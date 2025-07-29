@@ -1,0 +1,15 @@
+# SFTP 下載與比較系統 - 套件需求
+# 安裝方式: pip install -r requirements.txt
+
+# SFTP 連線
+paramiko>=2.7.0
+
+# Excel 處理
+pandas>=1.2.0
+openpyxl>=3.0.0
+
+# XML 處理
+lxml>=4.6.0
+
+# 選用：更好的進度顯示（如需要可取消註解）
+# tqdm>=4.60.0

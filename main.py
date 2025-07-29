@@ -1,0 +1,262 @@
+"""
+SFTP 下載與比較系統 - 主程式
+提供互動式介面和命令列參數支援
+"""
+import os
+import sys
+import argparse
+from typing import Optional
+import utils
+import config
+from sftp_downloader import SFTPDownloader
+from file_comparator import FileComparator
+from zip_packager import ZipPackager
+
+logger = utils.setup_logger(__name__)
+
+class SFTPCompareSystem:
+    """SFTP 下載與比較系統主類別"""
+    
+    def __init__(self):
+        self.logger = logger
+        self.downloader = None
+        self.comparator = FileComparator()
+        self.packager = ZipPackager()
+        
+    def interactive_mode(self):
+        """互動式模式"""
+        while True:
+            print("\n" + "="*50)
+            print("SFTP 下載與比較系統")
+            print("="*50)
+            print("1. 下載 SFTP 檔案並產生報表")
+            print("2. 比較模組檔案差異")
+            print("3. 打包比對結果成 ZIP")
+            print("4. 測試 SFTP 連線")
+            print("5. 退出")
+            print("="*50)
+            
+            choice = input("請選擇功能 (1-5): ").strip()
+            
+            if choice == '1':
+                self._interactive_download()
+            elif choice == '2':
+                self._interactive_compare()
+            elif choice == '3':
+                self._interactive_package()
+            elif choice == '4':
+                self._test_connection()
+            elif choice == '5':
+                print("感謝使用，再見！")
+                break
+            else:
+                print("無效的選擇，請重新輸入")
+                
+    def _interactive_download(self):
+        """互動式下載功能"""
+        print("\n--- 下載 SFTP 檔案 ---")
+        
+        # 取得 Excel 檔案路徑
+        excel_path = input("請輸入 Excel 檔案路徑: ").strip()
+        if not os.path.exists(excel_path):
+            print(f"錯誤：檔案不存在 - {excel_path}")
+            return
+            
+        # 取得 SFTP 設定
+        use_default = input("使用預設 SFTP 設定？(Y/n): ").strip().lower()
+        
+        if use_default != 'n':
+            host = config.SFTP_HOST
+            port = config.SFTP_PORT
+            username = config.SFTP_USERNAME
+            password = config.SFTP_PASSWORD
+        else:
+            host = input(f"SFTP 伺服器 (預設: {config.SFTP_HOST}): ").strip() or config.SFTP_HOST
+            port_str = input(f"SFTP 連接埠 (預設: {config.SFTP_PORT}): ").strip()
+            port = int(port_str) if port_str else config.SFTP_PORT
+            username = input(f"使用者名稱 (預設: {config.SFTP_USERNAME}): ").strip() or config.SFTP_USERNAME
+            password = input("密碼: ").strip() or config.SFTP_PASSWORD
+            
+        # 取得輸出目錄
+        output_dir = input(f"輸出目錄 (預設: {config.DEFAULT_OUTPUT_DIR}): ").strip()
+        output_dir = output_dir or config.DEFAULT_OUTPUT_DIR
+        
+        # 執行下載
+        try:
+            self.downloader = SFTPDownloader(host, port, username, password)
+            report_path = self.downloader.download_from_excel(excel_path, output_dir)
+            print(f"\n下載完成！報表已儲存至: {report_path}")
+        except Exception as e:
+            print(f"\n錯誤：{str(e)}")
+            
+    def _interactive_compare(self):
+        """互動式比較功能"""
+        print("\n--- 比較模組檔案差異 ---")
+        
+        # 取得來源目錄
+        source_dir = input("請輸入來源目錄路徑: ").strip()
+        if not os.path.exists(source_dir):
+            print(f"錯誤：目錄不存在 - {source_dir}")
+            return
+            
+        # 取得輸出目錄
+        output_dir = input(f"輸出目錄 (預設: 與來源目錄相同): ").strip()
+        output_dir = output_dir or source_dir
+        
+        # 執行比較
+        try:
+            compare_files = self.comparator.compare_all_modules(source_dir, output_dir)
+            print(f"\n比較完成！產生了 {len(compare_files)} 個比較報表")
+            print(f"整合報表已儲存至: {os.path.join(output_dir, 'all_compare.xlsx')}")
+        except Exception as e:
+            print(f"\n錯誤：{str(e)}")
+            
+    def _interactive_package(self):
+        """互動式打包功能"""
+        print("\n--- 打包比對結果成 ZIP ---")
+        
+        # 取得來源目錄
+        source_dir = input("請輸入要打包的目錄路徑: ").strip()
+        if not os.path.exists(source_dir):
+            print(f"錯誤：目錄不存在 - {source_dir}")
+            return
+            
+        # 詢問打包選項
+        include_excel = input("包含 Excel 報表？(Y/n): ").strip().lower() != 'n'
+        include_source = input("包含原始檔案 (txt/xml)？(Y/n): ").strip().lower() != 'n'
+        
+        # 取得輸出檔名
+        default_name = f"compare_results_{utils.get_timestamp()}.zip"
+        zip_name = input(f"ZIP 檔案名稱 (預設: {default_name}): ").strip()
+        zip_name = zip_name or default_name
+        
+        # 執行打包
+        try:
+            zip_path = self.packager.create_compare_results_zip(
+                source_dir, zip_name, include_excel, include_source
+            )
+            print(f"\n打包完成！ZIP 檔案已儲存至: {zip_path}")
+        except Exception as e:
+            print(f"\n錯誤：{str(e)}")
+            
+    def _test_connection(self):
+        """測試 SFTP 連線"""
+        print("\n--- 測試 SFTP 連線 ---")
+        
+        # 取得 SFTP 設定
+        use_default = input("使用預設 SFTP 設定？(Y/n): ").strip().lower()
+        
+        if use_default != 'n':
+            host = config.SFTP_HOST
+            port = config.SFTP_PORT
+            username = config.SFTP_USERNAME
+            password = config.SFTP_PASSWORD
+        else:
+            host = input(f"SFTP 伺服器 (預設: {config.SFTP_HOST}): ").strip() or config.SFTP_HOST
+            port_str = input(f"SFTP 連接埠 (預設: {config.SFTP_PORT}): ").strip()
+            port = int(port_str) if port_str else config.SFTP_PORT
+            username = input(f"使用者名稱 (預設: {config.SFTP_USERNAME}): ").strip() or config.SFTP_USERNAME
+            password = input("密碼: ").strip() or config.SFTP_PASSWORD
+            
+        # 測試連線
+        try:
+            self.downloader = SFTPDownloader(host, port, username, password)
+            if self.downloader.test_connection():
+                print("\n✓ SFTP 連線測試成功！")
+            else:
+                print("\n✗ SFTP 連線測試失敗！")
+        except Exception as e:
+            print(f"\n✗ SFTP 連線測試失敗：{str(e)}")
+            
+    def command_line_mode(self, args):
+        """命令列模式"""
+        if args.function == 'download':
+            self._cmd_download(args)
+        elif args.function == 'compare':
+            self._cmd_compare(args)
+        elif args.function == 'package':
+            self._cmd_package(args)
+            
+    def _cmd_download(self, args):
+        """命令列下載功能"""
+        try:
+            self.downloader = SFTPDownloader(
+                args.host, args.port, args.username, args.password
+            )
+            report_path = self.downloader.download_from_excel(
+                args.excel, args.output_dir
+            )
+            print(f"下載完成！報表已儲存至: {report_path}")
+        except Exception as e:
+            logger.error(f"下載失敗：{str(e)}")
+            sys.exit(1)
+            
+    def _cmd_compare(self, args):
+        """命令列比較功能"""
+        try:
+            compare_files = self.comparator.compare_all_modules(
+                args.source_dir, args.output_dir
+            )
+            print(f"比較完成！產生了 {len(compare_files)} 個比較報表")
+        except Exception as e:
+            logger.error(f"比較失敗：{str(e)}")
+            sys.exit(1)
+            
+    def _cmd_package(self, args):
+        """命令列打包功能"""
+        try:
+            zip_path = self.packager.create_zip(
+                args.source_dir, args.zip_name
+            )
+            print(f"打包完成！ZIP 檔案已儲存至: {zip_path}")
+        except Exception as e:
+            logger.error(f"打包失敗：{str(e)}")
+            sys.exit(1)
+
+def create_parser():
+    """建立命令列參數解析器"""
+    parser = argparse.ArgumentParser(
+        description='SFTP 下載與比較系統',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    # 建立子命令
+    subparsers = parser.add_subparsers(dest='function', help='功能選擇')
+    
+    # 下載功能
+    download_parser = subparsers.add_parser('download', help='下載 SFTP 檔案')
+    download_parser.add_argument('--excel', required=True, help='Excel 檔案路徑')
+    download_parser.add_argument('--host', default=config.SFTP_HOST, help='SFTP 伺服器')
+    download_parser.add_argument('--port', type=int, default=config.SFTP_PORT, help='SFTP 連接埠')
+    download_parser.add_argument('--username', default=config.SFTP_USERNAME, help='使用者名稱')
+    download_parser.add_argument('--password', default=config.SFTP_PASSWORD, help='密碼')
+    download_parser.add_argument('--output-dir', default=config.DEFAULT_OUTPUT_DIR, help='輸出目錄')
+    
+    # 比較功能
+    compare_parser = subparsers.add_parser('compare', help='比較檔案差異')
+    compare_parser.add_argument('--source-dir', required=True, help='來源目錄')
+    compare_parser.add_argument('--output-dir', help='輸出目錄（預設：與來源目錄相同）')
+    
+    # 打包功能
+    package_parser = subparsers.add_parser('package', help='打包成 ZIP')
+    package_parser.add_argument('--source-dir', required=True, help='要打包的目錄')
+    package_parser.add_argument('--zip-name', help='ZIP 檔案名稱')
+    
+    return parser
+
+def main():
+    """主程式進入點"""
+    parser = create_parser()
+    args = parser.parse_args()
+    
+    system = SFTPCompareSystem()
+    
+    if args.function:
+        # 命令列模式
+        system.command_line_mode(args)
+    else:
+        # 互動式模式
+        system.interactive_mode()
+
+if __name__ == '__main__':
+    main()
