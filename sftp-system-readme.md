@@ -124,6 +124,7 @@ SFTP_PASSWORD = 'your_password'
 # 檔案設定
 TARGET_FILES = ['F_Version.txt', 'manifest.xml', 'Version.txt']
 CASE_INSENSITIVE = True
+MAX_SEARCH_DEPTH = 3  # 遞迴搜尋的最大深度（可根據需要調整）
 
 # 輸出設定
 DEFAULT_OUTPUT_DIR = './downloads'
@@ -138,6 +139,10 @@ DEFAULT_COMPARE_DIR = './compare_results'
 |----|------|----------|
 | 1 | bootcode | /DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_master/20250728_1111_5330ddb |
 | 2 | emcu | /DailyBuild/PrebuildFW/emcu/RDDB-321_realtek_mac8q_master/20250728_2222_5330ddb |
+| 3 | dolby_ta | /DailyBuild/PrebuildFW/dolby_ta/RDDB-1031_merlin7_3.16_android14_mp.google-refplus.backup/2025_07_03-10_53_618e9e1 |
+| 4 | ufsd_ko | /DailyBuild/PrebuildFW/ufsd_ko/RDDB-508_merlin7_android11_mp.google-refplus/2025_07_03-10_53_618e9e1 |
+
+**注意**：系統會自動從路徑中解析模組名稱（如 bootcode、emcu、dolby_ta、ufsd_ko 等）和 JIRA ID（RDDB-XXX）。
 
 ## 輸出說明
 
@@ -161,6 +166,9 @@ DEFAULT_COMPARE_DIR = './compare_results'
    | SN | 模組 | sftp 路徑 | 版本資訊檔案 |
    |----|------|-----------|--------------|
    | 1 | bootcode | /DailyBuild/... | F_Version.txt, manifest.xml, Version.txt |
+   | 2 | emcu | /DailyBuild/... | F_Version.txt (2025_06_24-17_41_e54f7a5/F_Version.txt), manifest.xml (2025_06_24-17_41_e54f7a5/manifest.xml), Version.txt (2025_06_24-17_41_e54f7a5/Version.txt) |
+   
+   註：括號內顯示檔案在 FTP 路徑下的相對位置（如果檔案在子目錄中）
 
 ### 功能二輸出
 1. 各模組比較結果：`{模組名稱}_compare.xlsx`
@@ -177,6 +185,7 @@ DEFAULT_COMPARE_DIR = './compare_results'
 2. Excel 檔案路徑必須包含 "ftp path" 欄位
 3. 比較功能需要每個模組下有兩個資料夾才能進行比較
 4. 檔案名稱比對不區分大小寫
+5. 系統會自動在 FTP 路徑及其子目錄中遞迴搜尋目標檔案（最多搜尋 3 層深度）
 
 ## 錯誤處理
 - 連線失敗：檢查 SFTP 設定和網路連線

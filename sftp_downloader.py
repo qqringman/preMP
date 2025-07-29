@@ -3,6 +3,7 @@ SFTP 下載模組
 處理從 SFTP 伺服器下載檔案的功能
 """
 import os
+import stat
 import paramiko
 from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
@@ -89,7 +90,51 @@ class SFTPDownloader:
             self.logger.error(f"列出遠端目錄失敗 {remote_path}: {str(e)}")
             return None
             
-    def download_files(self, ftp_path: str, local_dir: str) -> List[str]:
+    def _find_file_recursive(self, remote_path: str, filename: str, max_depth: int = 3, current_depth: int = 0) -> Optional[Tuple[str, str]]:
+        """
+        遞迴搜尋檔案（不區分大小寫）
+        
+        Args:
+            remote_path: 遠端目錄路徑
+            filename: 要尋找的檔案名稱
+            max_depth: 最大搜尋深度
+            current_depth: 當前深度
+            
+        Returns:
+            (檔案完整路徑, 實際檔案名稱) 或 None
+        """
+        if current_depth > max_depth:
+            return None
+            
+        try:
+            # 先在當前目錄尋找
+            actual_filename = self._find_file_case_insensitive(remote_path, filename)
+            if actual_filename:
+                full_path = os.path.join(remote_path, actual_filename).replace('\\', '/')
+                return (full_path, actual_filename)
+            
+            # 如果沒找到，遞迴搜尋子目錄
+            try:
+                items = self._sftp.listdir_attr(remote_path)
+                for item in items:
+                    # 只處理目錄
+                    if item.st_mode is not None and stat.S_ISDIR(item.st_mode):
+                        subdir_path = os.path.join(remote_path, item.filename).replace('\\', '/')
+                        self.logger.debug(f"搜尋子目錄: {subdir_path}")
+                        
+                        result = self._find_file_recursive(subdir_path, filename, max_depth, current_depth + 1)
+                        if result:
+                            return result
+            except Exception as e:
+                self.logger.debug(f"無法列出子目錄 {remote_path}: {str(e)}")
+                
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"遞迴搜尋失敗 {remote_path}: {str(e)}")
+            return None
+            
+    def download_files(self, ftp_path: str, local_dir: str) -> Tuple[List[str], Dict[str, str]]:
         """
         從 FTP 路徑下載指定的檔案
         
@@ -98,9 +143,10 @@ class SFTPDownloader:
             local_dir: 本地目錄
             
         Returns:
-            成功下載的檔案列表
+            (成功下載的檔案列表, 檔案路徑映射)
         """
         downloaded_files = []
+        file_paths = {}  # 記錄每個檔案的實際路徑
         
         try:
             # 確保本地目錄存在
@@ -109,18 +155,26 @@ class SFTPDownloader:
             # 下載每個目標檔案
             for target_file in config.TARGET_FILES:
                 try:
-                    # 尋找檔案（不區分大小寫）
-                    actual_filename = self._find_file_case_insensitive(ftp_path, target_file)
+                    # 遞迴尋找檔案
+                    self.logger.debug(f"搜尋檔案: {target_file} in {ftp_path}")
+                    result = self._find_file_recursive(ftp_path, target_file, config.MAX_SEARCH_DEPTH)
                     
-                    if actual_filename:
-                        remote_file = os.path.join(ftp_path, actual_filename).replace('\\', '/')
+                    if result:
+                        remote_file, actual_filename = result
                         local_file = os.path.join(local_dir, target_file)
+                        
+                        # 記錄相對路徑
+                        relative_path = remote_file.replace(ftp_path, '').lstrip('/')
+                        if relative_path != actual_filename:
+                            self.logger.info(f"找到檔案 {target_file} 在子目錄: {os.path.dirname(relative_path)}")
                         
                         self.logger.info(f"下載檔案: {remote_file} -> {local_file}")
                         self._sftp.get(remote_file, local_file)
                         downloaded_files.append(target_file)
+                        
+                        file_paths[target_file] = relative_path
                     else:
-                        self.logger.warning(f"檔案不存在: {ftp_path}/{target_file}")
+                        self.logger.warning(f"找不到檔案: {target_file} in {ftp_path} (包含子目錄)")
                         
                 except Exception as e:
                     self.logger.error(f"下載檔案失敗 {target_file}: {str(e)}")
@@ -128,7 +182,7 @@ class SFTPDownloader:
         except Exception as e:
             self.logger.error(f"下載過程發生錯誤: {str(e)}")
             
-        return downloaded_files
+        return downloaded_files, file_paths
         
     def download_from_excel(self, excel_path: str, output_dir: str = None) -> str:
         """
@@ -172,14 +226,27 @@ class SFTPDownloader:
                     local_dir = os.path.join(output_dir, module, jira_id)
                     
                     # 下載檔案
-                    downloaded_files = self.download_files(ftp_path, local_dir)
+                    downloaded_files, file_paths = self.download_files(ftp_path, local_dir)
+                    
+                    # 準備檔案資訊字串
+                    file_info = []
+                    for file in downloaded_files:
+                        if file in file_paths:
+                            # 只有當檔案不在根目錄時才顯示路徑
+                            path = file_paths[file]
+                            if path and path != file:
+                                file_info.append(f"{file} ({path})")
+                            else:
+                                file_info.append(file)
+                        else:
+                            file_info.append(file)
                     
                     # 加入報表資料
                     report_data.append({
                         'SN': idx + 1,
                         '模組': module,
                         'sftp 路徑': ftp_path,
-                        '版本資訊檔案': ', '.join(downloaded_files) if downloaded_files else '無'
+                        '版本資訊檔案': ', '.join(file_info) if file_info else '無'
                     })
                 else:
                     self.logger.warning(f"無法解析 FTP 路徑: {ftp_path}")

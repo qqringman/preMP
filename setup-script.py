@@ -54,13 +54,15 @@ def create_sample_excel():
         import pandas as pd
         
         sample_data = {
-            'SN': [1, 2],
-            '模組': ['bootcode', 'emcu'],
+            'SN': [1, 2, 3, 4],
+            '模組': ['bootcode', 'emcu', 'dolby_ta', 'ufsd_ko'],
             'ftp path': [
-                '/DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_master/20250728_1111_5330ddb',
-                '/DailyBuild/PrebuildFW/emcu/RDDB-321_realtek_mac8q_master/20250728_2222_5330ddb'
+                '/DailyBuild/PrebuildFW/bootcode/RDDB-942_realtek_merlin8_premp.google-refplus/2025_06_24-18_16_9624861',
+                '/DailyBuild/PrebuildFW/emcu/RDDB-1193_merlin8_android-14_premp.google-refplus/2025_06_24-17_41_e54f7a5',
+                '/DailyBuild/PrebuildFW/dolby_ta/RDDB-932_mac7p_v3.0_common_android11_premp.google-refplus.upgrade-11.rtd2851a/2025_06_18-15_30_e05abe4',
+                '/DailyBuild/PrebuildFW/ufsd_ko/RDDB-982_mac8q_android11_premp.google-refplus.upgrade-11/20250717_1455_618e9e1'
             ],
-            '備註': ['主要版本', '測試版本']
+            '備註': ['主要版本', '測試版本', 'Dolby 模組', '檔案系統模組']
         }
         
         df = pd.DataFrame(sample_data)
