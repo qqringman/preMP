@@ -14,9 +14,13 @@
 - **進階比較邏輯**：
   - 完整的 manifest.xml 比較功能（包含 wave 標記）
   - 動態 branch_error 檢查（根據比較對象自動調整檢查規則）
+  - Version.txt 和 F_Version.txt 內容比較
 - **多格式支援**：支援標準格式和特殊格式的 FTP 路徑
 - **自動產生 Gerrit 連結**：方便查看詳細的程式碼變更（支援 prebuilt 和 prebuild）
-- **美觀的報表格式**：彩色標題列、自動調整欄寬
+- **美觀的報表格式**：
+  - 彩色標題列、自動調整欄寬
+  - 黃底標記重要欄位（"problem"、"狀態"、"is_different"、revision 欄位）
+  - 紅字顯示版本差異內容（base_short、base_revision、compare_short、compare_revision）
 
 ## 安裝需求
 ```bash
@@ -202,9 +206,18 @@ GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
    - 第二個頁籤：新增/刪除的項目
 
 2. 整合報表：`all_compare.xlsx`
-   - revision_diff：所有 revision 差異（包含 wave 項目）
-   - branch_error：不符合命名規則的分支（根據比較對象動態檢查）
-   - lost_project：新增/刪除的專案
+   - **revision_diff**：所有 revision 差異（包含 wave 項目）
+     - base_short、base_revision、compare_short、compare_revision 欄位標題為黃底
+     - 這四個欄位的內容顯示為紅字，方便識別版本差異
+   - **branch_error**：不符合命名規則的分支（根據比較對象動態檢查）
+     - "problem" 欄位標題為黃底，顯示具體問題描述
+     - 自動篩選只顯示 has_wave = N 的資料
+   - **lost_project**：新增/刪除的專案
+     - "狀態" 欄位標題為黃底
+   - **version_diff**：Version.txt 和 F_Version.txt 的內容差異
+     - "is_different" 欄位標題為黃底
+     - 顯示檔案內容（最多前 100 個字元）
+   - **無法比對**：無法進行比對的模組清單
 
 比較邏輯說明：
 - 使用 name 和 path 作為唯一鍵來識別 project
@@ -216,6 +229,7 @@ GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 - 自動生成 Gerrit link（支援 prebuilt 和 prebuild）
 - 縮短 revision hash 為前 7 個字元以提高可讀性
 - revision_diff 頁籤會標註包含 'wave' 的項目（has_wave 欄位）
+- 版本檔案比較會顯示有差異的 Version.txt 和 F_Version.txt 內容
 
 ### 功能三輸出
 - ZIP 檔案包含所有比較結果和下載的檔案
@@ -231,6 +245,9 @@ GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 8. branch_error 檢查會根據比較對象動態調整規則
 9. 支援特殊格式的 FTP 路徑（如 /DailyBuild/Merlin7/DB2302_...）
 10. 所有 Excel 報表都會自動格式化，包含彩色標題列和自動調整欄寬
+11. 重要欄位會以黃底標記（"problem"、"狀態"、"is_different"、revision 相關欄位）
+12. revision_diff 中的版本資訊會以紅字顯示，方便快速比對差異
+13. Version.txt 和 F_Version.txt 的比較結果會整合在同一份報表中
 
 ## 錯誤處理
 - 連線失敗：檢查 SFTP 設定和網路連線

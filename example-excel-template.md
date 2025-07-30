@@ -164,16 +164,26 @@ python main.py package --source-dir ./downloads
    - 不再排除 wave 項目，所有差異都會顯示
    - 新增 has_wave 欄位標示是否包含 'wave' 關鍵字
    - 顯示縮短的 hash code（前 7 個字元）
+   - **base_short、base_revision、compare_short、compare_revision 標題為黃底**
+   - **這四個欄位的內容以紅字顯示，方便快速識別版本差異**
 
 2. **branch_error**：根據比較對象動態檢查分支命名規則
    - RDDB-XXX vs RDDB-XXX-premp：檢查 compare 中不包含 'premp' 的項目
    - RDDB-XXX-premp vs RDDB-XXX-wave：檢查 compare 中不包含 'wave' 的項目
    - RDDB-XXX-wave vs RDDB-XXX-wave.backup：檢查 compare 中不包含 'wave.backup' 的項目
    - 系統會自動判斷比較類型並套用對應規則
+   - **"problem" 欄位標題為黃底**，顯示具體問題（如 "沒改成 premp"）
 
 3. **lost_project**：新增或刪除的專案
    - 狀態為「新增」：只在 compare 檔案中存在
    - 狀態為「刪除」：只在 base 檔案中存在
+   - **"狀態" 欄位標題為黃底**
+
+4. **version_diff**：Version.txt 和 F_Version.txt 的內容比較
+   - 顯示每個模組的版本檔案內容差異
+   - 包含 base 和 compare 資料夾的檔案內容（最多顯示前 100 個字元）
+   - **"is_different" 欄位標題為黃底**
+   - 只顯示有差異的檔案
 
 ### 基準選擇邏輯
 
@@ -234,28 +244,55 @@ bootcode/
 
 **頁籤 1: revision_diff（包含所有 revision 差異）**
 
-| SN | module | name | path | base_short | base_revision | compare_short | compare_revision | has_wave | base_link | compare_link |
-|----|--------|------|------|------------|---------------|---------------|------------------|----------|-----------|--------------|
-| 1 | bootcode | realtek/mac7p/bootcode | bootcode/src | abc123d | abc123def456... | def456g | def456ghi789... | N | https://... | https://... |
-| 2 | bootcode | realtek/frameworks | frameworks/ | aaa111b | aaa111bbb222... | ccc333d | ccc333ddd444... | Y | https://... | https://... |
+| SN | module | name | path | **base_short** | **base_revision** | **compare_short** | **compare_revision** | has_wave | base_link | compare_link |
+|----|--------|------|------|----------------|-------------------|-------------------|----------------------|----------|-----------|--------------|
+| 1 | bootcode | realtek/mac7p/bootcode | bootcode/src | <span style="color:red">abc123d</span> | <span style="color:red">abc123def456...</span> | <span style="color:red">def456g</span> | <span style="color:red">def456ghi789...</span> | N | https://... | https://... |
+| 2 | bootcode | realtek/frameworks | frameworks/ | <span style="color:red">aaa111b</span> | <span style="color:red">aaa111bbb222...</span> | <span style="color:red">ccc333d</span> | <span style="color:red">ccc333ddd444...</span> | Y | https://... | https://... |
 
-註：has_wave 欄位標示該項目是否包含 'wave' 關鍵字
+註：
+- has_wave 欄位標示該項目是否包含 'wave' 關鍵字
+- **base_short、base_revision、compare_short、compare_revision** 欄位標題為黃底
+- 這四個欄位的內容顯示為紅字，方便快速識別版本差異
 
-**頁籤 2: branch_error**
+**頁籤 2: branch_error（黃底標題）**
 
-| SN | module | name | path | revision_short | revision | upstream | dest-branch | check_keyword | compare_link |
-|----|--------|------|------|----------------|----------|----------|-------------|---------------|--------------|
-| 1 | emcu | realtek/emcu | emcu/src | abc123d | abc123def456... | realtek/master | realtek/master | premp | https://... |
-| 2 | bootcode | realtek/boot | boot/src | def456g | def456ghi789... | realtek/android-14 | realtek/android-14 | wave | https://... |
+| SN | module | name | path | revision_short | revision | upstream | dest-branch | compare_link | **problem** | has_wave |
+|----|--------|------|------|----------------|----------|----------|-------------|--------------|-------------|----------|
+| 1 | emcu | realtek/emcu | emcu/src | abc123d | abc123def456... | realtek/master | realtek/master | https://... | 沒改成 premp | N |
+| 2 | bootcode | realtek/boot | boot/src | def456g | def456ghi789... | realtek/android-14 | realtek/android-14 | https://... | 沒改成 wave | N |
 
-註：check_keyword 顯示檢查的命名規則類型（premp/wave/wave.backup）
+註：
+- **problem** 欄位標題為黃底，顯示命名規則不符的問題
+- 只有 has_wave = N 的項目才會顯示問題描述
+- Excel 會自動篩選只顯示 has_wave = N 的資料
 
-**頁籤 3: lost_project (新增/刪除)**
+**頁籤 3: lost_project（黃底標題）**
 
-| SN | 狀態 | module | name | path | upstream | dest-branch | revision |
-|----|------|--------|------|------|----------|-------------|----------|
+| SN | **狀態** | module | name | path | upstream | dest-branch | revision |
+|----|----------|--------|------|------|----------|-------------|----------|
 | 1 | 新增 | bootcode | realtek/mac7p/new_module | new/path | realtek/android-14/master | realtek/android-14/master | new123rev456 |
 | 2 | 刪除 | bootcode | realtek/mac7p/old_module | old/path | realtek/android-13/master | realtek/android-13/master | old789rev012 |
+
+註：**狀態** 欄位標題為黃底
+
+**頁籤 4: version_diff（黃底標題）**
+
+| SN | module | base_folder | compare_folder | file_type | base_content | compare_content | **is_different** | module_path |
+|----|--------|-------------|----------------|-----------|--------------|-----------------|------------------|-------------|
+| 1 | bootcode | RDDB-320 | RDDB-320-premp | Version.txt | V1.0.0-20240728 | V1.0.1-20240729 | Y | downloads/PrebuildFW/bootcode |
+| 2 | emcu | RDDB-321 | RDDB-321-wave | F_Version.txt | FW Version: 2.3.4... | FW Version: 2.3.5... | Y | downloads/PrebuildFW/emcu |
+
+註：
+- **is_different** 欄位標題為黃底
+- 內容顯示最多前 100 個字元，超過則顯示 "..."
+- 只顯示有差異的版本檔案
+
+**頁籤 5: 無法比對**
+
+| SN | module | folder_count | folders | path | reason |
+|----|--------|--------------|---------|------|--------|
+| 1 | dolby_ta | 1 | RDDB-1031-wave.backup | downloads/PrebuildFW/dolby_ta/RDDB-1031-wave.backup | 缺少 wave 資料夾 (RDDB-XXX-wave) |
+| 2 | ufsd_ko | 1 | RDDB-508-wave | downloads/PrebuildFW/ufsd_ko/RDDB-508-wave | 缺少 master 資料夾 (RDDB-XXX) |
 
 ## 故障排除
 

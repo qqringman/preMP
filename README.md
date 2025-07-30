@@ -12,6 +12,9 @@
 - 📁 **多格式支援**：支援標準格式和特殊格式的 FTP 路徑
 - 📦 **彈性打包**：可選擇性打包比較結果
 - 📋 **美觀報表**：自動格式化的 Excel 報表，包含彩色標題和自動調整欄寬
+  - 黃底標題：標記重要欄位
+  - 紅字內容：快速識別版本差異
+- 📝 **版本檔案比較**：比較 Version.txt 和 F_Version.txt 的內容差異
 
 ## 快速開始
 
@@ -94,10 +97,16 @@ Excel 檔案需包含 "ftp path" 欄位，支援兩種格式：
 
 ### 比較功能
 - 可選擇不同資料夾作為基準（base）進行比較
-- 產生 `all_compare.xlsx` 包含三個頁籤：
-  - revision_diff：所有 revision 差異（包含 wave 標記）
-  - branch_error：分支命名錯誤（根據比較對象動態檢查）
-  - lost_project：新增/刪除的專案
+- 產生 `all_compare.xlsx` 包含五個頁籤：
+  - **revision_diff**：所有 revision 差異（包含 wave 標記）
+    - base_short、base_revision、compare_short、compare_revision 標題為黃底，內容為紅字
+  - **branch_error**：分支命名錯誤（根據比較對象動態檢查）
+    - "problem" 欄位標題為黃底，顯示具體問題
+  - **lost_project**：新增/刪除的專案
+    - "狀態" 欄位標題為黃底
+  - **version_diff**：Version.txt 和 F_Version.txt 的內容差異
+    - "is_different" 欄位標題為黃底
+  - **無法比對**：無法進行比對的模組清單（如資料夾不足）
 
 ## 進階功能
 
@@ -106,6 +115,7 @@ Excel 檔案需包含 "ftp path" 欄位，支援兩種格式：
 - **自訂 SFTP 設定**：支援命令列參數覆蓋預設設定
 - **選擇基準資料夾**：比較時可指定使用哪個版本作為基準
 - **動態分支檢查**：根據比較對象自動調整 branch_error 檢查規則
+- **版本檔案比較**：自動比較 Version.txt 和 F_Version.txt 的內容差異
 
 ## 故障排除
 

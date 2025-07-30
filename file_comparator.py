@@ -258,106 +258,6 @@ class FileComparator:
         
         return revision_diff, branch_error, lost_project
         
-        # 根據資料夾名稱決定檢查規則
-        check_keyword = None
-        if base_folder and compare_folder:
-            if "-premp" in compare_folder and "-premp" not in base_folder:
-                check_keyword = 'premp'
-            elif "-wave" in compare_folder and "-wave.backup" not in compare_folder:
-                if "-premp" in base_folder:
-                    check_keyword = 'wave'
-            elif "-wave.backup" in compare_folder:
-                check_keyword = 'wave.backup'
-        
-        if check_keyword:
-            for key, compare_proj in compare_projects.items():
-                upstream = compare_proj.get('upstream', '')
-                dest_branch = compare_proj.get('dest-branch', '')
-                revision = compare_proj.get('revision', '')
-                
-                # 根據檢查關鍵字進行相應的檢查
-                should_check = False
-                
-                if check_keyword == 'premp':
-                    # 檢查是否都不包含 'premp'
-                    if upstream and dest_branch:
-                        if 'premp' not in upstream and 'premp' not in dest_branch:
-                            should_check = True
-                elif check_keyword == 'wave':
-                    # 檢查是否都不包含 'wave'
-                    if upstream and dest_branch:
-                        if 'wave' not in upstream and 'wave' not in dest_branch:
-                            should_check = True
-                elif check_keyword == 'wave.backup':
-                    # 檢查是否都不包含 'wave.backup'
-                    if upstream and dest_branch:
-                        if 'wave.backup' not in upstream and 'wave.backup' not in dest_branch:
-                            should_check = True
-                
-                if should_check:
-                    # 檢查是否包含 wave
-                    has_wave = ('wave' in upstream or 'wave' in dest_branch)
-                    
-                    branch_error.append({
-                        'SN': sn,
-                        'module': simple_module,
-                        'base_folder': base_folder,
-                        'compare_folder': compare_folder,
-                        'name': compare_proj['name'],
-                        'path': compare_proj['path'],
-                        'revision_short': self._shorten_hash(revision),
-                        'revision': revision,
-                        'upstream': upstream,
-                        'dest-branch': dest_branch,
-                        'check_keyword': check_keyword,
-                        'module_path': module_path if module_path else '',
-                        'compare_link': self._generate_link(compare_proj),
-                        'has_wave': 'Y' if has_wave else 'N'
-                    })
-                    sn += 1
-        
-        # 3. 檢查缺少或新增的 project
-        lost_project = []
-        sn = 1
-        
-        # 檢查在 base 檔案中但不在 compare 檔案中的項目（刪除）
-        for key, base_proj in base_projects.items():
-            if key not in compare_projects:
-                revision = base_proj.get('revision', '')
-                lost_project.append({
-                    'SN': sn,
-                    '狀態': '刪除',
-                    'module': simple_module,
-                    'folder': base_folder,  # 記錄是哪個資料夾
-                    'name': base_proj['name'],
-                    'path': base_proj['path'],
-                    'upstream': base_proj.get('upstream', ''),
-                    'dest-branch': base_proj.get('dest-branch', ''),
-                    'revision': revision,
-                    'link': self._generate_link(base_proj)
-                })
-                sn += 1
-        
-        # 檢查在 compare 檔案中但不在 base 檔案中的項目（新增）
-        for key, compare_proj in compare_projects.items():
-            if key not in base_projects:
-                revision = compare_proj.get('revision', '')
-                lost_project.append({
-                    'SN': sn,
-                    '狀態': '新增',
-                    'module': simple_module,
-                    'folder': compare_folder,  # 記錄是哪個資料夾
-                    'name': compare_proj['name'],
-                    'path': compare_proj['path'],
-                    'upstream': compare_proj.get('upstream', ''),
-                    'dest-branch': compare_proj.get('dest-branch', ''),
-                    'revision': revision,
-                    'link': self._generate_link(compare_proj)
-                })
-                sn += 1
-        
-        return revision_diff, branch_error, lost_project
-        
     def _compare_text_files(self, file1: str, file2: str) -> List[Dict[str, Any]]:
         """
         比較兩個文字檔案
@@ -477,6 +377,30 @@ class FileComparator:
                         differences = self._compare_text_files(file1, file2)
                         if differences:
                             results['text_file_differences'][target_file] = differences
+                            
+                            # 為整合報表準備版本檔案差異資料
+                            if target_file.lower() in ['version.txt', 'f_version.txt']:
+                                # 讀取檔案內容
+                                with open(file1, 'r', encoding='utf-8') as f:
+                                    base_content = f.read().strip()
+                                with open(file2, 'r', encoding='utf-8') as f:
+                                    compare_content = f.read().strip()
+                                
+                                version_diff_item = {
+                                    'module': self._extract_simple_module_name(results['module']),
+                                    'base_folder': base_folder,
+                                    'compare_folder': compare_folder,
+                                    'file_type': target_file,
+                                    'base_content': base_content,
+                                    'compare_content': compare_content,
+                                    'is_different': 'Y',
+                                    'module_path': module_path if module_path else ''
+                                }
+                                
+                                # 將版本差異加入結果
+                                if 'version_diffs' not in results:
+                                    results['version_diffs'] = []
+                                results['version_diffs'].append(version_diff_item)
                 else:
                     self.logger.warning(f"檔案 {target_file} 在一個或兩個資料夾中都不存在")
                     
@@ -504,6 +428,7 @@ class FileComparator:
         all_revision_diff = []
         all_branch_error = []
         all_lost_project = []
+        all_version_diff = []  # 新增：版本檔案差異
         cannot_compare_modules = []  # 記錄無法比對的模組
         
         try:
@@ -583,6 +508,10 @@ class FileComparator:
                 all_branch_error.extend(results['branch_error'])
                 all_lost_project.extend(results['lost_project'])
                 
+                # 收集版本檔案差異
+                if 'version_diffs' in results:
+                    all_version_diff.extend(results['version_diffs'])
+                
                 # 如果有比較結果，寫入模組報表
                 if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
                     # 建立輸出路徑，保持目錄結構
@@ -602,10 +531,10 @@ class FileComparator:
                         compare_files.append(report_file)
                         
             # 寫入整合報表（包含無法比對的模組）
-            if any([all_revision_diff, all_branch_error, all_lost_project, cannot_compare_modules]):
+            if any([all_revision_diff, all_branch_error, all_lost_project, all_version_diff, cannot_compare_modules]):
                 self._write_all_compare_report(
                     all_revision_diff, all_branch_error, all_lost_project, 
-                    cannot_compare_modules, output_dir
+                    all_version_diff, cannot_compare_modules, output_dir
                 )
                 
             return compare_files
@@ -742,6 +671,7 @@ class FileComparator:
             'branch_error': [],
             'lost_project': [],
             'text_file_differences': {},
+            'version_diffs': [],  # 新增版本檔案差異
             'base_folder': base_folder,
             'compare_folder': compare_folder
         }
@@ -771,6 +701,29 @@ class FileComparator:
                         differences = self._compare_text_files(file1, file2)
                         if differences:
                             results['text_file_differences'][target_file] = differences
+                            
+                            # 為整合報表準備版本檔案差異資料
+                            if target_file.lower() in ['version.txt', 'f_version.txt']:
+                                # 讀取檔案內容
+                                try:
+                                    with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
+                                        base_content = f.read().strip()
+                                    with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
+                                        compare_content = f.read().strip()
+                                    
+                                    version_diff_item = {
+                                        'module': self._extract_simple_module_name(module),
+                                        'base_folder': base_folder,
+                                        'compare_folder': compare_folder,
+                                        'file_type': target_file,
+                                        'base_content': base_content[:100] + '...' if len(base_content) > 100 else base_content,
+                                        'compare_content': compare_content[:100] + '...' if len(compare_content) > 100 else compare_content,
+                                        'is_different': 'Y',
+                                        'module_path': module_path
+                                    }
+                                    results['version_diffs'].append(version_diff_item)
+                                except Exception as e:
+                                    self.logger.error(f"讀取版本檔案失敗: {str(e)}")
                 else:
                     self.logger.warning(f"檔案 {target_file} 在一個或兩個資料夾中都不存在")
                     
@@ -822,8 +775,8 @@ class FileComparator:
             return None
             
     def _write_all_compare_report(self, revision_diff: List[Dict], branch_error: List[Dict],
-                             lost_project: List[Dict], cannot_compare_modules: List[Dict], 
-                             output_dir: str) -> str:
+                             lost_project: List[Dict], version_diff: List[Dict],
+                             cannot_compare_modules: List[Dict], output_dir: str) -> str:
         """
         寫入整合比較報表（包含所有比較結果）
         """
@@ -858,6 +811,33 @@ class FileComparator:
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='revision_diff', index=False)
+                    
+                    # 格式化 revision_diff 頁籤
+                    worksheet = writer.sheets['revision_diff']
+                    
+                    # 設定深紅底標題的欄位
+                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")  # 深紅色背景
+                    white_font = Font(color="FFFFFF", bold=True)  # 白色粗體字
+                    red_font = Font(color="FF0000")  # 紅色字體
+                    
+                    # 找到需要格式化的欄位位置
+                    target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
+                    column_indices = {}
+                    
+                    for idx, col in enumerate(df.columns):
+                        if col in target_columns:
+                            column_indices[col] = idx + 1  # Excel 是 1-based
+                    
+                    # 設定標題為深紅底白字
+                    for col_name, col_idx in column_indices.items():
+                        cell = worksheet.cell(row=1, column=col_idx)
+                        cell.fill = header_fill
+                        cell.font = white_font
+                    
+                    # 設定內容為紅字
+                    for row in range(2, len(df) + 2):  # 從第2行開始（第1行是標題）
+                        for col_name, col_idx in column_indices.items():
+                            worksheet.cell(row=row, column=col_idx).font = red_font
                 
                 # branch_error 頁籤（只在有資料時產生）
                 if branch_error:
@@ -893,9 +873,12 @@ class FileComparator:
                             has_wave_col = idx + 1
                     
                     if problem_col:
-                        # 設定 "問題" 標題為黃色
-                        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-                        worksheet.cell(row=1, column=problem_col).fill = yellow_fill
+                        # 設定 "problem" 標題為深紅底白字
+                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                        white_font = Font(color="FFFFFF", bold=True)
+                        cell = worksheet.cell(row=1, column=problem_col)
+                        cell.fill = header_fill
+                        cell.font = white_font
                     
                     # 設定自動篩選
                     worksheet.auto_filter.ref = worksheet.dimensions
@@ -929,16 +912,147 @@ class FileComparator:
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
+                    
+                    # 格式化 lost_project 頁籤
+                    worksheet = writer.sheets['lost_project']
+                    
+                    # 找到 "狀態" 欄位的位置
+                    status_col = None
+                    for idx, col in enumerate(df.columns):
+                        if col == '狀態':
+                            status_col = idx + 1  # Excel 是 1-based
+                            break
+                    
+                    if status_col:
+                        # 設定 "狀態" 標題為深紅底白字
+                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                        white_font = Font(color="FFFFFF", bold=True)
+                        cell = worksheet.cell(row=1, column=status_col)
+                        cell.fill = header_fill
+                        cell.font = white_font
+                
+                # version_diff 頁籤（只在有資料時產生）
+                if version_diff:
+                    # 重新編號
+                    for i, item in enumerate(version_diff, 1):
+                        item['SN'] = i
+                    
+                    df = pd.DataFrame(version_diff)
+                    # 調整欄位順序
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='version_diff', index=False)
+                    
+                    # 格式化 version_diff 頁籤
+                    worksheet = writer.sheets['version_diff']
+                    
+                    # 找到 "is_different" 欄位的位置
+                    diff_col = None
+                    for idx, col in enumerate(df.columns):
+                        if col == 'is_different':
+                            diff_col = idx + 1  # Excel 是 1-based
+                            break
+                    
+                    if diff_col:
+                        # 設定 "is_different" 標題為深紅底白字
+                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                        white_font = Font(color="FFFFFF", bold=True)
+                        cell = worksheet.cell(row=1, column=diff_col)
+                        cell.fill = header_fill
+                        cell.font = white_font
                 
                 # 無法比對頁籤（只在有資料時產生）
                 if cannot_compare_modules:
                     df = pd.DataFrame(cannot_compare_modules)
                     df.to_excel(writer, sheet_name='無法比對', index=False)
                 
-                # 格式化所有工作表
+                # 先格式化所有工作表（基本格式）
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
+                
+                # 然後再套用特定欄位的格式（避免被覆蓋）
+                # revision_diff 頁籤的特定格式
+                if revision_diff and 'revision_diff' in writer.sheets:
+                    worksheet = writer.sheets['revision_diff']
+                    df = pd.DataFrame(revision_diff)
+                    
+                    # 設定深紅底標題的欄位
+                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                    white_font = Font(color="FFFFFF", bold=True)
+                    red_font = Font(color="FF0000")
+                    
+                    # 找到需要格式化的欄位位置
+                    target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
+                    column_indices = {}
+                    
+                    for idx, col in enumerate(df.columns):
+                        if col in target_columns:
+                            column_indices[col] = idx + 1
+                    
+                    # 設定標題為深紅底白字
+                    for col_name, col_idx in column_indices.items():
+                        cell = worksheet.cell(row=1, column=col_idx)
+                        cell.fill = header_fill
+                        cell.font = white_font
+                    
+                    # 設定內容為紅字
+                    for row in range(2, len(df) + 2):
+                        for col_name, col_idx in column_indices.items():
+                            worksheet.cell(row=row, column=col_idx).font = red_font
+                
+                # branch_error 頁籤的特定格式
+                if branch_error and 'branch_error' in writer.sheets:
+                    worksheet = writer.sheets['branch_error']
+                    df = pd.DataFrame(branch_error)
+                    
+                    # 找到 "problem" 欄位的位置
+                    for idx, col in enumerate(df.columns):
+                        if col == 'problem':
+                            problem_col = idx + 1
+                            # 設定深紅底白字
+                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                            white_font = Font(color="FFFFFF", bold=True)
+                            cell = worksheet.cell(row=1, column=problem_col)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                            break
+                
+                # lost_project 頁籤的特定格式
+                if lost_project and 'lost_project' in writer.sheets:
+                    worksheet = writer.sheets['lost_project']
+                    df = pd.DataFrame(lost_project)
+                    
+                    # 找到 "狀態" 欄位的位置
+                    for idx, col in enumerate(df.columns):
+                        if col == '狀態':
+                            status_col = idx + 1
+                            # 設定深紅底白字
+                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                            white_font = Font(color="FFFFFF", bold=True)
+                            cell = worksheet.cell(row=1, column=status_col)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                            break
+                
+                # version_diff 頁籤的特定格式
+                if version_diff and 'version_diff' in writer.sheets:
+                    worksheet = writer.sheets['version_diff']
+                    df = pd.DataFrame(version_diff)
+                    
+                    # 找到 "is_different" 欄位的位置
+                    for idx, col in enumerate(df.columns):
+                        if col == 'is_different':
+                            diff_col = idx + 1
+                            # 設定深紅底白字
+                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                            white_font = Font(color="FFFFFF", bold=True)
+                            cell = worksheet.cell(row=1, column=diff_col)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                            break
                         
             self.logger.info(f"成功寫入整合報表: {output_file}")
             return output_file
