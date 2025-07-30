@@ -734,7 +734,7 @@ class FileComparator:
         
     def _write_module_compare_report(self, module: str, results: Dict, output_dir: str) -> str:
         """
-        寫入單一模組的比較報表
+        寫入單一模組的比較報表（與 all_compare.xlsx 相同格式）
         
         Args:
             module: 模組名稱
@@ -745,30 +745,206 @@ class FileComparator:
             報表檔案路徑
         """
         try:
-            # 準備不同頁籤的資料
-            different_projects = []
-            added_deleted_projects = results['lost_project']  # 這已經是正確格式
+            import pandas as pd
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.worksheet.filters import FilterColumn, Filters
             
-            # 將 revision_diff 轉換為舊格式（第一個頁籤）
-            for item in results['revision_diff']:
-                different_projects.append({
-                    'SN': item['SN'],
-                    'module': module,
-                    'base_folder': results.get('base_folder', ''),
-                    'compare_folder': results.get('compare_folder', ''),
-                    'name': item['name'],
-                    'path': item['path'],
-                    'upstream': item.get('base_upstream', ''),
-                    'dest-branch': item.get('base_dest-branch', ''),
-                    'revision': item['base_revision']
-                })
+            output_file = os.path.join(output_dir, f"{module}_compare.xlsx")
+            
+            # 準備各頁籤的資料
+            revision_diff = results.get('revision_diff', [])
+            branch_error = results.get('branch_error', [])
+            lost_project = results.get('lost_project', [])
+            version_diffs = results.get('version_diffs', [])
+            
+            # 重新編號
+            for i, item in enumerate(revision_diff, 1):
+                item['SN'] = i
+            for i, item in enumerate(branch_error, 1):
+                item['SN'] = i
+            for i, item in enumerate(lost_project, 1):
+                item['SN'] = i
+            for i, item in enumerate(version_diffs, 1):
+                item['SN'] = i
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # revision_diff 頁籤
+                if revision_diff:
+                    df = pd.DataFrame(revision_diff)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                'base_short', 'base_revision', 'compare_short', 'compare_revision',
+                                'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
+                                'base_link', 'compare_link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='revision_diff', index=False)
+                else:
+                    # 即使沒有資料也建立空的頁籤
+                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path',
+                                        'base_short', 'base_revision', 'compare_short', 'compare_revision']).to_excel(
+                        writer, sheet_name='revision_diff', index=False)
                 
-            # 寫入報表
-            report_file = self.excel_handler.write_compare_report(
-                module, different_projects, added_deleted_projects, output_dir
-            )
-            
-            return report_file
+                # branch_error 頁籤
+                if branch_error:
+                    # 移除 check_keyword 欄位，將 module_path 改名為 path_location
+                    for item in branch_error:
+                        if 'check_keyword' in item:
+                            del item['check_keyword']
+                        if 'module_path' in item:
+                            item['path_location'] = item.pop('module_path')
+                    
+                    df = pd.DataFrame(branch_error)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                'revision_short', 'revision', 'upstream', 'dest-branch', 
+                                'path_location', 'compare_link', 'problem', 'has_wave']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    
+                    # 將 has_wave = N 的資料排在前面
+                    df_sorted = df.sort_values('has_wave', ascending=True)
+                    df_sorted.to_excel(writer, sheet_name='branch_error', index=False)
+                else:
+                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path',
+                                        'problem', 'has_wave']).to_excel(
+                        writer, sheet_name='branch_error', index=False)
+                
+                # lost_project 頁籤
+                if lost_project:
+                    df = pd.DataFrame(lost_project)
+                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                                'upstream', 'dest-branch', 'revision', 'link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='lost_project', index=False)
+                else:
+                    pd.DataFrame(columns=['SN', '狀態', 'module', 'folder', 'name', 'path']).to_excel(
+                        writer, sheet_name='lost_project', index=False)
+                
+                # version_diff 頁籤
+                if version_diffs:
+                    df = pd.DataFrame(version_diffs)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='version_diff', index=False)
+                else:
+                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'file_type',
+                                        'base_content', 'compare_content', 'is_different']).to_excel(
+                        writer, sheet_name='version_diff', index=False)
+                
+                # 先格式化所有工作表（基本格式）
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+                
+                # 套用特定欄位的格式
+                # revision_diff 頁籤的特定格式
+                if 'revision_diff' in writer.sheets:
+                    worksheet = writer.sheets['revision_diff']
+                    if revision_diff:
+                        df = pd.DataFrame(revision_diff)
+                        
+                        # 設定深紅底標題的欄位
+                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                        white_font = Font(color="FFFFFF", bold=True)
+                        red_font = Font(color="FF0000")
+                        
+                        # 找到需要格式化的欄位位置
+                        target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
+                        column_indices = {}
+                        
+                        for idx, col in enumerate(df.columns):
+                            if col in target_columns:
+                                column_indices[col] = idx + 1
+                        
+                        # 設定標題為深紅底白字
+                        for col_name, col_idx in column_indices.items():
+                            cell = worksheet.cell(row=1, column=col_idx)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                        
+                        # 設定內容為紅字
+                        for row in range(2, len(df) + 2):
+                            for col_name, col_idx in column_indices.items():
+                                worksheet.cell(row=row, column=col_idx).font = red_font
+                
+                # branch_error 頁籤的特定格式
+                if 'branch_error' in writer.sheets and branch_error:
+                    worksheet = writer.sheets['branch_error']
+                    df = pd.DataFrame(branch_error)
+                    
+                    # 找到 "problem" 和 "has_wave" 欄位的位置
+                    problem_col = None
+                    has_wave_col = None
+                    for idx, col in enumerate(df.columns):
+                        if col == 'problem':
+                            problem_col = idx + 1
+                        elif col == 'has_wave':
+                            has_wave_col = idx + 1
+                    
+                    if problem_col:
+                        # 設定深紅底白字
+                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                        white_font = Font(color="FFFFFF", bold=True)
+                        cell = worksheet.cell(row=1, column=problem_col)
+                        cell.fill = header_fill
+                        cell.font = white_font
+                    
+                    # 設定自動篩選
+                    worksheet.auto_filter.ref = worksheet.dimensions
+                    
+                    # 設定 has_wave 欄位的篩選條件為只顯示 "N"
+                    if has_wave_col:
+                        has_wave_values = df['has_wave'].unique().tolist()
+                        
+                        filter_column = FilterColumn(colId=has_wave_col - 1)
+                        filter_column.filters = Filters()
+                        filter_column.filters.filter = ['N']
+                        
+                        if 'Y' in has_wave_values:
+                            for row_idx in range(2, len(df) + 2):
+                                if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
+                                    worksheet.row_dimensions[row_idx].hidden = True
+                        
+                        worksheet.auto_filter.filterColumn.append(filter_column)
+                
+                # lost_project 頁籤的特定格式
+                if 'lost_project' in writer.sheets and lost_project:
+                    worksheet = writer.sheets['lost_project']
+                    df = pd.DataFrame(lost_project)
+                    
+                    # 找到 "狀態" 欄位的位置
+                    for idx, col in enumerate(df.columns):
+                        if col == '狀態':
+                            status_col = idx + 1
+                            # 設定深紅底白字
+                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                            white_font = Font(color="FFFFFF", bold=True)
+                            cell = worksheet.cell(row=1, column=status_col)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                            break
+                
+                # version_diff 頁籤的特定格式
+                if 'version_diff' in writer.sheets and version_diffs:
+                    worksheet = writer.sheets['version_diff']
+                    df = pd.DataFrame(version_diffs)
+                    
+                    # 找到 "is_different" 欄位的位置
+                    for idx, col in enumerate(df.columns):
+                        if col == 'is_different':
+                            diff_col = idx + 1
+                            # 設定深紅底白字
+                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                            white_font = Font(color="FFFFFF", bold=True)
+                            cell = worksheet.cell(row=1, column=diff_col)
+                            cell.fill = header_fill
+                            cell.font = white_font
+                            break
+                        
+            self.logger.info(f"成功寫入比較報表: {output_file}")
+            return output_file
             
         except Exception as e:
             self.logger.error(f"寫入模組比較報表失敗: {str(e)}")
