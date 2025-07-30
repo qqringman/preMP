@@ -363,10 +363,6 @@ class FileComparator:
             source_dir: 來源目錄
             output_dir: 輸出目錄
             compare_mode: 比對模式
-                - master_vs_premp: RDDB-XXX vs RDDB-XXX-premp
-                - premp_vs_wave: RDDB-XXX-premp vs RDDB-XXX-wave
-                - wave_vs_backup: RDDB-XXX-wave vs RDDB-XXX-wave.backup
-                - manual_XXX_vs_YYY: 手動選擇的組合
             
         Returns:
             產生的比較報表檔案列表
@@ -381,15 +377,42 @@ class FileComparator:
         cannot_compare_modules = []  # 記錄無法比對的模組
         
         try:
-            # 取得所有模組資料夾
-            modules = [d for d in os.listdir(source_dir) 
-                    if os.path.isdir(os.path.join(source_dir, d))]
+            # 檢查是否有 PrebuildFW 或 DailyBuild 子目錄
+            has_top_dirs = False
+            actual_modules = []
             
-            self.logger.info(f"找到 {len(modules)} 個模組")
+            # 檢查 PrebuildFW 目錄
+            prebuild_path = os.path.join(source_dir, 'PrebuildFW')
+            if os.path.exists(prebuild_path) and os.path.isdir(prebuild_path):
+                has_top_dirs = True
+                # 取得 PrebuildFW 下的所有模組
+                for module in os.listdir(prebuild_path):
+                    module_path = os.path.join(prebuild_path, module)
+                    if os.path.isdir(module_path):
+                        actual_modules.append(('PrebuildFW', module, module_path))
             
-            for module in modules:
-                module_path = os.path.join(source_dir, module)
-                
+            # 檢查 DailyBuild 目錄
+            daily_path = os.path.join(source_dir, 'DailyBuild')
+            if os.path.exists(daily_path) and os.path.isdir(daily_path):
+                has_top_dirs = True
+                # 取得 DailyBuild 下的所有模組（平台）
+                for platform in os.listdir(daily_path):
+                    platform_path = os.path.join(daily_path, platform)
+                    if os.path.isdir(platform_path):
+                        actual_modules.append(('DailyBuild', platform, platform_path))
+            
+            # 如果沒有頂層目錄，使用原本的邏輯
+            if not has_top_dirs:
+                modules = [d for d in os.listdir(source_dir) 
+                          if os.path.isdir(os.path.join(source_dir, d))]
+                for module in modules:
+                    module_path = os.path.join(source_dir, module)
+                    actual_modules.append(('', module, module_path))
+            
+            self.logger.info(f"找到 {len(actual_modules)} 個模組")
+            
+            # 處理每個模組
+            for top_dir, module, module_path in actual_modules:
                 # 根據比對模式找出需要比對的資料夾
                 base_folder, compare_folder, missing_info = self._find_folders_for_comparison(
                     module_path, compare_mode
@@ -397,13 +420,22 @@ class FileComparator:
                 
                 if not base_folder or not compare_folder:
                     # 記錄無法比對的原因
+                    folders = [f for f in os.listdir(module_path) 
+                              if os.path.isdir(os.path.join(module_path, f))]
+                    
+                    # 如果有資料夾，使用第一個資料夾的完整路徑
+                    if folders:
+                        full_path = os.path.join(module_path, folders[0])
+                    else:
+                        full_path = module_path
+                        
                     self.logger.warning(f"模組 {module} 無法進行比對")
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
-                        'module': module,
-                        'folder_count': len(os.listdir(module_path)),
-                        'folders': ', '.join(os.listdir(module_path)) if os.listdir(module_path) else '無資料夾',
-                        'path': module_path,
+                        'module': f"{top_dir}/{module}" if top_dir else module,
+                        'folder_count': len(folders),
+                        'folders': ', '.join(folders) if folders else '無資料夾',
+                        'path': full_path,
                         'reason': missing_info
                     })
                     continue
@@ -413,6 +445,15 @@ class FileComparator:
                     module_path, base_folder, compare_folder, module
                 )
                 
+                # 在結果中加入頂層目錄資訊
+                if top_dir:
+                    for item in results['revision_diff']:
+                        item['module'] = f"{top_dir}/{module}"
+                    for item in results['branch_error']:
+                        item['module'] = f"{top_dir}/{module}"
+                    for item in results['lost_project']:
+                        item['module'] = f"{top_dir}/{module}"
+                
                 # 收集所有資料
                 all_revision_diff.extend(results['revision_diff'])
                 all_branch_error.extend(results['branch_error'])
@@ -420,8 +461,18 @@ class FileComparator:
                 
                 # 如果有比較結果，寫入模組報表
                 if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
+                    # 建立輸出路徑，保持目錄結構
+                    if top_dir:
+                        module_output_dir = os.path.join(output_dir, top_dir, module)
+                    else:
+                        module_output_dir = os.path.join(output_dir, module)
+                    
+                    # 確保目錄存在
+                    if not os.path.exists(module_output_dir):
+                        os.makedirs(module_output_dir)
+                        
                     report_file = self._write_module_compare_report(
-                        module, results, module_path
+                        module, results, module_output_dir
                     )
                     if report_file:
                         compare_files.append(report_file)
@@ -438,6 +489,115 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"比較所有模組失敗: {str(e)}")
             raise
+            
+    def _find_folders_for_comparison(self, module_path: str, compare_mode: str) -> Tuple[str, str, str]:
+        """
+        根據比對模式找出需要比對的資料夾
+        
+        Args:
+            module_path: 模組路徑
+            compare_mode: 比對模式
+            
+        Returns:
+            (base_folder, compare_folder, missing_info)
+        """
+        folders = [f for f in os.listdir(module_path) 
+                   if os.path.isdir(os.path.join(module_path, f))]
+        
+        # 判斷是 RDDB 還是 DB 格式
+        is_rddb_format = any(folder.startswith('RDDB-') for folder in folders)
+        
+        # 根據資料夾名稱分類
+        master_folder = None
+        premp_folder = None
+        wave_folder = None
+        backup_folder = None
+        
+        for folder in folders:
+            if folder.endswith('-wave.backup'):
+                backup_folder = folder
+            elif folder.endswith('-wave'):
+                wave_folder = folder
+            elif folder.endswith('-premp'):
+                premp_folder = folder
+            else:
+                # 沒有後綴的是 master
+                if is_rddb_format and folder.startswith('RDDB-'):
+                    master_folder = folder
+                elif not is_rddb_format and folder.startswith('DB'):
+                    master_folder = folder
+        
+        # 根據比對模式決定要比對的資料夾
+        base_folder = None
+        compare_folder = None
+        missing_info = ""
+        
+        if compare_mode == 'master_vs_premp':
+            base_folder = master_folder
+            compare_folder = premp_folder
+            if not master_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 master 資料夾 (RDDB-XXX)"
+                else:
+                    missing_info = "缺少 master 資料夾 (DBXXXX)"
+            elif not premp_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 premp 資料夾 (RDDB-XXX-premp)"
+                else:
+                    missing_info = "缺少 premp 資料夾 (DBXXXX-premp)"
+                
+        elif compare_mode == 'premp_vs_wave':
+            base_folder = premp_folder
+            compare_folder = wave_folder
+            if not premp_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 premp 資料夾 (RDDB-XXX-premp)"
+                else:
+                    missing_info = "缺少 premp 資料夾 (DBXXXX-premp)"
+            elif not wave_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 wave 資料夾 (RDDB-XXX-wave)"
+                else:
+                    missing_info = "缺少 wave 資料夾 (DBXXXX-wave)"
+                
+        elif compare_mode == 'wave_vs_backup':
+            base_folder = wave_folder
+            compare_folder = backup_folder
+            if not wave_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 wave 資料夾 (RDDB-XXX-wave)"
+                else:
+                    missing_info = "缺少 wave 資料夾 (DBXXXX-wave)"
+            elif not backup_folder:
+                if is_rddb_format:
+                    missing_info = "缺少 wave.backup 資料夾 (RDDB-XXX-wave.backup)"
+                else:
+                    missing_info = "缺少 wave.backup 資料夾 (DBXXXX-wave.backup)"
+                
+        elif compare_mode and compare_mode.startswith('manual_'):
+            # 手動模式解析
+            parts = compare_mode.split('_')
+            if len(parts) >= 4:
+                base_type = parts[1]
+                compare_type = parts[3]
+                
+                # 根據類型找資料夾
+                type_to_folder = {
+                    'master': master_folder,
+                    'premp': premp_folder,
+                    'wave': wave_folder,
+                    'wave.backup': backup_folder
+                }
+                
+                base_folder = type_to_folder.get(base_type)
+                compare_folder = type_to_folder.get(compare_type)
+                
+                if not base_folder:
+                    missing_info = f"缺少 {base_type} 資料夾"
+                elif not compare_folder:
+                    missing_info = f"缺少 {compare_type} 資料夾"
+        
+        return base_folder, compare_folder, missing_info
 
     def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, module: str) -> Dict[str, Any]:
         """
@@ -495,92 +655,6 @@ class FileComparator:
             
         return results
         
-    def _find_folders_for_comparison(self, module_path: str, compare_mode: str) -> Tuple[str, str, str]:
-        """
-        根據比對模式找出需要比對的資料夾
-        
-        Args:
-            module_path: 模組路徑
-            compare_mode: 比對模式
-            
-        Returns:
-            (base_folder, compare_folder, missing_info)
-        """
-        folders = [f for f in os.listdir(module_path) 
-                if os.path.isdir(os.path.join(module_path, f))]
-        
-        # 根據資料夾名稱分類
-        master_folder = None
-        premp_folder = None
-        wave_folder = None
-        backup_folder = None
-        
-        for folder in folders:
-            if folder.endswith('-wave.backup'):
-                backup_folder = folder
-            elif folder.endswith('-wave'):
-                wave_folder = folder
-            elif folder.endswith('-premp'):
-                premp_folder = folder
-            else:
-                # 假設沒有後綴的是 master
-                if folder.startswith('RDDB-'):
-                    master_folder = folder
-        
-        # 根據比對模式決定要比對的資料夾
-        base_folder = None
-        compare_folder = None
-        missing_info = ""
-        
-        if compare_mode == 'master_vs_premp':
-            base_folder = master_folder
-            compare_folder = premp_folder
-            if not master_folder:
-                missing_info = "缺少 master 資料夾 (RDDB-XXX)"
-            elif not premp_folder:
-                missing_info = "缺少 premp 資料夾 (RDDB-XXX-premp)"
-                
-        elif compare_mode == 'premp_vs_wave':
-            base_folder = premp_folder
-            compare_folder = wave_folder
-            if not premp_folder:
-                missing_info = "缺少 premp 資料夾 (RDDB-XXX-premp)"
-            elif not wave_folder:
-                missing_info = "缺少 wave 資料夾 (RDDB-XXX-wave)"
-                
-        elif compare_mode == 'wave_vs_backup':
-            base_folder = wave_folder
-            compare_folder = backup_folder
-            if not wave_folder:
-                missing_info = "缺少 wave 資料夾 (RDDB-XXX-wave)"
-            elif not backup_folder:
-                missing_info = "缺少 wave.backup 資料夾 (RDDB-XXX-wave.backup)"
-                
-        elif compare_mode and compare_mode.startswith('manual_'):
-            # 手動模式解析
-            parts = compare_mode.split('_')
-            if len(parts) >= 4:
-                base_type = parts[1]
-                compare_type = parts[3]
-                
-                # 根據類型找資料夾
-                type_to_folder = {
-                    'master': master_folder,
-                    'premp': premp_folder,
-                    'wave': wave_folder,
-                    'wave.backup': backup_folder
-                }
-                
-                base_folder = type_to_folder.get(base_type)
-                compare_folder = type_to_folder.get(compare_type)
-                
-                if not base_folder:
-                    missing_info = f"缺少 {base_type} 資料夾"
-                elif not compare_folder:
-                    missing_info = f"缺少 {compare_type} 資料夾"
-        
-        return base_folder, compare_folder, missing_info
-                    
     def _write_module_compare_report(self, module: str, results: Dict, output_dir: str) -> str:
         """
         寫入單一模組的比較報表
@@ -624,8 +698,8 @@ class FileComparator:
             return None
             
     def _write_all_compare_report(self, revision_diff: List[Dict], branch_error: List[Dict],
-                             lost_project: List[Dict], cannot_compare_modules: List[Dict], 
-                             output_dir: str) -> str:
+                                 lost_project: List[Dict], cannot_compare_modules: List[Dict], 
+                                 output_dir: str) -> str:
         """
         寫入整合比較報表（包含所有比較結果）
         
@@ -674,7 +748,7 @@ class FileComparator:
                     df = pd.DataFrame(branch_error)
                     # 調整欄位順序
                     columns_order = ['SN', 'module', 'name', 'path', 'revision_short', 'revision', 
-                                'upstream', 'dest-branch', 'folders', 'path_location', 'compare_link']
+                                   'upstream', 'dest-branch', 'folders', 'path_location', 'compare_link']
                     # 只選擇存在的欄位
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]

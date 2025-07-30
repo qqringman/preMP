@@ -211,56 +211,91 @@ class SFTPCompareSystem:
         
         # 讓使用者選擇要打包的目錄
         print("\n選擇要打包的目錄：")
-        print("1. downloads (下載的原始檔案)")
-        print("2. compare_results (比較結果報表)")
-        print("3. downloads + compare_results (全部打包)")
-        print("4. 自訂目錄")
+        print("1. downloads/PrebuildFW (PrebuildFW 下載檔案)")
+        print("2. downloads/DailyBuild (DailyBuild 下載檔案)")
+        print("3. downloads (所有下載檔案)")
+        print("4. compare_results (比較結果報表)")
+        print("5. 全部打包")
+        print("6. 自訂目錄")
         
-        choice = input("\n請選擇 (1-4，預設: 3): ").strip()
+        choice = input("\n請選擇 (1-6，預設: 5): ").strip()
         
-        # 如果空白，預設選 3（全部打包）
+        # 如果空白，預設選 5（全部打包）
         if not choice:
-            choice = '3'
+            choice = '5'
         
         # 根據選擇決定來源目錄
+        sources_to_pack = []
+        default_name = ""
+        
         if choice == '1':
-            source_dir = config.DEFAULT_OUTPUT_DIR.replace('./', '')
-            print(f"將打包: {source_dir}")
-            default_name = f"downloads_{utils.get_timestamp()}.zip"
+            source_path = os.path.join(config.DEFAULT_OUTPUT_DIR.replace('./', ''), 'PrebuildFW')
+            if os.path.exists(source_path):
+                sources_to_pack.append(source_path)
+                print(f"將打包: {source_path}")
+                default_name = f"prebuildfw_{utils.get_timestamp()}.zip"
+            else:
+                print(f"錯誤：目錄不存在 - {source_path}")
+                return
+                
         elif choice == '2':
-            source_dir = config.DEFAULT_COMPARE_DIR.replace('./', '')
-            print(f"將打包: {source_dir}")
-            default_name = f"compare_results_{utils.get_timestamp()}.zip"
+            source_path = os.path.join(config.DEFAULT_OUTPUT_DIR.replace('./', ''), 'DailyBuild')
+            if os.path.exists(source_path):
+                sources_to_pack.append(source_path)
+                print(f"將打包: {source_path}")
+                default_name = f"dailybuild_{utils.get_timestamp()}.zip"
+            else:
+                print(f"錯誤：目錄不存在 - {source_path}")
+                return
+                
         elif choice == '3':
-            # 打包多個目錄
+            source_dir = config.DEFAULT_OUTPUT_DIR.replace('./', '')
+            if os.path.exists(source_dir):
+                sources_to_pack.append(source_dir)
+                print(f"將打包: {source_dir}")
+                default_name = f"downloads_{utils.get_timestamp()}.zip"
+            else:
+                print(f"錯誤：目錄不存在 - {source_dir}")
+                return
+                
+        elif choice == '4':
+            source_dir = config.DEFAULT_COMPARE_DIR.replace('./', '')
+            if os.path.exists(source_dir):
+                sources_to_pack.append(source_dir)
+                print(f"將打包: {source_dir}")
+                default_name = f"compare_results_{utils.get_timestamp()}.zip"
+            else:
+                print(f"錯誤：目錄不存在 - {source_dir}")
+                return
+                
+        elif choice == '5':
+            # 打包所有目錄
             downloads_dir = config.DEFAULT_OUTPUT_DIR.replace('./', '')
             compare_dir = config.DEFAULT_COMPARE_DIR.replace('./', '')
-            print(f"將打包: {downloads_dir} 和 {compare_dir}")
-            default_name = f"all_results_{utils.get_timestamp()}.zip"
-        elif choice == '4':
+            
+            if os.path.exists(downloads_dir):
+                sources_to_pack.append(downloads_dir)
+            if os.path.exists(compare_dir):
+                sources_to_pack.append(compare_dir)
+                
+            if sources_to_pack:
+                print(f"將打包: {', '.join(sources_to_pack)}")
+                default_name = f"all_results_{utils.get_timestamp()}.zip"
+            else:
+                print("錯誤：沒有找到任何可打包的目錄")
+                return
+                
+        elif choice == '6':
             source_dir = input("請輸入自訂目錄路徑: ").strip()
-            default_name = f"package_{utils.get_timestamp()}.zip"
+            if os.path.exists(source_dir):
+                sources_to_pack.append(source_dir)
+                default_name = f"package_{utils.get_timestamp()}.zip"
+            else:
+                print(f"錯誤：目錄不存在 - {source_dir}")
+                return
         else:
             print("無效的選擇")
             return
-        
-        # 檢查目錄是否存在
-        if choice == '3':
-            # 檢查兩個目錄
-            missing_dirs = []
-            if not os.path.exists(downloads_dir):
-                missing_dirs.append(downloads_dir)
-            if not os.path.exists(compare_dir):
-                missing_dirs.append(compare_dir)
-            
-            if missing_dirs:
-                print(f"錯誤：以下目錄不存在 - {', '.join(missing_dirs)}")
-                return
-        else:
-            # 檢查單一目錄
-            if not os.path.exists(source_dir):
-                print(f"錯誤：目錄不存在 - {source_dir}")
-                return
             
         # 詢問打包選項
         include_excel = input("包含 Excel 報表？(Y/n): ").strip().lower() != 'n'
@@ -281,20 +316,16 @@ class SFTPCompareSystem:
         
         # 執行打包
         try:
-            if choice == '3':
+            if len(sources_to_pack) > 1:
                 # 打包多個目錄
-                # 需要建立臨時目錄來合併內容
                 import tempfile
-                import shutil
                 
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    # 複製 downloads 目錄內容
-                    if os.path.exists(downloads_dir):
-                        shutil.copytree(downloads_dir, os.path.join(temp_dir, "downloads"))
-                    
-                    # 複製 compare_results 目錄內容
-                    if os.path.exists(compare_dir):
-                        shutil.copytree(compare_dir, os.path.join(temp_dir, "compare_results"))
+                    # 複製所有來源到臨時目錄
+                    for source in sources_to_pack:
+                        dest_name = os.path.basename(source)
+                        dest_path = os.path.join(temp_dir, dest_name)
+                        shutil.copytree(source, dest_path)
                     
                     # 打包臨時目錄
                     zip_path = self.packager.create_compare_results_zip(
@@ -303,7 +334,7 @@ class SFTPCompareSystem:
             else:
                 # 打包單一目錄
                 zip_path = self.packager.create_compare_results_zip(
-                    source_dir, zip_path, include_excel, include_source
+                    sources_to_pack[0], zip_path, include_excel, include_source
                 )
                 
             print(f"\n打包完成！ZIP 檔案已儲存至: {zip_path}")
@@ -354,6 +385,12 @@ class SFTPCompareSystem:
         for dir_path in temp_dirs:
             if os.path.exists(dir_path):
                 print(f"- {dir_path}")
+                # 顯示子目錄結構
+                if dir_path == config.DEFAULT_OUTPUT_DIR:
+                    for subdir in ['PrebuildFW', 'DailyBuild']:
+                        full_path = os.path.join(dir_path, subdir)
+                        if os.path.exists(full_path):
+                            print(f"  - {subdir}/")
         
         confirm = input("\n確定要清除這些目錄嗎？(y/N): ").strip().lower()
         

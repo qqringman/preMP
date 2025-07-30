@@ -5,8 +5,8 @@
 # SFTP 連線設定
 SFTP_HOST = 'mmsftpx.realtek.com'
 SFTP_PORT = 22
-SFTP_USERNAME = ''
-SFTP_PASSWORD = ''
+SFTP_USERNAME = 'lgwar_user'
+SFTP_PASSWORD = 'Ab!123456'
 SFTP_TIMEOUT = 30  # 連線逾時時間（秒）
 
 # 檔案設定
