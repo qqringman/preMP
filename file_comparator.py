@@ -830,6 +830,7 @@ class FileComparator:
         try:
             import pandas as pd
             from openpyxl.styles import PatternFill, Font
+            from openpyxl.worksheet.filters import FilterColumn, Filters
             
             # 確保輸出目錄存在
             if not os.path.exists(output_dir):
@@ -874,17 +875,22 @@ class FileComparator:
                                 'path_location', 'compare_link', 'problem', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
-                    df.to_excel(writer, sheet_name='branch_error', index=False)
+                    
+                    # 將 has_wave = N 的資料排在前面
+                    df_sorted = df.sort_values('has_wave', ascending=True)
+                    df_sorted.to_excel(writer, sheet_name='branch_error', index=False)
                     
                     # 格式化 branch_error 頁籤
                     worksheet = writer.sheets['branch_error']
                     
-                    # 找到 "問題" 欄位的位置
+                    # 找到 "問題" 和 "has_wave" 欄位的位置
                     problem_col = None
+                    has_wave_col = None
                     for idx, col in enumerate(df.columns):
                         if col == 'problem':
                             problem_col = idx + 1  # Excel 是 1-based
-                            break
+                        elif col == 'has_wave':
+                            has_wave_col = idx + 1
                     
                     if problem_col:
                         # 設定 "問題" 標題為黃色
@@ -894,8 +900,25 @@ class FileComparator:
                     # 設定自動篩選
                     worksheet.auto_filter.ref = worksheet.dimensions
                     
-                    # 設定預設篩選條件 has_wave = N
-                    # 注意：openpyxl 不支援設定預設篩選值，但可以設定自動篩選範圍
+                    # 設定 has_wave 欄位的篩選條件為只顯示 "N"
+                    if has_wave_col:
+                        # 取得所有唯一的 has_wave 值
+                        has_wave_values = df['has_wave'].unique().tolist()
+                        
+                        # 建立篩選器，只選擇 "N"
+                        filter_column = FilterColumn(colId=has_wave_col - 1)
+                        filter_column.filters = Filters()
+                        filter_column.filters.filter = ['N']
+                        
+                        # 如果有 'Y' 值，需要將其設為隱藏
+                        if 'Y' in has_wave_values:
+                            # 找出所有 has_wave = 'Y' 的行並隱藏
+                            for row_idx in range(2, len(df) + 2):  # 從第2行開始（第1行是標題）
+                                if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
+                                    worksheet.row_dimensions[row_idx].hidden = True
+                        
+                        # 將篩選器加入自動篩選
+                        worksheet.auto_filter.filterColumn.append(filter_column)
                 
                 # lost_project 頁籤（只在有資料時產生）
                 if lost_project:
