@@ -104,17 +104,6 @@ class FileComparator:
     def _compare_manifest_files(self, file1: str, file2: str, module: str, base_folder: str = None, compare_folder: str = None, module_path: str = None) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """
         比較兩個 manifest.xml 檔案（修改後的邏輯）
-        
-        Args:
-            file1: 第一個檔案路徑（base）
-            file2: 第二個檔案路徑（compare）
-            module: 模組名稱（完整路徑）
-            base_folder: base 資料夾名稱
-            compare_folder: compare 資料夾名稱
-            module_path: 模組完整路徑
-            
-        Returns:
-            (revision_diff, branch_error, lost_project)
         """
         # 解析兩個檔案
         base_projects = self._parse_manifest_xml(file1)
@@ -157,6 +146,117 @@ class FileComparator:
         # 2. 檢查分支命名錯誤
         branch_error = []
         sn = 1
+        
+        # 根據資料夾名稱決定檢查規則
+        check_keyword = None
+        if base_folder and compare_folder:
+            if "-premp" in compare_folder and "-premp" not in base_folder:
+                check_keyword = 'premp'
+            elif "-wave" in compare_folder and "-wave.backup" not in compare_folder:
+                if "-premp" in base_folder:
+                    check_keyword = 'wave'
+            elif "-wave.backup" in compare_folder:
+                check_keyword = 'wave.backup'
+        
+        if check_keyword:
+            for key, compare_proj in compare_projects.items():
+                upstream = compare_proj.get('upstream', '')
+                dest_branch = compare_proj.get('dest-branch', '')
+                revision = compare_proj.get('revision', '')
+                
+                # 根據檢查關鍵字進行相應的檢查
+                should_check = False
+                
+                if check_keyword == 'premp':
+                    # 檢查是否都不包含 'premp'
+                    if upstream and dest_branch:
+                        if 'premp' not in upstream and 'premp' not in dest_branch:
+                            should_check = True
+                elif check_keyword == 'wave':
+                    # 檢查是否都不包含 'wave'
+                    if upstream and dest_branch:
+                        if 'wave' not in upstream and 'wave' not in dest_branch:
+                            should_check = True
+                elif check_keyword == 'wave.backup':
+                    # 檢查是否都不包含 'wave.backup'
+                    if upstream and dest_branch:
+                        if 'wave.backup' not in upstream and 'wave.backup' not in dest_branch:
+                            should_check = True
+                
+                if should_check:
+                    # 檢查是否包含 wave
+                    has_wave = ('wave' in upstream or 'wave' in dest_branch)
+                    
+                    # 決定問題描述
+                    problem = ""
+                    if not has_wave:  # 只有 has_wave = N 時才顯示問題
+                        if check_keyword == 'premp':
+                            problem = "沒改成 premp"
+                        elif check_keyword == 'wave':
+                            problem = "沒改成 wave"
+                        elif check_keyword == 'wave.backup':
+                            problem = "沒改成 wavebackup"
+                    
+                    branch_error.append({
+                        'SN': sn,
+                        'module': simple_module,
+                        'base_folder': base_folder,
+                        'compare_folder': compare_folder,
+                        'name': compare_proj['name'],
+                        'path': compare_proj['path'],
+                        'revision_short': self._shorten_hash(revision),
+                        'revision': revision,
+                        'upstream': upstream,
+                        'dest-branch': dest_branch,
+                        'check_keyword': check_keyword,
+                        'module_path': module_path if module_path else '',
+                        'compare_link': self._generate_link(compare_proj),
+                        'has_wave': 'Y' if has_wave else 'N',
+                        'problem': problem
+                    })
+                    sn += 1
+        
+        # 3. 檢查缺少或新增的 project（保持原有邏輯）
+        lost_project = []
+        sn = 1
+        
+        # 檢查在 base 檔案中但不在 compare 檔案中的項目（刪除）
+        for key, base_proj in base_projects.items():
+            if key not in compare_projects:
+                revision = base_proj.get('revision', '')
+                lost_project.append({
+                    'SN': sn,
+                    '狀態': '刪除',
+                    'module': simple_module,
+                    'folder': base_folder,  # 記錄是哪個資料夾
+                    'name': base_proj['name'],
+                    'path': base_proj['path'],
+                    'upstream': base_proj.get('upstream', ''),
+                    'dest-branch': base_proj.get('dest-branch', ''),
+                    'revision': revision,
+                    'link': self._generate_link(base_proj)
+                })
+                sn += 1
+        
+        # 檢查在 compare 檔案中但不在 base 檔案中的項目（新增）
+        for key, compare_proj in compare_projects.items():
+            if key not in base_projects:
+                revision = compare_proj.get('revision', '')
+                lost_project.append({
+                    'SN': sn,
+                    '狀態': '新增',
+                    'module': simple_module,
+                    'folder': compare_folder,  # 記錄是哪個資料夾
+                    'name': compare_proj['name'],
+                    'path': compare_proj['path'],
+                    'upstream': compare_proj.get('upstream', ''),
+                    'dest-branch': compare_proj.get('dest-branch', ''),
+                    'revision': revision,
+                    'link': self._generate_link(compare_proj)
+                })
+                sn += 1
+        
+        return revision_diff, branch_error, lost_project
         
         # 根據資料夾名稱決定檢查規則
         check_keyword = None
@@ -722,23 +822,14 @@ class FileComparator:
             return None
             
     def _write_all_compare_report(self, revision_diff: List[Dict], branch_error: List[Dict],
-                                 lost_project: List[Dict], cannot_compare_modules: List[Dict], 
-                                 output_dir: str) -> str:
+                             lost_project: List[Dict], cannot_compare_modules: List[Dict], 
+                             output_dir: str) -> str:
         """
         寫入整合比較報表（包含所有比較結果）
-        
-        Args:
-            revision_diff: revision 差異列表
-            branch_error: 分支命名錯誤列表
-            lost_project: 新增/刪除專案列表
-            cannot_compare_modules: 無法比對的模組列表
-            output_dir: 輸出目錄
-            
-        Returns:
-            報表檔案路徑
         """
         try:
             import pandas as pd
+            from openpyxl.styles import PatternFill, Font
             
             # 確保輸出目錄存在
             if not os.path.exists(output_dir):
@@ -760,9 +851,9 @@ class FileComparator:
                     df = pd.DataFrame(revision_diff)
                     # 調整欄位順序
                     columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
-                                   'base_short', 'base_revision', 'compare_short', 'compare_revision',
-                                   'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
-                                   'base_link', 'compare_link']
+                                'base_short', 'base_revision', 'compare_short', 'compare_revision',
+                                'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
+                                'base_link', 'compare_link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='revision_diff', index=False)
@@ -777,32 +868,49 @@ class FileComparator:
                             item['path_location'] = item.pop('module_path')
                     
                     df = pd.DataFrame(branch_error)
-                    # 調整欄位順序
+                    # 調整欄位順序，problem 和 has_wave 放在最後
                     columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
-                                   'revision_short', 'revision', 'upstream', 'dest-branch', 
-                                   'path_location', 'compare_link', 'has_wave']
+                                'revision_short', 'revision', 'upstream', 'dest-branch', 
+                                'path_location', 'compare_link', 'problem', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='branch_error', index=False)
+                    
+                    # 格式化 branch_error 頁籤
+                    worksheet = writer.sheets['branch_error']
+                    
+                    # 找到 "問題" 欄位的位置
+                    problem_col = None
+                    for idx, col in enumerate(df.columns):
+                        if col == 'problem':
+                            problem_col = idx + 1  # Excel 是 1-based
+                            break
+                    
+                    if problem_col:
+                        # 設定 "問題" 標題為黃色
+                        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                        worksheet.cell(row=1, column=problem_col).fill = yellow_fill
+                    
+                    # 設定自動篩選
+                    worksheet.auto_filter.ref = worksheet.dimensions
+                    
+                    # 設定預設篩選條件 has_wave = N
+                    # 注意：openpyxl 不支援設定預設篩選值，但可以設定自動篩選範圍
                 
                 # lost_project 頁籤（只在有資料時產生）
                 if lost_project:
                     df = pd.DataFrame(lost_project)
                     # 調整欄位順序
                     columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
-                                   'upstream', 'dest-branch', 'revision', 'link']
+                                'upstream', 'dest-branch', 'revision', 'link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
                 
-                # 無法比對頁籤（即使沒有資料也產生，但通常有資料才會呼叫此方法）
+                # 無法比對頁籤（只在有資料時產生）
                 if cannot_compare_modules:
                     df = pd.DataFrame(cannot_compare_modules)
                     df.to_excel(writer, sheet_name='無法比對', index=False)
-                else:
-                    pd.DataFrame(columns=['SN', 'module', 'folder_count', 
-                                        'folders', 'path', 'reason']).to_excel(
-                        writer, sheet_name='無法比對', index=False)
                 
                 # 格式化所有工作表
                 for sheet_name in writer.sheets:
