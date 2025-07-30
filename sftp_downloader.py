@@ -152,20 +152,64 @@ class SFTPDownloader:
             # 確保本地目錄存在
             utils.create_directory(local_dir)
             
-            # 下載每個目標檔案
+            # 判斷檔案格式類型
+            is_rddb_format = '/DailyBuild/PrebuildFW' in ftp_path  # RDDB 格式
+            is_db_format = '/DailyBuild/' in ftp_path and '/PrebuildFW' not in ftp_path  # DB 格式
+            version_number = None
+            
+            if is_db_format:
+                # DB 格式：從路徑中提取版本號
+                # 例如：/DailyBuild/MacArthur7P/DB1857_Mac7p_FW_Android12_Ref_Design_Cert/904_all_202507300838
+                # 或：/DailyBuild/Merlin7/DB2857_Merlin7_32Bit_FW_Android14_Ref_Plus_PreMP_GoogleGMS/69_202507292300
+                path_parts = ftp_path.rstrip('/').split('/')
+                if path_parts:
+                    last_part = path_parts[-1]
+                    # 檢查最後一部分是否符合 "版本號_xxx" 的格式
+                    if '_' in last_part:
+                        first_part = last_part.split('_')[0]
+                        if first_part.isdigit():
+                            version_number = first_part
+                            self.logger.info(f"檢測到 DB 格式，版本號: {version_number}")
+            
+            # 準備要下載的檔案列表
+            target_files = []
+            file_mapping = {}  # 映射標準檔名到實際檔名
+            
             for target_file in config.TARGET_FILES:
+                if is_db_format and version_number:
+                    # DB 格式：使用帶版本號的檔名
+                    if target_file.lower() == 'manifest.xml':
+                        actual_file = f'manifest_{version_number}.xml'
+                        target_files.append(actual_file)
+                        file_mapping[target_file] = actual_file
+                    elif target_file.lower() == 'version.txt':
+                        actual_file = f'Version_{version_number}.txt'
+                        target_files.append(actual_file)
+                        file_mapping[target_file] = actual_file
+                    elif target_file.lower() == 'f_version.txt':
+                        # F_Version.txt 在 DB 格式中可能不存在或不需要版本號
+                        # 先嘗試原始名稱
+                        target_files.append(target_file)
+                        file_mapping[target_file] = target_file
+                else:
+                    # RDDB 格式或其他：使用標準檔名
+                    target_files.append(target_file)
+                    file_mapping[target_file] = target_file
+            
+            # 下載每個目標檔案
+            for original_file, actual_file in file_mapping.items():
                 try:
-                    # 檢查本地是否已存在該檔案
-                    local_file = os.path.join(local_dir, target_file)
+                    # 檢查本地是否已存在該檔案（使用原始檔名）
+                    local_file = os.path.join(local_dir, original_file)
                     if os.path.exists(local_file) and config.SKIP_EXISTING_FILES:
                         self.logger.info(f"檔案已存在，跳過下載: {local_file}")
-                        downloaded_files.append(target_file)
-                        file_paths[target_file] = "已存在"
+                        downloaded_files.append(original_file)
+                        file_paths[original_file] = "已存在"
                         continue
                     
-                    # 遞迴尋找檔案
-                    self.logger.debug(f"搜尋檔案: {target_file} in {ftp_path}")
-                    result = self._find_file_recursive(ftp_path, target_file, config.MAX_SEARCH_DEPTH)
+                    # 遞迴尋找檔案（使用實際檔名）
+                    self.logger.debug(f"搜尋檔案: {actual_file} in {ftp_path}")
+                    result = self._find_file_recursive(ftp_path, actual_file, config.MAX_SEARCH_DEPTH)
                     
                     if result:
                         remote_file, actual_filename = result
@@ -173,18 +217,35 @@ class SFTPDownloader:
                         # 記錄相對路徑
                         relative_path = remote_file.replace(ftp_path, '').lstrip('/')
                         if relative_path != actual_filename:
-                            self.logger.info(f"找到檔案 {target_file} 在子目錄: {os.path.dirname(relative_path)}")
+                            self.logger.info(f"找到檔案 {actual_file} 在子目錄: {os.path.dirname(relative_path)}")
                         
+                        # 下載檔案（儲存為原始檔名）
                         self.logger.info(f"下載檔案: {remote_file} -> {local_file}")
                         self._sftp.get(remote_file, local_file)
-                        downloaded_files.append(target_file)
+                        downloaded_files.append(original_file)
                         
-                        file_paths[target_file] = relative_path
+                        file_paths[original_file] = relative_path
                     else:
-                        self.logger.warning(f"找不到檔案: {target_file} in {ftp_path} (包含子目錄)")
-                        
+                        # 如果是 DB 格式但找不到帶版本號的檔案，嘗試原始檔名
+                        if is_db_format and actual_file != original_file:
+                            self.logger.info(f"找不到 {actual_file}，嘗試尋找 {original_file}")
+                            result = self._find_file_recursive(ftp_path, original_file, config.MAX_SEARCH_DEPTH)
+                            
+                            if result:
+                                remote_file, actual_filename = result
+                                relative_path = remote_file.replace(ftp_path, '').lstrip('/')
+                                
+                                self.logger.info(f"下載檔案: {remote_file} -> {local_file}")
+                                self._sftp.get(remote_file, local_file)
+                                downloaded_files.append(original_file)
+                                file_paths[original_file] = relative_path
+                            else:
+                                self.logger.warning(f"找不到檔案: {original_file} 或 {actual_file} in {ftp_path} (包含子目錄)")
+                        else:
+                            self.logger.warning(f"找不到檔案: {actual_file} in {ftp_path} (包含子目錄)")
+                            
                 except Exception as e:
-                    self.logger.error(f"下載檔案失敗 {target_file}: {str(e)}")
+                    self.logger.error(f"下載檔案失敗 {original_file}: {str(e)}")
                     
         except Exception as e:
             self.logger.error(f"下載過程發生錯誤: {str(e)}")
@@ -229,9 +290,17 @@ class SFTPDownloader:
                 module, jira_id = utils.parse_module_and_jira(ftp_path)
                 
                 if module:
-                    # 檢查路徑中的關鍵字並決定資料夾後綴
-                    folder_suffix = ""
-                    if jira_id:  # 標準格式（有 JIRA ID）
+                    # 根據路徑類型決定頂層目錄
+                    if '/DailyBuild/PrebuildFW' in ftp_path:
+                        # RDDB 格式：PrebuildFW/模組/RDDB-XXX
+                        top_dir = 'PrebuildFW'
+                    else:
+                        # DB 格式：DailyBuild/平台/DBXXXX
+                        top_dir = 'DailyBuild'
+                    
+                    if jira_id:  # RDDB 格式（有 JIRA ID）
+                        # 檢查路徑中的關鍵字並決定資料夾後綴
+                        folder_suffix = ""
                         if "mp.google-refplus.wave.backup" in ftp_path:
                             folder_suffix = "-wave.backup"
                         elif "mp.google-refplus.wave" in ftp_path:
@@ -239,12 +308,19 @@ class SFTPDownloader:
                         elif "premp.google-refplus" in ftp_path:
                             folder_suffix = "-premp"
                         
-                        # 建立本地目錄（加上後綴）
+                        # 建立本地目錄結構：PrebuildFW/模組/RDDB-XXX-後綴
                         folder_name = f"{jira_id}{folder_suffix}"
-                        local_dir = os.path.join(output_dir, module, folder_name)
+                        local_dir = os.path.join(output_dir, top_dir, module, folder_name)
+                        
+                        # 用於報表顯示的路徑
+                        local_folder_display = f"{top_dir}/{module}/{folder_name}"
                     else:
-                        # 特殊格式（如 Merlin7/DB2302）
-                        local_dir = os.path.join(output_dir, module)
+                        # DB 格式（如 Merlin7/DB2302）
+                        # 建立本地目錄結構：DailyBuild/平台/DBXXXX
+                        local_dir = os.path.join(output_dir, top_dir, module)
+                        
+                        # 用於報表顯示的路徑
+                        local_folder_display = f"{top_dir}/{module}"
                     
                     # 下載檔案
                     downloaded_files, file_paths = self.download_files(ftp_path, local_dir)
@@ -262,12 +338,6 @@ class SFTPDownloader:
                                 file_info.append(file)
                         else:
                             file_info.append(file)
-                    
-                    # 建立本地資料夾路徑字串
-                    if jira_id:
-                        local_folder_display = f"{module}/{folder_name}"
-                    else:
-                        local_folder_display = module
                     
                     # 加入報表資料
                     report_data.append({

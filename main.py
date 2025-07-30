@@ -148,33 +148,58 @@ class SFTPCompareSystem:
         output_dir = input(f"輸出目錄 (預設: {default_output}): ").strip()
         output_dir = output_dir or default_output
         
-        # 詢問要使用哪個資料夾作為 base
-        print("\n選擇要作為基準(base)的資料夾類型：")
-        print("1. 預設 (RDDB-XXX)")
-        print("2. premp (RDDB-XXX-premp)")
-        print("3. wave (RDDB-XXX-wave)")
-        print("4. wave.backup (RDDB-XXX-wave.backup)")
-        print("5. 自動選擇 (使用第一個資料夾)")
+        # 詢問要使用哪種比對方式
+        print("\n選擇比對方式：")
+        print("1. master vs premp (RDDB-XXX vs RDDB-XXX-premp)")
+        print("2. premp vs wave (RDDB-XXX-premp vs RDDB-XXX-wave)")
+        print("3. wave vs wave.backup (RDDB-XXX-wave vs RDDB-XXX-wave.backup)")
+        print("4. 手動選擇 (自訂比對組合)")
         
-        choice = input("\n請選擇 (1-5，預設: 1): ").strip()
+        choice = input("\n請選擇 (1-4，預設: 1): ").strip()
         
         # 如果空白，預設選 1
         if not choice:
             choice = '1'
         
-        base_folder_suffix = None
+        compare_mode = None
         if choice == '1':
-            base_folder_suffix = 'default'
+            compare_mode = 'master_vs_premp'
         elif choice == '2':
-            base_folder_suffix = 'premp'
+            compare_mode = 'premp_vs_wave'
         elif choice == '3':
-            base_folder_suffix = 'wave'
+            compare_mode = 'wave_vs_backup'
         elif choice == '4':
-            base_folder_suffix = 'wave.backup'
+            # 手動選擇模式
+            print("\n手動選擇比對組合：")
+            print("Base 資料夾類型：")
+            print("1. master (RDDB-XXX)")
+            print("2. premp (RDDB-XXX-premp)")
+            print("3. wave (RDDB-XXX-wave)")
+            print("4. wave.backup (RDDB-XXX-wave.backup)")
+            base_choice = input("選擇 Base (1-4): ").strip()
+            
+            print("\nCompare 資料夾類型：")
+            print("1. master (RDDB-XXX)")
+            print("2. premp (RDDB-XXX-premp)")
+            print("3. wave (RDDB-XXX-wave)")
+            print("4. wave.backup (RDDB-XXX-wave.backup)")
+            compare_choice = input("選擇 Compare (1-4): ").strip()
+            
+            base_suffix = {'1': 'master', '2': 'premp', '3': 'wave', '4': 'wave.backup'}.get(base_choice)
+            compare_suffix = {'1': 'master', '2': 'premp', '3': 'wave', '4': 'wave.backup'}.get(compare_choice)
+            
+            if base_suffix and compare_suffix:
+                compare_mode = f'manual_{base_suffix}_vs_{compare_suffix}'
+            else:
+                print("無效的選擇")
+                return
+        else:
+            print("無效的選擇")
+            return
         
         # 執行比較
         try:
-            compare_files = self.comparator.compare_all_modules(source_dir, output_dir, base_folder_suffix)
+            compare_files = self.comparator.compare_all_modules(source_dir, output_dir, compare_mode)
             print(f"\n比較完成！產生了 {len(compare_files)} 個比較報表")
             print(f"整合報表已儲存至: {os.path.join(output_dir, 'all_compare.xlsx')}")
         except Exception as e:

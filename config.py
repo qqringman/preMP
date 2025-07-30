@@ -5,8 +5,8 @@
 # SFTP 連線設定
 SFTP_HOST = 'mmsftpx.realtek.com'
 SFTP_PORT = 22
-SFTP_USERNAME = 'lgwar_user'
-SFTP_PASSWORD = 'Ab!123456'
+SFTP_USERNAME = ''
+SFTP_PASSWORD = ''
 SFTP_TIMEOUT = 30  # 連線逾時時間（秒）
 
 # 檔案設定
@@ -24,7 +24,13 @@ DEFAULT_ZIP_DIR = './zip_output'
 FTP_PATH_COLUMN = 'ftp path'  # Excel 中 FTP 路徑的欄位名稱
 
 # 路徑解析規則
-MODULE_PATTERN = r'/PrebuildFW/([^/]+)/(RDDB-\d+)'  # 標準格式：用於解析模組和 JIRA ID
+MODULE_PATTERN = r'/PrebuildFW/([^/]+)/(RDDB-\d+)'  # RDDB 格式
+DB_PATTERN = r'/DailyBuild/([^/]+)/(DB\d+)_'  # DB 格式
+
+# 檔案格式設定
+RDDB_TARGET_FILES = ['F_Version.txt', 'manifest.xml', 'Version.txt']
+DB_TARGET_FILES = ['manifest_{version}.xml', 'Version_{version}.txt']  # {version} 會被替換
+
 # 正則表達式說明：
 # - /PrebuildFW/ : 固定的路徑前綴
 # - ([^/]+) : 匹配模組名稱（任何非斜線的字符，如 bootcode, emcu, dolby_ta, ufsd_ko 等）

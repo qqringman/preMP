@@ -31,16 +31,23 @@ def parse_module_and_jira(ftp_path: str) -> Tuple[Optional[str], Optional[str]]:
     Returns:
         (module, jira_id) 或 (None, None) 如果解析失敗
     """
-    # 先嘗試匹配標準的 PrebuildFW 格式
-    match = re.search(config.MODULE_PATTERN, ftp_path)
-    if match:
-        return match.group(1), match.group(2)
+    # RDDB 格式：/DailyBuild/PrebuildFW/模組/RDDB-XXX_...
+    if '/PrebuildFW/' in ftp_path:
+        match = re.search(config.MODULE_PATTERN, ftp_path)
+        if match:
+            return match.group(1), match.group(2)
     
-    # 嘗試匹配特殊格式：/DailyBuild/Merlin7/DB2302_...
-    special_match = re.search(r'/DailyBuild/(\w+)/(\w+)_', ftp_path)
-    if special_match:
-        # 返回 "Merlin7/DB2302" 格式
-        return f"{special_match.group(1)}/{special_match.group(2)}", None
+    # DB 格式：/DailyBuild/平台/DBXXXX_...
+    # 例如：/DailyBuild/Merlin7/DB2857_Merlin7_32Bit_FW.../版本號_日期
+    elif '/DailyBuild/' in ftp_path and '/PrebuildFW/' not in ftp_path:
+        # 提取平台名稱和 DB 編號
+        pattern = r'/DailyBuild/([^/]+)/(DB\d+)_'
+        match = re.search(pattern, ftp_path)
+        if match:
+            platform = match.group(1)  # 例如：Merlin7, MacArthur7P
+            db_number = match.group(2)  # 例如：DB2857, DB1857
+            # 返回 "平台/DB編號" 格式
+            return f"{platform}/{db_number}", None
     
     return None, None
 
