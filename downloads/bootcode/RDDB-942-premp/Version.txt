@@ -1,9 +1,0 @@
-P_JIRA_ID;RDDB-942
-P_JIRA_URL;https://jira.realtek.com/browse/RDDB-942
-P_CATEGORY;bootcode
-P_JKS_BUILD_URL;http://172.22.47.32:8080/job/Bootcode/job/RDDB942_Merlin8_PreMP_Refplus_Bootcode_Prebuilt/7/
-P_REPO_INIT;repo init -u ssh://mm2sd-slave.sdlc.rd.realtek.com:29418/realtek/bootcode/manifest -b realtek/merlin8/master -m android-14/premp.google-refplus.xml
-P_GIT_001;realtek/bootcode;realtek/merlin8/android-14/premp.google-refplus;9624861;1006894
-P_GIT_002;realtek/emcu_prebuilt;realtek/merlin8/android-14/premp.google-refplus;0616cbe;1000490
-P_GIT_003;realtek/rbus;realtek/android-14/premp.google-refplus;7f53463;1000124
-P_DAILY_BUILD;/DailyBuild/PrebuildFW/bootcode/RDDB-942_realtek_merlin8_premp.google-refplus/2025_06_24-18_16_9624861

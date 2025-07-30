@@ -298,16 +298,16 @@ class SFTPDownloader:
                         # DB 格式：DailyBuild/平台/DBXXXX
                         top_dir = 'DailyBuild'
                     
+                    # 檢查路徑中的關鍵字並決定資料夾後綴（統一處理）
+                    folder_suffix = ""
+                    if "mp.google-refplus.wave.backup" in ftp_path:
+                        folder_suffix = "-wave.backup"
+                    elif "mp.google-refplus.wave" in ftp_path:
+                        folder_suffix = "-wave"
+                    elif "premp.google-refplus" in ftp_path:
+                        folder_suffix = "-premp"
+                    
                     if jira_id:  # RDDB 格式（有 JIRA ID）
-                        # 檢查路徑中的關鍵字並決定資料夾後綴
-                        folder_suffix = ""
-                        if "mp.google-refplus.wave.backup" in ftp_path:
-                            folder_suffix = "-wave.backup"
-                        elif "mp.google-refplus.wave" in ftp_path:
-                            folder_suffix = "-wave"
-                        elif "premp.google-refplus" in ftp_path:
-                            folder_suffix = "-premp"
-                        
                         # 建立本地目錄結構：PrebuildFW/模組/RDDB-XXX-後綴
                         folder_name = f"{jira_id}{folder_suffix}"
                         local_dir = os.path.join(output_dir, top_dir, module, folder_name)
@@ -316,11 +316,19 @@ class SFTPDownloader:
                         local_folder_display = f"{top_dir}/{module}/{folder_name}"
                     else:
                         # DB 格式（如 Merlin7/DB2302）
-                        # 建立本地目錄結構：DailyBuild/平台/DBXXXX
-                        local_dir = os.path.join(output_dir, top_dir, module)
-                        
-                        # 用於報表顯示的路徑
-                        local_folder_display = f"{top_dir}/{module}"
+                        # module 格式為 "Merlin7/DB2302"，需要分解
+                        if '/' in module:
+                            platform, db_number = module.split('/', 1)
+                            # 建立本地目錄結構：DailyBuild/平台/DBXXXX-後綴
+                            folder_name = f"{db_number}{folder_suffix}"
+                            local_dir = os.path.join(output_dir, top_dir, platform, folder_name)
+                            
+                            # 用於報表顯示的路徑
+                            local_folder_display = f"{top_dir}/{platform}/{folder_name}"
+                        else:
+                            # 備用處理
+                            local_dir = os.path.join(output_dir, top_dir, module)
+                            local_folder_display = f"{top_dir}/{module}"
                     
                     # 下載檔案
                     downloaded_files, file_paths = self.download_files(ftp_path, local_dir)

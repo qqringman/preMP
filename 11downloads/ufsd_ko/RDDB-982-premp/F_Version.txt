@@ -1,8 +1,0 @@
-P_JIRA_ID;RDDB-982
-P_JIRA_URL;https://jira.realtek.com/browse/RDDB-982
-P_CATEGORY;ufsd_ko
-P_JKS_BUILD_URL;http://172.22.47.32:8080/job/007_Others/job/RDDB982_Mac8q_PreMP_Refplus_Android11_UFSD_Prebuilt/7/
-P_REPO_INIT;repo init -u ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest -b realtek/android-11 -m atv-google-refplus.xml -g rtk_kernel
-P_GIT_001;kernel/linux;realtek/linux-5.4/android-11/mp.mac8q.google-refplus;9918023;1000003
-P_GIT_002;realtek/ufsd;realtek/kernel5.4/android-11/UFSD_HEAD_r340724_b26;618e9e1;1000001
-P_DAILY_BUILD;/DailyBuild/PrebuildFW/ufsd_ko/RDDB-982_mac8q_android11_premp.google-refplus.upgrade-11/20250717_1455_618e9e1

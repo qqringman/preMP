@@ -1,8 +1,0 @@
-P_JIRA_ID;RDDB-932
-P_JIRA_URL;https://jira.realtek.com/browse/RDDB-932
-P_CATEGORY;dolby_ta
-P_JKS_BUILD_URL;http://172.22.47.32:8080/job/Dolby_Vision/job/RDDB932_Mac7p_Shark_Dolby_Vision_TA_PreMP_Prebuilt/2/
-P_REPO_INIT;repo init -u ssh://mm2sd.rtkbf.com:29418/realtek/dolby_vision/manifest -b realtek/android-14/premp.google-refplus.upgrade-11.rtd2851a -m dolby_ta_optee3.0_shark_amati_manifest.xml
-P_GIT_001;realtek/mac7p/v3.0/common/optee_os_prebuilt;realtek/android-14/premp.google-refplus.upgrade-11;8fcb57a;1000072
-P_GIT_002;realtek/dolby_vision_hw2_ta_source;realtek/android-14/premp.google-refplus.upgrade-11;e05abe4;1000013
-P_DAILY_BUILD;/DailyBuild/PrebuildFW/dolby_ta/RDDB-932_mac7p_v3.0_common_android11_premp.google-refplus.upgrade-11.rtd2851a/2025_06_18-15_30_e05abe4
