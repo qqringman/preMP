@@ -35,8 +35,8 @@ class SFTPCompareSystem:
             print("3. 打包比對結果成 ZIP")
             print("4. 測試 SFTP 連線")
             print("5. 清除暫存檔案")
-            print("6. 【一步到位】下載→比較→打包")
-            print("7. 【全部比對】執行所有比對情境")
+            print("6. 【全部比對】執行所有比對情境")            
+            print("7. 【一步到位】下載→比較→打包")
             print("8. 退出")
             print("="*50)
             
@@ -53,9 +53,9 @@ class SFTPCompareSystem:
             elif choice == '5':
                 self._clean_temp_files()
             elif choice == '6':
-                self._one_step_process()
-            elif choice == '7':
                 self._all_comparisons()
+            elif choice == '7':
+                self._one_step_process()
             elif choice == '8':
                 print("感謝使用，再見！")
                 break
