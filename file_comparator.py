@@ -41,8 +41,24 @@ class FileComparator:
                 base_url = self.base_url_prebuilt
             else:
                 base_url = self.base_url_normal
-            return f"{base_url}{name}/+log/refs/heads/{branch}"
+            
+            # 處理特殊的 branch 格式
+            if branch.startswith('refs/'):
+                # 如果 branch 已經包含 refs/，直接使用
+                # 例如：refs/tags/u-tv-keystone-rtk-refplus-wave3-release-UKR8.20250727
+                return f"{base_url}{name}/+log/{branch}"
+            else:
+                # 一般情況，加上 refs/heads/
+                return f"{base_url}{name}/+log/refs/heads/{branch}"
         return ""
+    
+    def _extract_simple_module_name(self, full_module: str) -> str:
+        """從完整模組路徑提取簡單模組名稱"""
+        # PrebuildFW/bootcode -> bootcode
+        # DailyBuild/Merlin7 -> Merlin7
+        if '/' in full_module:
+            return full_module.split('/')[-1]
+        return full_module
         
     def _parse_manifest_xml(self, file_path: str) -> Dict[str, Dict[str, str]]:
         """
@@ -92,7 +108,7 @@ class FileComparator:
         Args:
             file1: 第一個檔案路徑（base）
             file2: 第二個檔案路徑（compare）
-            module: 模組名稱
+            module: 模組名稱（完整路徑）
             base_folder: base 資料夾名稱
             compare_folder: compare 資料夾名稱
             module_path: 模組完整路徑
@@ -104,7 +120,10 @@ class FileComparator:
         base_projects = self._parse_manifest_xml(file1)
         compare_projects = self._parse_manifest_xml(file2)
         
-        # 1. 比較 revision 差異（移除 has_wave）
+        # 簡化模組名稱
+        simple_module = self._extract_simple_module_name(module)
+        
+        # 1. 比較 revision 差異
         revision_diff = []
         sn = 1
         
@@ -117,7 +136,9 @@ class FileComparator:
                 if base_revision != compare_revision or not compare_revision:
                     revision_diff.append({
                         'SN': sn,
-                        'module': module,
+                        'module': simple_module,
+                        'base_folder': base_folder,
+                        'compare_folder': compare_folder,
                         'name': base_proj['name'],
                         'path': base_proj['path'],
                         'base_short': self._shorten_hash(base_revision),
@@ -133,7 +154,7 @@ class FileComparator:
                     })
                     sn += 1
         
-        # 2. 檢查分支命名錯誤（新增 folders 和 module_path）
+        # 2. 檢查分支命名錯誤
         branch_error = []
         sn = 1
         
@@ -174,9 +195,14 @@ class FileComparator:
                             should_check = True
                 
                 if should_check:
+                    # 檢查是否包含 wave
+                    has_wave = ('wave' in upstream or 'wave' in dest_branch)
+                    
                     branch_error.append({
                         'SN': sn,
-                        'module': module,
+                        'module': simple_module,
+                        'base_folder': base_folder,
+                        'compare_folder': compare_folder,
                         'name': compare_proj['name'],
                         'path': compare_proj['path'],
                         'revision_short': self._shorten_hash(revision),
@@ -184,9 +210,9 @@ class FileComparator:
                         'upstream': upstream,
                         'dest-branch': dest_branch,
                         'check_keyword': check_keyword,
-                        'folders': f"{base_folder} vs {compare_folder}",
                         'module_path': module_path if module_path else '',
-                        'compare_link': self._generate_link(compare_proj)
+                        'compare_link': self._generate_link(compare_proj),
+                        'has_wave': 'Y' if has_wave else 'N'
                     })
                     sn += 1
         
@@ -194,19 +220,21 @@ class FileComparator:
         lost_project = []
         sn = 1
         
-        # 檢查在 base 檔案中但不在 compare 檔案中的項目（缺少）
+        # 檢查在 base 檔案中但不在 compare 檔案中的項目（刪除）
         for key, base_proj in base_projects.items():
             if key not in compare_projects:
                 revision = base_proj.get('revision', '')
                 lost_project.append({
                     'SN': sn,
                     '狀態': '刪除',
-                    'module': module,
+                    'module': simple_module,
+                    'folder': base_folder,  # 記錄是哪個資料夾
                     'name': base_proj['name'],
                     'path': base_proj['path'],
                     'upstream': base_proj.get('upstream', ''),
                     'dest-branch': base_proj.get('dest-branch', ''),
-                    'revision': revision
+                    'revision': revision,
+                    'link': self._generate_link(base_proj)
                 })
                 sn += 1
         
@@ -217,12 +245,14 @@ class FileComparator:
                 lost_project.append({
                     'SN': sn,
                     '狀態': '新增',
-                    'module': module,
+                    'module': simple_module,
+                    'folder': compare_folder,  # 記錄是哪個資料夾
                     'name': compare_proj['name'],
                     'path': compare_proj['path'],
                     'upstream': compare_proj.get('upstream', ''),
                     'dest-branch': compare_proj.get('dest-branch', ''),
-                    'revision': revision
+                    'revision': revision,
+                    'link': self._generate_link(compare_proj)
                 })
                 sn += 1
         
@@ -413,6 +443,9 @@ class FileComparator:
             
             # 處理每個模組
             for top_dir, module, module_path in actual_modules:
+                # 組合完整模組名稱
+                full_module = f"{top_dir}/{module}" if top_dir else module
+                
                 # 根據比對模式找出需要比對的資料夾
                 base_folder, compare_folder, missing_info = self._find_folders_for_comparison(
                     module_path, compare_mode
@@ -432,7 +465,7 @@ class FileComparator:
                     self.logger.warning(f"模組 {module} 無法進行比對")
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
-                        'module': f"{top_dir}/{module}" if top_dir else module,
+                        'module': module,  # 簡化的模組名稱
                         'folder_count': len(folders),
                         'folders': ', '.join(folders) if folders else '無資料夾',
                         'path': full_path,
@@ -442,19 +475,10 @@ class FileComparator:
                 
                 # 比較模組
                 results = self._compare_specific_folders(
-                    module_path, base_folder, compare_folder, module
+                    module_path, base_folder, compare_folder, full_module
                 )
                 
-                # 在結果中加入頂層目錄資訊
-                if top_dir:
-                    for item in results['revision_diff']:
-                        item['module'] = f"{top_dir}/{module}"
-                    for item in results['branch_error']:
-                        item['module'] = f"{top_dir}/{module}"
-                    for item in results['lost_project']:
-                        item['module'] = f"{top_dir}/{module}"
-                
-                # 收集所有資料
+                # 收集所有資料（模組名稱已經在 _compare_manifest_files 中簡化）
                 all_revision_diff.extend(results['revision_diff'])
                 all_branch_error.extend(results['branch_error'])
                 all_lost_project.extend(results['lost_project'])
@@ -607,7 +631,7 @@ class FileComparator:
             module_path: 模組路徑
             base_folder: base 資料夾名稱
             compare_folder: compare 資料夾名稱
-            module: 模組名稱
+            module: 模組名稱（完整路徑）
             
         Returns:
             比較結果
@@ -677,13 +701,13 @@ class FileComparator:
                 different_projects.append({
                     'SN': item['SN'],
                     'module': module,
+                    'base_folder': results.get('base_folder', ''),
+                    'compare_folder': results.get('compare_folder', ''),
                     'name': item['name'],
                     'path': item['path'],
                     'upstream': item.get('base_upstream', ''),
                     'dest-branch': item.get('base_dest-branch', ''),
-                    'revision': item['base_revision'],
-                    'base_folder': results.get('base_folder', ''),
-                    'compare_folder': results.get('compare_folder', '')
+                    'revision': item['base_revision']
                 })
                 
             # 寫入報表
@@ -734,22 +758,29 @@ class FileComparator:
                 # revision_diff 頁籤（只在有資料時產生）
                 if revision_diff:
                     df = pd.DataFrame(revision_diff)
+                    # 調整欄位順序
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                   'base_short', 'base_revision', 'compare_short', 'compare_revision',
+                                   'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
+                                   'base_link', 'compare_link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
                     df.to_excel(writer, sheet_name='revision_diff', index=False)
                 
                 # branch_error 頁籤（只在有資料時產生）
                 if branch_error:
-                    # 移除 check_keyword 欄位（內部使用，不顯示在報表中）
-                    # 將 module_path 改名為 path_location
+                    # 移除 check_keyword 欄位，將 module_path 改名為 path_location
                     for item in branch_error:
                         if 'check_keyword' in item:
                             del item['check_keyword']
                         if 'module_path' in item:
                             item['path_location'] = item.pop('module_path')
+                    
                     df = pd.DataFrame(branch_error)
                     # 調整欄位順序
-                    columns_order = ['SN', 'module', 'name', 'path', 'revision_short', 'revision', 
-                                   'upstream', 'dest-branch', 'folders', 'path_location', 'compare_link']
-                    # 只選擇存在的欄位
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                   'revision_short', 'revision', 'upstream', 'dest-branch', 
+                                   'path_location', 'compare_link', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='branch_error', index=False)
@@ -757,6 +788,11 @@ class FileComparator:
                 # lost_project 頁籤（只在有資料時產生）
                 if lost_project:
                     df = pd.DataFrame(lost_project)
+                    # 調整欄位順序
+                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                                   'upstream', 'dest-branch', 'revision', 'link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
                 
                 # 無法比對頁籤（即使沒有資料也產生，但通常有資料才會呼叫此方法）
