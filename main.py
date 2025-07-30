@@ -184,21 +184,64 @@ class SFTPCompareSystem:
         """互動式打包功能"""
         print("\n--- 打包比對結果成 ZIP ---")
         
-        # 取得來源目錄
-        default_source = config.DEFAULT_COMPARE_DIR.replace('./', '')  # 移除 ./
-        source_dir = input(f"請輸入要打包的目錄路徑 (預設: {default_source}): ").strip()
-        source_dir = source_dir or default_source
+        # 讓使用者選擇要打包的目錄
+        print("\n選擇要打包的目錄：")
+        print("1. downloads (下載的原始檔案)")
+        print("2. compare_results (比較結果報表)")
+        print("3. downloads + compare_results (全部打包)")
+        print("4. 自訂目錄")
         
-        if not os.path.exists(source_dir):
-            print(f"錯誤：目錄不存在 - {source_dir}")
+        choice = input("\n請選擇 (1-4，預設: 3): ").strip()
+        
+        # 如果空白，預設選 3（全部打包）
+        if not choice:
+            choice = '3'
+        
+        # 根據選擇決定來源目錄
+        if choice == '1':
+            source_dir = config.DEFAULT_OUTPUT_DIR.replace('./', '')
+            print(f"將打包: {source_dir}")
+            default_name = f"downloads_{utils.get_timestamp()}.zip"
+        elif choice == '2':
+            source_dir = config.DEFAULT_COMPARE_DIR.replace('./', '')
+            print(f"將打包: {source_dir}")
+            default_name = f"compare_results_{utils.get_timestamp()}.zip"
+        elif choice == '3':
+            # 打包多個目錄
+            downloads_dir = config.DEFAULT_OUTPUT_DIR.replace('./', '')
+            compare_dir = config.DEFAULT_COMPARE_DIR.replace('./', '')
+            print(f"將打包: {downloads_dir} 和 {compare_dir}")
+            default_name = f"all_results_{utils.get_timestamp()}.zip"
+        elif choice == '4':
+            source_dir = input("請輸入自訂目錄路徑: ").strip()
+            default_name = f"package_{utils.get_timestamp()}.zip"
+        else:
+            print("無效的選擇")
             return
+        
+        # 檢查目錄是否存在
+        if choice == '3':
+            # 檢查兩個目錄
+            missing_dirs = []
+            if not os.path.exists(downloads_dir):
+                missing_dirs.append(downloads_dir)
+            if not os.path.exists(compare_dir):
+                missing_dirs.append(compare_dir)
+            
+            if missing_dirs:
+                print(f"錯誤：以下目錄不存在 - {', '.join(missing_dirs)}")
+                return
+        else:
+            # 檢查單一目錄
+            if not os.path.exists(source_dir):
+                print(f"錯誤：目錄不存在 - {source_dir}")
+                return
             
         # 詢問打包選項
         include_excel = input("包含 Excel 報表？(Y/n): ").strip().lower() != 'n'
         include_source = input("包含原始檔案 (txt/xml)？(Y/n): ").strip().lower() != 'n'
         
         # 取得輸出檔名
-        default_name = f"compare_results_{utils.get_timestamp()}.zip"
         zip_name = input(f"ZIP 檔案名稱 (預設: {default_name}): ").strip()
         zip_name = zip_name or default_name
         
@@ -213,10 +256,31 @@ class SFTPCompareSystem:
         
         # 執行打包
         try:
-            # 注意：這裡要修改，因為 create_compare_results_zip 的參數可能需要調整
-            zip_path = self.packager.create_compare_results_zip(
-                source_dir, zip_path, include_excel, include_source
-            )
+            if choice == '3':
+                # 打包多個目錄
+                # 需要建立臨時目錄來合併內容
+                import tempfile
+                import shutil
+                
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # 複製 downloads 目錄內容
+                    if os.path.exists(downloads_dir):
+                        shutil.copytree(downloads_dir, os.path.join(temp_dir, "downloads"))
+                    
+                    # 複製 compare_results 目錄內容
+                    if os.path.exists(compare_dir):
+                        shutil.copytree(compare_dir, os.path.join(temp_dir, "compare_results"))
+                    
+                    # 打包臨時目錄
+                    zip_path = self.packager.create_compare_results_zip(
+                        temp_dir, zip_path, include_excel, include_source
+                    )
+            else:
+                # 打包單一目錄
+                zip_path = self.packager.create_compare_results_zip(
+                    source_dir, zip_path, include_excel, include_source
+                )
+                
             print(f"\n打包完成！ZIP 檔案已儲存至: {zip_path}")
         except Exception as e:
             print(f"\n錯誤：{str(e)}")
