@@ -55,14 +55,14 @@ def create_sample_excel():
         
         sample_data = {
             'SN': [1, 2, 3, 4, 5, 6],
-            '模組': ['bootcode', 'emcu', 'dolby_ta', 'ufsd_ko', 'bootcode', 'Merlin7'],
+            '模組': ['dprx_quickshow', 'dprx_quickshow', 'bootcode', 'bootcode', 'Merlin7', 'Merlin7'],
             'ftp path': [
-                '/DailyBuild/PrebuildFW/bootcode/RDDB-942_realtek_merlin8_premp.google-refplus/2025_06_24-18_16_9624861',
-                '/DailyBuild/PrebuildFW/emcu/RDDB-1193_merlin8_android-14_premp.google-refplus/2025_06_24-17_41_e54f7a5',
-                '/DailyBuild/PrebuildFW/dolby_ta/RDDB-932_mac7p_v3.0_common_android11_premp.google-refplus.upgrade-11.rtd2851a/2025_06_18-15_30_e05abe4',
-                '/DailyBuild/PrebuildFW/ufsd_ko/RDDB-982_mac8q_android11_premp.google-refplus.upgrade-11/20250717_1455_618e9e1',
-                '/DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_premp.google-refplus/20250729_3333_4440eec',
-                '/DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14_Ref_Plus_GoogleGMS/533_all_202507282300'
+                '/DailyBuild/PrebuildFW/dprx_quickshow/RDDB-1204_merlin8_quickshow_premp.google-refplus.upgrade-11.rtd2885p/20250722_2344_f053054',
+                '/DailyBuild/PrebuildFW/dprx_quickshow/RDDB-300_merlin8_quickshow/2025_01_27-12_53_c216918',
+                '/DailyBuild/PrebuildFW/bootcode/RDDB-1046_realtek_merlin9_premp.google-refplus/20250723_1834_d875865',
+                '/DailyBuild/PrebuildFW/bootcode/RDDB-531_realtek_merlin9_master/20250725_1800_5fadb5f',
+                '/DailyBuild/Merlin7/DB2857_Merlin7_32Bit_FW_Android14_Ref_Plus_PreMP_GoogleGMS/69_202507292300',
+                '/DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14_Ref_Plus_GoogleGMS/534_all_202507292300'
             ],
             '備註': ['主要版本', '測試版本', 'Wave backup 版本', 'Wave 版本', 'PreMP 版本', '特殊格式']
         }
@@ -80,9 +80,9 @@ def update_config():
     print("\n設定 SFTP 連線資訊...")
     print("（按 Enter 使用預設值）")
     
-    host = input("SFTP 伺服器位址 [your.sftp.server.com]: ").strip()
+    host = input("SFTP 伺服器位址 [mmsftpx.realtek.com]: ").strip()
     port = input("SFTP 連接埠 [22]: ").strip()
-    username = input("使用者名稱 [your_username]: ").strip()
+    username = input("使用者名稱 [lgwar_user]: ").strip()
     password = input("密碼 [your_password]: ").strip()
     
     # 詢問 Gerrit URL
