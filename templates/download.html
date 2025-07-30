@@ -1,0 +1,671 @@
+{% extends "base.html" %}
+
+{% block title %}下載檔案 - SFTP 下載與比較系統{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1 class="page-title">
+            <i class="fas fa-download"></i> 下載 SFTP 檔案
+        </h1>
+        <p class="page-subtitle">從 SFTP 伺服器下載檔案並自動分類整理</p>
+    </div>
+
+    <!-- 下載表單 -->
+    <div class="download-form">
+        <!-- Excel 上傳區 -->
+        <div class="form-section">
+            <h2 class="section-title">
+                <i class="fas fa-file-excel"></i> 步驟 1：上傳 FTP 路徑檔案
+            </h2>
+            
+            <div class="upload-area" id="downloadUploadArea">
+                <input type="file" id="downloadFileInput" accept=".xlsx" hidden>
+                <div class="upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <p class="upload-text">拖曳 Excel 檔案至此處或點擊選擇</p>
+                <p class="upload-hint">檔案需包含 "ftp path" 欄位</p>
+                <button class="btn btn-outline" onclick="document.getElementById('downloadFileInput').click()">
+                    選擇檔案
+                </button>
+            </div>
+            
+            <div class="file-info hidden" id="downloadFileInfo">
+                <i class="fas fa-file-excel"></i>
+                <span id="downloadFileName"></span>
+                <button class="btn-icon" onclick="removeDownloadFile()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Excel 範例 -->
+            <div class="example-section">
+                <h3 class="example-title">
+                    <i class="fas fa-info-circle"></i> Excel 格式範例
+                </h3>
+                <div class="example-table">
+                    <table class="table-example">
+                        <thead>
+                            <tr>
+                                <th>SN</th>
+                                <th>模組</th>
+                                <th>ftp path</th>
+                                <th>備註</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>bootcode</td>
+                                <td>/DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek...</td>
+                                <td>主要版本</td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td>emcu</td>
+                                <td>/DailyBuild/PrebuildFW/emcu/RDDB-321_realtek...</td>
+                                <td>測試版本</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SFTP 設定 -->
+        <div class="form-section">
+            <h2 class="section-title">
+                <i class="fas fa-server"></i> 步驟 2：SFTP 連線設定
+            </h2>
+            
+            <div class="form-group">
+                <label class="form-label">使用預設設定</label>
+                <div class="switch-container">
+                    <label class="switch">
+                        <input type="checkbox" id="downloadUseDefault" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="switch-label">使用 config.py 中的預設值</span>
+                </div>
+            </div>
+            
+            <div id="downloadCustomConfig" class="custom-config disabled">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-network-wired"></i> 伺服器位址
+                        </label>
+                        <input type="text" class="form-input" id="downloadHost" placeholder="sftp.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-ethernet"></i> 連接埠
+                        </label>
+                        <input type="number" class="form-input" id="downloadPort" value="22">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-user"></i> 使用者名稱
+                        </label>
+                        <input type="text" class="form-input" id="downloadUsername" placeholder="username">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-key"></i> 密碼
+                        </label>
+                        <input type="password" class="form-input" id="downloadPassword" placeholder="••••••••">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 測試連線 -->
+            <div class="connection-test">
+                <button class="btn btn-outline" onclick="testConnection()">
+                    <i class="fas fa-plug"></i> 測試連線
+                </button>
+                <span class="connection-status" id="connectionStatus"></span>
+            </div>
+        </div>
+
+        <!-- 下載選項 -->
+        <div class="form-section">
+            <h2 class="section-title">
+                <i class="fas fa-cog"></i> 步驟 3：下載選項
+            </h2>
+            
+            <div class="download-options">
+                <div class="option-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="skipExisting" checked>
+                        <span>跳過已存在的檔案</span>
+                    </label>
+                    <p class="option-desc">若本地已有相同檔案，將不會重新下載</p>
+                </div>
+                
+                <div class="option-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="recursiveSearch" checked>
+                        <span>遞迴搜尋子目錄</span>
+                    </label>
+                    <p class="option-desc">在 FTP 路徑的子目錄中搜尋目標檔案</p>
+                </div>
+                
+                <div class="option-item">
+                    <label class="form-label">搜尋深度</label>
+                    <input type="number" class="form-input small" id="searchDepth" value="3" min="1" max="10">
+                    <p class="option-desc">最多搜尋幾層子目錄</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 執行按鈕 -->
+        <div class="form-actions">
+            <button class="btn btn-primary btn-large" id="downloadBtn" onclick="executeDownload()" disabled>
+                <i class="fas fa-download"></i> 開始下載
+            </button>
+        </div>
+    </div>
+
+    <!-- 下載進度 -->
+    <div class="download-progress hidden" id="downloadProgress">
+        <h2 class="section-title">
+            <i class="fas fa-tasks"></i> 下載進度
+        </h2>
+        
+        <div class="progress-overview">
+            <div class="progress-stat">
+                <div class="stat-value" id="totalFiles">0</div>
+                <div class="stat-label">總檔案數</div>
+            </div>
+            <div class="progress-stat">
+                <div class="stat-value" id="downloadedFiles">0</div>
+                <div class="stat-label">已下載</div>
+            </div>
+            <div class="progress-stat">
+                <div class="stat-value" id="skippedFiles">0</div>
+                <div class="stat-label">已跳過</div>
+            </div>
+            <div class="progress-stat">
+                <div class="stat-value" id="failedFiles">0</div>
+                <div class="stat-label">失敗</div>
+            </div>
+        </div>
+
+        <div class="progress-bar-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="downloadProgressFill" style="width: 0%"></div>
+            </div>
+            <div class="progress-text" id="downloadProgressText">0%</div>
+        </div>
+
+        <div class="download-log">
+            <h3 class="log-title">下載日誌</h3>
+            <div class="log-content" id="downloadLog">
+                <!-- 動態填充日誌 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 下載結果 -->
+    <div class="download-results hidden" id="downloadResults">
+        <div class="result-header">
+            <i class="fas fa-check-circle"></i>
+            <h2>下載完成</h2>
+        </div>
+
+        <div class="result-summary" id="downloadSummary">
+            <!-- 動態填充摘要 -->
+        </div>
+
+        <div class="result-actions">
+            <button class="btn btn-primary" onclick="viewDownloadReport()">
+                <i class="fas fa-file-excel"></i> 查看下載報表
+            </button>
+            <button class="btn btn-success" onclick="proceedToCompare()">
+                <i class="fas fa-code-compare"></i> 繼續比對
+            </button>
+            <button class="btn btn-outline" onclick="startNewDownload()">
+                <i class="fas fa-redo"></i> 新的下載
+            </button>
+        </div>
+
+        <!-- 資料夾結構預覽 -->
+        <div class="folder-preview">
+            <h3 class="preview-title">
+                <i class="fas fa-folder-tree"></i> 下載的資料夾結構
+            </h3>
+            <div class="folder-tree" id="folderTree">
+                <!-- 動態生成資料夾樹狀結構 -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let downloadFile = null;
+let downloadTaskId = null;
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initializeDownloadUpload();
+    initializeDownloadConfig();
+});
+
+// 初始化上傳功能
+function initializeDownloadUpload() {
+    const uploadArea = document.getElementById('downloadUploadArea');
+    const fileInput = document.getElementById('downloadFileInput');
+    
+    // 拖放事件
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragging');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragging');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragging');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleDownloadFileSelect(files[0]);
+        }
+    });
+    
+    // 檔案選擇
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleDownloadFileSelect(e.target.files[0]);
+        }
+    });
+}
+
+// 處理檔案選擇
+async function handleDownloadFileSelect(file) {
+    if (!file.name.endsWith('.xlsx')) {
+        utils.showNotification('請選擇 Excel (.xlsx) 檔案', 'error');
+        return;
+    }
+    
+    document.getElementById('downloadUploadArea').classList.add('hidden');
+    document.getElementById('downloadFileInfo').classList.remove('hidden');
+    document.getElementById('downloadFileName').textContent = 
+        `${file.name} (${utils.formatFileSize(file.size)})`;
+    
+    try {
+        const result = await utils.uploadFile(file);
+        downloadFile = result.filepath;
+        checkDownloadButton();
+    } catch (error) {
+        console.error('Upload error:', error);
+        removeDownloadFile();
+    }
+}
+
+// 移除檔案
+function removeDownloadFile() {
+    downloadFile = null;
+    document.getElementById('downloadFileInfo').classList.add('hidden');
+    document.getElementById('downloadUploadArea').classList.remove('hidden');
+    document.getElementById('downloadFileInput').value = '';
+    checkDownloadButton();
+}
+
+// 初始化 SFTP 設定
+function initializeDownloadConfig() {
+    const useDefault = document.getElementById('downloadUseDefault');
+    const customConfig = document.getElementById('downloadCustomConfig');
+    
+    useDefault.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            customConfig.classList.add('disabled');
+        } else {
+            customConfig.classList.remove('disabled');
+        }
+    });
+}
+
+// 檢查下載按鈕
+function checkDownloadButton() {
+    const downloadBtn = document.getElementById('downloadBtn');
+    downloadBtn.disabled = !downloadFile;
+}
+
+// 測試連線
+async function testConnection() {
+    const config = getDownloadConfig();
+    const statusEl = document.getElementById('connectionStatus');
+    
+    statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 測試中...';
+    statusEl.className = 'connection-status testing';
+    
+    try {
+        // 這裡應該呼叫後端 API 測試連線
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 模擬
+        
+        statusEl.innerHTML = '<i class="fas fa-check"></i> 連線成功';
+        statusEl.className = 'connection-status success';
+    } catch (error) {
+        statusEl.innerHTML = '<i class="fas fa-times"></i> 連線失敗';
+        statusEl.className = 'connection-status error';
+    }
+}
+
+// 取得下載設定
+function getDownloadConfig() {
+    const config = {};
+    
+    if (!document.getElementById('downloadUseDefault').checked) {
+        config.host = document.getElementById('downloadHost').value;
+        config.port = parseInt(document.getElementById('downloadPort').value) || 22;
+        config.username = document.getElementById('downloadUsername').value;
+        config.password = document.getElementById('downloadPassword').value;
+    }
+    
+    return config;
+}
+
+// 執行下載
+async function executeDownload() {
+    if (!downloadFile) {
+        utils.showNotification('請先上傳 Excel 檔案', 'error');
+        return;
+    }
+    
+    // 隱藏表單，顯示進度
+    document.querySelector('.download-form').classList.add('hidden');
+    document.getElementById('downloadProgress').classList.remove('hidden');
+    
+    try {
+        const response = await utils.apiRequest('/api/download', {
+            method: 'POST',
+            body: JSON.stringify({
+                excel_file: downloadFile,
+                sftp_config: getDownloadConfig(),
+                options: {
+                    skip_existing: document.getElementById('skipExisting').checked,
+                    recursive_search: document.getElementById('recursiveSearch').checked,
+                    search_depth: parseInt(document.getElementById('searchDepth').value)
+                }
+            })
+        });
+        
+        downloadTaskId = response.task_id;
+        
+        // 模擬進度更新
+        simulateDownloadProgress();
+        
+    } catch (error) {
+        console.error('Download error:', error);
+        utils.showNotification('下載失敗', 'error');
+    }
+}
+
+// 模擬下載進度
+function simulateDownloadProgress() {
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += Math.random() * 20;
+        if (progress >= 100) {
+            progress = 100;
+            clearInterval(interval);
+            showDownloadResults();
+        }
+        
+        updateDownloadProgress(progress);
+    }, 1000);
+}
+
+// 更新下載進度
+function updateDownloadProgress(progress) {
+    document.getElementById('downloadProgressFill').style.width = `${progress}%`;
+    document.getElementById('downloadProgressText').textContent = `${Math.round(progress)}%`;
+    
+    // 更新統計
+    document.getElementById('totalFiles').textContent = '15';
+    document.getElementById('downloadedFiles').textContent = Math.floor(15 * progress / 100);
+    
+    // 添加日誌
+    const log = document.getElementById('downloadLog');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `
+        <span class="log-time">${new Date().toLocaleTimeString('zh-TW')}</span>
+        <span class="log-message">下載檔案... ${Math.round(progress)}%</span>
+    `;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+// 顯示下載結果
+function showDownloadResults() {
+    document.getElementById('downloadProgress').classList.add('hidden');
+    document.getElementById('downloadResults').classList.remove('hidden');
+    
+    // 生成摘要
+    const summary = `
+        <div class="summary-grid">
+            <div class="summary-item success">
+                <i class="fas fa-check"></i>
+                <span>成功下載 12 個檔案</span>
+            </div>
+            <div class="summary-item info">
+                <i class="fas fa-forward"></i>
+                <span>跳過 3 個已存在檔案</span>
+            </div>
+        </div>
+    `;
+    document.getElementById('downloadSummary').innerHTML = summary;
+    
+    // 生成資料夾樹
+    generateFolderTree();
+}
+
+// 生成資料夾樹狀結構
+function generateFolderTree() {
+    const tree = `
+        <div class="tree-node">
+            <i class="fas fa-folder-open"></i> downloads/
+            <div class="tree-children">
+                <div class="tree-node">
+                    <i class="fas fa-folder"></i> PrebuildFW/
+                    <div class="tree-children">
+                        <div class="tree-node">
+                            <i class="fas fa-folder"></i> bootcode/
+                            <div class="tree-children">
+                                <div class="tree-node"><i class="fas fa-folder"></i> RDDB-320/</div>
+                                <div class="tree-node"><i class="fas fa-folder"></i> RDDB-320-premp/</div>
+                            </div>
+                        </div>
+                        <div class="tree-node">
+                            <i class="fas fa-folder"></i> emcu/
+                            <div class="tree-children">
+                                <div class="tree-node"><i class="fas fa-folder"></i> RDDB-321/</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('folderTree').innerHTML = tree;
+}
+
+// 查看下載報表
+function viewDownloadReport() {
+    if (downloadTaskId) {
+        window.location.href = `/api/download-report/${downloadTaskId}`;
+    }
+}
+
+// 繼續比對
+function proceedToCompare() {
+    window.location.href = '/compare';
+}
+
+// 開始新的下載
+function startNewDownload() {
+    location.reload();
+}
+
+// 匯出函數
+window.removeDownloadFile = removeDownloadFile;
+window.testConnection = testConnection;
+window.executeDownload = executeDownload;
+window.viewDownloadReport = viewDownloadReport;
+window.proceedToCompare = proceedToCompare;
+window.startNewDownload = startNewDownload;
+</script>
+
+<style>
+/* 下載頁面特定樣式 */
+.example-section {
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+}
+
+.example-title {
+    font-size: 1rem;
+    color: var(--nordic-gray-700);
+    margin-bottom: var(--spacing-md);
+}
+
+.table-example {
+    width: 100%;
+    font-size: 0.9rem;
+    border-collapse: collapse;
+}
+
+.table-example th {
+    background: var(--nordic-gray-200);
+    padding: var(--spacing-sm);
+    text-align: left;
+}
+
+.table-example td {
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid var(--nordic-gray-200);
+}
+
+.connection-test {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
+}
+
+.connection-status {
+    font-weight: 500;
+}
+
+.connection-status.success {
+    color: var(--nordic-green);
+}
+
+.connection-status.error {
+    color: var(--nordic-red);
+}
+
+.connection-status.testing {
+    color: var(--nordic-blue-600);
+}
+
+.download-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.option-item {
+    padding: var(--spacing-md);
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.checkbox-label input {
+    margin-right: var(--spacing-sm);
+}
+
+.option-desc {
+    margin-top: var(--spacing-xs);
+    font-size: 0.9rem;
+    color: var(--nordic-gray-600);
+}
+
+.form-input.small {
+    width: 100px;
+}
+
+.progress-overview {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.progress-stat {
+    text-align: center;
+    padding: var(--spacing-lg);
+    background: white;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.download-log {
+    background: var(--nordic-gray-900);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-top: var(--spacing-xl);
+}
+
+.folder-preview {
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-xl);
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-lg);
+}
+
+.preview-title {
+    font-size: 1.1rem;
+    margin-bottom: var(--spacing-lg);
+    color: var(--nordic-gray-800);
+}
+
+.folder-tree {
+    font-family: 'Consolas', monospace;
+    font-size: 0.9rem;
+}
+
+.tree-node {
+    margin-left: var(--spacing-lg);
+    color: var(--nordic-gray-700);
+}
+
+.tree-node > i {
+    color: var(--nordic-blue-600);
+    margin-right: var(--spacing-xs);
+}
+
+.tree-children {
+    margin-left: var(--spacing-lg);
+}
+</style>
+{% endblock %}

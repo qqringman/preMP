@@ -1,12 +1,12 @@
 """
-SFTP 下載與比較系統 - 主程式
-提供互動式介面和命令列參數支援
+SFTP 下載與比較系統 - 主程式（增強版）
+提供互動式介面、命令列參數支援和一步到位功能
 """
 import os
 import sys
 import argparse
 import shutil
-from typing import Optional
+from typing import Optional, List, Dict
 import utils
 import config
 from sftp_downloader import SFTPDownloader
@@ -35,10 +35,12 @@ class SFTPCompareSystem:
             print("3. 打包比對結果成 ZIP")
             print("4. 測試 SFTP 連線")
             print("5. 清除暫存檔案")
-            print("6. 退出")
+            print("6. 【一步到位】下載→比較→打包")
+            print("7. 【全部比對】執行所有比對情境")
+            print("8. 退出")
             print("="*50)
             
-            choice = input("請選擇功能 (1-6): ").strip()
+            choice = input("請選擇功能 (1-8): ").strip()
             
             if choice == '1':
                 self._interactive_download()
@@ -51,17 +53,174 @@ class SFTPCompareSystem:
             elif choice == '5':
                 self._clean_temp_files()
             elif choice == '6':
+                self._one_step_process()
+            elif choice == '7':
+                self._all_comparisons()
+            elif choice == '8':
                 print("感謝使用，再見！")
                 break
             else:
                 print("無效的選擇，請重新輸入")
                 
+    def _one_step_process(self):
+        """一步到位處理：下載→比較→打包"""
+        print("\n--- 【一步到位】下載→比較→打包 ---")
+        print("這個功能會自動執行：")
+        print("1. 從 Excel 下載 SFTP 檔案")
+        print("2. 執行所有可能的比對")
+        print("3. 打包所有結果")
+        print()
+        
+        # 步驟 1：下載檔案
+        print("="*50)
+        print("步驟 1/3：下載 SFTP 檔案")
+        print("="*50)
+        
+        # 列出當前目錄的 xlsx 檔案
+        xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.endswith('_report.xlsx')]
+        
+        if xlsx_files:
+            print("\n當前目錄的 Excel 檔案：")
+            for i, file in enumerate(xlsx_files, 1):
+                print(f"{i}. {file}")
+            print("\n您可以輸入檔案編號或完整路徑")
+        
+        # 取得 Excel 檔案路徑
+        excel_input = input("請輸入 Excel 檔案路徑或編號 (預設: 1): ").strip()
+        
+        # 如果空白且有 xlsx 檔案，預設選第一個
+        if not excel_input and xlsx_files:
+            excel_input = "1"
+        
+        # 檢查是否輸入編號
+        if excel_input.isdigit() and xlsx_files:
+            index = int(excel_input) - 1
+            if 0 <= index < len(xlsx_files):
+                excel_path = xlsx_files[index]
+            else:
+                print(f"錯誤：編號超出範圍")
+                return
+        else:
+            excel_path = excel_input
+        
+        if not os.path.exists(excel_path):
+            print(f"錯誤：檔案不存在 - {excel_path}")
+            return
+        
+        # 執行下載
+        download_dir = config.DEFAULT_OUTPUT_DIR
+        try:
+            self.downloader = SFTPDownloader()
+            report_path = self.downloader.download_from_excel(excel_path, download_dir)
+            print(f"\n✓ 下載完成！報表已儲存至: {report_path}")
+        except Exception as e:
+            print(f"\n✗ 下載失敗：{str(e)}")
+            return
+        
+        # 步驟 2：執行所有比對
+        print("\n" + "="*50)
+        print("步驟 2/3：執行所有比對")
+        print("="*50)
+        
+        compare_dir = config.DEFAULT_COMPARE_DIR
+        try:
+            # 執行所有比對情境
+            all_results = self.comparator.compare_all_scenarios(download_dir, compare_dir)
+            
+            print("\n✓ 比對完成！")
+            print(f"   - Master vs PreMP: {all_results['master_vs_premp']['success']} 個模組")
+            print(f"   - PreMP vs Wave: {all_results['premp_vs_wave']['success']} 個模組")
+            print(f"   - Wave vs Wave.backup: {all_results['wave_vs_backup']['success']} 個模組")
+            print(f"   - 無法比對: {all_results['failed']} 個模組")
+            print(f"\n整合報表已儲存至: {all_results['summary_report']}")
+            
+        except Exception as e:
+            print(f"\n✗ 比對失敗：{str(e)}")
+            return
+        
+        # 步驟 3：打包結果
+        print("\n" + "="*50)
+        print("步驟 3/3：打包所有結果")
+        print("="*50)
+        
+        try:
+            timestamp = utils.get_timestamp()
+            zip_name = f"all_results_{timestamp}.zip"
+            zip_output_dir = config.DEFAULT_ZIP_DIR
+            
+            if not os.path.exists(zip_output_dir):
+                os.makedirs(zip_output_dir)
+            
+            zip_path = os.path.join(zip_output_dir, zip_name)
+            
+            # 建立臨時目錄來整合所有內容
+            import tempfile
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # 複製下載的檔案
+                if os.path.exists(download_dir):
+                    dest_downloads = os.path.join(temp_dir, 'downloads')
+                    shutil.copytree(download_dir, dest_downloads)
+                
+                # 複製比對結果
+                if os.path.exists(compare_dir):
+                    dest_compare = os.path.join(temp_dir, 'compare_results')
+                    shutil.copytree(compare_dir, dest_compare)
+                
+                # 打包
+                zip_path = self.packager.create_zip(temp_dir, zip_path)
+            
+            print(f"\n✓ 打包完成！ZIP 檔案已儲存至: {zip_path}")
+            
+            # 顯示總結
+            print("\n" + "="*50)
+            print("【一步到位】處理完成！")
+            print("="*50)
+            print(f"1. 下載報表: {report_path}")
+            print(f"2. 比對報表: {all_results['summary_report']}")
+            print(f"3. 打包檔案: {zip_path}")
+            
+        except Exception as e:
+            print(f"\n✗ 打包失敗：{str(e)}")
+            
+    def _all_comparisons(self):
+        """執行所有比對情境"""
+        print("\n--- 【全部比對】執行所有比對情境 ---")
+        
+        # 取得來源目錄
+        default_source = config.DEFAULT_OUTPUT_DIR.replace('./', '')
+        source_dir = input(f"請輸入來源目錄路徑 (預設: {default_source}): ").strip()
+        source_dir = source_dir or default_source
+        
+        if not os.path.exists(source_dir):
+            print(f"錯誤：目錄不存在 - {source_dir}")
+            return
+        
+        # 取得輸出目錄
+        default_output = config.DEFAULT_COMPARE_DIR.replace('./', '')
+        output_dir = input(f"輸出目錄 (預設: {default_output}): ").strip()
+        output_dir = output_dir or default_output
+        
+        # 執行所有比對
+        try:
+            all_results = self.comparator.compare_all_scenarios(source_dir, output_dir)
+            
+            print("\n✓ 所有比對完成！")
+            print("\n比對結果摘要：")
+            print(f"- Master vs PreMP: {all_results['master_vs_premp']['success']} 個模組成功")
+            print(f"- PreMP vs Wave: {all_results['premp_vs_wave']['success']} 個模組成功")
+            print(f"- Wave vs Wave.backup: {all_results['wave_vs_backup']['success']} 個模組成功")
+            print(f"- 無法比對的模組: {all_results['failed']} 個")
+            print(f"\n整合報表已儲存至: {all_results['summary_report']}")
+            
+        except Exception as e:
+            print(f"\n錯誤：{str(e)}")
+            
     def _interactive_download(self):
         """互動式下載功能"""
         print("\n--- 下載 SFTP 檔案 ---")
         
         # 列出當前目錄的 xlsx 檔案
-        xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx')]
+        xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.endswith('_report.xlsx')]
         
         if xlsx_files:
             print("\n當前目錄的 Excel 檔案：")
@@ -153,13 +312,14 @@ class SFTPCompareSystem:
         print("1. master vs premp (RDDB-XXX vs RDDB-XXX-premp)")
         print("2. premp vs wave (RDDB-XXX-premp vs RDDB-XXX-wave)")
         print("3. wave vs wave.backup (RDDB-XXX-wave vs RDDB-XXX-wave.backup)")
-        print("4. 手動選擇 (自訂比對組合)")
+        print("4. 執行所有比對")
+        print("5. 手動選擇 (自訂比對組合)")
         
-        choice = input("\n請選擇 (1-4，預設: 1): ").strip()
+        choice = input("\n請選擇 (1-5，預設: 4): ").strip()
         
-        # 如果空白，預設選 1
+        # 如果空白，預設選 4
         if not choice:
-            choice = '1'
+            choice = '4'
         
         compare_mode = None
         if choice == '1':
@@ -169,6 +329,18 @@ class SFTPCompareSystem:
         elif choice == '3':
             compare_mode = 'wave_vs_backup'
         elif choice == '4':
+            # 執行所有比對
+            try:
+                all_results = self.comparator.compare_all_scenarios(source_dir, output_dir)
+                print(f"\n比較完成！")
+                print(f"- Master vs PreMP: {all_results['master_vs_premp']['success']} 個模組")
+                print(f"- PreMP vs Wave: {all_results['premp_vs_wave']['success']} 個模組")
+                print(f"- Wave vs Wave.backup: {all_results['wave_vs_backup']['success']} 個模組")
+                print(f"整合報表已儲存至: {all_results['summary_report']}")
+            except Exception as e:
+                print(f"\n錯誤：{str(e)}")
+            return
+        elif choice == '5':
             # 手動選擇模式
             print("\n手動選擇比對組合：")
             print("Base 資料夾類型：")
@@ -420,6 +592,8 @@ class SFTPCompareSystem:
             self._cmd_compare(args)
         elif args.function == 'package':
             self._cmd_package(args)
+        elif args.function == 'all':
+            self._cmd_all(args)
             
     def _cmd_download(self, args):
         """命令列下載功能"""
@@ -448,10 +622,19 @@ class SFTPCompareSystem:
     def _cmd_compare(self, args):
         """命令列比較功能"""
         try:
-            compare_files = self.comparator.compare_all_modules(
-                args.source_dir, args.output_dir, args.base_folder
-            )
-            print(f"比較完成！產生了 {len(compare_files)} 個比較報表")
+            if args.all_scenarios:
+                # 執行所有比對情境
+                all_results = self.comparator.compare_all_scenarios(
+                    args.source_dir, args.output_dir
+                )
+                print(f"所有比對完成！")
+                print(f"整合報表已儲存至: {all_results['summary_report']}")
+            else:
+                # 執行單一比對
+                compare_files = self.comparator.compare_all_modules(
+                    args.source_dir, args.output_dir, args.mode
+                )
+                print(f"比較完成！產生了 {len(compare_files)} 個比較報表")
         except Exception as e:
             logger.error(f"比較失敗：{str(e)}")
             sys.exit(1)
@@ -465,6 +648,58 @@ class SFTPCompareSystem:
             print(f"打包完成！ZIP 檔案已儲存至: {zip_path}")
         except Exception as e:
             logger.error(f"打包失敗：{str(e)}")
+            sys.exit(1)
+            
+    def _cmd_all(self, args):
+        """命令列一步到位功能"""
+        try:
+            # 步驟 1：下載
+            print("步驟 1/3：下載 SFTP 檔案...")
+            self.downloader = SFTPDownloader(
+                args.host, args.port, args.username, args.password
+            )
+            download_dir = args.output_dir or config.DEFAULT_OUTPUT_DIR
+            report_path = self.downloader.download_from_excel(args.excel, download_dir)
+            print(f"✓ 下載完成！報表: {report_path}")
+            
+            # 步驟 2：比較
+            print("\n步驟 2/3：執行所有比對...")
+            compare_dir = args.compare_dir or config.DEFAULT_COMPARE_DIR
+            all_results = self.comparator.compare_all_scenarios(download_dir, compare_dir)
+            print(f"✓ 比對完成！整合報表: {all_results['summary_report']}")
+            
+            # 步驟 3：打包
+            print("\n步驟 3/3：打包結果...")
+            timestamp = utils.get_timestamp()
+            zip_name = args.zip_name or f"all_results_{timestamp}.zip"
+            zip_output_dir = config.DEFAULT_ZIP_DIR
+            
+            if not os.path.exists(zip_output_dir):
+                os.makedirs(zip_output_dir)
+            
+            zip_path = os.path.join(zip_output_dir, zip_name)
+            
+            # 建立臨時目錄來整合所有內容
+            import tempfile
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # 複製下載的檔案
+                if os.path.exists(download_dir):
+                    dest_downloads = os.path.join(temp_dir, 'downloads')
+                    shutil.copytree(download_dir, dest_downloads)
+                
+                # 複製比對結果
+                if os.path.exists(compare_dir):
+                    dest_compare = os.path.join(temp_dir, 'compare_results')
+                    shutil.copytree(compare_dir, dest_compare)
+                
+                # 打包
+                zip_path = self.packager.create_zip(temp_dir, zip_path)
+            
+            print(f"✓ 打包完成！ZIP 檔案: {zip_path}")
+            print("\n【一步到位】所有流程完成！")
+            
+        except Exception as e:
+            logger.error(f"一步到位執行失敗：{str(e)}")
             sys.exit(1)
 
 def create_parser():
@@ -491,13 +726,25 @@ def create_parser():
     compare_parser = subparsers.add_parser('compare', help='比較檔案差異')
     compare_parser.add_argument('--source-dir', required=True, help='來源目錄')
     compare_parser.add_argument('--output-dir', help='輸出目錄（預設：與來源目錄相同）')
-    compare_parser.add_argument('--base-folder', choices=['default', 'premp', 'wave', 'wave.backup'], 
-                               help='選擇作為基準的資料夾類型')
+    compare_parser.add_argument('--mode', choices=['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'], 
+                               help='比對模式')
+    compare_parser.add_argument('--all-scenarios', action='store_true', help='執行所有比對情境')
     
     # 打包功能
     package_parser = subparsers.add_parser('package', help='打包成 ZIP')
     package_parser.add_argument('--source-dir', required=True, help='要打包的目錄')
     package_parser.add_argument('--zip-name', help='ZIP 檔案名稱')
+    
+    # 一步到位功能
+    all_parser = subparsers.add_parser('all', help='一步到位：下載→比較→打包')
+    all_parser.add_argument('--excel', required=True, help='Excel 檔案路徑')
+    all_parser.add_argument('--host', default=config.SFTP_HOST, help='SFTP 伺服器')
+    all_parser.add_argument('--port', type=int, default=config.SFTP_PORT, help='SFTP 連接埠')
+    all_parser.add_argument('--username', default=config.SFTP_USERNAME, help='使用者名稱')
+    all_parser.add_argument('--password', default=config.SFTP_PASSWORD, help='密碼')
+    all_parser.add_argument('--output-dir', help='下載輸出目錄')
+    all_parser.add_argument('--compare-dir', help='比較輸出目錄')
+    all_parser.add_argument('--zip-name', help='ZIP 檔案名稱')
     
     return parser
 

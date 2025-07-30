@@ -1,6 +1,7 @@
 """
-檔案比較模組
+檔案比較模組（增強版）
 處理 manifest.xml, F_Version.txt, Version.txt 的差異比較
+支援一次執行所有比對情境
 """
 import os
 import xml.etree.ElementTree as ET
@@ -295,6 +296,444 @@ class FileComparator:
             self.logger.error(f"比較文字檔案失敗: {str(e)}")
             
         return differences
+    
+    def compare_all_scenarios(self, source_dir: str, output_dir: str = None) -> Dict[str, Any]:
+        """
+        執行所有比對情境
+        
+        Args:
+            source_dir: 來源目錄
+            output_dir: 輸出目錄
+            
+        Returns:
+            所有比對結果的摘要
+        """
+        output_dir = output_dir or source_dir
+        
+        # 初始化結果
+        all_results = {
+            'master_vs_premp': {
+                'success': 0,
+                'failed': 0,
+                'modules': [],
+                'reports': []
+            },
+            'premp_vs_wave': {
+                'success': 0,
+                'failed': 0,
+                'modules': [],
+                'reports': []
+            },
+            'wave_vs_backup': {
+                'success': 0,
+                'failed': 0,
+                'modules': [],
+                'reports': []
+            },
+            'failed': 0,
+            'failed_modules': [],
+            'summary_report': ''
+        }
+        
+        # 整合報表的資料
+        all_revision_diff = []
+        all_branch_error = []
+        all_lost_project = []
+        all_version_diff = []
+        cannot_compare_modules = []
+        
+        try:
+            # 取得所有模組
+            actual_modules = self._get_all_modules(source_dir)
+            self.logger.info(f"找到 {len(actual_modules)} 個模組")
+            
+            # 處理每個模組
+            for top_dir, module, module_path in actual_modules:
+                full_module = f"{top_dir}/{module}" if top_dir else module
+                
+                # 執行三種比對情境
+                scenarios = [
+                    ('master_vs_premp', 'Master vs PreMP'),
+                    ('premp_vs_wave', 'PreMP vs Wave'),
+                    ('wave_vs_backup', 'Wave vs Wave.backup')
+                ]
+                
+                module_has_comparison = False
+                module_failures = []
+                
+                for scenario_key, scenario_name in scenarios:
+                    base_folder, compare_folder, missing_info = self._find_folders_for_comparison(
+                        module_path, scenario_key
+                    )
+                    
+                    if base_folder and compare_folder:
+                        # 可以進行比對
+                        try:
+                            results = self._compare_specific_folders(
+                                module_path, base_folder, compare_folder, full_module
+                            )
+                            
+                            # 收集資料
+                            all_revision_diff.extend(results['revision_diff'])
+                            all_branch_error.extend(results['branch_error'])
+                            all_lost_project.extend(results['lost_project'])
+                            if 'version_diffs' in results:
+                                all_version_diff.extend(results['version_diffs'])
+                            
+                            # 記錄成功
+                            all_results[scenario_key]['success'] += 1
+                            all_results[scenario_key]['modules'].append(module)
+                            module_has_comparison = True
+                            
+                            # 寫入個別報表
+                            if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
+                                # 建立輸出路徑
+                                scenario_dir = os.path.join(output_dir, scenario_key)
+                                if top_dir:
+                                    module_output_dir = os.path.join(scenario_dir, top_dir, module)
+                                else:
+                                    module_output_dir = os.path.join(scenario_dir, module)
+                                
+                                if not os.path.exists(module_output_dir):
+                                    os.makedirs(module_output_dir)
+                                
+                                report_file = self._write_module_compare_report(
+                                    module, results, module_output_dir
+                                )
+                                if report_file:
+                                    all_results[scenario_key]['reports'].append(report_file)
+                                    
+                        except Exception as e:
+                            self.logger.error(f"比對 {module} ({scenario_name}) 失敗: {str(e)}")
+                            module_failures.append({
+                                'scenario': scenario_name,
+                                'error': str(e)
+                            })
+                    else:
+                        # 無法比對
+                        all_results[scenario_key]['failed'] += 1
+                        module_failures.append({
+                            'scenario': scenario_name,
+                            'reason': missing_info
+                        })
+                
+                # 如果這個模組完全無法比對
+                if not module_has_comparison:
+                    folders = [f for f in os.listdir(module_path) 
+                              if os.path.isdir(os.path.join(module_path, f))]
+                    
+                    # 使用第一個資料夾的完整路徑
+                    if folders:
+                        full_path = os.path.join(module_path, folders[0])
+                    else:
+                        full_path = module_path
+                    
+                    # 整理失敗原因
+                    failure_reasons = []
+                    for failure in module_failures:
+                        if 'reason' in failure:
+                            failure_reasons.append(f"{failure['scenario']}: {failure['reason']}")
+                        else:
+                            failure_reasons.append(f"{failure['scenario']}: {failure['error']}")
+                    
+                    cannot_compare_modules.append({
+                        'SN': len(cannot_compare_modules) + 1,
+                        'module': module,
+                        'folder_count': len(folders),
+                        'folders': ', '.join(folders) if folders else '無資料夾',
+                        'path': full_path,
+                        'reason': '; '.join(failure_reasons)
+                    })
+                    all_results['failed'] += 1
+                    all_results['failed_modules'].append(module)
+            
+            # 重新編號所有資料
+            for i, item in enumerate(all_revision_diff, 1):
+                item['SN'] = i
+            for i, item in enumerate(all_branch_error, 1):
+                item['SN'] = i
+            for i, item in enumerate(all_lost_project, 1):
+                item['SN'] = i
+            for i, item in enumerate(all_version_diff, 1):
+                item['SN'] = i
+            
+            # 寫入總整合報表
+            summary_report_path = self._write_all_scenarios_report(
+                all_revision_diff, all_branch_error, all_lost_project,
+                all_version_diff, cannot_compare_modules, all_results, output_dir
+            )
+            
+            all_results['summary_report'] = summary_report_path
+            
+            return all_results
+            
+        except Exception as e:
+            self.logger.error(f"執行所有比對情境失敗: {str(e)}")
+            raise
+    
+    def _get_all_modules(self, source_dir: str) -> List[Tuple[str, str, str]]:
+        """取得所有模組"""
+        actual_modules = []
+        
+        # 檢查是否有 PrebuildFW 或 DailyBuild 子目錄
+        has_top_dirs = False
+        
+        # 檢查 PrebuildFW 目錄
+        prebuild_path = os.path.join(source_dir, 'PrebuildFW')
+        if os.path.exists(prebuild_path) and os.path.isdir(prebuild_path):
+            has_top_dirs = True
+            # 取得 PrebuildFW 下的所有模組
+            for module in os.listdir(prebuild_path):
+                module_path = os.path.join(prebuild_path, module)
+                if os.path.isdir(module_path):
+                    actual_modules.append(('PrebuildFW', module, module_path))
+        
+        # 檢查 DailyBuild 目錄
+        daily_path = os.path.join(source_dir, 'DailyBuild')
+        if os.path.exists(daily_path) and os.path.isdir(daily_path):
+            has_top_dirs = True
+            # 取得 DailyBuild 下的所有模組（平台）
+            for platform in os.listdir(daily_path):
+                platform_path = os.path.join(daily_path, platform)
+                if os.path.isdir(platform_path):
+                    actual_modules.append(('DailyBuild', platform, platform_path))
+        
+        # 如果沒有頂層目錄，使用原本的邏輯
+        if not has_top_dirs:
+            modules = [d for d in os.listdir(source_dir) 
+                      if os.path.isdir(os.path.join(source_dir, d))]
+            for module in modules:
+                module_path = os.path.join(source_dir, module)
+                actual_modules.append(('', module, module_path))
+        
+        return actual_modules
+    
+    def _write_all_scenarios_report(self, revision_diff: List[Dict], branch_error: List[Dict],
+                                   lost_project: List[Dict], version_diff: List[Dict],
+                                   cannot_compare_modules: List[Dict], all_results: Dict,
+                                   output_dir: str) -> str:
+        """寫入所有比對情境的整合報表"""
+        try:
+            import pandas as pd
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.worksheet.filters import FilterColumn, Filters
+            
+            output_file = os.path.join(output_dir, "all_scenarios_compare.xlsx")
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 摘要頁籤
+                summary_data = []
+                
+                # 各情境的統計
+                scenarios = [
+                    ('Master vs PreMP', all_results['master_vs_premp']),
+                    ('PreMP vs Wave', all_results['premp_vs_wave']),
+                    ('Wave vs Wave.backup', all_results['wave_vs_backup'])
+                ]
+                
+                for scenario_name, scenario_result in scenarios:
+                    summary_data.append({
+                        '比對情境': scenario_name,
+                        '成功模組數': scenario_result['success'],
+                        '失敗模組數': scenario_result['failed'],
+                        '成功模組清單': ', '.join(scenario_result['modules'][:5]) + 
+                                     ('...' if len(scenario_result['modules']) > 5 else '')
+                    })
+                
+                # 加入總計
+                total_modules = len(set(
+                    all_results['master_vs_premp']['modules'] +
+                    all_results['premp_vs_wave']['modules'] +
+                    all_results['wave_vs_backup']['modules']
+                ))
+                
+                summary_data.append({
+                    '比對情境': '總計',
+                    '成功模組數': total_modules,
+                    '失敗模組數': all_results['failed'],
+                    '成功模組清單': f"共 {total_modules} 個不重複模組"
+                })
+                
+                df_summary = pd.DataFrame(summary_data)
+                df_summary.to_excel(writer, sheet_name='摘要', index=False)
+                
+                # revision_diff 頁籤
+                if revision_diff:
+                    df = pd.DataFrame(revision_diff)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                'base_short', 'base_revision', 'compare_short', 'compare_revision',
+                                'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
+                                'base_link', 'compare_link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='revision_diff', index=False)
+                
+                # branch_error 頁籤
+                if branch_error:
+                    # 移除 check_keyword 欄位
+                    for item in branch_error:
+                        if 'check_keyword' in item:
+                            del item['check_keyword']
+                        if 'module_path' in item:
+                            item['path_location'] = item.pop('module_path')
+                    
+                    df = pd.DataFrame(branch_error)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                                'revision_short', 'revision', 'upstream', 'dest-branch', 
+                                'path_location', 'compare_link', 'problem', 'has_wave']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df_sorted = df.sort_values('has_wave', ascending=True)
+                    df_sorted.to_excel(writer, sheet_name='branch_error', index=False)
+                
+                # lost_project 頁籤
+                if lost_project:
+                    df = pd.DataFrame(lost_project)
+                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                                'upstream', 'dest-branch', 'revision', 'link']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='lost_project', index=False)
+                
+                # version_diff 頁籤
+                if version_diff:
+                    df = pd.DataFrame(version_diff)
+                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
+                    df.to_excel(writer, sheet_name='version_diff', index=False)
+                
+                # 無法比對頁籤
+                if cannot_compare_modules:
+                    df = pd.DataFrame(cannot_compare_modules)
+                    df.to_excel(writer, sheet_name='無法比對', index=False)
+                
+                # 格式化所有工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+                
+                # 套用特定格式
+                self._apply_special_formatting(writer, revision_diff, branch_error, 
+                                             lost_project, version_diff)
+            
+            self.logger.info(f"成功寫入所有情境整合報表: {output_file}")
+            return output_file
+            
+        except Exception as e:
+            self.logger.error(f"寫入所有情境整合報表失敗: {str(e)}")
+            raise
+    
+    def _apply_special_formatting(self, writer, revision_diff, branch_error, 
+                                lost_project, version_diff):
+        """套用特定欄位的格式"""
+        import pandas as pd
+        from openpyxl.styles import PatternFill, Font
+        from openpyxl.worksheet.filters import FilterColumn, Filters
+        
+        # revision_diff 頁籤的特定格式
+        if revision_diff and 'revision_diff' in writer.sheets:
+            worksheet = writer.sheets['revision_diff']
+            df = pd.DataFrame(revision_diff)
+            
+            # 設定深紅底標題的欄位
+            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+            white_font = Font(color="FFFFFF", bold=True)
+            red_font = Font(color="FF0000")
+            
+            # 找到需要格式化的欄位位置
+            target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
+            column_indices = {}
+            
+            for idx, col in enumerate(df.columns):
+                if col in target_columns:
+                    column_indices[col] = idx + 1
+            
+            # 設定標題為深紅底白字
+            for col_name, col_idx in column_indices.items():
+                cell = worksheet.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = white_font
+            
+            # 設定內容為紅字
+            for row in range(2, len(df) + 2):
+                for col_name, col_idx in column_indices.items():
+                    worksheet.cell(row=row, column=col_idx).font = red_font
+        
+        # branch_error 頁籤的特定格式
+        if branch_error and 'branch_error' in writer.sheets:
+            worksheet = writer.sheets['branch_error']
+            df = pd.DataFrame(branch_error)
+            
+            # 找到 "problem" 和 "has_wave" 欄位的位置
+            problem_col = None
+            has_wave_col = None
+            for idx, col in enumerate(df.columns):
+                if col == 'problem':
+                    problem_col = idx + 1
+                elif col == 'has_wave':
+                    has_wave_col = idx + 1
+            
+            if problem_col:
+                # 設定深紅底白字
+                header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                white_font = Font(color="FFFFFF", bold=True)
+                cell = worksheet.cell(row=1, column=problem_col)
+                cell.fill = header_fill
+                cell.font = white_font
+            
+            # 設定自動篩選
+            worksheet.auto_filter.ref = worksheet.dimensions
+            
+            # 設定 has_wave 欄位的篩選條件為只顯示 "N"
+            if has_wave_col:
+                has_wave_values = df['has_wave'].unique().tolist()
+                
+                filter_column = FilterColumn(colId=has_wave_col - 1)
+                filter_column.filters = Filters()
+                filter_column.filters.filter = ['N']
+                
+                if 'Y' in has_wave_values:
+                    for row_idx in range(2, len(df) + 2):
+                        if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
+                            worksheet.row_dimensions[row_idx].hidden = True
+                
+                worksheet.auto_filter.filterColumn.append(filter_column)
+        
+        # lost_project 頁籤的特定格式
+        if lost_project and 'lost_project' in writer.sheets:
+            worksheet = writer.sheets['lost_project']
+            df = pd.DataFrame(lost_project)
+            
+            # 找到 "狀態" 欄位的位置
+            for idx, col in enumerate(df.columns):
+                if col == '狀態':
+                    status_col = idx + 1
+                    # 設定深紅底白字
+                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                    white_font = Font(color="FFFFFF", bold=True)
+                    cell = worksheet.cell(row=1, column=status_col)
+                    cell.fill = header_fill
+                    cell.font = white_font
+                    break
+        
+        # version_diff 頁籤的特定格式
+        if version_diff and 'version_diff' in writer.sheets:
+            worksheet = writer.sheets['version_diff']
+            df = pd.DataFrame(version_diff)
+            
+            # 找到 "is_different" 欄位的位置
+            for idx, col in enumerate(df.columns):
+                if col == 'is_different':
+                    diff_col = idx + 1
+                    # 設定深紅底白字
+                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                    white_font = Font(color="FFFFFF", bold=True)
+                    cell = worksheet.cell(row=1, column=diff_col)
+                    cell.fill = header_fill
+                    cell.font = white_font
+                    break
         
     def compare_module_folders(self, module_path: str, base_folder_suffix: str = None) -> Dict[str, Any]:
         """
@@ -432,38 +871,8 @@ class FileComparator:
         cannot_compare_modules = []  # 記錄無法比對的模組
         
         try:
-            # 檢查是否有 PrebuildFW 或 DailyBuild 子目錄
-            has_top_dirs = False
-            actual_modules = []
-            
-            # 檢查 PrebuildFW 目錄
-            prebuild_path = os.path.join(source_dir, 'PrebuildFW')
-            if os.path.exists(prebuild_path) and os.path.isdir(prebuild_path):
-                has_top_dirs = True
-                # 取得 PrebuildFW 下的所有模組
-                for module in os.listdir(prebuild_path):
-                    module_path = os.path.join(prebuild_path, module)
-                    if os.path.isdir(module_path):
-                        actual_modules.append(('PrebuildFW', module, module_path))
-            
-            # 檢查 DailyBuild 目錄
-            daily_path = os.path.join(source_dir, 'DailyBuild')
-            if os.path.exists(daily_path) and os.path.isdir(daily_path):
-                has_top_dirs = True
-                # 取得 DailyBuild 下的所有模組（平台）
-                for platform in os.listdir(daily_path):
-                    platform_path = os.path.join(daily_path, platform)
-                    if os.path.isdir(platform_path):
-                        actual_modules.append(('DailyBuild', platform, platform_path))
-            
-            # 如果沒有頂層目錄，使用原本的邏輯
-            if not has_top_dirs:
-                modules = [d for d in os.listdir(source_dir) 
-                          if os.path.isdir(os.path.join(source_dir, d))]
-                for module in modules:
-                    module_path = os.path.join(source_dir, module)
-                    actual_modules.append(('', module, module_path))
-            
+            # 取得所有模組
+            actual_modules = self._get_all_modules(source_dir)
             self.logger.info(f"找到 {len(actual_modules)} 個模組")
             
             # 處理每個模組

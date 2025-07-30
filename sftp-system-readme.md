@@ -1,294 +1,46 @@
-# SFTP 下載與比較系統 - 操作說明
+# SFTP 下載與比較系統 - 完整使用說明
 
 ## 系統概述
-本系統提供三個主要功能：
-1. 從 SFTP 下載檔案並產生報表
-2. 比較模組下的 manifest.xml/F_Version.txt/Version.txt 差異
-3. 打包比對結果成 ZIP 檔案
 
-### 主要特點
-- **智能檔案搜尋**：自動在子目錄中遞迴搜尋目標檔案
-- **斷點續傳**：自動跳過已下載的檔案，支援多次執行
-- **自動分類**：根據路徑關鍵字自動為資料夾加上後綴（-premp、-wave、-wave.backup）
-- **彈性比較**：可選擇不同資料夾作為基準進行比較
-- **進階比較邏輯**：
-  - 完整的 manifest.xml 比較功能（包含 wave 標記）
-  - 動態 branch_error 檢查（根據比較對象自動調整檢查規則）
-  - Version.txt 和 F_Version.txt 內容比較
-- **多格式支援**：支援標準格式和特殊格式的 FTP 路徑
-- **自動產生 Gerrit 連結**：方便查看詳細的程式碼變更（支援 prebuilt 和 prebuild）
-- **美觀的報表格式**：
-  - 彩色標題列、自動調整欄寬
-  - 黃底標記重要欄位（"problem"、"狀態"、"is_different"、revision 欄位）
-  - 紅字顯示版本差異內容（base_short、base_revision、compare_short、compare_revision）
+本系統提供兩種操作方式：
+1. **命令列介面**：適合自動化腳本和批次處理
+2. **Web 介面**：提供友善的圖形化操作和互動式資料分析
 
-## 安裝需求
+## 快速開始
+
+### 安裝系統
+
 ```bash
-pip install paramiko pandas openpyxl lxml argparse
+# 1. 克隆或下載專案
+cd sftp_compare_system
+
+# 2. 安裝基礎套件
+pip install -r requirements.txt
+
+# 3. 安裝 Web 介面額外套件（選用）
+pip install flask flask-socketio eventlet
 ```
 
-## 專案結構
-```
-sftp_compare_system/
-├── main.py              # 主程式與互動介面
-├── config.py            # 系統設定
-├── sftp_downloader.py   # SFTP 下載模組
-├── file_comparator.py   # 檔案比較模組
-├── zip_packager.py      # ZIP 打包模組
-├── excel_handler.py     # Excel 處理模組
-└── utils.py            # 共用工具函數
-```
+### 設定系統
 
-## 使用方式
-
-### 1. 互動式介面
-```bash
-python main.py
-```
-系統會顯示選單讓您選擇功能。
-
-### 2. 命令列模式
-
-#### 功能一：下載 SFTP 檔案
-```bash
-# 基本用法
-python main.py --function download --excel input.xlsx
-
-# 完整參數
-python main.py --function download \
-    --excel input.xlsx \
-    --host sftp.example.com \
-    --port 22 \
-    --username user \
-    --password pass \
-    --output-dir ./downloads
-```
-
-參數說明：
-- `--excel`: 包含 FTP 路徑的 Excel 檔案
-- `--host`: SFTP 伺服器位址（預設：從 config.py 讀取）
-- `--port`: SFTP 連接埠（預設：22）
-- `--username`: SFTP 使用者名稱
-- `--password`: SFTP 密碼
-- `--output-dir`: 下載檔案的輸出目錄（預設：./downloads）
-
-#### 功能二：比較檔案差異
-```bash
-# 基本用法
-python main.py --function compare --source-dir /vince/home/all_folder
-
-# 指定輸出目錄
-python main.py --function compare \
-    --source-dir /vince/home/all_folder \
-    --output-dir ./compare_results
-```
-
-參數說明：
-- `--source-dir`: 包含模組資料夾的根目錄
-- `--output-dir`: 比較結果的輸出目錄（預設：source-dir）
-
-#### 功能三：打包 ZIP
-```bash
-# 基本用法
-python main.py --function package --source-dir /vince/home/all_folder
-
-# 指定 ZIP 檔名
-python main.py --function package \
-    --source-dir /vince/home/all_folder \
-    --zip-name compare_results.zip
-```
-
-參數說明：
-- `--source-dir`: 要打包的資料夾路徑
-- `--zip-name`: ZIP 檔案名稱（預設：compare_results_{timestamp}.zip）
-
-### 3. 模組獨立使用
-
-#### 下載模組
-```python
-from sftp_downloader import SFTPDownloader
-
-downloader = SFTPDownloader(host='sftp.example.com', username='user', password='pass')
-downloader.download_from_excel('input.xlsx', output_dir='./downloads')
-```
-
-#### 比較模組
-```python
-from file_comparator import FileComparator
-
-comparator = FileComparator()
-comparator.compare_all_modules('/vince/home/all_folder')
-```
-
-#### 打包模組
-```python
-from zip_packager import ZipPackager
-
-packager = ZipPackager()
-packager.create_zip('/vince/home/all_folder', 'output.zip')
-```
-
-## 設定檔說明 (config.py)
-
+編輯 `config.py` 設定您的環境：
 ```python
 # SFTP 連線設定
 SFTP_HOST = 'your.sftp.server.com'
-SFTP_PORT = 22
 SFTP_USERNAME = 'your_username'
 SFTP_PASSWORD = 'your_password'
-
-# 檔案設定
-TARGET_FILES = ['F_Version.txt', 'manifest.xml', 'Version.txt']
-CASE_INSENSITIVE = True              # 檔案名稱比對不區分大小寫
-MAX_SEARCH_DEPTH = 3                 # 遞迴搜尋的最大深度（可根據需要調整）
-SKIP_EXISTING_FILES = True           # 是否跳過已存在的檔案
-
-# 輸出設定
-DEFAULT_OUTPUT_DIR = './downloads'
-DEFAULT_COMPARE_DIR = './compare_results'
-
-# Gerrit URL 設定（根據您的環境修改）
-GERRIT_BASE_URL_PREBUILT = "https://mm2sd-git2.rtkbf.com/gerrit/plugins/gitiles/"
-GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 ```
 
-## Excel 輸入格式
+## 命令列介面使用
 
-### 功能一的輸入 Excel
-需要包含 "ftp path" 欄位，範例：
-| SN | 模組 | ftp path |
-|----|------|----------|
-| 1 | bootcode | /DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_master/20250728_1111_5330ddb |
-| 2 | emcu | /DailyBuild/PrebuildFW/emcu/RDDB-321_realtek_mac8q_master/20250728_2222_5330ddb |
-| 3 | dolby_ta | /DailyBuild/PrebuildFW/dolby_ta/RDDB-1031_merlin7_3.16_android14_mp.google-refplus.backup/2025_07_03-10_53_618e9e1 |
-| 4 | ufsd_ko | /DailyBuild/PrebuildFW/ufsd_ko/RDDB-508_merlin7_android11_mp.google-refplus/2025_07_03-10_53_618e9e1 |
+### 1. 互動式模式
 
-**注意**：系統會自動從路徑中解析模組名稱（如 bootcode、emcu、dolby_ta、ufsd_ko 等）和 JIRA ID（RDDB-XXX）。
-
-## 輸出說明
-
-### 功能一輸出
-1. 資料夾結構：
-   ```
-   downloads/
-   ├── bootcode/
-   │   ├── RDDB-320/              # 預設資料夾
-   │   ├── RDDB-321-premp/        # premp 版本
-   │   └── RDDB-322-wave/         # wave 版本
-   ├── emcu/
-   │   ├── RDDB-323/
-   │   ├── RDDB-324-premp/
-   │   └── RDDB-325-wave.backup/   # wave backup 版本
-   └── Merlin7/
-       └── DB2302/                # 特殊格式的資料夾
-           ├── F_Version.txt
-           ├── manifest.xml
-           └── Version.txt
-   ```
-
-2. Excel 報表：`{原檔名}_report.xlsx`
-   | SN | 模組 | sftp 路徑 | 本地資料夾 | 版本資訊檔案 |
-   |----|------|-----------|------------|--------------|
-   | 1 | bootcode | /DailyBuild/... | bootcode/RDDB-320 | F_Version.txt, manifest.xml, Version.txt |
-   | 2 | bootcode | /DailyBuild/.../premp.google-refplus/... | bootcode/RDDB-321-premp | F_Version.txt, manifest.xml, Version.txt |
-   | 3 | emcu | /DailyBuild/.../mp.google-refplus.wave/... | emcu/RDDB-322-wave | F_Version.txt (2025_06_24/F_Version.txt), ... |
-   | 4 | Merlin7 | /DailyBuild/Merlin7/DB2302_... | Merlin7/DB2302 | F_Version.txt, manifest.xml, Version.txt |
-   
-   註：
-   - 資料夾名稱會根據 FTP 路徑中的關鍵字自動加上後綴
-   - 特殊格式路徑會解析為對應的資料夾結構（如 Merlin7/DB2302）
-   - 括號內顯示檔案在 FTP 路徑下的相對位置（如果檔案在子目錄中）
-   - 「已存在」表示本地已有該檔案，系統跳過下載
-
-### 功能二輸出
-1. 各模組比較結果：`{模組名稱}_compare.xlsx`
-   - 第一個頁籤：不同的 project（revision 差異）
-   - 第二個頁籤：新增/刪除的項目
-
-2. 整合報表：`all_compare.xlsx`
-   - **revision_diff**：所有 revision 差異（包含 wave 項目）
-     - base_short、base_revision、compare_short、compare_revision 欄位標題為黃底
-     - 這四個欄位的內容顯示為紅字，方便識別版本差異
-   - **branch_error**：不符合命名規則的分支（根據比較對象動態檢查）
-     - "problem" 欄位標題為黃底，顯示具體問題描述
-     - 自動篩選只顯示 has_wave = N 的資料
-   - **lost_project**：新增/刪除的專案
-     - "狀態" 欄位標題為黃底
-   - **version_diff**：Version.txt 和 F_Version.txt 的內容差異
-     - "is_different" 欄位標題為黃底
-     - 顯示檔案內容（最多前 100 個字元）
-   - **無法比對**：無法進行比對的模組清單
-
-比較邏輯說明：
-- 使用 name 和 path 作為唯一鍵來識別 project
-- 可選擇作為基準(base)的資料夾類型（default/premp/wave/wave.backup）
-- branch_error 會根據比較對象自動調整檢查規則：
-  - RDDB-XXX vs RDDB-XXX-premp → 檢查 premp 命名規則
-  - RDDB-XXX-premp vs RDDB-XXX-wave → 檢查 wave 命名規則
-  - RDDB-XXX-wave vs RDDB-XXX-wave.backup → 檢查 wave.backup 命名規則
-- 自動生成 Gerrit link（支援 prebuilt 和 prebuild）
-- 縮短 revision hash 為前 7 個字元以提高可讀性
-- revision_diff 頁籤會標註包含 'wave' 的項目（has_wave 欄位）
-- 版本檔案比較會顯示有差異的 Version.txt 和 F_Version.txt 內容
-
-### 功能三輸出
-- ZIP 檔案包含所有比較結果和下載的檔案
-
-## 注意事項
-1. 確保 SFTP 伺服器連線資訊正確
-2. Excel 檔案路徑必須包含 "ftp path" 欄位
-3. 比較功能需要每個模組下有兩個資料夾才能進行比較
-4. 檔案名稱比對不區分大小寫
-5. 系統會自動在 FTP 路徑及其子目錄中遞迴搜尋目標檔案（最多搜尋 3 層深度）
-6. 資料夾命名會根據 FTP 路徑中的關鍵字自動加上後綴（-premp、-wave、-wave.backup）
-7. 比較時可選擇不同的資料夾作為基準進行比較
-8. branch_error 檢查會根據比較對象動態調整規則
-9. 支援特殊格式的 FTP 路徑（如 /DailyBuild/Merlin7/DB2302_...）
-10. 所有 Excel 報表都會自動格式化，包含彩色標題列和自動調整欄寬
-11. 重要欄位會以黃底標記（"problem"、"狀態"、"is_different"、revision 相關欄位）
-12. revision_diff 中的版本資訊會以紅字顯示，方便快速比對差異
-13. Version.txt 和 F_Version.txt 的比較結果會整合在同一份報表中
-
-## 錯誤處理
-- 連線失敗：檢查 SFTP 設定和網路連線
-- 檔案不存在：確認 FTP 路徑正確且檔案存在
-- 權限問題：確認有足夠的讀寫權限
-
-## 完整使用範例
-
-### 範例 1：完整工作流程
 ```bash
-# 1. 從 Excel 下載 SFTP 檔案
-python main.py download --excel ftp_paths.xlsx --output-dir ./downloads
-
-# 2. 比較下載的檔案（使用 wave 版本作為基準）
-python main.py compare --source-dir ./downloads --base-folder wave
-
-# 3. 打包結果
-python main.py package --source-dir ./downloads --zip-name results.zip
+python main.py
 ```
 
-### 範例 2：使用自訂 SFTP 設定
-```bash
-python main.py download \
-    --excel input.xlsx \
-    --host 192.168.1.100 \
-    --port 2222 \
-    --username myuser \
-    --password mypass \
-    --output-dir ./my_downloads
+系統會顯示選單：
 ```
-
-### 範例 3：強制重新下載
-```bash
-# 強制重新下載所有檔案（不跳過已存在的）
-python main.py download --excel input.xlsx --force
-```
-
-### 範例 4：互動式模式使用
-```
-$ python main.py
-
 ==================================================
 SFTP 下載與比較系統
 ==================================================
@@ -296,14 +48,313 @@ SFTP 下載與比較系統
 2. 比較模組檔案差異
 3. 打包比對結果成 ZIP
 4. 測試 SFTP 連線
-5. 退出
+5. 清除暫存檔案
+6. 【一步到位】下載→比較→打包
+7. 【全部比對】執行所有比對情境
+8. 退出
 ==================================================
-請選擇功能 (1-5): 1
-
---- 下載 SFTP 檔案 ---
-請輸入 Excel 檔案路徑: ftp_paths.xlsx
-使用預設 SFTP 設定？(Y/n): Y
-輸出目錄 (預設: ./downloads): 
-
-下載完成！報表已儲存至: ./downloads/ftp_paths_report.xlsx
 ```
+
+### 2. 命令列模式
+
+#### 一步到位處理
+```bash
+# 使用預設 SFTP 設定
+python main.py all --excel ftp_paths.xlsx
+
+# 使用自訂 SFTP 設定
+python main.py all --excel ftp_paths.xlsx \
+    --host sftp.example.com \
+    --username myuser \
+    --password mypass
+```
+
+#### 單獨執行各功能
+```bash
+# 下載檔案
+python main.py download --excel ftp_paths.xlsx
+
+# 執行所有比對情境
+python main.py compare --source-dir ./downloads --all-scenarios
+
+# 執行特定比對
+python main.py compare --source-dir ./downloads --mode master_vs_premp
+
+# 打包結果
+python main.py package --source-dir ./downloads --zip-name results.zip
+```
+
+## Web 介面使用
+
+### 啟動 Web 伺服器
+
+```bash
+# 開發模式
+python web_app.py
+
+# 生產模式
+gunicorn -k eventlet -w 1 --bind 0.0.0.0:5000 web_app:app
+```
+
+瀏覽器訪問：http://localhost:5000
+
+### Web 功能說明
+
+#### 1. 一步到位處理
+- 路徑：`/one-step`
+- 功能：自動執行下載→比對→打包全流程
+- 特色：
+  - 拖放上傳 Excel
+  - 即時進度追蹤
+  - WebSocket 即時更新
+  - 詳細處理日誌
+
+#### 2. 比較功能
+- 路徑：`/compare`
+- 功能：執行各種比對情境
+- 支援情境：
+  - 執行所有比對
+  - Master vs PreMP
+  - PreMP vs Wave
+  - Wave vs Wave.backup
+- 特色：
+  - 自動偵測可用目錄
+  - 視覺化結果圖表
+  - 快速匯出功能
+
+#### 3. 結果報表（樞紐分析）
+- 路徑：`/results/<task_id>`
+- 功能：互動式資料分析
+- 特色：
+  - 類似 Excel 的樞紐分析表
+  - 拖放式操作介面
+  - 多種彙總函數
+  - 即時篩選功能
+  - 多格式匯出
+
+## 輸入檔案格式
+
+### Excel 檔案格式
+必須包含 "ftp path" 欄位：
+
+| SN | 模組 | ftp path | 備註 |
+|----|------|----------|------|
+| 1 | bootcode | /DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_master/20250728_1111 | 主版本 |
+| 2 | bootcode | /DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_premp.google-refplus/20250729_3333 | PreMP 版本 |
+| 3 | Merlin7 | /DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14/533_all_202507282300 | 特殊格式 |
+
+## 輸出說明
+
+### 1. 下載結果
+```
+downloads/
+├── PrebuildFW/
+│   ├── bootcode/
+│   │   ├── RDDB-320/         # 預設版本
+│   │   ├── RDDB-320-premp/   # PreMP 版本
+│   │   └── RDDB-320-wave/    # Wave 版本
+│   └── emcu/
+│       └── RDDB-321/
+└── DailyBuild/
+    └── Merlin7/
+        └── DB2302/
+```
+
+### 2. 比對報表
+- **all_scenarios_compare.xlsx**：所有情境的整合報表
+  - 摘要：統計各情境的成功/失敗數
+  - revision_diff：所有 revision 差異
+  - branch_error：分支命名錯誤
+  - lost_project：新增/刪除的專案
+  - version_diff：版本檔案差異
+  - 無法比對：缺少必要資料夾的模組
+
+### 3. 重要欄位標記
+- **深紅底白字標題**：
+  - revision 相關欄位（base_short、base_revision、compare_short、compare_revision）
+  - problem（問題描述）
+  - 狀態（新增/刪除）
+  - is_different（版本差異）
+- **紅字內容**：revision 差異值
+- **自動篩選**：branch_error 預設只顯示需修正的項目
+
+## 比對邏輯說明
+
+### 1. 自動偵測比對類型
+系統會根據資料夾名稱自動判斷比對類型：
+- RDDB-XXX vs RDDB-XXX-premp → 檢查 premp 命名規則
+- RDDB-XXX-premp vs RDDB-XXX-wave → 檢查 wave 命名規則
+- RDDB-XXX-wave vs RDDB-XXX-wave.backup → 檢查 wave.backup 命名規則
+
+### 2. 分支錯誤檢查
+- 只檢查 compare 資料夾中的項目
+- 根據資料夾類型動態調整檢查規則
+- 包含 'wave' 的項目不會被標記為錯誤
+
+### 3. 版本檔案比較
+- 自動比較 Version.txt 和 F_Version.txt
+- 顯示內容差異（最多 100 字元）
+- 只顯示有差異的檔案
+
+## 進階功能
+
+### 1. 樞紐分析使用方式
+1. 進入結果頁面
+2. 點擊「切換樞紐分析」
+3. 拖曳欄位到不同區域：
+   - **行**：垂直分組
+   - **列**：水平分組
+   - **值**：要彙總的數據
+4. 選擇彙總函數（總和、平均、計數等）
+5. 可匯出分析結果
+
+### 2. 資料篩選
+1. 點擊右下角篩選按鈕
+2. 選擇要篩選的欄位和值
+3. 點擊「套用篩選」
+4. 可同時篩選多個欄位
+
+### 3. 批次處理腳本
+```python
+# batch_process.py
+import subprocess
+import glob
+
+# 處理所有 Excel 檔案
+for excel_file in glob.glob("*.xlsx"):
+    if not excel_file.endswith("_report.xlsx"):
+        print(f"處理 {excel_file}...")
+        subprocess.run([
+            "python", "main.py", "all",
+            "--excel", excel_file
+        ])
+```
+
+## 故障排除
+
+### 常見問題
+
+1. **SFTP 連線失敗**
+   ```bash
+   # 測試連線
+   python main.py
+   # 選擇 4 測試 SFTP 連線
+   ```
+
+2. **找不到檔案**
+   - 檢查 FTP 路徑是否正確
+   - 調整 `MAX_SEARCH_DEPTH` 增加搜尋深度
+   - 查看下載報表了解實際路徑
+
+3. **Web 介面無法啟動**
+   ```bash
+   # 檢查埠是否被占用
+   netstat -an | grep 5000
+   
+   # 使用不同埠
+   python web_app.py --port 8080
+   ```
+
+4. **記憶體不足**
+   - 分批處理大量檔案
+   - 調整 pandas 讀取參數
+   - 使用串流處理
+
+### 除錯模式
+```python
+# 在 config.py 設定
+LOG_LEVEL = 'DEBUG'
+```
+
+## 效能優化建議
+
+1. **並行下載**
+   - 修改 `sftp_downloader.py` 使用 ThreadPoolExecutor
+   - 建議最多 5 個並行連線
+
+2. **大檔案處理**
+   - 使用分塊讀取
+   - 實作進度回調
+
+3. **資料庫快取**
+   - 儲存比對結果
+   - 避免重複計算
+
+## 安全建議
+
+1. **密碼管理**
+   - 使用環境變數儲存密碼
+   - 不要將密碼提交到版本控制
+
+2. **權限控制**
+   - Web 介面加入認證機制
+   - 限制檔案上傳大小和類型
+
+3. **日誌記錄**
+   - 記錄所有操作
+   - 定期清理舊日誌
+
+## API 參考
+
+### Python API
+```python
+from sftp_downloader import SFTPDownloader
+from file_comparator import FileComparator
+from zip_packager import ZipPackager
+
+# 下載
+downloader = SFTPDownloader(host, port, username, password)
+report = downloader.download_from_excel('input.xlsx', './output')
+
+# 比較
+comparator = FileComparator()
+results = comparator.compare_all_scenarios('./downloads', './results')
+
+# 打包
+packager = ZipPackager()
+zip_path = packager.create_zip('./results', 'output.zip')
+```
+
+### REST API
+```bash
+# 上傳檔案
+curl -X POST -F "file=@input.xlsx" http://localhost:5000/api/upload
+
+# 執行一步到位
+curl -X POST http://localhost:5000/api/one-step \
+  -H "Content-Type: application/json" \
+  -d '{"excel_file": "path/to/file.xlsx"}'
+
+# 取得狀態
+curl http://localhost:5000/api/status/task_id
+
+# 匯出結果
+curl -O http://localhost:5000/api/export-excel/task_id
+```
+
+## 版本更新說明
+
+### v2.0.0 (2024-01)
+- ✨ 新增 Web 介面
+- ✨ 支援一步到位處理
+- ✨ 支援所有比對情境自動執行
+- ✨ 新增互動式樞紐分析功能
+- 🎨 採用北歐藍設計風格
+- 🔧 改進比對邏輯和錯誤處理
+
+### v1.0.0 (2023-12)
+- 🚀 初始版本發布
+- 📥 支援 SFTP 下載
+- 🔄 支援檔案比對
+- 📦 支援結果打包
+
+## 聯絡與支援
+
+如有問題或建議，請：
+1. 查看本說明文件
+2. 檢查 logs 目錄的錯誤日誌
+3. 聯絡系統管理員
+
+---
+
+本系統由 Claude AI Assistant 協助開發

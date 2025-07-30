@@ -1,0 +1,252 @@
+<!-- 404.html -->
+{% extends "base.html" %}
+
+{% block title %}500 -（內部伺服器錯誤）{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-content">
+        <div class="error-icon">
+            <i class="fas fa-map-marked-alt"></i>
+        </div>
+        <h1 class="error-code">500</h1>
+        <h2 class="error-title">內部伺服器錯誤</h2>
+        <p class="error-message">
+            抱歉，您要找的頁面似乎不存在。<br>
+            可能是連結錯誤或頁面已被移除。
+        </p>
+        <div class="error-actions">
+            <button class="btn btn-primary" onclick="window.history.back()">
+                <i class="fas fa-arrow-left"></i> 返回上一頁
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-outline">
+                <i class="fas fa-home"></i> 回到首頁
+            </a>
+        </div>
+        
+        <!-- 建議連結 -->
+        <div class="suggested-links">
+            <h3>您可能想要：</h3>
+            <div class="link-grid">
+                <a href="{{ url_for('one_step_page') }}" class="suggested-link">
+                    <i class="fas fa-rocket"></i>
+                    <span>一步到位處理</span>
+                </a>
+                <a href="{{ url_for('compare_page') }}" class="suggested-link">
+                    <i class="fas fa-code-compare"></i>
+                    <span>比較檔案</span>
+                </a>
+                <a href="{{ url_for('download_page') }}" class="suggested-link">
+                    <i class="fas fa-download"></i>
+                    <span>下載檔案</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    min-height: calc(100vh - 64px - 80px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+}
+
+.error-content {
+    text-align: center;
+    max-width: 600px;
+}
+
+.error-icon {
+    font-size: 5rem;
+    color: var(--nordic-blue-300);
+    margin-bottom: var(--spacing-lg);
+}
+
+.error-code {
+    font-size: 6rem;
+    font-weight: 700;
+    color: var(--nordic-gray-900);
+    margin: 0;
+    line-height: 1;
+}
+
+.error-title {
+    font-size: 2rem;
+    color: var(--nordic-gray-800);
+    margin: var(--spacing-md) 0;
+}
+
+.error-message {
+    font-size: 1.1rem;
+    color: var(--nordic-gray-600);
+    margin-bottom: var(--spacing-xl);
+    line-height: 1.8;
+}
+
+.error-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    margin-bottom: var(--spacing-2xl);
+}
+
+.suggested-links {
+    margin-top: var(--spacing-2xl);
+    padding-top: var(--spacing-2xl);
+    border-top: 1px solid var(--nordic-gray-200);
+}
+
+.suggested-links h3 {
+    font-size: 1.2rem;
+    color: var(--nordic-gray-700);
+    margin-bottom: var(--spacing-lg);
+}
+
+.link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--spacing-md);
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.suggested-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-lg);
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--nordic-gray-700);
+    transition: all var(--transition-fast);
+}
+
+.suggested-link:hover {
+    background: var(--nordic-blue-50);
+    color: var(--nordic-blue-700);
+    transform: translateY(-2px);
+}
+
+.suggested-link i {
+    font-size: 2rem;
+    margin-bottom: var(--spacing-sm);
+}
+</style>
+{% endblock %}
+
+<!-- 分隔線：以下是 500.html -->
+<!-- 500.html -->
+{% extends "base.html" %}
+
+{% block title %}500 - 伺服器錯誤{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-content">
+        <div class="error-icon error">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h1 class="error-code">500</h1>
+        <h2 class="error-title">伺服器錯誤</h2>
+        <p class="error-message">
+            很抱歉，伺服器發生了錯誤。<br>
+            我們已經記錄此問題，將會盡快修復。
+        </p>
+        
+        <div class="error-details">
+            <div class="detail-item">
+                <i class="fas fa-clock"></i>
+                <span>錯誤時間：{{ current_time }}</span>
+            </div>
+            <div class="detail-item">
+                <i class="fas fa-fingerprint"></i>
+                <span>錯誤 ID：{{ error_id }}</span>
+            </div>
+        </div>
+        
+        <div class="error-actions">
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                <i class="fas fa-redo"></i> 重新整理
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-outline">
+                <i class="fas fa-home"></i> 回到首頁
+            </a>
+        </div>
+        
+        <!-- 故障排除提示 -->
+        <div class="troubleshooting">
+            <h3>可能的解決方案：</h3>
+            <ul>
+                <li>稍等片刻後重新整理頁面</li>
+                <li>檢查您的網路連線</li>
+                <li>清除瀏覽器快取和 Cookie</li>
+                <li>如果問題持續，請聯絡系統管理員</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-icon.error {
+    color: var(--nordic-red);
+}
+
+.error-details {
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin: var(--spacing-xl) 0;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    margin: var(--spacing-sm) 0;
+    color: var(--nordic-gray-600);
+}
+
+.detail-item i {
+    color: var(--nordic-gray-500);
+}
+
+.troubleshooting {
+    margin-top: var(--spacing-2xl);
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.troubleshooting h3 {
+    font-size: 1.1rem;
+    color: var(--nordic-gray-700);
+    margin-bottom: var(--spacing-md);
+}
+
+.troubleshooting ul {
+    list-style: none;
+    padding: 0;
+}
+
+.troubleshooting li {
+    padding: var(--spacing-sm) 0;
+    padding-left: var(--spacing-lg);
+    position: relative;
+    color: var(--nordic-gray-600);
+}
+
+.troubleshooting li:before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--nordic-blue-500);
+    font-weight: bold;
+}
+</style>
+{% endblock %}

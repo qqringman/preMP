@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}首頁 - SFTP 下載與比較系統{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 歡迎區塊 -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">SFTP 下載與比較系統</h1>
+            <p class="hero-subtitle">智能化的檔案下載、比對與分析平台</p>
+            <div class="hero-features">
+                <div class="feature-tag">
+                    <i class="fas fa-bolt"></i> 快速處理
+                </div>
+                <div class="feature-tag">
+                    <i class="fas fa-chart-line"></i> 智能分析
+                </div>
+                <div class="feature-tag">
+                    <i class="fas fa-shield-alt"></i> 安全可靠
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 功能卡片 -->
+    <section class="features-grid">
+        <div class="feature-card" onclick="window.location.href='{{ url_for('download_page') }}'">
+            <div class="feature-icon">
+                <i class="fas fa-download"></i>
+            </div>
+            <h3 class="feature-title">下載檔案</h3>
+            <p class="feature-description">
+                從 SFTP 伺服器下載檔案，支援批次處理與自動分類
+            </p>
+            <ul class="feature-list">
+                <li><i class="fas fa-check"></i> 智能檔案搜尋</li>
+                <li><i class="fas fa-check"></i> 斷點續傳</li>
+                <li><i class="fas fa-check"></i> 自動分類整理</li>
+            </ul>
+            <button class="feature-btn">
+                開始下載 <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+
+        <div class="feature-card" onclick="window.location.href='{{ url_for('compare_page') }}'">
+            <div class="feature-icon">
+                <i class="fas fa-code-compare"></i>
+            </div>
+            <h3 class="feature-title">比較差異</h3>
+            <p class="feature-description">
+                比較不同版本的 manifest.xml 與版本檔案差異
+            </p>
+            <ul class="feature-list">
+                <li><i class="fas fa-check"></i> 多情境比對</li>
+                <li><i class="fas fa-check"></i> 視覺化差異</li>
+                <li><i class="fas fa-check"></i> 詳細報表</li>
+            </ul>
+            <button class="feature-btn">
+                開始比較 <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+
+        <div class="feature-card highlight" onclick="window.location.href='{{ url_for('one_step_page') }}'">
+            <div class="feature-icon">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <h3 class="feature-title">一步到位</h3>
+            <p class="feature-description">
+                自動執行下載、比對、打包全流程
+            </p>
+            <ul class="feature-list">
+                <li><i class="fas fa-check"></i> 全自動處理</li>
+                <li><i class="fas fa-check"></i> 即時進度追蹤</li>
+                <li><i class="fas fa-check"></i> 一鍵完成</li>
+            </ul>
+            <button class="feature-btn primary">
+                立即執行 <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </section>
+
+    <!-- 比對情境說明 -->
+    <section class="scenarios-section">
+        <h2 class="section-title">支援的比對情境</h2>
+        <div class="scenarios-grid">
+            <div class="scenario-card">
+                <div class="scenario-header">
+                    <i class="fas fa-code-branch"></i>
+                    <span>Master vs PreMP</span>
+                </div>
+                <p class="scenario-desc">比較主版本與預量產版本的差異</p>
+            </div>
+            <div class="scenario-card">
+                <div class="scenario-header">
+                    <i class="fas fa-water"></i>
+                    <span>PreMP vs Wave</span>
+                </div>
+                <p class="scenario-desc">比較預量產與 Wave 版本的差異</p>
+            </div>
+            <div class="scenario-card">
+                <div class="scenario-header">
+                    <i class="fas fa-database"></i>
+                    <span>Wave vs Backup</span>
+                </div>
+                <p class="scenario-desc">比較 Wave 版本與備份版本的差異</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 統計資訊 -->
+    <section class="stats-section">
+        <div class="stats-container">
+            <div class="stat-item">
+                <div class="stat-number" id="totalProcessed">0</div>
+                <div class="stat-label">總處理數</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="todayProcessed">0</div>
+                <div class="stat-label">今日處理</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="successRate">0%</div>
+                <div class="stat-label">成功率</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 最近活動 -->
+    <section class="recent-section">
+        <h2 class="section-title">最近活動</h2>
+        <div class="recent-activities" id="recentActivities">
+            <div class="activity-placeholder">
+                <i class="fas fa-history"></i>
+                <p>暫無最近活動</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // 載入統計資料
+    function loadStatistics() {
+        // 這裡可以從後端 API 載入真實數據
+        animateNumber('totalProcessed', 1234);
+        animateNumber('todayProcessed', 56);
+        animateNumber('successRate', 98, '%');
+    }
+
+    // 數字動畫效果
+    function animateNumber(elementId, target, suffix = '') {
+        const element = document.getElementById(elementId);
+        const duration = 1000;
+        const start = 0;
+        const increment = target / (duration / 16);
+        let current = start;
+
+        const timer = setInterval(() => {
+            current += increment;
+            if (current >= target) {
+                current = target;
+                clearInterval(timer);
+            }
+            element.textContent = Math.floor(current) + suffix;
+        }, 16);
+    }
+
+    // 載入最近活動
+    function loadRecentActivities() {
+        // 這裡可以從後端 API 載入真實數據
+        const activities = [
+            { time: '5 分鐘前', action: '完成一步到位處理', status: 'success' },
+            { time: '15 分鐘前', action: '執行 Master vs PreMP 比對', status: 'success' },
+            { time: '1 小時前', action: '下載 bootcode 模組檔案', status: 'success' },
+            { time: '2 小時前', action: '打包比對結果', status: 'success' }
+        ];
+
+        const container = document.getElementById('recentActivities');
+        container.innerHTML = '';
+
+        activities.forEach(activity => {
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            item.innerHTML = `
+                <div class="activity-time">${activity.time}</div>
+                <div class="activity-action">${activity.action}</div>
+                <div class="activity-status ${activity.status}">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    // 頁面載入時執行
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStatistics();
+        loadRecentActivities();
+    });
+</script>
+{% endblock %}
