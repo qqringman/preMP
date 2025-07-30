@@ -17,8 +17,34 @@ class FileComparator:
     def __init__(self):
         self.logger = logger
         self.excel_handler = ExcelHandler()
+        self.base_url_prebuilt = config.GERRIT_BASE_URL_PREBUILT
+        self.base_url_normal = config.GERRIT_BASE_URL_NORMAL
         
-    def _parse_manifest_xml(self, file_path: str) -> List[Dict[str, str]]:
+    def _shorten_hash(self, hash_str: str) -> str:
+        """將 hash code 縮短為前 7 個字元"""
+        if hash_str and len(hash_str) >= 7:
+            return hash_str[:7]
+        return hash_str
+    
+    def _generate_link(self, project_info: Dict[str, str]) -> str:
+        """根據 project 資訊生成 Gerrit link"""
+        name = project_info.get('name', '')
+        upstream = project_info.get('upstream', '')
+        dest_branch = project_info.get('dest-branch', '')
+        
+        # 優先使用 upstream，如果沒有則使用 dest-branch
+        branch = upstream if upstream else dest_branch
+        
+        if name and branch:
+            # 判斷是否包含 prebuilt 或 prebuild，選擇對應的 base URL
+            if 'prebuilt' in name.lower() or 'prebuild' in name.lower():
+                base_url = self.base_url_prebuilt
+            else:
+                base_url = self.base_url_normal
+            return f"{base_url}{name}/+log/refs/heads/{branch}"
+        return ""
+        
+    def _parse_manifest_xml(self, file_path: str) -> Dict[str, Dict[str, str]]:
         """
         解析 manifest.xml 檔案
         
@@ -26,9 +52,9 @@ class FileComparator:
             file_path: XML 檔案路徑
             
         Returns:
-            專案資訊列表
+            專案資訊字典 {key: project_info}
         """
-        projects = []
+        projects = {}
         
         try:
             tree = ET.parse(file_path)
@@ -36,14 +62,21 @@ class FileComparator:
             
             # 尋找所有 project 元素
             for project in root.findall('.//project'):
-                project_info = {}
+                name = project.get('name', '')
+                path = project.get('path', '')
+                key = f"{name}||{path}"  # 使用 name 和 path 作為唯一鍵
                 
-                # 取得所有屬性
-                for attr in ['name', 'path', 'revision', 'upstream', 'dest-branch', 
-                           'remote', 'groups', 'clone-depth']:
-                    project_info[attr] = project.get(attr, '')
-                    
-                projects.append(project_info)
+                projects[key] = {
+                    'name': name,
+                    'path': path,
+                    'revision': project.get('revision', ''),
+                    'upstream': project.get('upstream', ''),
+                    'dest-branch': project.get('dest-branch', ''),
+                    'groups': project.get('groups', ''),
+                    'clone-depth': project.get('clone-depth', ''),
+                    'remote': project.get('remote', ''),
+                    'element': ET.tostring(project, encoding='unicode').strip()
+                }
                 
             self.logger.info(f"成功解析 {file_path}，找到 {len(projects)} 個專案")
             
@@ -52,100 +85,152 @@ class FileComparator:
             
         return projects
         
-    def _create_project_key(self, project: Dict[str, str]) -> str:
+    def _compare_manifest_files(self, file1: str, file2: str, module: str, base_folder: str = None, compare_folder: str = None) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """
-        建立專案的主鍵
+        比較兩個 manifest.xml 檔案（修改後的邏輯）
         
         Args:
-            project: 專案資訊
+            file1: 第一個檔案路徑（base）
+            file2: 第二個檔案路徑（compare）
+            module: 模組名稱
+            base_folder: base 資料夾名稱
+            compare_folder: compare 資料夾名稱
             
         Returns:
-            主鍵字串
-        """
-        key_values = []
-        for key in config.MANIFEST_PRIMARY_KEYS:
-            key_values.append(project.get(key, ''))
-        return '|'.join(key_values)
-        
-    def _compare_manifest_files(self, file1: str, file2: str) -> Tuple[List[Dict], List[Dict]]:
-        """
-        比較兩個 manifest.xml 檔案
-        
-        Args:
-            file1: 第一個檔案路徑
-            file2: 第二個檔案路徑
-            
-        Returns:
-            (不同的專案列表, 新增/刪除的專案列表)
+            (revision_diff, branch_error, lost_project)
         """
         # 解析兩個檔案
-        projects1 = self._parse_manifest_xml(file1)
-        projects2 = self._parse_manifest_xml(file2)
+        base_projects = self._parse_manifest_xml(file1)
+        compare_projects = self._parse_manifest_xml(file2)
         
-        # 建立專案字典（以主鍵為 key）
-        projects_dict1 = {self._create_project_key(p): p for p in projects1}
-        projects_dict2 = {self._create_project_key(p): p for p in projects2}
+        # 1. 比較 revision 差異（不再排除 wave 項目）
+        revision_diff = []
+        sn = 1
         
-        # 找出不同的專案
-        different_projects = []
-        
-        # 比較相同主鍵的專案
-        for key in projects_dict1:
-            if key in projects_dict2:
-                proj1 = projects_dict1[key]
-                proj2 = projects_dict2[key]
+        for key, base_proj in base_projects.items():
+            if key in compare_projects:
+                compare_proj = compare_projects[key]
+                base_revision = base_proj.get('revision', '')
+                compare_revision = compare_proj.get('revision', '')
                 
-                # 比較所有屬性
-                if proj1 != proj2:
-                    different_projects.append({
-                        'project_key': key,
-                        'file1': proj1,
-                        'file2': proj2,
-                        'differences': self._find_differences(proj1, proj2)
-                    })
+                if base_revision != compare_revision or not compare_revision:
+                    # 檢查是否包含 wave
+                    base_has_wave = ('wave' in base_proj.get('upstream', '') or 
+                                   'wave' in base_proj.get('dest-branch', ''))
+                    compare_has_wave = ('wave' in compare_proj.get('upstream', '') or 
+                                      'wave' in compare_proj.get('dest-branch', ''))
                     
-        # 找出新增/刪除的專案
-        added_deleted_projects = []
+                    revision_diff.append({
+                        'SN': sn,
+                        'module': module,
+                        'name': base_proj['name'],
+                        'path': base_proj['path'],
+                        'base_short': self._shorten_hash(base_revision),
+                        'base_revision': base_revision,
+                        'compare_short': self._shorten_hash(compare_revision),
+                        'compare_revision': compare_revision,
+                        'base_upstream': base_proj.get('upstream', ''),
+                        'compare_upstream': compare_proj.get('upstream', ''),
+                        'base_dest-branch': base_proj.get('dest-branch', ''),
+                        'compare_dest-branch': compare_proj.get('dest-branch', ''),
+                        'has_wave': 'Y' if (base_has_wave or compare_has_wave) else 'N',
+                        'base_link': self._generate_link(base_proj),
+                        'compare_link': self._generate_link(compare_proj)
+                    })
+                    sn += 1
         
-        # 只在 file1 中的專案（已刪除）
-        for key in projects_dict1:
-            if key not in projects_dict2:
-                added_deleted_projects.append({
-                    'status': '刪除',
-                    'project': projects_dict1[key]
+        # 2. 檢查分支命名錯誤（根據比較類型決定檢查規則）
+        branch_error = []
+        sn = 1
+        
+        # 根據資料夾名稱決定檢查規則
+        check_keyword = None
+        if base_folder and compare_folder:
+            if "-premp" in compare_folder and "-premp" not in base_folder:
+                check_keyword = 'premp'
+            elif "-wave" in compare_folder and "-wave.backup" not in compare_folder:
+                if "-premp" in base_folder:
+                    check_keyword = 'wave'
+            elif "-wave.backup" in compare_folder:
+                check_keyword = 'wave.backup'
+        
+        if check_keyword:
+            for key, compare_proj in compare_projects.items():
+                upstream = compare_proj.get('upstream', '')
+                dest_branch = compare_proj.get('dest-branch', '')
+                revision = compare_proj.get('revision', '')
+                
+                # 根據檢查關鍵字進行相應的檢查
+                should_check = False
+                
+                if check_keyword == 'premp':
+                    # 檢查是否都不包含 'premp'
+                    if upstream and dest_branch:
+                        if 'premp' not in upstream and 'premp' not in dest_branch:
+                            should_check = True
+                elif check_keyword == 'wave':
+                    # 檢查是否都不包含 'wave'
+                    if upstream and dest_branch:
+                        if 'wave' not in upstream and 'wave' not in dest_branch:
+                            should_check = True
+                elif check_keyword == 'wave.backup':
+                    # 檢查是否都不包含 'wave.backup'
+                    if upstream and dest_branch:
+                        if 'wave.backup' not in upstream and 'wave.backup' not in dest_branch:
+                            should_check = True
+                
+                if should_check:
+                    branch_error.append({
+                        'SN': sn,
+                        'module': module,
+                        'name': compare_proj['name'],
+                        'path': compare_proj['path'],
+                        'revision_short': self._shorten_hash(revision),
+                        'revision': revision,
+                        'upstream': upstream,
+                        'dest-branch': dest_branch,
+                        'check_keyword': check_keyword,
+                        'compare_link': self._generate_link(compare_proj)
+                    })
+                    sn += 1
+        
+        # 3. 檢查缺少或新增的 project
+        lost_project = []
+        sn = 1
+        
+        # 檢查在 base 檔案中但不在 compare 檔案中的項目（缺少）
+        for key, base_proj in base_projects.items():
+            if key not in compare_projects:
+                revision = base_proj.get('revision', '')
+                lost_project.append({
+                    'SN': sn,
+                    '狀態': '刪除',
+                    'module': module,
+                    'name': base_proj['name'],
+                    'path': base_proj['path'],
+                    'upstream': base_proj.get('upstream', ''),
+                    'dest-branch': base_proj.get('dest-branch', ''),
+                    'revision': revision
                 })
-                
-        # 只在 file2 中的專案（新增）
-        for key in projects_dict2:
-            if key not in projects_dict1:
-                added_deleted_projects.append({
-                    'status': '新增',
-                    'project': projects_dict2[key]
+                sn += 1
+        
+        # 檢查在 compare 檔案中但不在 base 檔案中的項目（新增）
+        for key, compare_proj in compare_projects.items():
+            if key not in base_projects:
+                revision = compare_proj.get('revision', '')
+                lost_project.append({
+                    'SN': sn,
+                    '狀態': '新增',
+                    'module': module,
+                    'name': compare_proj['name'],
+                    'path': compare_proj['path'],
+                    'upstream': compare_proj.get('upstream', ''),
+                    'dest-branch': compare_proj.get('dest-branch', ''),
+                    'revision': revision
                 })
-                
-        return different_projects, added_deleted_projects
+                sn += 1
         
-    def _find_differences(self, dict1: Dict, dict2: Dict) -> Dict[str, Tuple[str, str]]:
-        """
-        找出兩個字典的差異
-        
-        Args:
-            dict1: 第一個字典
-            dict2: 第二個字典
-            
-        Returns:
-            差異字典 {key: (value1, value2)}
-        """
-        differences = {}
-        all_keys = set(dict1.keys()) | set(dict2.keys())
-        
-        for key in all_keys:
-            val1 = dict1.get(key, '')
-            val2 = dict2.get(key, '')
-            if val1 != val2:
-                differences[key] = (val1, val2)
-                
-        return differences
+        return revision_diff, branch_error, lost_project
         
     def _compare_text_files(self, file1: str, file2: str) -> List[Dict[str, Any]]:
         """
@@ -185,21 +270,25 @@ class FileComparator:
             
         return differences
         
-    def compare_module_folders(self, module_path: str) -> Dict[str, Any]:
+    def compare_module_folders(self, module_path: str, base_folder_suffix: str = None) -> Dict[str, Any]:
         """
         比較模組下的兩個資料夾
         
         Args:
             module_path: 模組路徑
+            base_folder_suffix: 指定要作為 base 的資料夾後綴（如 "wave", "premp"）
             
         Returns:
             比較結果
         """
         results = {
             'module': os.path.basename(module_path),
-            'manifest_different': [],
-            'manifest_added_deleted': [],
-            'text_file_differences': {}
+            'revision_diff': [],
+            'branch_error': [],
+            'lost_project': [],
+            'text_file_differences': {},
+            'base_folder': '',
+            'compare_folder': ''
         }
         
         try:
@@ -210,24 +299,54 @@ class FileComparator:
             if len(folders) < 2:
                 self.logger.warning(f"模組 {module_path} 下的資料夾少於 2 個，無法比較")
                 return results
-                
-            # 只比較前兩個資料夾
-            folder1 = os.path.join(module_path, folders[0])
-            folder2 = os.path.join(module_path, folders[1])
             
-            self.logger.info(f"比較資料夾: {folders[0]} vs {folders[1]}")
+            # 根據使用者選擇決定 base 和 compare 資料夾
+            base_folder = None
+            compare_folder = None
+            
+            if base_folder_suffix:
+                # 尋找符合後綴的資料夾作為 base
+                for folder in folders:
+                    if folder.endswith(f"-{base_folder_suffix}"):
+                        base_folder = folder
+                        break
+                    elif base_folder_suffix == "default" and not any(folder.endswith(suffix) for suffix in ["-wave", "-premp", "-wave.backup"]):
+                        base_folder = folder
+                        break
+                        
+                # 找出 compare 資料夾（另一個資料夾）
+                if base_folder:
+                    for folder in folders:
+                        if folder != base_folder:
+                            compare_folder = folder
+                            break
+            
+            # 如果沒有找到或沒有指定，使用前兩個資料夾
+            if not base_folder or not compare_folder:
+                base_folder = folders[0]
+                compare_folder = folders[1]
+            
+            folder1_path = os.path.join(module_path, base_folder)
+            folder2_path = os.path.join(module_path, compare_folder)
+            
+            self.logger.info(f"比較資料夾: {base_folder} (base) vs {compare_folder} (compare)")
+            results['base_folder'] = base_folder
+            results['compare_folder'] = compare_folder
             
             # 比較每個目標檔案
             for target_file in config.TARGET_FILES:
-                file1 = utils.find_file_case_insensitive(folder1, target_file)
-                file2 = utils.find_file_case_insensitive(folder2, target_file)
+                file1 = utils.find_file_case_insensitive(folder1_path, target_file)
+                file2 = utils.find_file_case_insensitive(folder2_path, target_file)
                 
                 if file1 and file2:
                     if target_file.lower() == 'manifest.xml':
-                        # 比較 manifest.xml
-                        different, added_deleted = self._compare_manifest_files(file1, file2)
-                        results['manifest_different'] = different
-                        results['manifest_added_deleted'] = added_deleted
+                        # 比較 manifest.xml（使用新的邏輯）
+                        revision_diff, branch_error, lost_project = self._compare_manifest_files(
+                            file1, file2, results['module'], base_folder, compare_folder
+                        )
+                        results['revision_diff'] = revision_diff
+                        results['branch_error'] = branch_error
+                        results['lost_project'] = lost_project
                     else:
                         # 比較文字檔案
                         differences = self._compare_text_files(file1, file2)
@@ -241,19 +360,25 @@ class FileComparator:
             
         return results
         
-    def compare_all_modules(self, source_dir: str, output_dir: str = None) -> List[str]:
+    def compare_all_modules(self, source_dir: str, output_dir: str = None, base_folder_suffix: str = None) -> List[str]:
         """
         比較所有模組
         
         Args:
             source_dir: 來源目錄
             output_dir: 輸出目錄
+            base_folder_suffix: 指定要作為 base 的資料夾後綴
             
         Returns:
             產生的比較報表檔案列表
         """
         output_dir = output_dir or source_dir
         compare_files = []
+        
+        # 用於整合報表的資料
+        all_revision_diff = []
+        all_branch_error = []
+        all_lost_project = []
         
         try:
             # 取得所有模組資料夾
@@ -266,56 +391,137 @@ class FileComparator:
                 module_path = os.path.join(source_dir, module)
                 
                 # 比較模組
-                results = self.compare_module_folders(module_path)
+                results = self.compare_module_folders(module_path, base_folder_suffix)
                 
-                # 準備報表資料
-                different_projects = []
-                added_deleted_projects = []
+                # 收集所有資料
+                all_revision_diff.extend(results['revision_diff'])
+                all_branch_error.extend(results['branch_error'])
+                all_lost_project.extend(results['lost_project'])
                 
-                # 處理 manifest 差異
-                sn = 1
-                for diff in results['manifest_different']:
-                    project = diff['file1']
-                    different_projects.append({
-                        'SN': sn,
-                        'module': module,
-                        'name': project.get('name', ''),
-                        'path': project.get('path', ''),
-                        'upstream': project.get('upstream', ''),
-                        'dest-branch': project.get('dest-branch', ''),
-                        'revision': project.get('revision', '')
-                    })
-                    sn += 1
-                    
-                # 處理新增/刪除
-                sn = 1
-                for item in results['manifest_added_deleted']:
-                    project = item['project']
-                    added_deleted_projects.append({
-                        'SN': sn,
-                        '狀態': item['status'],
-                        'module': module,
-                        'name': project.get('name', ''),
-                        'path': project.get('path', ''),
-                        'upstream': project.get('upstream', ''),
-                        'dest-branch': project.get('dest-branch', ''),
-                        'revision': project.get('revision', '')
-                    })
-                    sn += 1
-                    
-                # 寫入模組比較報表
-                if different_projects or added_deleted_projects:
-                    report_file = self.excel_handler.write_compare_report(
-                        module, different_projects, added_deleted_projects, module_path
+                # 如果有比較結果，寫入模組報表
+                if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
+                    report_file = self._write_module_compare_report(
+                        module, results, module_path
                     )
-                    compare_files.append(report_file)
+                    if report_file:
+                        compare_files.append(report_file)
                     
-            # 合併所有報表
-            if compare_files:
-                self.excel_handler.merge_compare_reports(compare_files, output_dir)
+            # 寫入整合報表
+            if any([all_revision_diff, all_branch_error, all_lost_project]):
+                self._write_all_compare_report(
+                    all_revision_diff, all_branch_error, all_lost_project, output_dir
+                )
                 
             return compare_files
             
         except Exception as e:
             self.logger.error(f"比較所有模組失敗: {str(e)}")
+            raise
+            
+    def _write_module_compare_report(self, module: str, results: Dict, output_dir: str) -> str:
+        """
+        寫入單一模組的比較報表
+        
+        Args:
+            module: 模組名稱
+            results: 比較結果
+            output_dir: 輸出目錄
+            
+        Returns:
+            報表檔案路徑
+        """
+        try:
+            # 準備不同頁籤的資料
+            different_projects = []
+            added_deleted_projects = results['lost_project']  # 這已經是正確格式
+            
+            # 將 revision_diff 轉換為舊格式（第一個頁籤）
+            for item in results['revision_diff']:
+                different_projects.append({
+                    'SN': item['SN'],
+                    'module': module,
+                    'name': item['name'],
+                    'path': item['path'],
+                    'upstream': item.get('base_upstream', ''),
+                    'dest-branch': item.get('base_dest-branch', ''),
+                    'revision': item['base_revision'],
+                    'base_folder': results.get('base_folder', ''),
+                    'compare_folder': results.get('compare_folder', '')
+                })
+                
+            # 寫入報表
+            report_file = self.excel_handler.write_compare_report(
+                module, different_projects, added_deleted_projects, output_dir
+            )
+            
+            return report_file
+            
+        except Exception as e:
+            self.logger.error(f"寫入模組比較報表失敗: {str(e)}")
+            return None
+            
+    def _write_all_compare_report(self, revision_diff: List[Dict], branch_error: List[Dict],
+                                 lost_project: List[Dict], output_dir: str) -> str:
+        """
+        寫入整合比較報表（包含所有比較結果）
+        
+        Args:
+            revision_diff: revision 差異列表
+            branch_error: 分支命名錯誤列表
+            lost_project: 新增/刪除專案列表
+            output_dir: 輸出目錄
+            
+        Returns:
+            報表檔案路徑
+        """
+        try:
+            import pandas as pd
+            output_file = os.path.join(output_dir, "all_compare.xlsx")
+            
+            # 重新編號
+            for i, item in enumerate(revision_diff, 1):
+                item['SN'] = i
+            for i, item in enumerate(branch_error, 1):
+                item['SN'] = i
+            for i, item in enumerate(lost_project, 1):
+                item['SN'] = i
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # revision_diff 頁籤（包含所有 revision 差異，包括 wave）
+                if revision_diff:
+                    df = pd.DataFrame(revision_diff)
+                    df.to_excel(writer, sheet_name='revision_diff', index=False)
+                else:
+                    pd.DataFrame().to_excel(writer, sheet_name='revision_diff', index=False)
+                
+                # branch_error 頁籤
+                if branch_error:
+                    # 移除 check_keyword 欄位（內部使用，不顯示在報表中）
+                    for item in branch_error:
+                        if 'check_keyword' in item:
+                            del item['check_keyword']
+                    df = pd.DataFrame(branch_error)
+                    df.to_excel(writer, sheet_name='branch_error', index=False)
+                else:
+                    pd.DataFrame().to_excel(writer, sheet_name='branch_error', index=False)
+                
+                # lost_project 頁籤（新增/刪除）
+                if lost_project:
+                    df = pd.DataFrame(lost_project)
+                    df.to_excel(writer, sheet_name='lost_project', index=False)
+                else:
+                    pd.DataFrame(columns=['SN', '狀態', 'module', 'name', 'path', 
+                                        'upstream', 'dest-branch', 'revision']).to_excel(
+                        writer, sheet_name='lost_project', index=False)
+                
+                # 格式化所有工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+                        
+            self.logger.info(f"成功寫入整合報表: {output_file}")
+            return output_file
+            
+        except Exception as e:
+            self.logger.error(f"寫入整合報表失敗: {str(e)}")
             raise

@@ -31,9 +31,17 @@ def parse_module_and_jira(ftp_path: str) -> Tuple[Optional[str], Optional[str]]:
     Returns:
         (module, jira_id) 或 (None, None) 如果解析失敗
     """
+    # 先嘗試匹配標準的 PrebuildFW 格式
     match = re.search(config.MODULE_PATTERN, ftp_path)
     if match:
         return match.group(1), match.group(2)
+    
+    # 嘗試匹配特殊格式：/DailyBuild/Merlin7/DB2302_...
+    special_match = re.search(r'/DailyBuild/(\w+)/(\w+)_', ftp_path)
+    if special_match:
+        # 返回 "Merlin7/DB2302" 格式
+        return f"{special_match.group(1)}/{special_match.group(2)}", None
+    
     return None, None
 
 def create_directory(path: str) -> None:

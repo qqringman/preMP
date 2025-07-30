@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remote fetch="ssh://mm2sd-slave.rtkbf.com:29418" name="rtk" review="ssh://mm2sd.rtkbf.com:29418"/>
+  <remote fetch="ssh://mm2sd-git2-slave.rtkbf.com:29418" name="rtk-prebuilt" review="ssh://mm2sd-git2.rtkbf.com:29418"/>
+  
+  <default remote="rtk" revision="master" sync-j="2"/>
+  
+  <project dest-branch="asdk-6.4.1-a55-EL-4.4-g2.26-a32nut-190528" groups="dolby_vision_ta" name="open_source/gnu/toolchain/gcc" path="gcc" revision="b8c253096842b00bb892d3a7d053b0b93a1855fe" upstream="asdk-6.4.1-a55-EL-4.4-g2.26-a32nut-190528"/>
+  <project dest-branch="realtek/android-14/premp.google-refplus.upgrade-11" groups="dolby_vision_ta" name="realtek/dolby_vision_hw2_ta_source" path="dolby_vision_hw2_ta_source" revision="e05abe4176fc83db1c9b9cfec0758221a80588fd" upstream="realtek/android-14/premp.google-refplus.upgrade-11"/>
+  <project dest-branch="realtek/android-14/premp.google-refplus.upgrade-11" name="realtek/mac7p/v3.0/common/optee_os_prebuilt" path="optee_os_prebuilt" remote="rtk-prebuilt" revision="8fcb57a5ef873bd9967fa2844ec1d412488bf991" upstream="realtek/android-14/premp.google-refplus.upgrade-11"/>
+</manifest>

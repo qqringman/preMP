@@ -155,13 +155,20 @@ class SFTPDownloader:
             # 下載每個目標檔案
             for target_file in config.TARGET_FILES:
                 try:
+                    # 檢查本地是否已存在該檔案
+                    local_file = os.path.join(local_dir, target_file)
+                    if os.path.exists(local_file) and config.SKIP_EXISTING_FILES:
+                        self.logger.info(f"檔案已存在，跳過下載: {local_file}")
+                        downloaded_files.append(target_file)
+                        file_paths[target_file] = "已存在"
+                        continue
+                    
                     # 遞迴尋找檔案
                     self.logger.debug(f"搜尋檔案: {target_file} in {ftp_path}")
                     result = self._find_file_recursive(ftp_path, target_file, config.MAX_SEARCH_DEPTH)
                     
                     if result:
                         remote_file, actual_filename = result
-                        local_file = os.path.join(local_dir, target_file)
                         
                         # 記錄相對路徑
                         relative_path = remote_file.replace(ftp_path, '').lstrip('/')
@@ -221,9 +228,23 @@ class SFTPDownloader:
                 # 解析模組和 JIRA ID
                 module, jira_id = utils.parse_module_and_jira(ftp_path)
                 
-                if module and jira_id:
-                    # 建立本地目錄
-                    local_dir = os.path.join(output_dir, module, jira_id)
+                if module:
+                    # 檢查路徑中的關鍵字並決定資料夾後綴
+                    folder_suffix = ""
+                    if jira_id:  # 標準格式（有 JIRA ID）
+                        if "mp.google-refplus.wave.backup" in ftp_path:
+                            folder_suffix = "-wave.backup"
+                        elif "mp.google-refplus.wave" in ftp_path:
+                            folder_suffix = "-wave"
+                        elif "premp.google-refplus" in ftp_path:
+                            folder_suffix = "-premp"
+                        
+                        # 建立本地目錄（加上後綴）
+                        folder_name = f"{jira_id}{folder_suffix}"
+                        local_dir = os.path.join(output_dir, module, folder_name)
+                    else:
+                        # 特殊格式（如 Merlin7/DB2302）
+                        local_dir = os.path.join(output_dir, module)
                     
                     # 下載檔案
                     downloaded_files, file_paths = self.download_files(ftp_path, local_dir)
@@ -232,20 +253,28 @@ class SFTPDownloader:
                     file_info = []
                     for file in downloaded_files:
                         if file in file_paths:
-                            # 只有當檔案不在根目錄時才顯示路徑
                             path = file_paths[file]
-                            if path and path != file:
+                            if path == "已存在":
+                                file_info.append(f"{file} (已存在)")
+                            elif path and path != file:
                                 file_info.append(f"{file} ({path})")
                             else:
                                 file_info.append(file)
                         else:
                             file_info.append(file)
                     
+                    # 建立本地資料夾路徑字串
+                    if jira_id:
+                        local_folder_display = f"{module}/{folder_name}"
+                    else:
+                        local_folder_display = module
+                    
                     # 加入報表資料
                     report_data.append({
                         'SN': idx + 1,
-                        '模組': module,
+                        '模組': module.split('/')[0] if '/' in module else module,  # 對於 Merlin7/DB2302，只顯示 Merlin7
                         'sftp 路徑': ftp_path,
+                        '本地資料夾': local_folder_display,
                         '版本資訊檔案': ', '.join(file_info) if file_info else '無'
                     })
                 else:
@@ -254,6 +283,7 @@ class SFTPDownloader:
                         'SN': idx + 1,
                         '模組': '未知',
                         'sftp 路徑': ftp_path,
+                        '本地資料夾': '解析失敗',
                         '版本資訊檔案': '解析失敗'
                     })
                     

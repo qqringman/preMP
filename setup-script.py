@@ -54,15 +54,17 @@ def create_sample_excel():
         import pandas as pd
         
         sample_data = {
-            'SN': [1, 2, 3, 4],
-            '模組': ['bootcode', 'emcu', 'dolby_ta', 'ufsd_ko'],
+            'SN': [1, 2, 3, 4, 5, 6],
+            '模組': ['bootcode', 'emcu', 'dolby_ta', 'ufsd_ko', 'bootcode', 'Merlin7'],
             'ftp path': [
                 '/DailyBuild/PrebuildFW/bootcode/RDDB-942_realtek_merlin8_premp.google-refplus/2025_06_24-18_16_9624861',
                 '/DailyBuild/PrebuildFW/emcu/RDDB-1193_merlin8_android-14_premp.google-refplus/2025_06_24-17_41_e54f7a5',
                 '/DailyBuild/PrebuildFW/dolby_ta/RDDB-932_mac7p_v3.0_common_android11_premp.google-refplus.upgrade-11.rtd2851a/2025_06_18-15_30_e05abe4',
-                '/DailyBuild/PrebuildFW/ufsd_ko/RDDB-982_mac8q_android11_premp.google-refplus.upgrade-11/20250717_1455_618e9e1'
+                '/DailyBuild/PrebuildFW/ufsd_ko/RDDB-982_mac8q_android11_premp.google-refplus.upgrade-11/20250717_1455_618e9e1',
+                '/DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek_mac8q_premp.google-refplus/20250729_3333_4440eec',
+                '/DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14_Ref_Plus_GoogleGMS/533_all_202507282300'
             ],
-            '備註': ['主要版本', '測試版本', 'Dolby 模組', '檔案系統模組']
+            '備註': ['主要版本', '測試版本', 'Wave backup 版本', 'Wave 版本', 'PreMP 版本', '特殊格式']
         }
         
         df = pd.DataFrame(sample_data)
@@ -83,6 +85,11 @@ def update_config():
     username = input("使用者名稱 [your_username]: ").strip()
     password = input("密碼 [your_password]: ").strip()
     
+    # 詢問 Gerrit URL
+    print("\n設定 Gerrit URL（選填）")
+    gerrit_prebuilt = input("Gerrit Prebuilt URL [保持預設]: ").strip()
+    gerrit_normal = input("Gerrit Normal URL [保持預設]: ").strip()
+    
     # 更新 config.py
     config_updates = []
     if host:
@@ -93,6 +100,10 @@ def update_config():
         config_updates.append(f"SFTP_USERNAME = '{username}'")
     if password:
         config_updates.append(f"SFTP_PASSWORD = '{password}'")
+    if gerrit_prebuilt:
+        config_updates.append(f"GERRIT_BASE_URL_PREBUILT = '{gerrit_prebuilt}'")
+    if gerrit_normal:
+        config_updates.append(f"GERRIT_BASE_URL_NORMAL = '{gerrit_normal}'")
     
     if config_updates:
         try:

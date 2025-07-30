@@ -6,6 +6,18 @@
 2. 比較模組下的 manifest.xml/F_Version.txt/Version.txt 差異
 3. 打包比對結果成 ZIP 檔案
 
+### 主要特點
+- **智能檔案搜尋**：自動在子目錄中遞迴搜尋目標檔案
+- **斷點續傳**：自動跳過已下載的檔案，支援多次執行
+- **自動分類**：根據路徑關鍵字自動為資料夾加上後綴（-premp、-wave、-wave.backup）
+- **彈性比較**：可選擇不同資料夾作為基準進行比較
+- **進階比較邏輯**：
+  - 完整的 manifest.xml 比較功能（包含 wave 標記）
+  - 動態 branch_error 檢查（根據比較對象自動調整檢查規則）
+- **多格式支援**：支援標準格式和特殊格式的 FTP 路徑
+- **自動產生 Gerrit 連結**：方便查看詳細的程式碼變更（支援 prebuilt 和 prebuild）
+- **美觀的報表格式**：彩色標題列、自動調整欄寬
+
 ## 安裝需求
 ```bash
 pip install paramiko pandas openpyxl lxml argparse
@@ -123,12 +135,17 @@ SFTP_PASSWORD = 'your_password'
 
 # 檔案設定
 TARGET_FILES = ['F_Version.txt', 'manifest.xml', 'Version.txt']
-CASE_INSENSITIVE = True
-MAX_SEARCH_DEPTH = 3  # 遞迴搜尋的最大深度（可根據需要調整）
+CASE_INSENSITIVE = True              # 檔案名稱比對不區分大小寫
+MAX_SEARCH_DEPTH = 3                 # 遞迴搜尋的最大深度（可根據需要調整）
+SKIP_EXISTING_FILES = True           # 是否跳過已存在的檔案
 
 # 輸出設定
 DEFAULT_OUTPUT_DIR = './downloads'
 DEFAULT_COMPARE_DIR = './compare_results'
+
+# Gerrit URL 設定（根據您的環境修改）
+GERRIT_BASE_URL_PREBUILT = "https://mm2sd-git2.rtkbf.com/gerrit/plugins/gitiles/"
+GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 ```
 
 ## Excel 輸入格式
@@ -151,31 +168,54 @@ DEFAULT_COMPARE_DIR = './compare_results'
    ```
    downloads/
    ├── bootcode/
-   │   └── RDDB-320/
-   │       ├── F_Version.txt
-   │       ├── manifest.xml
-   │       └── Version.txt
-   └── emcu/
-       └── RDDB-321/
+   │   ├── RDDB-320/              # 預設資料夾
+   │   ├── RDDB-321-premp/        # premp 版本
+   │   └── RDDB-322-wave/         # wave 版本
+   ├── emcu/
+   │   ├── RDDB-323/
+   │   ├── RDDB-324-premp/
+   │   └── RDDB-325-wave.backup/   # wave backup 版本
+   └── Merlin7/
+       └── DB2302/                # 特殊格式的資料夾
            ├── F_Version.txt
            ├── manifest.xml
            └── Version.txt
    ```
 
 2. Excel 報表：`{原檔名}_report.xlsx`
-   | SN | 模組 | sftp 路徑 | 版本資訊檔案 |
-   |----|------|-----------|--------------|
-   | 1 | bootcode | /DailyBuild/... | F_Version.txt, manifest.xml, Version.txt |
-   | 2 | emcu | /DailyBuild/... | F_Version.txt (2025_06_24-17_41_e54f7a5/F_Version.txt), manifest.xml (2025_06_24-17_41_e54f7a5/manifest.xml), Version.txt (2025_06_24-17_41_e54f7a5/Version.txt) |
+   | SN | 模組 | sftp 路徑 | 本地資料夾 | 版本資訊檔案 |
+   |----|------|-----------|------------|--------------|
+   | 1 | bootcode | /DailyBuild/... | bootcode/RDDB-320 | F_Version.txt, manifest.xml, Version.txt |
+   | 2 | bootcode | /DailyBuild/.../premp.google-refplus/... | bootcode/RDDB-321-premp | F_Version.txt, manifest.xml, Version.txt |
+   | 3 | emcu | /DailyBuild/.../mp.google-refplus.wave/... | emcu/RDDB-322-wave | F_Version.txt (2025_06_24/F_Version.txt), ... |
+   | 4 | Merlin7 | /DailyBuild/Merlin7/DB2302_... | Merlin7/DB2302 | F_Version.txt, manifest.xml, Version.txt |
    
-   註：括號內顯示檔案在 FTP 路徑下的相對位置（如果檔案在子目錄中）
+   註：
+   - 資料夾名稱會根據 FTP 路徑中的關鍵字自動加上後綴
+   - 特殊格式路徑會解析為對應的資料夾結構（如 Merlin7/DB2302）
+   - 括號內顯示檔案在 FTP 路徑下的相對位置（如果檔案在子目錄中）
+   - 「已存在」表示本地已有該檔案，系統跳過下載
 
 ### 功能二輸出
 1. 各模組比較結果：`{模組名稱}_compare.xlsx`
-   - 第一個頁籤：不同的 project
+   - 第一個頁籤：不同的 project（revision 差異）
    - 第二個頁籤：新增/刪除的項目
 
 2. 整合報表：`all_compare.xlsx`
+   - revision_diff：所有 revision 差異（包含 wave 項目）
+   - branch_error：不符合命名規則的分支（根據比較對象動態檢查）
+   - lost_project：新增/刪除的專案
+
+比較邏輯說明：
+- 使用 name 和 path 作為唯一鍵來識別 project
+- 可選擇作為基準(base)的資料夾類型（default/premp/wave/wave.backup）
+- branch_error 會根據比較對象自動調整檢查規則：
+  - RDDB-XXX vs RDDB-XXX-premp → 檢查 premp 命名規則
+  - RDDB-XXX-premp vs RDDB-XXX-wave → 檢查 wave 命名規則
+  - RDDB-XXX-wave vs RDDB-XXX-wave.backup → 檢查 wave.backup 命名規則
+- 自動生成 Gerrit link（支援 prebuilt 和 prebuild）
+- 縮短 revision hash 為前 7 個字元以提高可讀性
+- revision_diff 頁籤會標註包含 'wave' 的項目（has_wave 欄位）
 
 ### 功能三輸出
 - ZIP 檔案包含所有比較結果和下載的檔案
@@ -186,6 +226,11 @@ DEFAULT_COMPARE_DIR = './compare_results'
 3. 比較功能需要每個模組下有兩個資料夾才能進行比較
 4. 檔案名稱比對不區分大小寫
 5. 系統會自動在 FTP 路徑及其子目錄中遞迴搜尋目標檔案（最多搜尋 3 層深度）
+6. 資料夾命名會根據 FTP 路徑中的關鍵字自動加上後綴（-premp、-wave、-wave.backup）
+7. 比較時可選擇不同的資料夾作為基準進行比較
+8. branch_error 檢查會根據比較對象動態調整規則
+9. 支援特殊格式的 FTP 路徑（如 /DailyBuild/Merlin7/DB2302_...）
+10. 所有 Excel 報表都會自動格式化，包含彩色標題列和自動調整欄寬
 
 ## 錯誤處理
 - 連線失敗：檢查 SFTP 設定和網路連線
@@ -199,8 +244,8 @@ DEFAULT_COMPARE_DIR = './compare_results'
 # 1. 從 Excel 下載 SFTP 檔案
 python main.py download --excel ftp_paths.xlsx --output-dir ./downloads
 
-# 2. 比較下載的檔案
-python main.py compare --source-dir ./downloads
+# 2. 比較下載的檔案（使用 wave 版本作為基準）
+python main.py compare --source-dir ./downloads --base-folder wave
 
 # 3. 打包結果
 python main.py package --source-dir ./downloads --zip-name results.zip
@@ -217,7 +262,13 @@ python main.py download \
     --output-dir ./my_downloads
 ```
 
-### 範例 3：互動式模式使用
+### 範例 3：強制重新下載
+```bash
+# 強制重新下載所有檔案（不跳過已存在的）
+python main.py download --excel input.xlsx --force
+```
+
+### 範例 4：互動式模式使用
 ```
 $ python main.py
 

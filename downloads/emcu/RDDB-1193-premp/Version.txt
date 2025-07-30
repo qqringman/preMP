@@ -1,0 +1,9 @@
+P_JIRA_ID;RDDB-1193
+P_JIRA_URL;https://jira.realtek.com/browse/RDDB-1193
+P_CATEGORY;emcu
+P_JKS_BUILD_URL;http://172.22.47.32:8080/job/007_Others/job/RDDB1193_Merlin8_PreMP_Refplus_EMCU_Prebuilt/2/
+P_REPO_INIT;repo init -u ssh://mm2sd-slave.sdlc.rd.realtek.com:29418/realtek/emcu/manifest -b realtek/merlin8/master -m android-14/premp.google-refplus.xml
+P_GIT_001;realtek/emcu;realtek/merlin8/android-14/premp.google-refplus;e54f7a5;1000660
+P_GIT_002;realtek/emcu-kdriver;realtek/merlin8/android-14/premp.google-refplus;7416c52;1001198
+P_GIT_003;realtek/typeC;realtek/android-14/premp.google-refplus;069e848;1001438
+P_DAILY_BUILD;/DailyBuild/PrebuildFW/emcu/RDDB-1193_merlin8_android-14_premp.google-refplus/2025_06_24-17_41_e54f7a5

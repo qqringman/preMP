@@ -81,11 +81,23 @@ class SFTPCompareSystem:
         output_dir = input(f"輸出目錄 (預設: {config.DEFAULT_OUTPUT_DIR}): ").strip()
         output_dir = output_dir or config.DEFAULT_OUTPUT_DIR
         
+        # 詢問是否要跳過已存在的檔案
+        skip_existing = input("跳過已存在的檔案？(Y/n): ").strip().lower() != 'n'
+        
         # 執行下載
         try:
-            self.downloader = SFTPDownloader(host, port, username, password)
-            report_path = self.downloader.download_from_excel(excel_path, output_dir)
-            print(f"\n下載完成！報表已儲存至: {report_path}")
+            # 暫時修改設定
+            original_skip = config.SKIP_EXISTING_FILES
+            config.SKIP_EXISTING_FILES = skip_existing
+            
+            try:
+                self.downloader = SFTPDownloader(host, port, username, password)
+                report_path = self.downloader.download_from_excel(excel_path, output_dir)
+                print(f"\n下載完成！報表已儲存至: {report_path}")
+            finally:
+                # 恢復原始設定
+                config.SKIP_EXISTING_FILES = original_skip
+                
         except Exception as e:
             print(f"\n錯誤：{str(e)}")
             
@@ -103,9 +115,29 @@ class SFTPCompareSystem:
         output_dir = input(f"輸出目錄 (預設: 與來源目錄相同): ").strip()
         output_dir = output_dir or source_dir
         
+        # 詢問要使用哪個資料夾作為 base
+        print("\n選擇要作為基準(base)的資料夾類型：")
+        print("1. 預設 (RDDB-XXX)")
+        print("2. premp (RDDB-XXX-premp)")
+        print("3. wave (RDDB-XXX-wave)")
+        print("4. wave.backup (RDDB-XXX-wave.backup)")
+        print("5. 自動選擇 (使用第一個資料夾)")
+        
+        choice = input("\n請選擇 (1-5，預設: 5): ").strip()
+        
+        base_folder_suffix = None
+        if choice == '1':
+            base_folder_suffix = 'default'
+        elif choice == '2':
+            base_folder_suffix = 'premp'
+        elif choice == '3':
+            base_folder_suffix = 'wave'
+        elif choice == '4':
+            base_folder_suffix = 'wave.backup'
+        
         # 執行比較
         try:
-            compare_files = self.comparator.compare_all_modules(source_dir, output_dir)
+            compare_files = self.comparator.compare_all_modules(source_dir, output_dir, base_folder_suffix)
             print(f"\n比較完成！產生了 {len(compare_files)} 個比較報表")
             print(f"整合報表已儲存至: {os.path.join(output_dir, 'all_compare.xlsx')}")
         except Exception as e:
@@ -180,13 +212,23 @@ class SFTPCompareSystem:
     def _cmd_download(self, args):
         """命令列下載功能"""
         try:
-            self.downloader = SFTPDownloader(
-                args.host, args.port, args.username, args.password
-            )
-            report_path = self.downloader.download_from_excel(
-                args.excel, args.output_dir
-            )
-            print(f"下載完成！報表已儲存至: {report_path}")
+            # 如果有 force 參數，暫時修改設定
+            original_skip = config.SKIP_EXISTING_FILES
+            if args.force:
+                config.SKIP_EXISTING_FILES = False
+                
+            try:
+                self.downloader = SFTPDownloader(
+                    args.host, args.port, args.username, args.password
+                )
+                report_path = self.downloader.download_from_excel(
+                    args.excel, args.output_dir
+                )
+                print(f"下載完成！報表已儲存至: {report_path}")
+            finally:
+                # 恢復原始設定
+                config.SKIP_EXISTING_FILES = original_skip
+                
         except Exception as e:
             logger.error(f"下載失敗：{str(e)}")
             sys.exit(1)
@@ -195,7 +237,7 @@ class SFTPCompareSystem:
         """命令列比較功能"""
         try:
             compare_files = self.comparator.compare_all_modules(
-                args.source_dir, args.output_dir
+                args.source_dir, args.output_dir, args.base_folder
             )
             print(f"比較完成！產生了 {len(compare_files)} 個比較報表")
         except Exception as e:
@@ -231,11 +273,14 @@ def create_parser():
     download_parser.add_argument('--username', default=config.SFTP_USERNAME, help='使用者名稱')
     download_parser.add_argument('--password', default=config.SFTP_PASSWORD, help='密碼')
     download_parser.add_argument('--output-dir', default=config.DEFAULT_OUTPUT_DIR, help='輸出目錄')
+    download_parser.add_argument('--force', action='store_true', help='強制重新下載已存在的檔案')
     
     # 比較功能
     compare_parser = subparsers.add_parser('compare', help='比較檔案差異')
     compare_parser.add_argument('--source-dir', required=True, help='來源目錄')
     compare_parser.add_argument('--output-dir', help='輸出目錄（預設：與來源目錄相同）')
+    compare_parser.add_argument('--base-folder', choices=['default', 'premp', 'wave', 'wave.backup'], 
+                               help='選擇作為基準的資料夾類型')
     
     # 打包功能
     package_parser = subparsers.add_parser('package', help='打包成 ZIP')
