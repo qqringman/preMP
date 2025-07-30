@@ -16,9 +16,9 @@ MAX_SEARCH_DEPTH = 3  # 遞迴搜尋的最大深度
 SKIP_EXISTING_FILES = True  # 是否跳過已存在的檔案
 
 # 輸出設定
-DEFAULT_OUTPUT_DIR = './downloads'
-DEFAULT_COMPARE_DIR = './compare_results'
-DEFAULT_ZIP_DIR = './zip_output'
+DEFAULT_OUTPUT_DIR = './11downloads'
+DEFAULT_COMPARE_DIR = './22compare_results'
+DEFAULT_ZIP_DIR = './33zip_output'
 
 # Excel 設定
 FTP_PATH_COLUMN = 'ftp path'  # Excel 中 FTP 路徑的欄位名稱

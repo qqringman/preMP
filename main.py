@@ -60,8 +60,33 @@ class SFTPCompareSystem:
         """互動式下載功能"""
         print("\n--- 下載 SFTP 檔案 ---")
         
-        # 取得 Excel 檔案路徑
-        excel_path = input("請輸入 Excel 檔案路徑: ").strip()
+        # 列出當前目錄的 xlsx 檔案
+        xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx')]
+        
+        if xlsx_files:
+            print("\n當前目錄的 Excel 檔案：")
+            for i, file in enumerate(xlsx_files, 1):
+                print(f"{i}. {file}")
+            print("\n您可以輸入檔案編號或完整路徑")
+        
+        # 取得 Excel 檔案路徑（預設選 1）
+        excel_input = input("請輸入 Excel 檔案路徑或編號 (預設: 1): ").strip()
+        
+        # 如果空白且有 xlsx 檔案，預設選第一個
+        if not excel_input and xlsx_files:
+            excel_input = "1"
+        
+        # 檢查是否輸入編號
+        if excel_input.isdigit() and xlsx_files:
+            index = int(excel_input) - 1
+            if 0 <= index < len(xlsx_files):
+                excel_path = xlsx_files[index]
+            else:
+                print(f"錯誤：編號超出範圍")
+                return
+        else:
+            excel_path = excel_input
+        
         if not os.path.exists(excel_path):
             print(f"錯誤：檔案不存在 - {excel_path}")
             return
@@ -110,16 +135,18 @@ class SFTPCompareSystem:
         print("\n--- 比較模組檔案差異 ---")
         
         # 取得來源目錄
-        source_dir = input("請輸入來源目錄路徑 (預設: downloads): ").strip()
-        source_dir = source_dir or "downloads"  # 如果空白則使用預設值
+        default_source = config.DEFAULT_OUTPUT_DIR.replace('./', '')  # 移除 ./
+        source_dir = input(f"請輸入來源目錄路徑 (預設: {default_source}): ").strip()
+        source_dir = source_dir or default_source
         
         if not os.path.exists(source_dir):
             print(f"錯誤：目錄不存在 - {source_dir}")
             return
             
         # 取得輸出目錄
-        output_dir = input(f"輸出目錄 (預設: compare_results): ").strip()
-        output_dir = output_dir or "compare_results"  # 如果空白則使用預設值
+        default_output = config.DEFAULT_COMPARE_DIR.replace('./', '')  # 移除 ./
+        output_dir = input(f"輸出目錄 (預設: {default_output}): ").strip()
+        output_dir = output_dir or default_output
         
         # 詢問要使用哪個資料夾作為 base
         print("\n選擇要作為基準(base)的資料夾類型：")
@@ -129,7 +156,11 @@ class SFTPCompareSystem:
         print("4. wave.backup (RDDB-XXX-wave.backup)")
         print("5. 自動選擇 (使用第一個資料夾)")
         
-        choice = input("\n請選擇 (1-5，預設: 5): ").strip()
+        choice = input("\n請選擇 (1-5，預設: 1): ").strip()
+        
+        # 如果空白，預設選 1
+        if not choice:
+            choice = '1'
         
         base_folder_suffix = None
         if choice == '1':
@@ -154,7 +185,10 @@ class SFTPCompareSystem:
         print("\n--- 打包比對結果成 ZIP ---")
         
         # 取得來源目錄
-        source_dir = input("請輸入要打包的目錄路徑: ").strip()
+        default_source = config.DEFAULT_COMPARE_DIR.replace('./', '')  # 移除 ./
+        source_dir = input(f"請輸入要打包的目錄路徑 (預設: {default_source}): ").strip()
+        source_dir = source_dir or default_source
+        
         if not os.path.exists(source_dir):
             print(f"錯誤：目錄不存在 - {source_dir}")
             return
@@ -168,10 +202,20 @@ class SFTPCompareSystem:
         zip_name = input(f"ZIP 檔案名稱 (預設: {default_name}): ").strip()
         zip_name = zip_name or default_name
         
+        # 確保 ZIP 輸出目錄存在
+        zip_output_dir = config.DEFAULT_ZIP_DIR
+        if not os.path.exists(zip_output_dir):
+            os.makedirs(zip_output_dir)
+            print(f"已建立輸出目錄: {zip_output_dir}")
+        
+        # 完整的 ZIP 檔案路徑
+        zip_path = os.path.join(zip_output_dir, zip_name)
+        
         # 執行打包
         try:
+            # 注意：這裡要修改，因為 create_compare_results_zip 的參數可能需要調整
             zip_path = self.packager.create_compare_results_zip(
-                source_dir, zip_name, include_excel, include_source
+                source_dir, zip_path, include_excel, include_source
             )
             print(f"\n打包完成！ZIP 檔案已儲存至: {zip_path}")
         except Exception as e:
