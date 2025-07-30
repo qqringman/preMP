@@ -5,6 +5,7 @@ SFTP 下載與比較系統 - 主程式
 import os
 import sys
 import argparse
+import shutil
 from typing import Optional
 import utils
 import config
@@ -33,10 +34,11 @@ class SFTPCompareSystem:
             print("2. 比較模組檔案差異")
             print("3. 打包比對結果成 ZIP")
             print("4. 測試 SFTP 連線")
-            print("5. 退出")
+            print("5. 清除暫存檔案")
+            print("6. 退出")
             print("="*50)
             
-            choice = input("請選擇功能 (1-5): ").strip()
+            choice = input("請選擇功能 (1-6): ").strip()
             
             if choice == '1':
                 self._interactive_download()
@@ -47,6 +49,8 @@ class SFTPCompareSystem:
             elif choice == '4':
                 self._test_connection()
             elif choice == '5':
+                self._clean_temp_files()
+            elif choice == '6':
                 print("感謝使用，再見！")
                 break
             else:
@@ -106,14 +110,16 @@ class SFTPCompareSystem:
         print("\n--- 比較模組檔案差異 ---")
         
         # 取得來源目錄
-        source_dir = input("請輸入來源目錄路徑: ").strip()
+        source_dir = input("請輸入來源目錄路徑 (預設: downloads): ").strip()
+        source_dir = source_dir or "downloads"  # 如果空白則使用預設值
+        
         if not os.path.exists(source_dir):
             print(f"錯誤：目錄不存在 - {source_dir}")
             return
             
         # 取得輸出目錄
-        output_dir = input(f"輸出目錄 (預設: 與來源目錄相同): ").strip()
-        output_dir = output_dir or source_dir
+        output_dir = input(f"輸出目錄 (預設: compare_results): ").strip()
+        output_dir = output_dir or "compare_results"  # 如果空白則使用預設值
         
         # 詢問要使用哪個資料夾作為 base
         print("\n選擇要作為基準(base)的資料夾類型：")
@@ -199,6 +205,42 @@ class SFTPCompareSystem:
                 print("\n✗ SFTP 連線測試失敗！")
         except Exception as e:
             print(f"\n✗ SFTP 連線測試失敗：{str(e)}")
+            
+    def _clean_temp_files(self):
+        """清除暫存檔案"""
+        print("\n--- 清除暫存檔案 ---")
+        
+        # 定義要清除的目錄
+        temp_dirs = [
+            config.DEFAULT_OUTPUT_DIR,
+            config.DEFAULT_COMPARE_DIR,
+            config.DEFAULT_ZIP_DIR
+        ]
+        
+        print("\n將清除以下目錄：")
+        for dir_path in temp_dirs:
+            if os.path.exists(dir_path):
+                print(f"- {dir_path}")
+        
+        confirm = input("\n確定要清除這些目錄嗎？(y/N): ").strip().lower()
+        
+        if confirm == 'y':
+            removed_count = 0
+            for dir_path in temp_dirs:
+                if os.path.exists(dir_path):
+                    try:
+                        shutil.rmtree(dir_path)
+                        print(f"✓ 已刪除: {dir_path}")
+                        removed_count += 1
+                    except Exception as e:
+                        print(f"✗ 刪除失敗 {dir_path}: {str(e)}")
+            
+            if removed_count > 0:
+                print(f"\n清除完成！已刪除 {removed_count} 個目錄")
+            else:
+                print("\n沒有需要清除的目錄")
+        else:
+            print("\n取消清除操作")
             
     def command_line_mode(self, args):
         """命令列模式"""
