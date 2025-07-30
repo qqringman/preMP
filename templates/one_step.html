@@ -11,34 +11,50 @@
         <p class="page-subtitle">自動執行下載、比對、打包全流程</p>
     </div>
 
-    <!-- 步驟指示器 -->
-    <div class="process-steps">
-        <div class="step" id="step-upload">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <div class="step-title">上傳 Excel</div>
-                <div class="step-desc">選擇 FTP 路徑檔案</div>
+    <!-- 改進的步驟指示器 -->
+    <div class="process-steps-container">
+        <div class="process-steps">
+            <div class="step" id="step-upload">
+                <div class="step-icon">
+                    <i class="fas fa-file-excel"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">上傳 Excel</div>
+                    <div class="step-desc">選擇 FTP 路徑檔案</div>
+                </div>
+                <div class="step-connector"></div>
             </div>
-        </div>
-        <div class="step" id="step-config">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <div class="step-title">設定 SFTP</div>
-                <div class="step-desc">配置連線資訊</div>
+            
+            <div class="step" id="step-config">
+                <div class="step-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">設定 SFTP</div>
+                    <div class="step-desc">配置連線資訊</div>
+                </div>
+                <div class="step-connector"></div>
             </div>
-        </div>
-        <div class="step" id="step-process">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <div class="step-title">執行處理</div>
-                <div class="step-desc">下載→比對→打包</div>
+            
+            <div class="step" id="step-process">
+                <div class="step-icon">
+                    <i class="fas fa-cogs"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">執行處理</div>
+                    <div class="step-desc">下載→比對→打包</div>
+                </div>
+                <div class="step-connector"></div>
             </div>
-        </div>
-        <div class="step" id="step-complete">
-            <div class="step-number">4</div>
-            <div class="step-content">
-                <div class="step-title">完成</div>
-                <div class="step-desc">下載結果</div>
+            
+            <div class="step" id="step-complete">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">完成</div>
+                    <div class="step-desc">下載結果</div>
+                </div>
             </div>
         </div>
     </div>
@@ -46,64 +62,80 @@
     <!-- 主要表單區 -->
     <div class="form-container" id="mainForm">
         <!-- 上傳 Excel -->
-        <div class="form-section" id="uploadSection">
-            <h2 class="section-title">
-                <i class="fas fa-file-excel"></i> 上傳 Excel 檔案
+        <div class="card-style" id="uploadSection">
+            <h2 class="section-title mb-4">
+                <i class="fas fa-file-excel"></i> 步驟 1：上傳 Excel 檔案
             </h2>
+            
             <div class="upload-area" id="uploadArea">
                 <input type="file" id="fileInput" accept=".xlsx" hidden>
-                <div class="upload-icon">
-                    <i class="fas fa-cloud-upload-alt"></i>
+                <div class="upload-content">
+                    <div class="upload-icon mb-3">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <p class="upload-text">拖曳檔案至此處或點擊選擇</p>
+                    <p class="upload-hint">支援 .xlsx 格式，最大 16MB</p>
+                    <button class="btn btn-outline mt-3" id="selectFileBtn">
+                        選擇檔案
+                    </button>
                 </div>
-                <p class="upload-text">拖曳檔案至此處或點擊選擇</p>
-                <p class="upload-hint">支援 .xlsx 格式，最大 16MB</p>
-                <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
-                    選擇檔案
-                </button>
             </div>
+            
             <div class="file-info hidden" id="fileInfo">
-                <i class="fas fa-file-excel"></i>
-                <span id="fileName"></span>
-                <button class="btn-icon" onclick="removeFile()">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="file-info-content">
+                    <i class="fas fa-file-excel fa-2x"></i>
+                    <div class="file-details">
+                        <span id="fileName"></span>
+                        <button class="btn-icon ml-3" onclick="removeFile()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- SFTP 設定 -->
-        <div class="form-section" id="sftpSection">
-            <h2 class="section-title">
-                <i class="fas fa-server"></i> SFTP 連線設定
+        <div class="card-style mt-4" id="sftpSection">
+            <h2 class="section-title mb-4">
+                <i class="fas fa-server"></i> 步驟 2：SFTP 連線設定
             </h2>
+            
             <div class="form-group">
-                <label class="form-label">使用預設設定</label>
                 <div class="switch-container">
                     <label class="switch">
                         <input type="checkbox" id="useDefaultConfig" checked>
                         <span class="slider"></span>
                     </label>
-                    <span class="switch-label">使用 config.py 中的預設值</span>
+                    <span class="switch-label ml-3">使用 config.py 中的預設值</span>
                 </div>
             </div>
             
-            <div id="customConfig" class="custom-config disabled">
+            <div id="customConfig" class="custom-config disabled mt-4">
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">伺服器位址</label>
+                        <label class="form-label">
+                            <i class="fas fa-network-wired"></i> 伺服器位址
+                        </label>
                         <input type="text" class="form-input" id="sftpHost" placeholder="sftp.example.com">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">連接埠</label>
+                        <label class="form-label">
+                            <i class="fas fa-ethernet"></i> 連接埠
+                        </label>
                         <input type="number" class="form-input" id="sftpPort" value="22">
                     </div>
                 </div>
-                <div class="form-row">
+                <div class="form-row mt-3">
                     <div class="form-group">
-                        <label class="form-label">使用者名稱</label>
+                        <label class="form-label">
+                            <i class="fas fa-user"></i> 使用者名稱
+                        </label>
                         <input type="text" class="form-input" id="sftpUsername" placeholder="username">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">密碼</label>
+                        <label class="form-label">
+                            <i class="fas fa-key"></i> 密碼
+                        </label>
                         <input type="password" class="form-input" id="sftpPassword" placeholder="••••••••">
                     </div>
                 </div>
@@ -111,62 +143,64 @@
         </div>
 
         <!-- 執行按鈕 -->
-        <div class="form-actions">
+        <div class="form-actions text-center mt-5">
             <button class="btn btn-primary btn-large" id="executeBtn" onclick="executeOneStep()" disabled>
-                <i class="fas fa-rocket"></i> 開始執行
+                <i class="fas fa-rocket"></i> 開始執行一步到位處理
             </button>
         </div>
     </div>
 
     <!-- 處理進度區 -->
     <div class="progress-container hidden" id="progressContainer">
-        <h2 class="section-title">
-            <i class="fas fa-tasks"></i> 處理進度
-        </h2>
-        
-        <div class="progress-bar-container">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        <div class="card-style">
+            <h2 class="section-title mb-4">
+                <i class="fas fa-tasks"></i> 處理進度
+            </h2>
+            
+            <div class="progress-bar-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="progressText">0%</div>
             </div>
-            <div class="progress-text" id="progressText">0%</div>
-        </div>
 
-        <div class="process-stages">
-            <div class="stage" id="stage-download">
-                <div class="stage-icon">
-                    <i class="fas fa-download"></i>
+            <div class="process-stages mt-5">
+                <div class="stage" id="stage-download">
+                    <div class="stage-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="stage-info">
+                        <div class="stage-title">下載檔案</div>
+                        <div class="stage-status">等待中...</div>
+                    </div>
                 </div>
-                <div class="stage-info">
-                    <div class="stage-title">下載檔案</div>
-                    <div class="stage-status">等待中...</div>
+                <div class="stage" id="stage-compare">
+                    <div class="stage-icon">
+                        <i class="fas fa-code-compare"></i>
+                    </div>
+                    <div class="stage-info">
+                        <div class="stage-title">比對差異</div>
+                        <div class="stage-status">等待中...</div>
+                    </div>
+                </div>
+                <div class="stage" id="stage-package">
+                    <div class="stage-icon">
+                        <i class="fas fa-box"></i>
+                    </div>
+                    <div class="stage-info">
+                        <div class="stage-title">打包結果</div>
+                        <div class="stage-status">等待中...</div>
+                    </div>
                 </div>
             </div>
-            <div class="stage" id="stage-compare">
-                <div class="stage-icon">
-                    <i class="fas fa-code-compare"></i>
-                </div>
-                <div class="stage-info">
-                    <div class="stage-title">比對差異</div>
-                    <div class="stage-status">等待中...</div>
-                </div>
-            </div>
-            <div class="stage" id="stage-package">
-                <div class="stage-icon">
-                    <i class="fas fa-box"></i>
-                </div>
-                <div class="stage-info">
-                    <div class="stage-title">打包結果</div>
-                    <div class="stage-status">等待中...</div>
-                </div>
-            </div>
-        </div>
 
-        <div class="log-container">
-            <h3 class="log-title">處理日誌</h3>
-            <div class="log-content" id="logContent">
-                <div class="log-entry">
-                    <span class="log-time">--:--:--</span>
-                    <span class="log-message">等待開始...</span>
+            <div class="log-container mt-4">
+                <h3 class="log-title">處理日誌</h3>
+                <div class="log-content" id="logContent">
+                    <div class="log-entry">
+                        <span class="log-time">--:--:--</span>
+                        <span class="log-message">等待開始...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -174,26 +208,30 @@
 
     <!-- 結果區 -->
     <div class="result-container hidden" id="resultContainer">
-        <div class="result-success">
-            <i class="fas fa-check-circle"></i>
-            <h2>處理完成！</h2>
-            <p>所有流程已成功執行</p>
-        </div>
+        <div class="card-style">
+            <div class="result-success text-center">
+                <div class="success-icon mb-3">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2>處理完成！</h2>
+                <p class="mt-2">所有流程已成功執行</p>
+            </div>
 
-        <div class="result-summary" id="resultSummary">
-            <!-- 動態填充結果摘要 -->
-        </div>
+            <div class="result-summary mt-5" id="resultSummary">
+                <!-- 動態填充結果摘要 -->
+            </div>
 
-        <div class="result-actions">
-            <button class="btn btn-primary" onclick="viewResults()">
-                <i class="fas fa-chart-line"></i> 查看詳細結果
-            </button>
-            <button class="btn btn-success" onclick="downloadAll()">
-                <i class="fas fa-download"></i> 下載所有檔案
-            </button>
-            <button class="btn btn-outline" onclick="startNew()">
-                <i class="fas fa-redo"></i> 開始新的處理
-            </button>
+            <div class="result-actions text-center mt-4">
+                <button class="btn btn-primary" onclick="viewResults()">
+                    <i class="fas fa-chart-line"></i> 查看詳細結果
+                </button>
+                <button class="btn btn-success ml-3" onclick="downloadAll()">
+                    <i class="fas fa-download"></i> 下載所有檔案
+                </button>
+                <button class="btn btn-outline ml-3" onclick="startNew()">
+                    <i class="fas fa-redo"></i> 開始新的處理
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -201,4 +239,210 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/one-step.js') }}"></script>
+
+<style>
+/* 改進的步驟指示器樣式 */
+.process-steps-container {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-2xl);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-2xl);
+}
+
+.process-steps {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+
+.step {
+    flex: 1;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.step-icon {
+    width: 80px;
+    height: 80px;
+    background: var(--nordic-gray-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--spacing-md);
+    font-size: 2rem;
+    color: var(--nordic-gray-500);
+    border: 4px solid var(--nordic-gray-200);
+    transition: all var(--transition-normal);
+}
+
+.step.active .step-icon {
+    background: var(--nordic-blue-100);
+    border-color: var(--nordic-blue-600);
+    color: var(--nordic-blue-700);
+    transform: scale(1.1);
+}
+
+.step.completed .step-icon {
+    background: var(--nordic-green);
+    border-color: var(--nordic-green);
+    color: white;
+}
+
+.step-connector {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    width: 100%;
+    height: 4px;
+    background: var(--nordic-gray-200);
+    z-index: -1;
+}
+
+.step:last-child .step-connector {
+    display: none;
+}
+
+.step.completed .step-connector {
+    background: var(--nordic-green);
+}
+
+.step-title {
+    font-weight: 600;
+    color: var(--nordic-gray-800);
+    margin-bottom: var(--spacing-xs);
+}
+
+.step-desc {
+    font-size: 0.9rem;
+    color: var(--nordic-gray-600);
+}
+
+/* 上傳區域改進 */
+.upload-content {
+    padding: var(--spacing-xl);
+}
+
+.file-info-content {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-lg);
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+}
+
+.file-details {
+    margin-left: var(--spacing-lg);
+    flex: 1;
+}
+
+/* 成功圖示 */
+.success-icon {
+    font-size: 5rem;
+    color: var(--nordic-green);
+}
+
+/* 處理階段改進 */
+.process-stages {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-lg);
+}
+
+.stage {
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.stage.active {
+    background: var(--nordic-blue-100);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.stage.completed {
+    background: var(--nordic-green);
+    color: white;
+}
+
+.stage-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.8;
+}
+
+.stage.active .stage-icon {
+    color: var(--nordic-blue-700);
+    opacity: 1;
+}
+
+.stage.completed .stage-icon {
+    color: white;
+    opacity: 1;
+}
+
+/* 摘要卡片網格 */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+.summary-card {
+    background: var(--nordic-gray-50);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.card-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--nordic-blue-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--spacing-md);
+    font-size: 1.5rem;
+    color: var(--nordic-blue-700);
+}
+
+.summary-card.error .card-icon {
+    background: var(--nordic-red);
+    color: white;
+}
+
+.card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--nordic-gray-900);
+}
+
+.card-label {
+    color: var(--nordic-gray-600);
+    font-size: 0.9rem;
+}
+
+.card-footer {
+    margin-top: var(--spacing-sm);
+    font-size: 0.8rem;
+}
+
+/* 按鈕間距 */
+.btn + .btn {
+    margin-left: var(--spacing-md);
+}
+</style>
 {% endblock %}

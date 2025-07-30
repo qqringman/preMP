@@ -13,38 +13,54 @@
 
     <!-- 比對選項 -->
     <div class="compare-options">
-        <div class="option-card">
-            <h2 class="option-title">
+        <div class="card-style">
+            <h2 class="section-title mb-4">
                 <i class="fas fa-folder-open"></i> 選擇來源目錄
             </h2>
             
-            <div class="directory-selector">
-                <div class="form-group">
-                    <label class="form-label">可用目錄</label>
+            <div class="folder-selector">
+                <div class="folder-input-group">
+                    <input type="text" 
+                           class="folder-input" 
+                           id="folderPath" 
+                           placeholder="輸入伺服器路徑 (例如: /home/vince_lin/ai/preMP)">
+                    <button class="btn btn-primary" onclick="useServerPath()">
+                        <i class="fas fa-server"></i> 使用此路徑
+                    </button>
+                </div>
+                
+                <div class="divider-text">或</div>
+                
+                <div class="directory-selector mt-3">
+                    <label class="form-label">選擇已下載的目錄</label>
                     <select class="form-input" id="sourceDirectory">
                         <option value="">請選擇目錄...</option>
                     </select>
                 </div>
                 
-                <div class="directory-info hidden" id="directoryInfo">
-                    <div class="info-item">
-                        <i class="fas fa-folder"></i>
-                        <span id="selectedPath"></span>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-calendar"></i>
-                        <span id="directoryDate"></span>
-                    </div>
+                <div class="folder-drop-area mt-4" id="folderDropArea">
+                    <i class="fas fa-folder-plus fa-3x mb-3"></i>
+                    <p>拖曳資料夾到此處</p>
+                    <small>或使用上方選項選擇</small>
                 </div>
                 
-                <button class="btn btn-outline" onclick="refreshDirectories()">
-                    <i class="fas fa-sync"></i> 重新整理
-                </button>
+                <div class="directory-info hidden mt-4" id="directoryInfo">
+                    <div class="info-card">
+                        <div class="info-item">
+                            <i class="fas fa-folder"></i>
+                            <span id="selectedPath"></span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-calendar"></i>
+                            <span id="directoryDate"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="option-card">
-            <h2 class="option-title">
+        <div class="card-style mt-4">
+            <h2 class="section-title mb-4">
                 <i class="fas fa-cog"></i> 比對設定
             </h2>
             
@@ -105,33 +121,33 @@
     </div>
 
     <!-- 執行按鈕 -->
-    <div class="action-container">
+    <div class="action-container text-center mt-4">
         <button class="btn btn-primary btn-large" id="compareBtn" onclick="executeCompare()" disabled>
             <i class="fas fa-play"></i> 開始比對
         </button>
     </div>
 
     <!-- 比對進度 -->
-    <div class="compare-progress hidden" id="compareProgress">
+    <div class="card-style hidden mt-5" id="compareProgress">
         <h2 class="section-title">
             <i class="fas fa-spinner fa-pulse"></i> 比對進行中
         </h2>
         
-        <div class="progress-bar-container">
+        <div class="progress-bar-container mt-4">
             <div class="progress-bar">
                 <div class="progress-fill" id="compareProgressFill" style="width: 0%"></div>
             </div>
             <div class="progress-text" id="compareProgressText">0%</div>
         </div>
         
-        <div class="progress-message" id="compareMessage">
+        <div class="progress-message mt-3" id="compareMessage">
             正在準備比對...
         </div>
     </div>
 
     <!-- 比對結果預覽 -->
-    <div class="compare-results hidden" id="compareResults">
-        <h2 class="section-title">
+    <div class="card-style hidden mt-5" id="compareResults">
+        <h2 class="section-title mb-4">
             <i class="fas fa-chart-bar"></i> 比對結果
         </h2>
         
@@ -139,7 +155,7 @@
             <!-- 動態填充 -->
         </div>
         
-        <div class="results-actions">
+        <div class="results-actions text-center mt-4">
             <button class="btn btn-primary" onclick="viewDetailedResults()">
                 <i class="fas fa-table"></i> 查看詳細報表
             </button>
@@ -155,7 +171,7 @@
         </div>
         
         <!-- 快速預覽圖表 -->
-        <div class="charts-container">
+        <div class="charts-container mt-5">
             <div class="chart-box">
                 <h3 class="chart-title">比對成功率</h3>
                 <canvas id="successChart"></canvas>
@@ -167,380 +183,35 @@
         </div>
     </div>
 
-    <!-- 最近比對記錄 -->
-    <div class="recent-comparisons">
-        <h2 class="section-title">
+    <!-- 最近比對記錄 - 時間軸形式 -->
+    <div class="card-style mt-5">
+        <h2 class="section-title mb-4">
             <i class="fas fa-history"></i> 最近比對記錄
         </h2>
-        <div class="comparison-list" id="comparisonList">
-            <div class="comparison-placeholder">
-                <i class="fas fa-inbox"></i>
-                <p>暫無比對記錄</p>
+        <div class="timeline" id="comparisonTimeline">
+            <div class="timeline-placeholder text-center p-4">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <p class="text-muted">暫無比對記錄</p>
             </div>
         </div>
     </div>
 </div>
+
+<!-- 非同步下載提示 -->
+<div class="async-download-toast hidden" id="asyncDownloadToast">
+    <div class="async-download-icon">
+        <i class="fas fa-check"></i>
+    </div>
+    <div class="async-download-content">
+        <div class="async-download-title">下載準備完成</div>
+        <div class="async-download-desc">您的檔案已準備好下載</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="downloadAsyncFile()">
+        立即下載
+    </button>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
-let currentTaskId = null;
-let sourceDirectory = null;
-
-// 頁面載入時初始化
-document.addEventListener('DOMContentLoaded', () => {
-    loadDirectories();
-    loadRecentComparisons();
-    initializeEventListeners();
-});
-
-// 載入可用目錄
-async function loadDirectories() {
-    try {
-        const directories = await utils.apiRequest('/api/list-directories');
-        const select = document.getElementById('sourceDirectory');
-        
-        // 清空選項
-        select.innerHTML = '<option value="">請選擇目錄...</option>';
-        
-        // 添加目錄選項
-        directories.forEach(dir => {
-            const option = document.createElement('option');
-            option.value = dir.path;
-            option.textContent = dir.name;
-            option.dataset.type = dir.type;
-            select.appendChild(option);
-        });
-        
-    } catch (error) {
-        console.error('Load directories error:', error);
-    }
-}
-
-// 重新整理目錄
-function refreshDirectories() {
-    utils.showNotification('正在重新整理...', 'info');
-    loadDirectories();
-}
-
-// 初始化事件監聽器
-function initializeEventListeners() {
-    // 目錄選擇
-    document.getElementById('sourceDirectory').addEventListener('change', (e) => {
-        sourceDirectory = e.target.value;
-        
-        if (sourceDirectory) {
-            document.getElementById('directoryInfo').classList.remove('hidden');
-            document.getElementById('selectedPath').textContent = sourceDirectory;
-            document.getElementById('directoryDate').textContent = new Date().toLocaleDateString('zh-TW');
-            document.getElementById('compareBtn').disabled = false;
-        } else {
-            document.getElementById('directoryInfo').classList.add('hidden');
-            document.getElementById('compareBtn').disabled = true;
-        }
-    });
-    
-    // 監聽任務進度
-    document.addEventListener('task-progress', (e) => {
-        const data = e.detail;
-        if (data.task_id === currentTaskId) {
-            updateCompareProgress(data);
-        }
-    });
-}
-
-// 執行比對
-async function executeCompare() {
-    if (!sourceDirectory) {
-        utils.showNotification('請選擇來源目錄', 'error');
-        return;
-    }
-    
-    const scenario = document.querySelector('input[name="scenario"]:checked').value;
-    
-    // 顯示進度
-    document.getElementById('compareProgress').classList.remove('hidden');
-    document.getElementById('compareResults').classList.add('hidden');
-    document.getElementById('compareBtn').disabled = true;
-    
-    try {
-        const response = await utils.apiRequest('/api/compare', {
-            method: 'POST',
-            body: JSON.stringify({
-                source_dir: sourceDirectory,
-                scenarios: scenario
-            })
-        });
-        
-        currentTaskId = response.task_id;
-        
-        // 加入任務房間
-        if (socket) {
-            socket.emit('join_task', { task_id: currentTaskId });
-        }
-        
-        // 開始輪詢狀態
-        pollCompareStatus();
-        
-    } catch (error) {
-        console.error('Execute compare error:', error);
-        utils.showNotification('執行比對失敗', 'error');
-        resetCompareUI();
-    }
-}
-
-// 更新比對進度
-function updateCompareProgress(data) {
-    const { progress, status, message } = data;
-    
-    document.getElementById('compareProgressFill').style.width = `${progress}%`;
-    document.getElementById('compareProgressText').textContent = `${progress}%`;
-    document.getElementById('compareMessage').textContent = message;
-    
-    if (status === 'completed') {
-        showCompareResults(data.results);
-    } else if (status === 'error') {
-        utils.showNotification(`比對失敗：${message}`, 'error');
-        resetCompareUI();
-    }
-}
-
-// 顯示比對結果
-function showCompareResults(results) {
-    document.getElementById('compareProgress').classList.add('hidden');
-    document.getElementById('compareResults').classList.remove('hidden');
-    
-    // 生成結果摘要
-    const summaryHtml = generateCompareResultsSummary(results);
-    document.getElementById('resultsSummary').innerHTML = summaryHtml;
-    
-    // 繪製圖表
-    drawCharts(results);
-    
-    // 重新載入最近記錄
-    loadRecentComparisons();
-    
-    utils.showNotification('比對完成！', 'success');
-}
-
-// 生成比對結果摘要
-function generateCompareResultsSummary(results) {
-    const compareResults = results.compare_results || {};
-    let html = '<div class="summary-grid">';
-    
-    if (compareResults.master_vs_premp) {
-        html += createSummaryCard('Master vs PreMP', compareResults.master_vs_premp);
-    }
-    
-    if (compareResults.premp_vs_wave) {
-        html += createSummaryCard('PreMP vs Wave', compareResults.premp_vs_wave);
-    }
-    
-    if (compareResults.wave_vs_backup) {
-        html += createSummaryCard('Wave vs Backup', compareResults.wave_vs_backup);
-    }
-    
-    if (compareResults.failed > 0) {
-        html += `
-            <div class="summary-card error">
-                <div class="card-header">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>無法比對</span>
-                </div>
-                <div class="card-value">${compareResults.failed}</div>
-                <div class="card-label">個模組</div>
-            </div>
-        `;
-    }
-    
-    html += '</div>';
-    return html;
-}
-
-// 創建摘要卡片
-function createSummaryCard(title, data) {
-    const icon = {
-        'Master vs PreMP': 'fa-code-branch',
-        'PreMP vs Wave': 'fa-water',
-        'Wave vs Backup': 'fa-database'
-    }[title] || 'fa-check';
-    
-    return `
-        <div class="summary-card">
-            <div class="card-header">
-                <i class="fas ${icon}"></i>
-                <span>${title}</span>
-            </div>
-            <div class="card-value">${data.success}</div>
-            <div class="card-label">個模組成功</div>
-            ${data.failed > 0 ? `<div class="card-footer">${data.failed} 個失敗</div>` : ''}
-        </div>
-    `;
-}
-
-// 繪製圖表
-function drawCharts(results) {
-    const compareResults = results.compare_results || {};
-    
-    // 成功率圖表
-    const successCtx = document.getElementById('successChart').getContext('2d');
-    new Chart(successCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['成功', '失敗'],
-            datasets: [{
-                data: [
-                    getTotalSuccess(compareResults),
-                    compareResults.failed || 0
-                ],
-                backgroundColor: ['#48BB78', '#F56565']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-    
-    // 差異分布圖表
-    const diffCtx = document.getElementById('diffChart').getContext('2d');
-    new Chart(diffCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Master vs PreMP', 'PreMP vs Wave', 'Wave vs Backup'],
-            datasets: [{
-                label: '成功',
-                data: [
-                    compareResults.master_vs_premp?.success || 0,
-                    compareResults.premp_vs_wave?.success || 0,
-                    compareResults.wave_vs_backup?.success || 0
-                ],
-                backgroundColor: '#2196F3'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-// 計算總成功數
-function getTotalSuccess(compareResults) {
-    let total = 0;
-    if (compareResults.master_vs_premp) total += compareResults.master_vs_premp.success;
-    if (compareResults.premp_vs_wave) total += compareResults.premp_vs_wave.success;
-    if (compareResults.wave_vs_backup) total += compareResults.wave_vs_backup.success;
-    return total;
-}
-
-// 查看詳細結果
-function viewDetailedResults() {
-    if (currentTaskId) {
-        window.location.href = `/results/${currentTaskId}`;
-    }
-}
-
-// 匯出結果
-function exportResults(format) {
-    if (!currentTaskId) return;
-    
-    const urls = {
-        excel: `/api/export-excel/${currentTaskId}`,
-        html: `/api/export-html/${currentTaskId}`,
-        zip: `/api/export-zip/${currentTaskId}`
-    };
-    
-    window.location.href = urls[format];
-}
-
-// 重置比對 UI
-function resetCompareUI() {
-    document.getElementById('compareProgress').classList.add('hidden');
-    document.getElementById('compareBtn').disabled = false;
-    document.getElementById('compareProgressFill').style.width = '0%';
-    document.getElementById('compareProgressText').textContent = '0%';
-}
-
-// 輪詢比對狀態
-async function pollCompareStatus() {
-    if (!currentTaskId) return;
-    
-    try {
-        const status = await utils.apiRequest(`/api/status/${currentTaskId}`);
-        
-        if (status.status !== 'not_found') {
-            updateCompareProgress(status);
-        }
-        
-        if (status.status !== 'completed' && status.status !== 'error') {
-            setTimeout(pollCompareStatus, 1000);
-        }
-    } catch (error) {
-        console.error('Poll status error:', error);
-    }
-}
-
-// 載入最近比對記錄
-function loadRecentComparisons() {
-    // 這裡可以從後端 API 載入真實數據
-    const comparisons = [
-        {
-            id: 'task_20240115_143022',
-            time: '10 分鐘前',
-            scenario: '所有比對',
-            status: 'completed',
-            modules: 15
-        },
-        {
-            id: 'task_20240115_141512',
-            time: '1 小時前',
-            scenario: 'Master vs PreMP',
-            status: 'completed',
-            modules: 8
-        }
-    ];
-    
-    const container = document.getElementById('comparisonList');
-    
-    if (comparisons.length === 0) {
-        container.innerHTML = `
-            <div class="comparison-placeholder">
-                <i class="fas fa-inbox"></i>
-                <p>暫無比對記錄</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = comparisons.map(comp => `
-        <div class="comparison-item" onclick="window.location.href='/results/${comp.id}'">
-            <div class="comparison-time">${comp.time}</div>
-            <div class="comparison-info">
-                <div class="comparison-scenario">${comp.scenario}</div>
-                <div class="comparison-modules">${comp.modules} 個模組</div>
-            </div>
-            <div class="comparison-status ${comp.status}">
-                <i class="fas fa-check-circle"></i>
-            </div>
-        </div>
-    `).join('');
-}
-
-// 匯出函數
-window.executeCompare = executeCompare;
-window.refreshDirectories = refreshDirectories;
-window.viewDetailedResults = viewDetailedResults;
-window.exportResults = exportResults;
-</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
 {% endblock %}
