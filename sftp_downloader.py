@@ -294,18 +294,33 @@ class SFTPDownloader:
                     if '/DailyBuild/PrebuildFW' in ftp_path:
                         # RDDB 格式：PrebuildFW/模組/RDDB-XXX
                         top_dir = 'PrebuildFW'
+                        is_prebuild = True
                     else:
                         # DB 格式：DailyBuild/平台/DBXXXX
                         top_dir = 'DailyBuild'
+                        is_prebuild = False
                     
-                    # 檢查路徑中的關鍵字並決定資料夾後綴（統一處理）
+                    # 檢查路徑中的關鍵字並決定資料夾後綴
                     folder_suffix = ""
-                    if "mp.google-refplus.wave.backup" in ftp_path:
-                        folder_suffix = "-wave.backup"
-                    elif "mp.google-refplus.wave" in ftp_path:
-                        folder_suffix = "-wave"
-                    elif "premp.google-refplus" in ftp_path:
-                        folder_suffix = "-premp"
+                    
+                    if is_prebuild:
+                        # PrebuildFW 的關鍵字規則（原有邏輯）
+                        if "mp.google-refplus.wave.backup" in ftp_path:
+                            folder_suffix = "-wave.backup"
+                        elif "mp.google-refplus.wave" in ftp_path:
+                            folder_suffix = "-wave"
+                        elif "premp.google-refplus" in ftp_path:
+                            folder_suffix = "-premp"
+                    else:
+                        # DailyBuild 的關鍵字規則（新邏輯）
+                        # 不區分大小寫的檢查
+                        ftp_path_upper = ftp_path.upper()
+                        if "WAVE_BACKUP" in ftp_path_upper or "WAVEBACKUP" in ftp_path_upper:
+                            folder_suffix = "-wave.backup"
+                        elif "WAVE" in ftp_path_upper and "BACKUP" not in ftp_path_upper:
+                            folder_suffix = "-wave"
+                        elif "PREMP" in ftp_path_upper:
+                            folder_suffix = "-premp"
                     
                     if jira_id:  # RDDB 格式（有 JIRA ID）
                         # 建立本地目錄結構：PrebuildFW/模組/RDDB-XXX-後綴
