@@ -781,13 +781,26 @@ class FileComparator:
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
                 
-                # version_diff 頁籤（移除 module_path 欄位）
+                # version_diff 頁籤
                 if version_diff:
                     df = pd.DataFrame(version_diff)
+                    # 移除 module_path 欄位
+                    if 'module_path' in df.columns:
+                        df = df.drop('module_path', axis=1)
+                    # 移除 is_different 欄位（如果存在）
+                    if 'is_different' in df.columns:
+                        df = df.drop('is_different', axis=1)
+                    
+                    # 確保欄位順序正確
                     columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
                                 'base_content', 'compare_content', 'org_content']
+                    
+                    # 只保留存在的欄位
                     columns_order = [col for col in columns_order if col in df.columns]
-                    df = df[columns_order]
+                    
+                    # 重新排序欄位
+                    df = df.reindex(columns=columns_order)
+                    
                     df.to_excel(writer, sheet_name='version_diff', index=False)
                 
                 # 無法比對頁籤
@@ -939,9 +952,9 @@ class FileComparator:
             
             for idx, col in enumerate(df.columns):
                 if col in target_columns:
-                    column_indices[col] = idx + 1
+                    column_indices[col] = idx + 2
             
-            # 設定標題為深紅底白字
+            # 設定標題為深紅底白字（只有 base_content 和 compare_content）
             for col_name, col_idx in column_indices.items():
                 cell = worksheet.cell(row=1, column=col_idx)
                 cell.fill = header_fill
@@ -971,10 +984,21 @@ class FileComparator:
                     # base_content 為紅字
                     if 'base_content' in column_indices:
                         worksheet.cell(row=row_idx, column=column_indices['base_content']).font = red_font
+                        worksheet.cell(row=row_idx, column=column_indices['base_content']).value = base_content
+                        
+                    # 如果 compare_content 是 "(檔案存在)"，保持黑字
+                    if 'compare_content' in column_indices and str(compare_content) == '(檔案存在)':
+                        worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = compare_content
+                        
                 elif str(compare_content) == '(檔案不存在)':
                     # compare_content 為紅字
                     if 'compare_content' in column_indices:
                         worksheet.cell(row=row_idx, column=column_indices['compare_content']).font = red_font
+                        worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = compare_content
+                        
+                    # 如果 base_content 是 "(檔案存在)"，保持黑字
+                    if 'base_content' in column_indices and str(base_content) == '(檔案存在)':
+                        worksheet.cell(row=row_idx, column=column_indices['base_content']).value = base_content
                 else:
                     # 根據檔案類型和內容選擇處理方式
                     if str(file_type).lower() == 'f_version.txt' and base_content and compare_content:
@@ -1207,21 +1231,19 @@ class FileComparator:
                             results['text_file_differences'][target_file] = differences
                             
                             # 為整合報表準備版本檔案差異資料
-                            for diff in differences:
-                                version_diff_item = {
-                                    'module': self._extract_simple_module_name(results['module']),
-                                    'location_path': module_path if module_path else '',
-                                    'base_folder': base_folder,
-                                    'compare_folder': compare_folder,
-                                    'file_type': target_file,
-                                    'base_content': diff['file1'],
-                                    'compare_content': diff['file2']
-                                }
-                                
-                                # 將版本差異加入結果
-                                if 'version_diffs' not in results:
-                                    results['version_diffs'] = []
-                                results['version_diffs'].append(version_diff_item)
+                            if target_file.lower() in ['version.txt', 'f_version.txt']:
+                                for diff in differences:
+                                    version_diff_item = {
+                                        'module': self._extract_simple_module_name(module),
+                                        'location_path': module_path,
+                                        'base_folder': base_folder,
+                                        'compare_folder': compare_folder,
+                                        'file_type': target_file,  # 這裡應該是檔案類型，如 "F_Version.txt" 或 "Version.txt"
+                                        'base_content': diff.get('file1', ''),  # 這裡應該是差異內容
+                                        'compare_content': diff.get('file2', ''),  # 這裡應該是差異內容
+                                        'org_content': diff.get('content1', '')  # 這裡是原始完整內容
+                                    }
+                                    results['version_diffs'].append(version_diff_item)
                 else:
                     self.logger.warning(f"檔案 {target_file} 在一個或兩個資料夾中都不存在")
                     
@@ -1452,16 +1474,6 @@ class FileComparator:
     def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, module: str, compare_mode: str = None) -> Dict[str, Any]:
         """
         比較指定的兩個資料夾
-        
-        Args:
-            module_path: 模組路徑
-            base_folder: base 資料夾名稱
-            compare_folder: compare 資料夾名稱
-            module: 模組名稱（完整路徑）
-            compare_mode: 比對模式
-            
-        Returns:
-            比較結果
         """
         results = {
             'module': module,
@@ -1516,10 +1528,10 @@ class FileComparator:
                                         'location_path': module_path,
                                         'base_folder': base_folder,
                                         'compare_folder': compare_folder,
-                                        'file_type': target_file,
-                                        'base_content': diff.get('file1', ''),
-                                        'compare_content': diff.get('file2', ''),
-                                        'org_content': diff.get('content1', '')  # 加入原始內容（base 檔案的完整內容）
+                                        'file_type': target_file,  # 保持為檔案類型名稱
+                                        'base_content': diff.get('file1', ''),  # 差異行內容
+                                        'compare_content': diff.get('file2', ''),  # 差異行內容
+                                        'org_content': diff.get('content1', '')  # base 檔案的完整內容
                                     }
                                     results['version_diffs'].append(version_diff_item)
                 elif file1 or file2:
@@ -1541,7 +1553,7 @@ class FileComparator:
                                     'location_path': module_path,
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
-                                    'file_type': target_file,
+                                    'file_type': target_file,  # 保持為檔案類型名稱
                                     'base_content': '(檔案存在)',
                                     'compare_content': '(檔案不存在)',
                                     'org_content': content1
@@ -1558,7 +1570,7 @@ class FileComparator:
                                     'location_path': module_path,
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
-                                    'file_type': target_file,
+                                    'file_type': target_file,  # 保持為檔案類型名稱
                                     'base_content': '(檔案不存在)',
                                     'compare_content': '(檔案存在)',
                                     'org_content': content2
@@ -1568,7 +1580,7 @@ class FileComparator:
                                 self.logger.error(f"讀取檔案失敗 {file2}: {str(e)}")
                 else:
                     self.logger.warning(f"檔案 {target_file} 在兩個資料夾中都不存在")
-                    
+                        
         except Exception as e:
             self.logger.error(f"比較資料夾失敗: {str(e)}")
             
@@ -1753,11 +1765,23 @@ class FileComparator:
                 # version_diff 頁籤
                 if version_diff:
                     df = pd.DataFrame(version_diff)
-                    # 調整欄位順序
+                    # 移除 module_path 欄位
+                    if 'module_path' in df.columns:
+                        df = df.drop('module_path', axis=1)
+                    # 移除 is_different 欄位（如果存在）
+                    if 'is_different' in df.columns:
+                        df = df.drop('is_different', axis=1)
+                    
+                    # 確保欄位順序正確
                     columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
-                                'base_content', 'compare_content']
+                                'base_content', 'compare_content', 'org_content']
+                    
+                    # 只保留存在的欄位
                     columns_order = [col for col in columns_order if col in df.columns]
-                    df = df[columns_order]
+                    
+                    # 重新排序欄位
+                    df = df.reindex(columns=columns_order)
+                    
                     df.to_excel(writer, sheet_name='version_diff', index=False)
                 
                 # 無法比對頁籤（只在有資料時產生）
