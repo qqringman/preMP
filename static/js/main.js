@@ -5,6 +5,11 @@ let socket = null;
 
 // 初始化 Socket.IO
 function initSocket() {
+    if (typeof io === 'undefined') {
+        console.warn('Socket.IO not loaded');
+        return;
+    }
+    
     socket = io();
     
     socket.on('connect', () => {
@@ -29,6 +34,11 @@ function handleProgressUpdate(data) {
 // 顯示通知
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
+    if (!notification) {
+        console.warn('Notification element not found');
+        return;
+    }
+    
     const icon = notification.querySelector('.notification-icon');
     const messageEl = notification.querySelector('.notification-message');
     
@@ -40,8 +50,13 @@ function showNotification(message, type = 'info') {
         warning: 'fas fa-exclamation-triangle'
     };
     
-    icon.className = `notification-icon ${icons[type] || icons.info}`;
-    messageEl.textContent = message;
+    if (icon) {
+        icon.className = `notification-icon ${icons[type] || icons.info}`;
+    }
+    
+    if (messageEl) {
+        messageEl.textContent = message;
+    }
     
     // 設定樣式
     notification.className = `notification ${type}`;
@@ -60,15 +75,21 @@ function showNotification(message, type = 'info') {
 // 顯示載入遮罩
 function showLoading(text = '處理中...') {
     const overlay = document.getElementById('loading-overlay');
+    if (!overlay) return;
+    
     const loadingText = overlay.querySelector('.loading-text');
-    loadingText.textContent = text;
+    if (loadingText) {
+        loadingText.textContent = text;
+    }
     overlay.classList.remove('hidden');
 }
 
 // 隱藏載入遮罩
 function hideLoading() {
     const overlay = document.getElementById('loading-overlay');
-    overlay.classList.add('hidden');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
 }
 
 // API 請求封裝
@@ -154,7 +175,7 @@ function formatTime(date) {
 }
 
 // 下載檔案
-function downloadFile(url, filename) {
+function urlDownloadFile(url, filename) {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || 'download';
@@ -250,6 +271,11 @@ function smoothScroll(element) {
     });
 }
 
+// 格式化數字（加千分位）
+function formatNumber(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 // 頁面載入完成後初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化 Socket.IO
@@ -286,12 +312,13 @@ window.utils = {
     uploadFile,
     formatFileSize,
     formatTime,
-    downloadFile,
+    urlDownloadFile,
     copyToClipboard,
     debounce,
     throttle,
     validateEmail,
     validateUrl,
     generateId,
-    smoothScroll
+    smoothScroll,
+    formatNumber
 };

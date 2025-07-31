@@ -1,5 +1,6 @@
 // 下載頁面 JavaScript
 
+// 頁面特定變數
 let downloadFile = null;
 let downloadTaskId = null;
 
@@ -14,6 +15,8 @@ function initializeDownloadUpload() {
     const uploadArea = document.getElementById('downloadUploadArea');
     const fileInput = document.getElementById('downloadFileInput');
     const selectBtn = document.getElementById('selectFileBtn');
+    
+    if (!uploadArea || !fileInput || !selectBtn) return;
     
     // 點擊選擇按鈕
     selectBtn.addEventListener('click', () => {
@@ -96,6 +99,8 @@ function initializeDownloadConfig() {
     const useDefault = document.getElementById('downloadUseDefault');
     const customConfig = document.getElementById('downloadCustomConfig');
     
+    if (!useDefault || !customConfig) return;
+    
     useDefault.addEventListener('change', (e) => {
         if (e.target.checked) {
             customConfig.classList.add('disabled');
@@ -114,6 +119,7 @@ function initializeDownloadConfig() {
     
     // 初始化時停用自訂設定
     if (useDefault.checked) {
+        customConfig.classList.add('disabled');
         customConfig.querySelectorAll('input').forEach(input => {
             input.disabled = true;
         });
@@ -123,13 +129,17 @@ function initializeDownloadConfig() {
 // 檢查下載按鈕
 function checkDownloadButton() {
     const downloadBtn = document.getElementById('downloadBtn');
-    downloadBtn.disabled = !downloadFile;
+    if (downloadBtn) {
+        downloadBtn.disabled = !downloadFile;
+    }
 }
 
 // 測試連線
 async function testConnection() {
     const config = getDownloadConfig();
     const statusEl = document.getElementById('connectionStatus');
+    
+    if (!statusEl) return;
     
     statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 測試中...';
     statusEl.className = 'connection-status testing ml-3';
@@ -231,15 +241,32 @@ function handleDownloadProgress(event) {
 function updateDownloadProgress(data) {
     const { progress, status, message, stats } = data;
     
-    document.getElementById('downloadProgressFill').style.width = `${progress}%`;
-    document.getElementById('downloadProgressText').textContent = `${Math.round(progress)}%`;
+    const progressFill = document.getElementById('downloadProgressFill');
+    const progressText = document.getElementById('downloadProgressText');
+    
+    if (progressFill) {
+        progressFill.style.width = `${progress}%`;
+    }
+    
+    if (progressText) {
+        progressText.textContent = `${Math.round(progress)}%`;
+    }
     
     // 更新統計
     if (stats) {
-        document.getElementById('totalFiles').textContent = stats.total || '0';
-        document.getElementById('downloadedFiles').textContent = stats.downloaded || '0';
-        document.getElementById('skippedFiles').textContent = stats.skipped || '0';
-        document.getElementById('failedFiles').textContent = stats.failed || '0';
+        const elements = {
+            totalFiles: stats.total || '0',
+            downloadedFiles: stats.downloaded || '0',
+            skippedFiles: stats.skipped || '0',
+            failedFiles: stats.failed || '0'
+        };
+        
+        for (const [id, value] of Object.entries(elements)) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        }
     }
     
     // 添加日誌
@@ -257,6 +284,8 @@ function updateDownloadProgress(data) {
 // 添加下載日誌
 function addDownloadLog(message) {
     const log = document.getElementById('downloadLog');
+    if (!log) return;
+    
     const entry = document.createElement('div');
     entry.className = 'log-entry';
     entry.innerHTML = `
@@ -292,7 +321,11 @@ function showDownloadResults(results) {
             ` : ''}
         </div>
     `;
-    document.getElementById('downloadSummary').innerHTML = summary;
+    
+    const summaryEl = document.getElementById('downloadSummary');
+    if (summaryEl) {
+        summaryEl.innerHTML = summary;
+    }
     
     // 生成資料夾樹
     if (results.folder_structure) {
@@ -303,7 +336,10 @@ function showDownloadResults(results) {
 // 生成資料夾樹狀結構
 function generateFolderTree(structure) {
     const tree = buildTreeHTML(structure, 'downloads');
-    document.getElementById('folderTree').innerHTML = tree;
+    const treeEl = document.getElementById('folderTree');
+    if (treeEl) {
+        treeEl.innerHTML = tree;
+    }
 }
 
 // 建立樹狀結構 HTML
@@ -353,11 +389,22 @@ function resetDownloadForm() {
     document.getElementById('downloadResults').classList.add('hidden');
     
     // 清空日誌
-    document.getElementById('downloadLog').innerHTML = '';
+    const log = document.getElementById('downloadLog');
+    if (log) {
+        log.innerHTML = '';
+    }
     
     // 重置進度
-    document.getElementById('downloadProgressFill').style.width = '0%';
-    document.getElementById('downloadProgressText').textContent = '0%';
+    const progressFill = document.getElementById('downloadProgressFill');
+    const progressText = document.getElementById('downloadProgressText');
+    
+    if (progressFill) {
+        progressFill.style.width = '0%';
+    }
+    
+    if (progressText) {
+        progressText.textContent = '0%';
+    }
 }
 
 // 查看下載報表
@@ -377,7 +424,7 @@ function startNewDownload() {
     location.reload();
 }
 
-// 匯出函數
+// 匯出函數到全域
 window.removeDownloadFile = removeDownloadFile;
 window.testConnection = testConnection;
 window.executeDownload = executeDownload;
