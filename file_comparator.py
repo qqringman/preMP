@@ -1615,15 +1615,6 @@ class FileComparator:
     def _write_module_compare_report(self, module: str, results: Dict, output_dir: str, filename: str = None) -> str:
         """
         寫入單一模組的比較報表（與 all_compare.xlsx 相同格式）
-        
-        Args:
-            module: 模組名稱
-            results: 比較結果
-            output_dir: 輸出目錄
-            filename: 自訂檔案名稱
-            
-        Returns:
-            報表檔案路徑
         """
         try:
             import pandas as pd
@@ -1695,17 +1686,18 @@ class FileComparator:
                     pd.DataFrame(columns=['SN', 'Base folder', '狀態', 'module', 'location_path', 'folder', 'name', 'path']).to_excel(
                         writer, sheet_name='lost_project', index=False)
                 
-                # version_diff 頁籤
+                # version_diff 頁籤 - 修正：加入 org_content
                 if version_diffs:
                     df = pd.DataFrame(version_diffs)
+                    # 確保欄位順序正確，org_content 在最後
                     columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
-                                'base_content', 'compare_content']
+                                'base_content', 'compare_content', 'org_content']  # 加入 org_content
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='version_diff', index=False)
                 else:
                     pd.DataFrame(columns=['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type',
-                                        'base_content', 'compare_content']).to_excel(
+                                        'base_content', 'compare_content', 'org_content']).to_excel(  # 加入 org_content
                         writer, sheet_name='version_diff', index=False)
                 
                 # 先格式化所有工作表（基本格式）
@@ -1715,7 +1707,7 @@ class FileComparator:
                 
                 # 套用特定欄位的格式和篩選
                 self._apply_special_formatting_and_filters(writer, revision_diff, branch_error, 
-                                                       lost_project, version_diffs)
+                                                    lost_project, version_diffs)
                         
             self.logger.info(f"成功寫入比較報表: {output_file}")
             return output_file
