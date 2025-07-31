@@ -4,8 +4,9 @@
 支援一次執行所有比對情境
 """
 import os
+import re
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Any, Tuple, Set
+from typing import List, Dict, Any, Tuple, Set, Optional
 import utils
 import config
 from excel_handler import ExcelHandler
@@ -102,7 +103,7 @@ class FileComparator:
             
         return projects
         
-    def _compare_manifest_files(self, file1: str, file2: str, module: str, base_folder: str = None, compare_folder: str = None, module_path: str = None) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    def _compare_manifest_files(self, file1: str, file2: str, module: str, base_folder: str = None, compare_folder: str = None, module_path: str = None, compare_mode: str = None) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """
         比較兩個 manifest.xml 檔案（修改後的邏輯）
         """
@@ -127,6 +128,7 @@ class FileComparator:
                     revision_diff.append({
                         'SN': sn,
                         'module': simple_module,
+                        'location_path': module_path if module_path else '',
                         'base_folder': base_folder,
                         'compare_folder': compare_folder,
                         'name': base_proj['name'],
@@ -201,6 +203,7 @@ class FileComparator:
                     branch_error.append({
                         'SN': sn,
                         'module': simple_module,
+                        'location_path': module_path if module_path else '',
                         'base_folder': base_folder,
                         'compare_folder': compare_folder,
                         'name': compare_proj['name'],
@@ -209,8 +212,6 @@ class FileComparator:
                         'revision': revision,
                         'upstream': upstream,
                         'dest-branch': dest_branch,
-                        'check_keyword': check_keyword,
-                        'module_path': module_path if module_path else '',
                         'compare_link': self._generate_link(compare_proj),
                         'has_wave': 'Y' if has_wave else 'N',
                         'problem': problem
@@ -221,14 +222,25 @@ class FileComparator:
         lost_project = []
         sn = 1
         
+        # 決定 Base folder 值
+        base_folder_value = ""
+        if compare_mode == 'master_vs_premp':
+            base_folder_value = "premp"
+        elif compare_mode == 'premp_vs_wave':
+            base_folder_value = "wave"
+        elif compare_mode == 'wave_vs_backup':
+            base_folder_value = "wavebackup"
+        
         # 檢查在 base 檔案中但不在 compare 檔案中的項目（刪除）
         for key, base_proj in base_projects.items():
             if key not in compare_projects:
                 revision = base_proj.get('revision', '')
                 lost_project.append({
                     'SN': sn,
+                    'Base folder': base_folder_value,
                     '狀態': '刪除',
                     'module': simple_module,
+                    'location_path': module_path if module_path else '',
                     'folder': base_folder,  # 記錄是哪個資料夾
                     'name': base_proj['name'],
                     'path': base_proj['path'],
@@ -245,8 +257,10 @@ class FileComparator:
                 revision = compare_proj.get('revision', '')
                 lost_project.append({
                     'SN': sn,
+                    'Base folder': base_folder_value,
                     '狀態': '新增',
                     'module': simple_module,
+                    'location_path': module_path if module_path else '',
                     'folder': compare_folder,  # 記錄是哪個資料夾
                     'name': compare_proj['name'],
                     'path': compare_proj['path'],
@@ -259,13 +273,14 @@ class FileComparator:
         
         return revision_diff, branch_error, lost_project
         
-    def _compare_text_files(self, file1: str, file2: str) -> List[Dict[str, Any]]:
+    def _compare_text_files(self, file1: str, file2: str, file_type: str) -> List[Dict[str, Any]]:
         """
-        比較兩個文字檔案
+        比較兩個文字檔案（根據檔案類型使用不同的比較規則）
         
         Args:
             file1: 第一個檔案路徑
             file2: 第二個檔案路徑
+            file_type: 檔案類型（F_Version.txt 或 Version.txt）
             
         Returns:
             差異列表
@@ -273,25 +288,115 @@ class FileComparator:
         differences = []
         
         try:
-            with open(file1, 'r', encoding='utf-8') as f1:
-                lines1 = f1.readlines()
-            with open(file2, 'r', encoding='utf-8') as f2:
-                lines2 = f2.readlines()
-                
-            # 比較每一行
-            max_lines = max(len(lines1), len(lines2))
+            with open(file1, 'r', encoding='utf-8', errors='ignore') as f1:
+                content1 = f1.read()
+                lines1 = content1.splitlines()
+            with open(file2, 'r', encoding='utf-8', errors='ignore') as f2:
+                content2 = f2.read()
+                lines2 = content2.splitlines()
             
-            for i in range(max_lines):
-                line1 = lines1[i].strip() if i < len(lines1) else ''
-                line2 = lines2[i].strip() if i < len(lines2) else ''
+            if file_type.lower() == 'f_version.txt':
+                # F_Version.txt 比較規則：只比較 P_GIT_xxx 行
+                git_lines1 = {}
+                git_lines2 = {}
                 
-                if line1 != line2:
-                    differences.append({
-                        'line': i + 1,
-                        'file1': line1,
-                        'file2': line2
-                    })
+                # 提取 P_GIT_xxx 行
+                for line in lines1:
+                    line = line.strip()
+                    if line.startswith('P_GIT_'):
+                        parts = line.split(';')
+                        if len(parts) >= 5:
+                            git_id = parts[0]
+                            git_lines1[git_id] = line
+                
+                for line in lines2:
+                    line = line.strip()
+                    if line.startswith('P_GIT_'):
+                        parts = line.split(';')
+                        if len(parts) >= 5:
+                            git_id = parts[0]
+                            git_lines2[git_id] = line
+                
+                # 比較差異
+                all_git_ids = set(git_lines1.keys()) | set(git_lines2.keys())
+                for git_id in sorted(all_git_ids):
+                    line1 = git_lines1.get(git_id, '')
+                    line2 = git_lines2.get(git_id, '')
+                    if line1 != line2:
+                        differences.append({
+                            'line': git_id,
+                            'file1': line1,
+                            'file2': line2,
+                            'content1': content1,
+                            'content2': content2
+                        })
+                        
+            else:  # Version.txt
+                # 檢查是否是特殊格式（有 F_HASH）
+                has_f_hash = any('F_HASH:' in line for line in lines1 + lines2)
+                
+                if has_f_hash:
+                    # Version.txt with F_HASH format
+                    hash1 = None
+                    hash2 = None
                     
+                    for line in lines1:
+                        if 'F_HASH:' in line:
+                            parts = line.split('F_HASH:')
+                            if len(parts) > 1:
+                                hash1 = parts[1].strip()
+                                hash_line1 = line.strip()
+                                break
+                    
+                    for line in lines2:
+                        if 'F_HASH:' in line:
+                            parts = line.split('F_HASH:')
+                            if len(parts) > 1:
+                                hash2 = parts[1].strip()
+                                hash_line2 = line.strip()
+                                break
+                    
+                    if hash1 != hash2:
+                        differences.append({
+                            'line': 'F_HASH',
+                            'file1': hash_line1 if 'hash_line1' in locals() else f'F_HASH: {hash1}' if hash1 else 'F_HASH: (not found)',
+                            'file2': hash_line2 if 'hash_line2' in locals() else f'F_HASH: {hash2}' if hash2 else 'F_HASH: (not found)',
+                            'content1': content1,
+                            'content2': content2
+                        })
+                else:
+                    # Other Version.txt format: 比較所有包含 ":" 的行
+                    colon_lines1 = {}
+                    colon_lines2 = {}
+                    
+                    # 提取包含 ":" 的行
+                    for line in lines1:
+                        line = line.strip()
+                        if ':' in line and not line.startswith('#') and not line.startswith('//'):
+                            # 使用冒號前的部分作為鍵
+                            key = line.split(':')[0].strip()
+                            colon_lines1[key] = line
+                    
+                    for line in lines2:
+                        line = line.strip()
+                        if ':' in line and not line.startswith('#') and not line.startswith('//'):
+                            key = line.split(':')[0].strip()
+                            colon_lines2[key] = line
+                    
+                    # 比較差異
+                    all_keys = set(colon_lines1.keys()) | set(colon_lines2.keys())
+                    for key in sorted(all_keys):
+                        line1 = colon_lines1.get(key, '')
+                        line2 = colon_lines2.get(key, '')
+                        if line1 != line2:
+                            differences.append({
+                                'line': key,
+                                'file1': line1,
+                                'file2': line2,
+                                'content1': content1,
+                                'content2': content2
+                            })
+                        
         except Exception as e:
             self.logger.error(f"比較文字檔案失敗: {str(e)}")
             
@@ -316,18 +421,21 @@ class FileComparator:
                 'success': 0,
                 'failed': 0,
                 'modules': [],
+                'failed_modules': [],
                 'reports': []
             },
             'premp_vs_wave': {
                 'success': 0,
                 'failed': 0,
                 'modules': [],
+                'failed_modules': [],
                 'reports': []
             },
             'wave_vs_backup': {
                 'success': 0,
                 'failed': 0,
                 'modules': [],
+                'failed_modules': [],
                 'reports': []
             },
             'failed': 0,
@@ -370,7 +478,7 @@ class FileComparator:
                         # 可以進行比對
                         try:
                             results = self._compare_specific_folders(
-                                module_path, base_folder, compare_folder, full_module
+                                module_path, base_folder, compare_folder, full_module, scenario_key
                             )
                             
                             # 收集資料
@@ -397,8 +505,13 @@ class FileComparator:
                                 if not os.path.exists(module_output_dir):
                                     os.makedirs(module_output_dir)
                                 
+                                # 生成檔案名稱
+                                compare_filename = self._generate_compare_filename(
+                                    module, base_folder, compare_folder
+                                )
+                                
                                 report_file = self._write_module_compare_report(
-                                    module, results, module_output_dir
+                                    module, results, module_output_dir, compare_filename
                                 )
                                 if report_file:
                                     all_results[scenario_key]['reports'].append(report_file)
@@ -409,9 +522,12 @@ class FileComparator:
                                 'scenario': scenario_name,
                                 'error': str(e)
                             })
+                            all_results[scenario_key]['failed'] += 1
+                            all_results[scenario_key]['failed_modules'].append(module)
                     else:
                         # 無法比對
                         all_results[scenario_key]['failed'] += 1
+                        all_results[scenario_key]['failed_modules'].append(module)
                         module_failures.append({
                             'scenario': scenario_name,
                             'reason': missing_info
@@ -439,6 +555,7 @@ class FileComparator:
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
                         'module': module,
+                        'location_path': module_path,
                         'folder_count': len(folders),
                         'folders': ', '.join(folders) if folders else '無資料夾',
                         'path': full_path,
@@ -470,6 +587,24 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"執行所有比對情境失敗: {str(e)}")
             raise
+    
+    def _generate_compare_filename(self, module: str, base_folder: str, compare_folder: str) -> str:
+        """
+        生成比較檔案名稱
+        例如：bootcode_RDDB-531_RDDB-1046-premp_compare.xlsx
+        """
+        # 提取資料夾中的 RDDB 或 DB 編號
+        base_id = base_folder
+        compare_id = compare_folder
+        
+        # 簡化：去除後綴，只保留編號部分
+        if base_folder.startswith('RDDB-'):
+            base_id = base_folder.split('-premp')[0].split('-wave')[0]
+        elif base_folder.startswith('DB'):
+            base_id = base_folder.split('-premp')[0].split('-wave')[0]
+            
+        filename = f"{module}_{base_id}_{compare_folder}_compare.xlsx"
+        return filename
     
     def _get_all_modules(self, source_dir: str) -> List[Tuple[str, str, str]]:
         """取得所有模組"""
@@ -509,14 +644,14 @@ class FileComparator:
         return actual_modules
     
     def _write_all_scenarios_report(self, revision_diff: List[Dict], branch_error: List[Dict],
-                                   lost_project: List[Dict], version_diff: List[Dict],
-                                   cannot_compare_modules: List[Dict], all_results: Dict,
-                                   output_dir: str) -> str:
+                               lost_project: List[Dict], version_diff: List[Dict],
+                               cannot_compare_modules: List[Dict], all_results: Dict,
+                               output_dir: str) -> str:
         """寫入所有比對情境的整合報表"""
         try:
             import pandas as pd
-            from openpyxl.styles import PatternFill, Font
-            from openpyxl.worksheet.filters import FilterColumn, Filters
+            from openpyxl.styles import PatternFill, Font, Alignment
+            from openpyxl.worksheet.filters import FilterColumn, Filters, AutoFilter
             
             output_file = os.path.join(output_dir, "all_scenarios_compare.xlsx")
             
@@ -528,7 +663,7 @@ class FileComparator:
                 scenarios = [
                     ('Master vs PreMP', all_results['master_vs_premp']),
                     ('PreMP vs Wave', all_results['premp_vs_wave']),
-                    ('Wave vs Wave.backup', all_results['wave_vs_backup'])
+                    ('Wave vs Backup', all_results['wave_vs_backup'])
                 ]
                 
                 for scenario_name, scenario_result in scenarios:
@@ -536,8 +671,8 @@ class FileComparator:
                         '比對情境': scenario_name,
                         '成功模組數': scenario_result['success'],
                         '失敗模組數': scenario_result['failed'],
-                        '成功模組清單': ', '.join(scenario_result['modules'][:5]) + 
-                                     ('...' if len(scenario_result['modules']) > 5 else '')
+                        '成功模組清單': ', '.join(scenario_result['modules']) if scenario_result['modules'] else '',
+                        '失敗模組清單': ', '.join(scenario_result['failed_modules']) if scenario_result['failed_modules'] else ''
                     })
                 
                 # 加入總計
@@ -547,20 +682,78 @@ class FileComparator:
                     all_results['wave_vs_backup']['modules']
                 ))
                 
+                total_failed = len(set(
+                    all_results['master_vs_premp']['failed_modules'] +
+                    all_results['premp_vs_wave']['failed_modules'] +
+                    all_results['wave_vs_backup']['failed_modules']
+                ))
+                
                 summary_data.append({
                     '比對情境': '總計',
                     '成功模組數': total_modules,
-                    '失敗模組數': all_results['failed'],
-                    '成功模組清單': f"共 {total_modules} 個不重複模組"
+                    '失敗模組數': total_failed,
+                    '成功模組清單': str(total_modules),
+                    '失敗模組清單': str(total_failed)
                 })
                 
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='摘要', index=False)
                 
+                # 格式化摘要頁籤
+                worksheet_summary = writer.sheets['摘要']
+                
+                # 設定標題列格式（深藍底白字）
+                header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                header_font = Font(color="FFFFFF", bold=True)
+                
+                # 格式化標題列
+                for cell in worksheet_summary[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                # 設定總計列的格式（淺藍底）
+                total_fill = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+                total_font = Font(bold=True)
+                
+                # 找到總計列（最後一列）
+                total_row = len(df_summary) + 1  # +1 因為第一行是標題
+                for col in range(1, len(df_summary.columns) + 1):
+                    cell = worksheet_summary.cell(row=total_row, column=col)
+                    cell.fill = total_fill
+                    cell.font = total_font
+                    # 總計列的數字也要置中
+                    if col in [2, 3]:  # 成功模組數和失敗模組數欄位
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                # 設定所有資料列的對齊方式
+                for row_idx in range(2, total_row + 1):  # 包含總計列
+                    # 比對情境欄位（第1欄）靠左
+                    worksheet_summary.cell(row=row_idx, column=1).alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    # 成功模組數和失敗模組數（第2、3欄）置中
+                    worksheet_summary.cell(row=row_idx, column=2).alignment = Alignment(horizontal='center', vertical='center')
+                    worksheet_summary.cell(row=row_idx, column=3).alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    # 成功模組清單和失敗模組清單（第4、5欄）靠左
+                    if row_idx < total_row:  # 非總計列
+                        worksheet_summary.cell(row=row_idx, column=4).alignment = Alignment(horizontal='left', vertical='center')
+                        worksheet_summary.cell(row=row_idx, column=5).alignment = Alignment(horizontal='left', vertical='center')
+                    else:  # 總計列的清單欄位也置中
+                        worksheet_summary.cell(row=row_idx, column=4).alignment = Alignment(horizontal='center', vertical='center')
+                        worksheet_summary.cell(row=row_idx, column=5).alignment = Alignment(horizontal='center', vertical='center')
+                
+                # 調整欄寬
+                worksheet_summary.column_dimensions['A'].width = 20  # 比對情境
+                worksheet_summary.column_dimensions['B'].width = 15  # 成功模組數
+                worksheet_summary.column_dimensions['C'].width = 15  # 失敗模組數
+                worksheet_summary.column_dimensions['D'].width = 60  # 成功模組清單
+                worksheet_summary.column_dimensions['E'].width = 60  # 失敗模組清單
+                
                 # revision_diff 頁籤
                 if revision_diff:
                     df = pd.DataFrame(revision_diff)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'base_short', 'base_revision', 'compare_short', 'compare_revision',
                                 'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
                                 'base_link', 'compare_link']
@@ -570,17 +763,10 @@ class FileComparator:
                 
                 # branch_error 頁籤
                 if branch_error:
-                    # 移除 check_keyword 欄位
-                    for item in branch_error:
-                        if 'check_keyword' in item:
-                            del item['check_keyword']
-                        if 'module_path' in item:
-                            item['path_location'] = item.pop('module_path')
-                    
                     df = pd.DataFrame(branch_error)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'revision_short', 'revision', 'upstream', 'dest-branch', 
-                                'path_location', 'compare_link', 'problem', 'has_wave']
+                                'compare_link', 'problem', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df_sorted = df.sort_values('has_wave', ascending=True)
@@ -589,17 +775,17 @@ class FileComparator:
                 # lost_project 頁籤
                 if lost_project:
                     df = pd.DataFrame(lost_project)
-                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                    columns_order = ['SN', 'Base folder', '狀態', 'module', 'location_path', 'folder', 'name', 'path', 
                                 'upstream', 'dest-branch', 'revision', 'link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
                 
-                # version_diff 頁籤
+                # version_diff 頁籤（移除 module_path 欄位）
                 if version_diff:
                     df = pd.DataFrame(version_diff)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
-                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content', 'org_content']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='version_diff', index=False)
@@ -607,6 +793,9 @@ class FileComparator:
                 # 無法比對頁籤
                 if cannot_compare_modules:
                     df = pd.DataFrame(cannot_compare_modules)
+                    columns_order = ['SN', 'module', 'location_path', 'folder_count', 'folders', 'path', 'reason']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
                     df.to_excel(writer, sheet_name='無法比對', index=False)
                 
                 # 格式化所有工作表
@@ -614,9 +803,9 @@ class FileComparator:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
                 
-                # 套用特定格式
-                self._apply_special_formatting(writer, revision_diff, branch_error, 
-                                             lost_project, version_diff)
+                # 套用特定格式和篩選
+                self._apply_special_formatting_and_filters(writer, revision_diff, branch_error, 
+                                            lost_project, version_diff)
             
             self.logger.info(f"成功寫入所有情境整合報表: {output_file}")
             return output_file
@@ -625,12 +814,12 @@ class FileComparator:
             self.logger.error(f"寫入所有情境整合報表失敗: {str(e)}")
             raise
     
-    def _apply_special_formatting(self, writer, revision_diff, branch_error, 
-                                lost_project, version_diff):
-        """套用特定欄位的格式"""
+    def _apply_special_formatting_and_filters(self, writer, revision_diff, branch_error, 
+                            lost_project, version_diff):
+        """套用特定欄位的格式和篩選器"""
         import pandas as pd
         from openpyxl.styles import PatternFill, Font
-        from openpyxl.worksheet.filters import FilterColumn, Filters
+        from openpyxl.worksheet.filters import FilterColumn, Filters, AutoFilter
         
         # revision_diff 頁籤的特定格式
         if revision_diff and 'revision_diff' in writer.sheets:
@@ -661,7 +850,7 @@ class FileComparator:
                 for col_name, col_idx in column_indices.items():
                     worksheet.cell(row=row, column=col_idx).font = red_font
         
-        # branch_error 頁籤的特定格式
+        # branch_error 頁籤的特定格式和篩選
         if branch_error and 'branch_error' in writer.sheets:
             worksheet = writer.sheets['branch_error']
             df = pd.DataFrame(branch_error)
@@ -685,20 +874,26 @@ class FileComparator:
             
             # 設定自動篩選
             worksheet.auto_filter.ref = worksheet.dimensions
-            
+
             # 設定 has_wave 欄位的篩選條件為只顯示 "N"
             if has_wave_col:
+                # 取得所有唯一的 has_wave 值
                 has_wave_values = df['has_wave'].unique().tolist()
                 
-                filter_column = FilterColumn(colId=has_wave_col - 1)
+                # 建立篩選器，注意 colId 是從 0 開始的
+                has_wave_df_index = df.columns.get_loc('has_wave')
+                filter_column = FilterColumn(colId=has_wave_df_index)
                 filter_column.filters = Filters()
                 filter_column.filters.filter = ['N']
                 
+                # 如果有 'Y' 值，需要將其設為隱藏
                 if 'Y' in has_wave_values:
-                    for row_idx in range(2, len(df) + 2):
+                    # 直接根據工作表中的值來隱藏
+                    for row_idx in range(2, worksheet.max_row + 1):
                         if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
                             worksheet.row_dimensions[row_idx].hidden = True
                 
+                # 將篩選器加入自動篩選
                 worksheet.auto_filter.filterColumn.append(filter_column)
         
         # lost_project 頁籤的特定格式
@@ -706,9 +901,17 @@ class FileComparator:
             worksheet = writer.sheets['lost_project']
             df = pd.DataFrame(lost_project)
             
-            # 找到 "狀態" 欄位的位置
+            # 找到 "Base folder" 和 "狀態" 欄位的位置
             for idx, col in enumerate(df.columns):
-                if col == '狀態':
+                if col == 'Base folder':
+                    base_folder_col = idx + 1
+                    # 設定深紅底白字
+                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+                    white_font = Font(color="FFFFFF", bold=True)
+                    cell = worksheet.cell(row=1, column=base_folder_col)
+                    cell.fill = header_fill
+                    cell.font = white_font
+                elif col == '狀態':
                     status_col = idx + 1
                     # 設定深紅底白字
                     header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
@@ -716,25 +919,211 @@ class FileComparator:
                     cell = worksheet.cell(row=1, column=status_col)
                     cell.fill = header_fill
                     cell.font = white_font
-                    break
         
         # version_diff 頁籤的特定格式
         if version_diff and 'version_diff' in writer.sheets:
             worksheet = writer.sheets['version_diff']
             df = pd.DataFrame(version_diff)
             
-            # 找到 "is_different" 欄位的位置
+            from openpyxl.cell.text import InlineFont
+            from openpyxl.cell.rich_text import TextBlock, CellRichText
+            
+            # 設定深紅底白字的標題
+            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+            white_font = Font(color="FFFFFF", bold=True)
+            red_font = Font(color="FF0000")
+            
+            # 找到需要格式化的欄位位置
+            target_columns = ['base_content', 'compare_content']
+            column_indices = {}
+            
             for idx, col in enumerate(df.columns):
-                if col == 'is_different':
-                    diff_col = idx + 1
-                    # 設定深紅底白字
-                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                    white_font = Font(color="FFFFFF", bold=True)
-                    cell = worksheet.cell(row=1, column=diff_col)
-                    cell.fill = header_fill
-                    cell.font = white_font
-                    break
+                if col in target_columns:
+                    column_indices[col] = idx + 1
+            
+            # 設定標題為深紅底白字
+            for col_name, col_idx in column_indices.items():
+                cell = worksheet.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = white_font
+            
+            # 處理內容，根據檔案類型標記不同部分
+            for row_idx in range(2, len(df) + 2):
+                # 讀取實際的值
+                df_row_idx = row_idx - 2  # DataFrame 的索引
+                
+                # 取得檔案類型
+                file_type = ''
+                if 'file_type' in df.columns:
+                    file_type = df.iloc[df_row_idx]['file_type']
+                
+                # 取得 base_content 和 compare_content
+                base_content = ''
+                compare_content = ''
+                
+                if 'base_content' in df.columns:
+                    base_content = df.iloc[df_row_idx]['base_content']
+                if 'compare_content' in df.columns:
+                    compare_content = df.iloc[df_row_idx]['compare_content']
+                
+                # 檢查是否為檔案不存在的情況
+                if str(base_content) == '(檔案不存在)':
+                    # base_content 為紅字
+                    if 'base_content' in column_indices:
+                        worksheet.cell(row=row_idx, column=column_indices['base_content']).font = red_font
+                elif str(compare_content) == '(檔案不存在)':
+                    # compare_content 為紅字
+                    if 'compare_content' in column_indices:
+                        worksheet.cell(row=row_idx, column=column_indices['compare_content']).font = red_font
+                else:
+                    # 根據檔案類型和內容選擇處理方式
+                    if str(file_type).lower() == 'f_version.txt' and base_content and compare_content:
+                        # F_Version.txt: 處理 P_GIT_xxx 行
+                        if str(base_content).startswith('P_GIT_') and str(compare_content).startswith('P_GIT_'):
+                            self._format_f_version_content(worksheet, row_idx, column_indices, base_content, compare_content)
+                        else:
+                            # 其他行不需要特殊格式化
+                            pass
+                    elif 'F_HASH:' in str(base_content) or 'F_HASH:' in str(compare_content):
+                        # Version.txt with F_HASH
+                        self._format_f_hash_content(worksheet, row_idx, column_indices, base_content, compare_content)
+                    elif ':' in str(base_content) or ':' in str(compare_content):
+                        # Other Version.txt with colon
+                        self._format_colon_content(worksheet, row_idx, column_indices, base_content, compare_content)
+
+    def _format_f_version_content(self, worksheet, row_idx, column_indices, base_content, compare_content):
+        """格式化 F_Version.txt 內容 - 只標記 git hash 和 svn number"""
+        from openpyxl.cell.text import InlineFont
+        from openpyxl.cell.rich_text import TextBlock, CellRichText
         
+        # 處理 base_content
+        if 'base_content' in column_indices and base_content:
+            base_parts = str(base_content).split(';')
+            compare_parts = str(compare_content).split(';') if compare_content else []
+            
+            rich_text_parts = []
+            for i, part in enumerate(base_parts):
+                if i > 0:
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+                
+                # 只有第3、4部分（索引3和4，即git hash 和 svn number）需要比較
+                if i in [3, 4] and i < len(compare_parts) and part != compare_parts[i]:
+                    rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                else:
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
+            
+            cell_rich_text = CellRichText(rich_text_parts)
+            worksheet.cell(row=row_idx, column=column_indices['base_content']).value = cell_rich_text
+        
+        # 處理 compare_content
+        if 'compare_content' in column_indices and compare_content:
+            base_parts = str(base_content).split(';') if base_content else []
+            compare_parts = str(compare_content).split(';')
+            
+            rich_text_parts = []
+            for i, part in enumerate(compare_parts):
+                if i > 0:
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+                
+                # 只有第3、4部分（索引3和4，即git hash 和 svn number）需要比較
+                if i in [3, 4] and i < len(base_parts) and part != base_parts[i]:
+                    rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                else:
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
+            
+            cell_rich_text = CellRichText(rich_text_parts)
+            worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = cell_rich_text
+
+    def _format_f_hash_content(self, worksheet, row_idx, column_indices, base_content, compare_content):
+        """格式化 F_HASH 內容 - 只標記 hash 值"""
+        from openpyxl.cell.text import InlineFont
+        from openpyxl.cell.rich_text import TextBlock, CellRichText
+        
+        # 處理 base_content
+        if 'base_content' in column_indices and base_content and 'F_HASH:' in str(base_content):
+            parts = str(base_content).split('F_HASH:', 1)
+            if len(parts) == 2:
+                hash1 = parts[1].strip()
+                hash2 = ''
+                if compare_content and 'F_HASH:' in str(compare_content):
+                    compare_parts = str(compare_content).split('F_HASH:', 1)
+                    if len(compare_parts) == 2:
+                        hash2 = compare_parts[1].strip()
+                
+                rich_text_parts = [
+                    TextBlock(InlineFont(color="000000"), "F_HASH: "),
+                    TextBlock(InlineFont(color="FF0000" if hash1 != hash2 else "000000"), hash1)
+                ]
+                
+                cell_rich_text = CellRichText(rich_text_parts)
+                worksheet.cell(row=row_idx, column=column_indices['base_content']).value = cell_rich_text
+        
+        # 處理 compare_content
+        if 'compare_content' in column_indices and compare_content and 'F_HASH:' in str(compare_content):
+            parts = str(compare_content).split('F_HASH:', 1)
+            if len(parts) == 2:
+                hash2 = parts[1].strip()
+                hash1 = ''
+                if base_content and 'F_HASH:' in str(base_content):
+                    base_parts = str(base_content).split('F_HASH:', 1)
+                    if len(base_parts) == 2:
+                        hash1 = base_parts[1].strip()
+                
+                rich_text_parts = [
+                    TextBlock(InlineFont(color="000000"), "F_HASH: "),
+                    TextBlock(InlineFont(color="FF0000" if hash1 != hash2 else "000000"), hash2)
+                ]
+                
+                cell_rich_text = CellRichText(rich_text_parts)
+                worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = cell_rich_text
+
+    def _format_colon_content(self, worksheet, row_idx, column_indices, base_content, compare_content):
+        """格式化包含冒號的內容 - 只標記值的部分"""
+        from openpyxl.cell.text import InlineFont
+        from openpyxl.cell.rich_text import TextBlock, CellRichText
+        
+        # 處理 base_content
+        if 'base_content' in column_indices and base_content and ':' in str(base_content):
+            parts = str(base_content).split(':', 1)
+            if len(parts) == 2:
+                key = parts[0]
+                value1 = parts[1].strip()
+                value2 = ''
+                
+                if compare_content and ':' in str(compare_content):
+                    compare_parts = str(compare_content).split(':', 1)
+                    if len(compare_parts) == 2 and compare_parts[0] == key:
+                        value2 = compare_parts[1].strip()
+                
+                rich_text_parts = [
+                    TextBlock(InlineFont(color="000000"), key + ": "),
+                    TextBlock(InlineFont(color="FF0000" if value1 != value2 else "000000"), value1)
+                ]
+                
+                cell_rich_text = CellRichText(rich_text_parts)
+                worksheet.cell(row=row_idx, column=column_indices['base_content']).value = cell_rich_text
+        
+        # 處理 compare_content
+        if 'compare_content' in column_indices and compare_content and ':' in str(compare_content):
+            parts = str(compare_content).split(':', 1)
+            if len(parts) == 2:
+                key = parts[0]
+                value2 = parts[1].strip()
+                value1 = ''
+                
+                if base_content and ':' in str(base_content):
+                    base_parts = str(base_content).split(':', 1)
+                    if len(base_parts) == 2 and base_parts[0] == key:
+                        value1 = base_parts[1].strip()
+                
+                rich_text_parts = [
+                    TextBlock(InlineFont(color="000000"), key + ": "),
+                    TextBlock(InlineFont(color="FF0000" if value1 != value2 else "000000"), value2)
+                ]
+                
+                cell_rich_text = CellRichText(rich_text_parts)
+                worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = cell_rich_text
+                        
     def compare_module_folders(self, module_path: str, base_folder_suffix: str = None) -> Dict[str, Any]:
         """
         比較模組下的兩個資料夾
@@ -812,28 +1201,21 @@ class FileComparator:
                         results['branch_error'] = branch_error
                         results['lost_project'] = lost_project
                     else:
-                        # 比較文字檔案
-                        differences = self._compare_text_files(file1, file2)
+                        # 比較文字檔案（使用新的比較規則）
+                        differences = self._compare_text_files(file1, file2, target_file)
                         if differences:
                             results['text_file_differences'][target_file] = differences
                             
                             # 為整合報表準備版本檔案差異資料
-                            if target_file.lower() in ['version.txt', 'f_version.txt']:
-                                # 讀取檔案內容
-                                with open(file1, 'r', encoding='utf-8') as f:
-                                    base_content = f.read().strip()
-                                with open(file2, 'r', encoding='utf-8') as f:
-                                    compare_content = f.read().strip()
-                                
+                            for diff in differences:
                                 version_diff_item = {
                                     'module': self._extract_simple_module_name(results['module']),
+                                    'location_path': module_path if module_path else '',
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
                                     'file_type': target_file,
-                                    'base_content': base_content,
-                                    'compare_content': compare_content,
-                                    'is_different': 'Y',
-                                    'module_path': module_path if module_path else ''
+                                    'base_content': diff['file1'],
+                                    'compare_content': diff['file2']
                                 }
                                 
                                 # 將版本差異加入結果
@@ -900,6 +1282,7 @@ class FileComparator:
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
                         'module': module,  # 簡化的模組名稱
+                        'location_path': module_path,
                         'folder_count': len(folders),
                         'folders': ', '.join(folders) if folders else '無資料夾',
                         'path': full_path,
@@ -909,7 +1292,7 @@ class FileComparator:
                 
                 # 比較模組
                 results = self._compare_specific_folders(
-                    module_path, base_folder, compare_folder, full_module
+                    module_path, base_folder, compare_folder, full_module, compare_mode
                 )
                 
                 # 收集所有資料（模組名稱已經在 _compare_manifest_files 中簡化）
@@ -932,9 +1315,14 @@ class FileComparator:
                     # 確保目錄存在
                     if not os.path.exists(module_output_dir):
                         os.makedirs(module_output_dir)
+                    
+                    # 生成檔案名稱
+                    compare_filename = self._generate_compare_filename(
+                        module, base_folder, compare_folder
+                    )
                         
                     report_file = self._write_module_compare_report(
-                        module, results, module_output_dir
+                        module, results, module_output_dir, compare_filename
                     )
                     if report_file:
                         compare_files.append(report_file)
@@ -1061,7 +1449,7 @@ class FileComparator:
         
         return base_folder, compare_folder, missing_info
 
-    def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, module: str) -> Dict[str, Any]:
+    def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, module: str, compare_mode: str = None) -> Dict[str, Any]:
         """
         比較指定的兩個資料夾
         
@@ -1070,6 +1458,7 @@ class FileComparator:
             base_folder: base 資料夾名稱
             compare_folder: compare 資料夾名稱
             module: 模組名稱（完整路徑）
+            compare_mode: 比對模式
             
         Returns:
             比較結果
@@ -1091,8 +1480,16 @@ class FileComparator:
             
             self.logger.info(f"比較資料夾: {base_folder} (base) vs {compare_folder} (compare)")
             
+            # 判斷是否為 DailyBuild
+            is_daily_build = 'DailyBuild' in module_path
+            
             # 比較每個目標檔案
             for target_file in config.TARGET_FILES:
+                # 如果是 DailyBuild 的 Version.txt，跳過
+                if is_daily_build and target_file.lower() == 'version.txt':
+                    self.logger.info(f"跳過 DailyBuild 的 Version.txt 比對")
+                    continue
+                    
                 file1 = utils.find_file_case_insensitive(folder1_path, target_file)
                 file2 = utils.find_file_case_insensitive(folder2_path, target_file)
                 
@@ -1100,48 +1497,84 @@ class FileComparator:
                     if target_file.lower() == 'manifest.xml':
                         # 比較 manifest.xml
                         revision_diff, branch_error, lost_project = self._compare_manifest_files(
-                            file1, file2, module, base_folder, compare_folder, module_path
+                            file1, file2, module, base_folder, compare_folder, module_path, compare_mode
                         )
                         results['revision_diff'] = revision_diff
                         results['branch_error'] = branch_error
                         results['lost_project'] = lost_project
                     else:
-                        # 比較文字檔案
-                        differences = self._compare_text_files(file1, file2)
+                        # 比較文字檔案（使用新的比較規則）
+                        differences = self._compare_text_files(file1, file2, target_file)
                         if differences:
                             results['text_file_differences'][target_file] = differences
                             
                             # 為整合報表準備版本檔案差異資料
                             if target_file.lower() in ['version.txt', 'f_version.txt']:
-                                # 讀取檔案內容
-                                try:
-                                    with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
-                                        base_content = f.read().strip()
-                                    with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
-                                        compare_content = f.read().strip()
-                                    
+                                for diff in differences:
                                     version_diff_item = {
                                         'module': self._extract_simple_module_name(module),
+                                        'location_path': module_path,
                                         'base_folder': base_folder,
                                         'compare_folder': compare_folder,
                                         'file_type': target_file,
-                                        'base_content': base_content[:100] + '...' if len(base_content) > 100 else base_content,
-                                        'compare_content': compare_content[:100] + '...' if len(compare_content) > 100 else compare_content,
-                                        'is_different': 'Y',
-                                        'module_path': module_path
+                                        'base_content': diff.get('file1', ''),
+                                        'compare_content': diff.get('file2', ''),
+                                        'org_content': diff.get('content1', '')  # 加入原始內容（base 檔案的完整內容）
                                     }
                                     results['version_diffs'].append(version_diff_item)
-                                except Exception as e:
-                                    self.logger.error(f"讀取版本檔案失敗: {str(e)}")
+                elif file1 or file2:
+                    # 只有一個檔案存在的情況
+                    self.logger.warning(f"檔案 {target_file} 只在一個資料夾中存在")
+                    
+                    # 如果是 DailyBuild 的 Version.txt，跳過
+                    if is_daily_build and target_file.lower() == 'version.txt':
+                        continue
+                        
+                    if target_file.lower() in ['version.txt', 'f_version.txt']:
+                        # 處理只有一個檔案的情況
+                        if file1:
+                            try:
+                                with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content1 = f.read()
+                                version_diff_item = {
+                                    'module': self._extract_simple_module_name(module),
+                                    'location_path': module_path,
+                                    'base_folder': base_folder,
+                                    'compare_folder': compare_folder,
+                                    'file_type': target_file,
+                                    'base_content': '(檔案存在)',
+                                    'compare_content': '(檔案不存在)',
+                                    'org_content': content1
+                                }
+                                results['version_diffs'].append(version_diff_item)
+                            except Exception as e:
+                                self.logger.error(f"讀取檔案失敗 {file1}: {str(e)}")
+                        elif file2:
+                            try:
+                                with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content2 = f.read()
+                                version_diff_item = {
+                                    'module': self._extract_simple_module_name(module),
+                                    'location_path': module_path,
+                                    'base_folder': base_folder,
+                                    'compare_folder': compare_folder,
+                                    'file_type': target_file,
+                                    'base_content': '(檔案不存在)',
+                                    'compare_content': '(檔案存在)',
+                                    'org_content': content2
+                                }
+                                results['version_diffs'].append(version_diff_item)
+                            except Exception as e:
+                                self.logger.error(f"讀取檔案失敗 {file2}: {str(e)}")
                 else:
-                    self.logger.warning(f"檔案 {target_file} 在一個或兩個資料夾中都不存在")
+                    self.logger.warning(f"檔案 {target_file} 在兩個資料夾中都不存在")
                     
         except Exception as e:
             self.logger.error(f"比較資料夾失敗: {str(e)}")
             
         return results
         
-    def _write_module_compare_report(self, module: str, results: Dict, output_dir: str) -> str:
+    def _write_module_compare_report(self, module: str, results: Dict, output_dir: str, filename: str = None) -> str:
         """
         寫入單一模組的比較報表（與 all_compare.xlsx 相同格式）
         
@@ -1149,6 +1582,7 @@ class FileComparator:
             module: 模組名稱
             results: 比較結果
             output_dir: 輸出目錄
+            filename: 自訂檔案名稱
             
         Returns:
             報表檔案路徑
@@ -1158,7 +1592,8 @@ class FileComparator:
             from openpyxl.styles import PatternFill, Font
             from openpyxl.worksheet.filters import FilterColumn, Filters
             
-            output_file = os.path.join(output_dir, f"{module}_compare.xlsx")
+            # 使用自訂檔名或預設檔名
+            output_file = os.path.join(output_dir, filename or f"{module}_compare.xlsx")
             
             # 準備各頁籤的資料
             revision_diff = results.get('revision_diff', [])
@@ -1180,7 +1615,7 @@ class FileComparator:
                 # revision_diff 頁籤
                 if revision_diff:
                     df = pd.DataFrame(revision_diff)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'base_short', 'base_revision', 'compare_short', 'compare_revision',
                                 'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
                                 'base_link', 'compare_link']
@@ -1189,23 +1624,16 @@ class FileComparator:
                     df.to_excel(writer, sheet_name='revision_diff', index=False)
                 else:
                     # 即使沒有資料也建立空的頁籤
-                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path',
+                    pd.DataFrame(columns=['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path',
                                         'base_short', 'base_revision', 'compare_short', 'compare_revision']).to_excel(
                         writer, sheet_name='revision_diff', index=False)
                 
                 # branch_error 頁籤
                 if branch_error:
-                    # 移除 check_keyword 欄位，將 module_path 改名為 path_location
-                    for item in branch_error:
-                        if 'check_keyword' in item:
-                            del item['check_keyword']
-                        if 'module_path' in item:
-                            item['path_location'] = item.pop('module_path')
-                    
                     df = pd.DataFrame(branch_error)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'revision_short', 'revision', 'upstream', 'dest-branch', 
-                                'path_location', 'compare_link', 'problem', 'has_wave']
+                                'compare_link', 'problem', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     
@@ -1213,33 +1641,33 @@ class FileComparator:
                     df_sorted = df.sort_values('has_wave', ascending=True)
                     df_sorted.to_excel(writer, sheet_name='branch_error', index=False)
                 else:
-                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path',
+                    pd.DataFrame(columns=['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path',
                                         'problem', 'has_wave']).to_excel(
                         writer, sheet_name='branch_error', index=False)
                 
                 # lost_project 頁籤
                 if lost_project:
                     df = pd.DataFrame(lost_project)
-                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                    columns_order = ['SN', 'Base folder', '狀態', 'module', 'location_path', 'folder', 'name', 'path', 
                                 'upstream', 'dest-branch', 'revision', 'link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
                 else:
-                    pd.DataFrame(columns=['SN', '狀態', 'module', 'folder', 'name', 'path']).to_excel(
+                    pd.DataFrame(columns=['SN', 'Base folder', '狀態', 'module', 'location_path', 'folder', 'name', 'path']).to_excel(
                         writer, sheet_name='lost_project', index=False)
                 
                 # version_diff 頁籤
                 if version_diffs:
                     df = pd.DataFrame(version_diffs)
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
-                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='version_diff', index=False)
                 else:
-                    pd.DataFrame(columns=['SN', 'module', 'base_folder', 'compare_folder', 'file_type',
-                                        'base_content', 'compare_content', 'is_different']).to_excel(
+                    pd.DataFrame(columns=['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type',
+                                        'base_content', 'compare_content']).to_excel(
                         writer, sheet_name='version_diff', index=False)
                 
                 # 先格式化所有工作表（基本格式）
@@ -1247,110 +1675,9 @@ class FileComparator:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
                 
-                # 套用特定欄位的格式
-                # revision_diff 頁籤的特定格式
-                if 'revision_diff' in writer.sheets:
-                    worksheet = writer.sheets['revision_diff']
-                    if revision_diff:
-                        df = pd.DataFrame(revision_diff)
-                        
-                        # 設定深紅底標題的欄位
-                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                        white_font = Font(color="FFFFFF", bold=True)
-                        red_font = Font(color="FF0000")
-                        
-                        # 找到需要格式化的欄位位置
-                        target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
-                        column_indices = {}
-                        
-                        for idx, col in enumerate(df.columns):
-                            if col in target_columns:
-                                column_indices[col] = idx + 1
-                        
-                        # 設定標題為深紅底白字
-                        for col_name, col_idx in column_indices.items():
-                            cell = worksheet.cell(row=1, column=col_idx)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                        
-                        # 設定內容為紅字
-                        for row in range(2, len(df) + 2):
-                            for col_name, col_idx in column_indices.items():
-                                worksheet.cell(row=row, column=col_idx).font = red_font
-                
-                # branch_error 頁籤的特定格式
-                if 'branch_error' in writer.sheets and branch_error:
-                    worksheet = writer.sheets['branch_error']
-                    df = pd.DataFrame(branch_error)
-                    
-                    # 找到 "problem" 和 "has_wave" 欄位的位置
-                    problem_col = None
-                    has_wave_col = None
-                    for idx, col in enumerate(df.columns):
-                        if col == 'problem':
-                            problem_col = idx + 1
-                        elif col == 'has_wave':
-                            has_wave_col = idx + 1
-                    
-                    if problem_col:
-                        # 設定深紅底白字
-                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                        white_font = Font(color="FFFFFF", bold=True)
-                        cell = worksheet.cell(row=1, column=problem_col)
-                        cell.fill = header_fill
-                        cell.font = white_font
-                    
-                    # 設定自動篩選
-                    worksheet.auto_filter.ref = worksheet.dimensions
-                    
-                    # 設定 has_wave 欄位的篩選條件為只顯示 "N"
-                    if has_wave_col:
-                        has_wave_values = df['has_wave'].unique().tolist()
-                        
-                        filter_column = FilterColumn(colId=has_wave_col - 1)
-                        filter_column.filters = Filters()
-                        filter_column.filters.filter = ['N']
-                        
-                        if 'Y' in has_wave_values:
-                            for row_idx in range(2, len(df) + 2):
-                                if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
-                                    worksheet.row_dimensions[row_idx].hidden = True
-                        
-                        worksheet.auto_filter.filterColumn.append(filter_column)
-                
-                # lost_project 頁籤的特定格式
-                if 'lost_project' in writer.sheets and lost_project:
-                    worksheet = writer.sheets['lost_project']
-                    df = pd.DataFrame(lost_project)
-                    
-                    # 找到 "狀態" 欄位的位置
-                    for idx, col in enumerate(df.columns):
-                        if col == '狀態':
-                            status_col = idx + 1
-                            # 設定深紅底白字
-                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                            white_font = Font(color="FFFFFF", bold=True)
-                            cell = worksheet.cell(row=1, column=status_col)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                            break
-                
-                # version_diff 頁籤的特定格式
-                if 'version_diff' in writer.sheets and version_diffs:
-                    worksheet = writer.sheets['version_diff']
-                    df = pd.DataFrame(version_diffs)
-                    
-                    # 找到 "is_different" 欄位的位置
-                    for idx, col in enumerate(df.columns):
-                        if col == 'is_different':
-                            diff_col = idx + 1
-                            # 設定深紅底白字
-                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                            white_font = Font(color="FFFFFF", bold=True)
-                            cell = worksheet.cell(row=1, column=diff_col)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                            break
+                # 套用特定欄位的格式和篩選
+                self._apply_special_formatting_and_filters(writer, revision_diff, branch_error, 
+                                                       lost_project, version_diffs)
                         
             self.logger.info(f"成功寫入比較報表: {output_file}")
             return output_file
@@ -1383,174 +1710,62 @@ class FileComparator:
                 item['SN'] = i
             for i, item in enumerate(lost_project, 1):
                 item['SN'] = i
+            for i, item in enumerate(version_diff, 1):
+                item['SN'] = i
             
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
                 # revision_diff 頁籤（只在有資料時產生）
                 if revision_diff:
                     df = pd.DataFrame(revision_diff)
                     # 調整欄位順序
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'base_short', 'base_revision', 'compare_short', 'compare_revision',
                                 'base_upstream', 'compare_upstream', 'base_dest-branch', 'compare_dest-branch',
                                 'base_link', 'compare_link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='revision_diff', index=False)
-                    
-                    # 格式化 revision_diff 頁籤
-                    worksheet = writer.sheets['revision_diff']
-                    
-                    # 設定深紅底標題的欄位
-                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")  # 深紅色背景
-                    white_font = Font(color="FFFFFF", bold=True)  # 白色粗體字
-                    red_font = Font(color="FF0000")  # 紅色字體
-                    
-                    # 找到需要格式化的欄位位置
-                    target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
-                    column_indices = {}
-                    
-                    for idx, col in enumerate(df.columns):
-                        if col in target_columns:
-                            column_indices[col] = idx + 1  # Excel 是 1-based
-                    
-                    # 設定標題為深紅底白字
-                    for col_name, col_idx in column_indices.items():
-                        cell = worksheet.cell(row=1, column=col_idx)
-                        cell.fill = header_fill
-                        cell.font = white_font
-                    
-                    # 設定內容為紅字
-                    for row in range(2, len(df) + 2):  # 從第2行開始（第1行是標題）
-                        for col_name, col_idx in column_indices.items():
-                            worksheet.cell(row=row, column=col_idx).font = red_font
                 
                 # branch_error 頁籤（只在有資料時產生）
                 if branch_error:
-                    # 移除 check_keyword 欄位，將 module_path 改名為 path_location
-                    for item in branch_error:
-                        if 'check_keyword' in item:
-                            del item['check_keyword']
-                        if 'module_path' in item:
-                            item['path_location'] = item.pop('module_path')
-                    
                     df = pd.DataFrame(branch_error)
-                    # 調整欄位順序，problem 和 has_wave 放在最後
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'name', 'path', 
+                    # 調整欄位順序
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'name', 'path', 
                                 'revision_short', 'revision', 'upstream', 'dest-branch', 
-                                'path_location', 'compare_link', 'problem', 'has_wave']
+                                'compare_link', 'problem', 'has_wave']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     
                     # 將 has_wave = N 的資料排在前面
                     df_sorted = df.sort_values('has_wave', ascending=True)
                     df_sorted.to_excel(writer, sheet_name='branch_error', index=False)
-                    
-                    # 格式化 branch_error 頁籤
-                    worksheet = writer.sheets['branch_error']
-                    
-                    # 找到 "問題" 和 "has_wave" 欄位的位置
-                    problem_col = None
-                    has_wave_col = None
-                    for idx, col in enumerate(df.columns):
-                        if col == 'problem':
-                            problem_col = idx + 1  # Excel 是 1-based
-                        elif col == 'has_wave':
-                            has_wave_col = idx + 1
-                    
-                    if problem_col:
-                        # 設定 "problem" 標題為深紅底白字
-                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                        white_font = Font(color="FFFFFF", bold=True)
-                        cell = worksheet.cell(row=1, column=problem_col)
-                        cell.fill = header_fill
-                        cell.font = white_font
-                    
-                    # 設定自動篩選
-                    worksheet.auto_filter.ref = worksheet.dimensions
-                    
-                    # 設定 has_wave 欄位的篩選條件為只顯示 "N"
-                    if has_wave_col:
-                        # 取得所有唯一的 has_wave 值
-                        has_wave_values = df['has_wave'].unique().tolist()
-                        
-                        # 建立篩選器，只選擇 "N"
-                        filter_column = FilterColumn(colId=has_wave_col - 1)
-                        filter_column.filters = Filters()
-                        filter_column.filters.filter = ['N']
-                        
-                        # 如果有 'Y' 值，需要將其設為隱藏
-                        if 'Y' in has_wave_values:
-                            # 找出所有 has_wave = 'Y' 的行並隱藏
-                            for row_idx in range(2, len(df) + 2):  # 從第2行開始（第1行是標題）
-                                if worksheet.cell(row=row_idx, column=has_wave_col).value == 'Y':
-                                    worksheet.row_dimensions[row_idx].hidden = True
-                        
-                        # 將篩選器加入自動篩選
-                        worksheet.auto_filter.filterColumn.append(filter_column)
                 
                 # lost_project 頁籤（只在有資料時產生）
                 if lost_project:
                     df = pd.DataFrame(lost_project)
                     # 調整欄位順序
-                    columns_order = ['SN', '狀態', 'module', 'folder', 'name', 'path', 
+                    columns_order = ['SN', 'Base folder', '狀態', 'module', 'location_path', 'folder', 'name', 'path', 
                                 'upstream', 'dest-branch', 'revision', 'link']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='lost_project', index=False)
-                    
-                    # 格式化 lost_project 頁籤
-                    worksheet = writer.sheets['lost_project']
-                    
-                    # 找到 "狀態" 欄位的位置
-                    status_col = None
-                    for idx, col in enumerate(df.columns):
-                        if col == '狀態':
-                            status_col = idx + 1  # Excel 是 1-based
-                            break
-                    
-                    if status_col:
-                        # 設定 "狀態" 標題為深紅底白字
-                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                        white_font = Font(color="FFFFFF", bold=True)
-                        cell = worksheet.cell(row=1, column=status_col)
-                        cell.fill = header_fill
-                        cell.font = white_font
                 
-                # version_diff 頁籤（只在有資料時產生）
+                # version_diff 頁籤
                 if version_diff:
-                    # 重新編號
-                    for i, item in enumerate(version_diff, 1):
-                        item['SN'] = i
-                    
                     df = pd.DataFrame(version_diff)
                     # 調整欄位順序
-                    columns_order = ['SN', 'module', 'base_folder', 'compare_folder', 'file_type', 
-                                'base_content', 'compare_content', 'is_different', 'module_path']
+                    columns_order = ['SN', 'module', 'location_path', 'base_folder', 'compare_folder', 'file_type', 
+                                'base_content', 'compare_content']
                     columns_order = [col for col in columns_order if col in df.columns]
                     df = df[columns_order]
                     df.to_excel(writer, sheet_name='version_diff', index=False)
-                    
-                    # 格式化 version_diff 頁籤
-                    worksheet = writer.sheets['version_diff']
-                    
-                    # 找到 "is_different" 欄位的位置
-                    diff_col = None
-                    for idx, col in enumerate(df.columns):
-                        if col == 'is_different':
-                            diff_col = idx + 1  # Excel 是 1-based
-                            break
-                    
-                    if diff_col:
-                        # 設定 "is_different" 標題為深紅底白字
-                        header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                        white_font = Font(color="FFFFFF", bold=True)
-                        cell = worksheet.cell(row=1, column=diff_col)
-                        cell.fill = header_fill
-                        cell.font = white_font
                 
                 # 無法比對頁籤（只在有資料時產生）
                 if cannot_compare_modules:
                     df = pd.DataFrame(cannot_compare_modules)
+                    columns_order = ['SN', 'module', 'location_path', 'folder_count', 'folders', 'path', 'reason']
+                    columns_order = [col for col in columns_order if col in df.columns]
+                    df = df[columns_order]
                     df.to_excel(writer, sheet_name='無法比對', index=False)
                 
                 # 先格式化所有工作表（基本格式）
@@ -1558,86 +1773,9 @@ class FileComparator:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
                 
-                # 然後再套用特定欄位的格式（避免被覆蓋）
-                # revision_diff 頁籤的特定格式
-                if revision_diff and 'revision_diff' in writer.sheets:
-                    worksheet = writer.sheets['revision_diff']
-                    df = pd.DataFrame(revision_diff)
-                    
-                    # 設定深紅底標題的欄位
-                    header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                    white_font = Font(color="FFFFFF", bold=True)
-                    red_font = Font(color="FF0000")
-                    
-                    # 找到需要格式化的欄位位置
-                    target_columns = ['base_short', 'base_revision', 'compare_short', 'compare_revision']
-                    column_indices = {}
-                    
-                    for idx, col in enumerate(df.columns):
-                        if col in target_columns:
-                            column_indices[col] = idx + 1
-                    
-                    # 設定標題為深紅底白字
-                    for col_name, col_idx in column_indices.items():
-                        cell = worksheet.cell(row=1, column=col_idx)
-                        cell.fill = header_fill
-                        cell.font = white_font
-                    
-                    # 設定內容為紅字
-                    for row in range(2, len(df) + 2):
-                        for col_name, col_idx in column_indices.items():
-                            worksheet.cell(row=row, column=col_idx).font = red_font
-                
-                # branch_error 頁籤的特定格式
-                if branch_error and 'branch_error' in writer.sheets:
-                    worksheet = writer.sheets['branch_error']
-                    df = pd.DataFrame(branch_error)
-                    
-                    # 找到 "problem" 欄位的位置
-                    for idx, col in enumerate(df.columns):
-                        if col == 'problem':
-                            problem_col = idx + 1
-                            # 設定深紅底白字
-                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                            white_font = Font(color="FFFFFF", bold=True)
-                            cell = worksheet.cell(row=1, column=problem_col)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                            break
-                
-                # lost_project 頁籤的特定格式
-                if lost_project and 'lost_project' in writer.sheets:
-                    worksheet = writer.sheets['lost_project']
-                    df = pd.DataFrame(lost_project)
-                    
-                    # 找到 "狀態" 欄位的位置
-                    for idx, col in enumerate(df.columns):
-                        if col == '狀態':
-                            status_col = idx + 1
-                            # 設定深紅底白字
-                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                            white_font = Font(color="FFFFFF", bold=True)
-                            cell = worksheet.cell(row=1, column=status_col)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                            break
-                
-                # version_diff 頁籤的特定格式
-                if version_diff and 'version_diff' in writer.sheets:
-                    worksheet = writer.sheets['version_diff']
-                    df = pd.DataFrame(version_diff)
-                    
-                    # 找到 "is_different" 欄位的位置
-                    for idx, col in enumerate(df.columns):
-                        if col == 'is_different':
-                            diff_col = idx + 1
-                            # 設定深紅底白字
-                            header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-                            white_font = Font(color="FFFFFF", bold=True)
-                            cell = worksheet.cell(row=1, column=diff_col)
-                            cell.fill = header_fill
-                            cell.font = white_font
-                            break
+                # 套用特定欄位的格式和篩選
+                self._apply_special_formatting_and_filters(writer, revision_diff, branch_error, 
+                                                       lost_project, version_diff)
                         
             self.logger.info(f"成功寫入整合報表: {output_file}")
             return output_file
