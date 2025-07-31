@@ -828,7 +828,7 @@ class FileComparator:
             raise
     
     def _apply_special_formatting_and_filters(self, writer, revision_diff, branch_error, 
-                            lost_project, version_diff):
+                        lost_project, version_diff):
         """套用特定欄位的格式和篩選器"""
         import pandas as pd
         from openpyxl.styles import PatternFill, Font
@@ -873,17 +873,26 @@ class FileComparator:
             has_wave_col = None
             for idx, col in enumerate(df.columns):
                 if col == 'problem':
-                    problem_col = idx + 1
+                    problem_col = idx
                 elif col == 'has_wave':
-                    has_wave_col = idx + 1
+                    has_wave_col = idx + 2
             
             if problem_col:
                 # 設定深紅底白字
                 header_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
                 white_font = Font(color="FFFFFF", bold=True)
+                red_font = Font(color="FF0000")
+                
+                # 設定標題
                 cell = worksheet.cell(row=1, column=problem_col)
                 cell.fill = header_fill
                 cell.font = white_font
+                
+                # 設定 problem 欄位有內容的儲存格為紅字
+                for row_idx in range(2, worksheet.max_row + 1):  # 使用 worksheet.max_row
+                    cell_value = worksheet.cell(row=row_idx, column=problem_col).value
+                    if cell_value and str(cell_value).strip():  # 如果有內容
+                        worksheet.cell(row=row_idx, column=problem_col).font = red_font
             
             # 設定自動篩選
             worksheet.auto_filter.ref = worksheet.dimensions
@@ -895,7 +904,7 @@ class FileComparator:
                 
                 # 建立篩選器，注意 colId 是從 0 開始的
                 has_wave_df_index = df.columns.get_loc('has_wave')
-                filter_column = FilterColumn(colId=has_wave_df_index)
+                filter_column = FilterColumn(colId=has_wave_df_index+1)
                 filter_column.filters = Filters()
                 filter_column.filters.filter = ['N']
                 
@@ -914,7 +923,13 @@ class FileComparator:
             worksheet = writer.sheets['lost_project']
             df = pd.DataFrame(lost_project)
             
+            # 定義顏色
+            red_font = Font(color="FF0000")  # 紅色
+            blue_font = Font(color="0000FF")  # 藍色
+            
             # 找到 "Base folder" 和 "狀態" 欄位的位置
+            base_folder_col = None
+            status_col = None
             for idx, col in enumerate(df.columns):
                 if col == 'Base folder':
                     base_folder_col = idx + 1
@@ -932,6 +947,17 @@ class FileComparator:
                     cell = worksheet.cell(row=1, column=status_col)
                     cell.fill = header_fill
                     cell.font = white_font
+            
+            # 設定狀態欄位的文字顏色
+            if status_col:
+                for row_idx in range(2, len(df) + 2):
+                    df_row_idx = row_idx - 2
+                    if '狀態' in df.columns:
+                        status_value = df.iloc[df_row_idx]['狀態']
+                        if status_value == '刪除':
+                            worksheet.cell(row=row_idx, column=status_col).font = red_font
+                        elif status_value == '新增':
+                            worksheet.cell(row=row_idx, column=status_col).font = blue_font
         
         # version_diff 頁籤的特定格式
         if version_diff and 'version_diff' in writer.sheets:
