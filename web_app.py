@@ -685,6 +685,112 @@ def internal_error(error):
     """500 錯誤處理"""
     return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/api/browse-server')
+def browse_server():
+    """瀏覽伺服器檔案 API"""
+    path = request.args.get('path', '/')
+    
+    try:
+        # 這裡應該連接到實際的檔案系統或 SFTP
+        # 目前返回模擬資料
+        if path == '/':
+            return jsonify({
+                'folders': [
+                    {'name': 'R306_ShareFolder', 'path': '/R306_ShareFolder'},
+                    {'name': 'DailyBuild', 'path': '/DailyBuild'},
+                    {'name': 'PrebuildFW', 'path': '/PrebuildFW'}
+                ],
+                'files': []
+            })
+        elif path == '/R306_ShareFolder':
+            return jsonify({
+                'folders': [
+                    {'name': 'nightrun_log', 'path': '/R306_ShareFolder/nightrun_log'},
+                    {'name': 'test_results', 'path': '/R306_ShareFolder/test_results'}
+                ],
+                'files': []
+            })
+        elif path == '/R306_ShareFolder/nightrun_log':
+            return jsonify({
+                'folders': [
+                    {'name': 'Demo_stress_Test_log', 'path': '/R306_ShareFolder/nightrun_log/Demo_stress_Test_log'}
+                ],
+                'files': [
+                    {'name': 'sample_ftp_paths.xlsx', 'path': '/R306_ShareFolder/nightrun_log/sample_ftp_paths.xlsx', 'size': 5270},
+                    {'name': 'test_data.xlsx', 'path': '/R306_ShareFolder/nightrun_log/test_data.xlsx', 'size': 8432}
+                ]
+            })
+        else:
+            # 返回一些示例檔案
+            return jsonify({
+                'folders': [],
+                'files': [
+                    {'name': 'ftp_paths_2025.xlsx', 'path': f'{path}/ftp_paths_2025.xlsx', 'size': 12345},
+                    {'name': 'module_list.xlsx', 'path': f'{path}/module_list.xlsx', 'size': 8765}
+                ]
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/preview-file')
+def preview_file():
+    """預覽檔案內容 API"""
+    file_path = request.args.get('path')
+    
+    if not file_path:
+        return jsonify({'error': '缺少檔案路徑'}), 400
+        
+    try:
+        # 這裡應該讀取實際檔案
+        # 目前返回模擬資料
+        if file_path.endswith('.xml'):
+            content = """<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+    <project name="bootcode" revision="abc123def456">
+        <source>realtek/mac7p/bootcode</source>
+    </project>
+    <project name="emcu" revision="def456ghi789">
+        <source>realtek/emcu</source>
+    </project>
+</manifest>"""
+        elif file_path.endswith('.txt'):
+            content = """Version Information
+==================
+Build Date: 2025-01-15
+Build Number: 1234
+Branch: master
+Commit: abc123def456"""
+        else:
+            content = "檔案預覽不支援此格式"
+            
+        return jsonify({'content': content})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-file')
+def download_single_file():
+    """下載單一檔案 API"""
+    file_path = request.args.get('path')
+    
+    if not file_path:
+        return jsonify({'error': '缺少檔案路徑'}), 400
+        
+    try:
+        # 這裡應該返回實際檔案
+        # 目前返回一個示例檔案
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.txt')
+        temp_file.write(b'This is a sample file content')
+        temp_file.close()
+        
+        return send_file(temp_file.name, as_attachment=True, 
+                       download_name=os.path.basename(file_path))
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+            
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)

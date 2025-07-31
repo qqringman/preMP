@@ -13,232 +13,380 @@
 
     <!-- 下載表單 -->
     <div class="download-form">
-        <!-- Excel 上傳區 -->
-        <div class="form-section card-style">
-            <h2 class="section-title">
-                <i class="fas fa-file-excel"></i> 步驟 1：上傳 FTP 路徑檔案
-            </h2>
-            
-            <div class="upload-area" id="downloadUploadArea">
-                <input type="file" id="downloadFileInput" accept=".xlsx" style="display: none;">
-                <div class="upload-icon">
-                    <i class="fas fa-cloud-upload-alt"></i>
+        <!-- Excel 上傳區 - 重新設計 -->
+        <div class="file-source-section">
+            <div class="section-header">
+                <div class="step-number">1</div>
+                <div class="section-info">
+                    <h2 class="section-title">選擇檔案來源</h2>
+                    <p class="section-desc">選擇 Excel 檔案或從伺服器瀏覽</p>
                 </div>
-                <p class="upload-text">拖曳 Excel 檔案至此處或點擊選擇</p>
-                <p class="upload-hint">檔案需包含 "ftp path" 欄位</p>
-                <button class="btn btn-outline mt-3" id="selectFileBtn">
-                    選擇檔案
-                </button>
             </div>
             
-            <div class="file-info hidden" id="downloadFileInfo">
-                <i class="fas fa-file-excel"></i>
-                <span id="downloadFileName"></span>
-                <button class="btn-icon ml-2" onclick="removeDownloadFile()">
-                    <i class="fas fa-times"></i>
-                </button>
+            <div class="source-selector">
+                <div class="selector-card active" onclick="switchTab('local')">
+                    <div class="selector-icon">
+                        <i class="fas fa-laptop fa-2x"></i>
+                    </div>
+                    <div class="selector-content">
+                        <h3>載入 Excel 檔案</h3>
+                        <p>從本機上傳 Excel 檔案</p>
+                    </div>
+                    <div class="selector-check">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+                
+                <div class="selector-card" onclick="switchTab('server')">
+                    <div class="selector-icon">
+                        <i class="fas fa-server fa-2x"></i>
+                    </div>
+                    <div class="selector-content">
+                        <h3>選擇伺服器檔案</h3>
+                        <p>瀏覽伺服器上的檔案</p>
+                    </div>
+                    <div class="selector-check">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
             </div>
 
-            <!-- Excel 範例 -->
-            <div class="example-section mt-4">
-                <h3 class="example-title">
-                    <i class="fas fa-info-circle"></i> Excel 格式範例
-                </h3>
-                <div class="example-table">
-                    <table class="table-example">
-                        <thead>
-                            <tr>
-                                <th>SN</th>
-                                <th>模組</th>
-                                <th>ftp path</th>
-                                <th>備註</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>1</td>
-                                <td>bootcode</td>
-                                <td>/DailyBuild/PrebuildFW/bootcode/RDDB-320_realtek...</td>
-                                <td>主要版本</td>
-                            </tr>
-                            <tr>
-                                <td>2</td>
-                                <td>emcu</td>
-                                <td>/DailyBuild/PrebuildFW/emcu/RDDB-321_realtek...</td>
-                                <td>測試版本</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- 本地 Excel 上傳 -->
+            <div class="tab-panel active" id="local-tab">
+                <div class="upload-zone" id="localUploadArea">
+                    <input type="file" id="localFileInput" accept=".xlsx" multiple style="display: none;">
+                    <div class="upload-visual">
+                        <div class="upload-icon-bg">
+                            <i class="fas fa-cloud-upload-alt fa-3x"></i>
+                        </div>
+                        <h3 class="upload-title">拖曳 Excel 檔案至此處</h3>
+                        <p class="upload-desc">支援多個 .xlsx 檔案同時上傳</p>
+                        <div class="upload-divider">
+                            <span>或</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="document.getElementById('localFileInput').click()">
+                            <i class="fas fa-folder-open"></i> 選擇檔案
+                        </button>
+                    </div>
+                    
+                    <div class="upload-hints">
+                        <div class="hint-item">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <span>支援 Excel 2007+ (.xlsx)</span>
+                        </div>
+                        <div class="hint-item">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <span>檔案需包含 "ftp path" 欄位</span>
+                        </div>
+                        <div class="hint-item">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <span>可同時處理多個檔案</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="file-list-container hidden" id="localFileListContainer">
+                    <h4 class="file-list-title">已選擇的檔案</h4>
+                    <div class="file-list" id="localFileList">
+                        <!-- 動態顯示已選擇的檔案 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 伺服器檔案選擇 -->
+            <div class="tab-panel" id="server-tab">
+                <div class="server-browser-container">
+                    <div class="browser-toolbar">
+                        <div class="path-navigation">
+                            <button class="nav-btn" onclick="navigateUp()" title="上一層">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <div class="path-breadcrumb" id="pathBreadcrumb">
+                                <span class="breadcrumb-item" onclick="navigateTo('/')">
+                                    <i class="fas fa-home"></i>
+                                </span>
+                            </div>
+                        </div>
+                        <button class="btn btn-small btn-outline" onclick="refreshServerFiles()">
+                            <i class="fas fa-sync"></i> 重新整理
+                        </button>
+                    </div>
+                    
+                    <div class="browser-viewport" id="serverBrowser">
+                        <div class="loading-state">
+                            <div class="loading-spinner-container">
+                                <div class="loading-spinner"></div>
+                            </div>
+                            <p>載入檔案列表...</p>
+                        </div>
+                    </div>
+                    
+                    <div class="browser-status">
+                        <span id="itemCount">0 個項目</span>
+                        <span class="separator">•</span>
+                        <span id="selectedStatus">已選擇 0 個檔案</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- SFTP 設定 -->
-        <div class="form-section card-style mt-4">
-            <h2 class="section-title">
-                <i class="fas fa-server"></i> 步驟 2：SFTP 連線設定
-            </h2>
-            
-            <div class="form-group">
-                <div class="switch-container">
-                    <label class="switch">
-                        <input type="checkbox" id="downloadUseDefault" checked>
-                        <span class="slider"></span>
-                    </label>
-                    <span class="switch-label ml-3">使用 config.py 中的預設值</span>
-                </div>
+        <!-- SFTP 設定 - 北歐藍風格 -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="card-icon fas fa-server"></i>
+                <h2 class="card-title">步驟 2：SFTP 連線設定</h2>
             </div>
             
-            <div id="downloadCustomConfig" class="custom-config disabled mt-4">
-                <div class="form-row">
+            <div class="form-group">
+                <label class="switch-label">
+                    <label class="switch">
+                        <input type="checkbox" id="useDefaultConfig" checked>
+                        <span class="switch-slider"></span>
+                    </label>
+                    <span>使用 config.py 中的預設值</span>
+                </label>
+            </div>
+            
+            <div id="customSftpConfig" class="custom-config disabled">
+                <div class="config-grid">
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-network-wired"></i> 伺服器位址
                         </label>
-                        <input type="text" class="form-input" id="downloadHost" placeholder="sftp.example.com">
+                        <input type="text" class="form-input" id="sftpHost" placeholder="sftp.example.com">
                     </div>
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-ethernet"></i> 連接埠
                         </label>
-                        <input type="number" class="form-input" id="downloadPort" value="22">
+                        <input type="number" class="form-input" id="sftpPort" value="22">
                     </div>
-                </div>
-                <div class="form-row mt-3">
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-user"></i> 使用者名稱
                         </label>
-                        <input type="text" class="form-input" id="downloadUsername" placeholder="username">
+                        <input type="text" class="form-input" id="sftpUsername" placeholder="username">
                     </div>
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-key"></i> 密碼
                         </label>
-                        <input type="password" class="form-input" id="downloadPassword" placeholder="••••••••">
+                        <input type="password" class="form-input" id="sftpPassword" placeholder="••••••••">
                     </div>
                 </div>
-            </div>
-
-            <!-- 測試連線 -->
-            <div class="connection-test mt-4">
-                <button class="btn btn-outline" onclick="testConnection()">
-                    <i class="fas fa-plug"></i> 測試連線
-                </button>
-                <span class="connection-status ml-3" id="connectionStatus"></span>
+                
+                <div class="test-connection mt-3">
+                    <button class="btn btn-outline btn-small" onclick="testSftpConnection()">
+                        <i class="fas fa-plug"></i> 測試連線
+                    </button>
+                    <span class="connection-status ml-3" id="connectionStatus"></span>
+                </div>
             </div>
         </div>
 
-        <!-- 下載選項 -->
-        <div class="form-section card-style mt-4">
-            <h2 class="section-title">
-                <i class="fas fa-cog"></i> 步驟 3：下載選項
-            </h2>
+        <!-- 下載選項 - 北歐藍風格 -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="card-icon fas fa-cog"></i>
+                <h2 class="card-title">步驟 3：下載選項</h2>
+            </div>
             
-            <div class="download-options">
-                <div class="option-item">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="skipExisting" checked>
-                        <span class="ml-2">跳過已存在的檔案</span>
-                    </label>
-                    <p class="option-desc">若本地已有相同檔案，將不會重新下載</p>
+            <div class="options-grid">
+                <div class="option-card">
+                    <div class="option-header">
+                        <label class="switch-label">
+                            <label class="switch">
+                                <input type="checkbox" id="skipExisting" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                            <div>
+                                <span class="option-title">跳過已存在的檔案</span>
+                                <p class="option-desc">若本地已有相同檔案，將不會重新下載</p>
+                            </div>
+                        </label>
+                    </div>
                 </div>
                 
-                <div class="option-item mt-3">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="recursiveSearch" checked>
-                        <span class="ml-2">遞迴搜尋子目錄</span>
-                    </label>
-                    <p class="option-desc">在 FTP 路徑的子目錄中搜尋目標檔案</p>
+                <div class="option-card">
+                    <div class="option-header">
+                        <label class="switch-label">
+                            <label class="switch">
+                                <input type="checkbox" id="recursiveSearch" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                            <div>
+                                <span class="option-title">遞迴搜尋子目錄</span>
+                                <p class="option-desc">在 FTP 路徑的子目錄中搜尋目標檔案</p>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="option-sub mt-3" id="searchDepthOption">
+                        <label class="form-label">搜尋深度</label>
+                        <div class="depth-selector">
+                            <button class="depth-btn" onclick="adjustDepth(-1)">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <input type="number" class="depth-input" id="searchDepth" value="3" min="1" max="10" readonly>
+                            <button class="depth-btn" onclick="adjustDepth(1)">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <p class="option-desc mt-2">最多搜尋 <span id="depthText">3</span> 層子目錄</p>
+                    </div>
                 </div>
                 
-                <div class="option-item mt-3">
-                    <label class="form-label">搜尋深度</label>
-                    <input type="number" class="form-input small" id="searchDepth" value="3" min="1" max="10">
-                    <p class="option-desc">最多搜尋幾層子目錄</p>
+                <div class="option-card">
+                    <div class="option-header">
+                        <label class="switch-label">
+                            <label class="switch">
+                                <input type="checkbox" id="enableResume">
+                                <span class="switch-slider"></span>
+                            </label>
+                            <div>
+                                <span class="option-title">啟用斷點續傳</span>
+                                <p class="option-desc">支援大檔案下載中斷後繼續</p>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 執行按鈕 -->
-        <div class="form-actions mt-4">
-            <button class="btn btn-primary btn-large" id="downloadBtn" onclick="executeDownload()" disabled>
+        <div class="form-actions mt-4 text-center">
+            <button class="btn btn-primary btn-large" id="downloadBtn" onclick="startDownload()" disabled>
                 <i class="fas fa-download"></i> 開始下載
             </button>
         </div>
     </div>
 
-    <!-- 下載進度 -->
-    <div class="download-progress hidden mt-5" id="downloadProgress">
-        <h2 class="section-title">
-            <i class="fas fa-tasks"></i> 下載進度
-        </h2>
-        
-        <div class="progress-overview">
-            <div class="progress-stat">
-                <div class="stat-value" id="totalFiles">0</div>
-                <div class="stat-label">總檔案數</div>
+    <!-- 下載進度 - 北歐藍風格 -->
+    <div class="download-progress hidden" id="downloadProgress">
+        <div class="card">
+            <div class="card-header">
+                <i class="card-icon fas fa-tasks"></i>
+                <h2 class="card-title">下載進度</h2>
             </div>
-            <div class="progress-stat">
-                <div class="stat-value" id="downloadedFiles">0</div>
-                <div class="stat-label">已下載</div>
+            
+            <div class="progress-stats">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-file"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="totalFiles">0</div>
+                        <div class="stat-label">總檔案數</div>
+                    </div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="downloadedFiles">0</div>
+                        <div class="stat-label">已下載</div>
+                    </div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-icon">
+                        <i class="fas fa-forward"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="skippedFiles">0</div>
+                        <div class="stat-label">已跳過</div>
+                    </div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="failedFiles">0</div>
+                        <div class="stat-label">失敗</div>
+                    </div>
+                </div>
             </div>
-            <div class="progress-stat">
-                <div class="stat-value" id="skippedFiles">0</div>
-                <div class="stat-label">已跳過</div>
-            </div>
-            <div class="progress-stat">
-                <div class="stat-value" id="failedFiles">0</div>
-                <div class="stat-label">失敗</div>
-            </div>
-        </div>
 
-        <div class="progress-bar-container mt-4">
-            <div class="progress-bar">
-                <div class="progress-fill" id="downloadProgressFill" style="width: 0%"></div>
+            <div class="progress-bar-wrapper mt-4">
+                <div class="progress-header">
+                    <span class="progress-title">整體進度</span>
+                    <span class="progress-percentage" id="progressText">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
             </div>
-            <div class="progress-text" id="downloadProgressText">0%</div>
-        </div>
 
-        <div class="download-log mt-4">
-            <h3 class="log-title">下載日誌</h3>
-            <div class="log-content" id="downloadLog">
-                <!-- 動態填充日誌 -->
+            <div class="log-container mt-4">
+                <div class="log-header">
+                    <span class="log-title">
+                        <i class="fas fa-terminal"></i> 下載日誌
+                    </span>
+                    <button class="btn btn-outline btn-small" onclick="clearLog()">
+                        <i class="fas fa-eraser"></i> 清除
+                    </button>
+                </div>
+                <div class="log-content" id="downloadLog">
+                    <!-- 動態填充日誌 -->
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 下載結果 -->
-    <div class="download-results hidden mt-5" id="downloadResults">
-        <div class="result-header">
-            <i class="fas fa-check-circle"></i>
-            <h2>下載完成</h2>
+    <!-- 下載結果 - 北歐藍風格 -->
+    <div class="download-results hidden" id="downloadResults">
+        <!-- 成功訊息卡片 -->
+        <div class="result-card result-success">
+            <div class="result-header">
+                <i class="fas fa-check-circle fa-2x"></i>
+                <h2>下載完成！</h2>
+            </div>
+            <div class="result-summary" id="resultSummary">
+                <!-- 動態填充摘要 -->
+            </div>
         </div>
 
-        <div class="result-summary mt-4" id="downloadSummary">
-            <!-- 動態填充摘要 -->
-        </div>
-
-        <div class="result-actions mt-4">
-            <button class="btn btn-primary" onclick="viewDownloadReport()">
+        <!-- 操作按鈕 -->
+        <div class="result-actions">
+            <button class="btn btn-primary" onclick="viewReport()">
                 <i class="fas fa-file-excel"></i> 查看下載報表
             </button>
-            <button class="btn btn-success ml-3" onclick="proceedToCompare()">
+            <button class="btn btn-secondary ml-3" onclick="proceedToCompare()">
                 <i class="fas fa-code-compare"></i> 繼續比對
             </button>
-            <button class="btn btn-outline ml-3" onclick="startNewDownload()">
+            <button class="btn btn-outline ml-3" onclick="newDownload()">
                 <i class="fas fa-redo"></i> 新的下載
             </button>
         </div>
 
-        <!-- 資料夾結構預覽 -->
-        <div class="folder-preview mt-5">
-            <h3 class="preview-title">
-                <i class="fas fa-folder-tree"></i> 下載的資料夾結構
-            </h3>
-            <div class="folder-tree" id="folderTree">
-                <!-- 動態生成資料夾樹狀結構 -->
+        <!-- 資料夾結構 - 北歐藍風格 -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="card-icon fas fa-folder-tree"></i>
+                <h2 class="card-title">下載的資料夾結構</h2>
             </div>
+            
+            <div class="tree-container">
+                <div id="folderTree">
+                    <!-- 動態生成樹狀結構 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 檔案預覽模態框 -->
+<div id="filePreviewModal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">檔案預覽</h3>
+            <button class="modal-close" onclick="closePreview()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="previewContent">
+            <!-- 動態載入檔案內容 -->
         </div>
     </div>
 </div>

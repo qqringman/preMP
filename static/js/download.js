@@ -1,145 +1,360 @@
-// 下載頁面 JavaScript
+// 下載頁面 JavaScript - 北歐藍版本
 
-// 頁面特定變數
-let downloadFile = null;
+// 頁面變數
+let selectedSource = 'local';
+let selectedFiles = [];
 let downloadTaskId = null;
+let currentServerPath = '/';
+let serverSelectedFiles = [];
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
-    initializeDownloadUpload();
-    initializeDownloadConfig();
+    initializeTabs();
+    initializeUploadAreas();
+    initializeConfigToggles();
+    updateDownloadButton();
 });
 
-// 初始化上傳功能
-function initializeDownloadUpload() {
-    const uploadArea = document.getElementById('downloadUploadArea');
-    const fileInput = document.getElementById('downloadFileInput');
-    const selectBtn = document.getElementById('selectFileBtn');
+// 初始化標籤切換
+function initializeTabs() {
+    // 如果是伺服器標籤，載入檔案列表
+    if (selectedSource === 'server') {
+        loadServerFiles(currentServerPath);
+    }
+}
+
+// 切換標籤
+function switchTab(tab) {
+    selectedSource = tab;
     
-    if (!uploadArea || !fileInput || !selectBtn) return;
-    
-    // 點擊選擇按鈕
-    selectBtn.addEventListener('click', () => {
-        fileInput.click();
+    // 更新選擇器卡片狀態
+    document.querySelectorAll('.selector-card').forEach(card => {
+        card.classList.remove('active');
     });
     
-    // 點擊上傳區域
-    uploadArea.addEventListener('click', (e) => {
-        // 如果點擊的不是按鈕，則觸發檔案選擇
-        if (!e.target.classList.contains('btn') && !e.target.closest('.btn')) {
-            fileInput.click();
-        }
-    });
+    // 找到對應的選擇器卡片並激活
+    const cards = document.querySelectorAll('.selector-card');
+    if (tab === 'local' && cards[0]) {
+        cards[0].classList.add('active');
+    } else if (tab === 'server' && cards[1]) {
+        cards[1].classList.add('active');
+    }
     
-    // 拖放事件
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.classList.add('dragging');
+    // 更新標籤內容
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
     });
+    document.getElementById(`${tab}-tab`).classList.add('active');
     
-    uploadArea.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.classList.remove('dragging');
-    });
+    // 如果切換到伺服器，載入檔案列表
+    if (tab === 'server') {
+        loadServerFiles(currentServerPath);
+    }
     
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadArea.classList.remove('dragging');
-        
-        const files = e.dataTransfer.files;
-        if (files && files.length > 0) {
-            handleDownloadFileSelect(files[0]);
-        }
-    });
+    // 重置選擇
+    if (tab === 'local') {
+        selectedFiles = [];
+    } else {
+        selectedFiles = serverSelectedFiles;
+    }
+    updateDownloadButton();
+}
+
+// 初始化上傳區域
+function initializeUploadAreas() {
+    // 本地 Excel 上傳
+    const localArea = document.getElementById('localUploadArea');
+    const localInput = document.getElementById('localFileInput');
     
-    // 檔案選擇
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            handleDownloadFileSelect(e.target.files[0]);
-        }
+    setupDragDrop(localArea, handleLocalFiles);
+    localInput.addEventListener('change', (e) => {
+        handleLocalFiles(Array.from(e.target.files));
     });
 }
 
-// 處理檔案選擇
-async function handleDownloadFileSelect(file) {
-    if (!file.name.endsWith('.xlsx')) {
+// 設定拖放功能
+function setupDragDrop(element, handler) {
+    element.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        element.classList.add('dragging');
+    });
+    
+    element.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        element.classList.remove('dragging');
+    });
+    
+    element.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        element.classList.remove('dragging');
+        
+        const files = Array.from(e.dataTransfer.files);
+        handler(files);
+    });
+}
+
+// 處理本地檔案
+function handleLocalFiles(files) {
+    const excelFiles = files.filter(f => f.name.endsWith('.xlsx'));
+    
+    if (excelFiles.length === 0) {
         utils.showNotification('請選擇 Excel (.xlsx) 檔案', 'error');
         return;
     }
     
-    document.getElementById('downloadUploadArea').classList.add('hidden');
-    document.getElementById('downloadFileInfo').classList.remove('hidden');
-    document.getElementById('downloadFileName').textContent = 
-        `${file.name} (${utils.formatFileSize(file.size)})`;
+    selectedFiles = excelFiles;
+    displayLocalFiles();
+    updateDownloadButton();
+}
+
+// 顯示本地檔案列表
+function displayLocalFiles() {
+    const listEl = document.getElementById('localFileList');
+    const containerEl = document.getElementById('localFileListContainer');
     
-    try {
-        const result = await utils.uploadFile(file);
-        downloadFile = result.filepath;
-        checkDownloadButton();
-    } catch (error) {
-        console.error('Upload error:', error);
-        removeDownloadFile();
+    if (selectedFiles.length === 0) {
+        containerEl.classList.add('hidden');
+        return;
     }
+    
+    containerEl.classList.remove('hidden');
+    
+    let html = '';
+    selectedFiles.forEach((file, index) => {
+        html += `
+            <div class="file-item">
+                <i class="fas fa-file-excel text-success"></i>
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                <button class="file-remove" onclick="removeFile(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    });
+    
+    listEl.innerHTML = html;
 }
 
 // 移除檔案
-function removeDownloadFile() {
-    downloadFile = null;
-    document.getElementById('downloadFileInfo').classList.add('hidden');
-    document.getElementById('downloadUploadArea').classList.remove('hidden');
-    document.getElementById('downloadFileInput').value = '';
-    checkDownloadButton();
+function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    displayLocalFiles();
+    updateDownloadButton();
 }
 
-// 初始化 SFTP 設定
-function initializeDownloadConfig() {
-    const useDefault = document.getElementById('downloadUseDefault');
-    const customConfig = document.getElementById('downloadCustomConfig');
+// 載入伺服器檔案列表
+async function loadServerFiles(path) {
+    const browser = document.getElementById('serverBrowser');
+    browser.innerHTML = `
+        <div class="loading-state">
+            <div class="loading-spinner-container">
+                <div class="loading-spinner"></div>
+            </div>
+            <p>載入檔案列表...</p>
+        </div>
+    `;
     
-    if (!useDefault || !customConfig) return;
+    try {
+        const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
+        currentServerPath = path;
+        displayServerFiles(response);
+        updateBreadcrumb(path);
+        updateItemCount(response);
+    } catch (error) {
+        browser.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-triangle fa-3x"></i>
+                <h3>無法載入檔案列表</h3>
+                <p class="text-muted">${error.message}</p>
+                <button class="btn btn-primary mt-3" onclick="loadServerFiles('${path}')">
+                    <i class="fas fa-redo"></i> 重試
+                </button>
+            </div>
+        `;
+    }
+}
+
+// 更新項目計數
+function updateItemCount(data) {
+    const { files = [], folders = [] } = data;
+    const totalItems = files.length + folders.length;
+    const excelFiles = files.filter(f => f.name.endsWith('.xlsx')).length;
+    
+    document.getElementById('itemCount').textContent = 
+        `${totalItems} 個項目 (${excelFiles} 個 Excel 檔案)`;
+    updateSelectedStatus();
+}
+
+// 更新選擇狀態
+function updateSelectedStatus() {
+    document.getElementById('selectedStatus').textContent = 
+        `已選擇 ${serverSelectedFiles.length} 個檔案`;
+}
+
+// 導航到上一層
+function navigateUp() {
+    const parts = currentServerPath.split('/').filter(p => p);
+    parts.pop();
+    const parentPath = '/' + parts.join('/');
+    navigateTo(parentPath);
+}
+
+// 顯示伺服器檔案
+function displayServerFiles(data) {
+    const browser = document.getElementById('serverBrowser');
+    const { files = [], folders = [] } = data;
+    
+    if (files.length === 0 && folders.length === 0) {
+        browser.innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-folder-open fa-3x text-muted"></i>
+                <p class="text-muted mt-3">此資料夾是空的</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="file-grid">';
+    
+    // 顯示資料夾
+    folders.forEach(folder => {
+        html += `
+            <div class="file-grid-item folder" onclick="navigateTo('${folder.path}')">
+                <i class="fas fa-folder fa-2x"></i>
+                <span class="item-name">${folder.name}</span>
+            </div>
+        `;
+    });
+    
+    // 顯示 Excel 檔案
+    files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+        const isSelected = serverSelectedFiles.some(f => f.path === file.path);
+        html += `
+            <div class="file-grid-item file ${isSelected ? 'selected' : ''}" 
+                 onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
+                <i class="fas fa-file-excel fa-2x text-success"></i>
+                <span class="item-name">${file.name}</span>
+                <span class="item-size">${utils.formatFileSize(file.size)}</span>
+                ${isSelected ? '<i class="fas fa-check-circle selected-icon"></i>' : ''}
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    browser.innerHTML = html;
+}
+
+// 更新路徑麵包屑
+function updateBreadcrumb(path) {
+    const breadcrumb = document.getElementById('pathBreadcrumb');
+    const parts = path.split('/').filter(p => p);
+    
+    let html = `
+        <span class="breadcrumb-item" onclick="navigateTo('/')">
+            <i class="fas fa-home"></i>
+        </span>
+    `;
+    
+    let currentPath = '';
+    parts.forEach((part, index) => {
+        currentPath += '/' + part;
+        html += `
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item" onclick="navigateTo('${currentPath}')">
+                ${part}
+            </span>
+        `;
+    });
+    
+    breadcrumb.innerHTML = html;
+}
+
+// 導航到資料夾
+function navigateTo(path) {
+    loadServerFiles(path);
+}
+
+// 切換伺服器檔案選擇
+function toggleServerFile(path, name, size) {
+    const index = serverSelectedFiles.findIndex(f => f.path === path);
+    
+    if (index === -1) {
+        serverSelectedFiles.push({ path, name, size, type: 'server' });
+    } else {
+        serverSelectedFiles.splice(index, 1);
+    }
+    
+    selectedFiles = serverSelectedFiles;
+    displayServerFiles({ files: [], folders: [] }); // 重新渲染以更新選中狀態
+    loadServerFiles(currentServerPath); // 重新載入當前目錄
+    updateSelectedStatus();
+    updateDownloadButton();
+}
+
+// 重新整理伺服器檔案
+function refreshServerFiles() {
+    loadServerFiles(currentServerPath);
+}
+
+// 初始化設定開關
+function initializeConfigToggles() {
+    // SFTP 設定開關
+    const useDefault = document.getElementById('useDefaultConfig');
+    const customConfig = document.getElementById('customSftpConfig');
     
     useDefault.addEventListener('change', (e) => {
         if (e.target.checked) {
             customConfig.classList.add('disabled');
-            // 停用所有輸入欄位
             customConfig.querySelectorAll('input').forEach(input => {
                 input.disabled = true;
             });
         } else {
             customConfig.classList.remove('disabled');
-            // 啟用所有輸入欄位
             customConfig.querySelectorAll('input').forEach(input => {
                 input.disabled = false;
             });
         }
     });
     
-    // 初始化時停用自訂設定
-    if (useDefault.checked) {
-        customConfig.classList.add('disabled');
-        customConfig.querySelectorAll('input').forEach(input => {
-            input.disabled = true;
-        });
-    }
+    // 遞迴搜尋開關
+    const recursiveSearch = document.getElementById('recursiveSearch');
+    const depthOption = document.getElementById('searchDepthOption');
+    
+    recursiveSearch.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            depthOption.classList.remove('disabled');
+        } else {
+            depthOption.classList.add('disabled');
+        }
+    });
 }
 
-// 檢查下載按鈕
-function checkDownloadButton() {
-    const downloadBtn = document.getElementById('downloadBtn');
-    if (downloadBtn) {
-        downloadBtn.disabled = !downloadFile;
-    }
+// 更新下載按鈕狀態
+function updateDownloadButton() {
+    const btn = document.getElementById('downloadBtn');
+    btn.disabled = selectedFiles.length === 0;
+}
+
+// 調整搜尋深度
+function adjustDepth(delta) {
+    const input = document.getElementById('searchDepth');
+    const text = document.getElementById('depthText');
+    
+    let value = parseInt(input.value) + delta;
+    value = Math.max(1, Math.min(10, value));
+    
+    input.value = value;
+    text.textContent = value;
 }
 
 // 測試連線
-async function testConnection() {
-    const config = getDownloadConfig();
+async function testSftpConnection() {
+    const config = getSftpConfig();
     const statusEl = document.getElementById('connectionStatus');
-    
-    if (!statusEl) return;
     
     statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 測試中...';
     statusEl.className = 'connection-status testing ml-3';
@@ -163,17 +378,16 @@ async function testConnection() {
     }
 }
 
-// 取得下載設定
-function getDownloadConfig() {
+// 取得 SFTP 設定
+function getSftpConfig() {
     const config = {};
     
-    if (!document.getElementById('downloadUseDefault').checked) {
-        config.host = document.getElementById('downloadHost').value;
-        config.port = parseInt(document.getElementById('downloadPort').value) || 22;
-        config.username = document.getElementById('downloadUsername').value;
-        config.password = document.getElementById('downloadPassword').value;
+    if (!document.getElementById('useDefaultConfig').checked) {
+        config.host = document.getElementById('sftpHost').value;
+        config.port = parseInt(document.getElementById('sftpPort').value) || 22;
+        config.username = document.getElementById('sftpUsername').value;
+        config.password = document.getElementById('sftpPassword').value;
         
-        // 驗證必要欄位
         if (!config.host || !config.username || !config.password) {
             throw new Error('請填寫完整的 SFTP 設定');
         }
@@ -182,36 +396,59 @@ function getDownloadConfig() {
     return config;
 }
 
-// 執行下載
-async function executeDownload() {
-    if (!downloadFile) {
-        utils.showNotification('請先上傳 Excel 檔案', 'error');
+// 開始下載
+async function startDownload() {
+    if (selectedFiles.length === 0) {
+        utils.showNotification('請先選擇檔案', 'error');
         return;
     }
     
     try {
-        const sftpConfig = getDownloadConfig();
+        const sftpConfig = getSftpConfig();
+        
+        // 準備檔案資料
+        let excelFile = null;
+        
+        if (selectedSource === 'local') {
+            // 上傳本地檔案 - 只支援單一檔案作為主要 Excel
+            if (selectedFiles.length > 0) {
+                const result = await utils.uploadFile(selectedFiles[0]);
+                excelFile = result.filepath;
+            }
+        } else {
+            // 使用伺服器檔案的第一個作為主要 Excel
+            if (selectedFiles.length > 0) {
+                excelFile = selectedFiles[0].path;
+            }
+        }
+        
+        if (!excelFile) {
+            utils.showNotification('請選擇至少一個 Excel 檔案', 'error');
+            return;
+        }
         
         // 隱藏表單，顯示進度
         document.querySelector('.download-form').classList.add('hidden');
         document.getElementById('downloadProgress').classList.remove('hidden');
         
+        // 發送下載請求
         const response = await utils.apiRequest('/api/download', {
             method: 'POST',
             body: JSON.stringify({
-                excel_file: downloadFile,
+                excel_file: excelFile,
                 sftp_config: sftpConfig,
                 options: {
                     skip_existing: document.getElementById('skipExisting').checked,
                     recursive_search: document.getElementById('recursiveSearch').checked,
-                    search_depth: parseInt(document.getElementById('searchDepth').value)
+                    search_depth: parseInt(document.getElementById('searchDepth').value),
+                    enable_resume: document.getElementById('enableResume').checked
                 }
             })
         });
         
         downloadTaskId = response.task_id;
         
-        // 加入任務房間以接收即時更新
+        // 加入任務房間
         if (socket) {
             socket.emit('join_task', { task_id: downloadTaskId });
         }
@@ -219,7 +456,7 @@ async function executeDownload() {
         // 監聽進度更新
         document.addEventListener('task-progress', handleDownloadProgress);
         
-        // 開始輪詢狀態（備用方案）
+        // 開始輪詢狀態
         pollDownloadStatus();
         
     } catch (error) {
@@ -241,36 +478,22 @@ function handleDownloadProgress(event) {
 function updateDownloadProgress(data) {
     const { progress, status, message, stats } = data;
     
-    const progressFill = document.getElementById('downloadProgressFill');
-    const progressText = document.getElementById('downloadProgressText');
+    // 更新進度條
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
     
-    if (progressFill) {
+    if (progressFill && progressText) {
         progressFill.style.width = `${progress}%`;
-    }
-    
-    if (progressText) {
         progressText.textContent = `${Math.round(progress)}%`;
     }
     
     // 更新統計
     if (stats) {
-        const elements = {
-            totalFiles: stats.total || '0',
-            downloadedFiles: stats.downloaded || '0',
-            skippedFiles: stats.skipped || '0',
-            failedFiles: stats.failed || '0'
-        };
-        
-        for (const [id, value] of Object.entries(elements)) {
-            const element = document.getElementById(id);
-            if (element) {
-                element.textContent = value;
-            }
-        }
+        updateStats(stats);
     }
     
     // 添加日誌
-    addDownloadLog(message);
+    addLog(message, status);
     
     // 處理完成或錯誤
     if (status === 'completed') {
@@ -281,19 +504,78 @@ function updateDownloadProgress(data) {
     }
 }
 
-// 添加下載日誌
-function addDownloadLog(message) {
+// 更新統計數據
+function updateStats(stats) {
+    const elements = {
+        totalFiles: stats.total || 0,
+        downloadedFiles: stats.downloaded || 0,
+        skippedFiles: stats.skipped || 0,
+        failedFiles: stats.failed || 0
+    };
+    
+    for (const [id, value] of Object.entries(elements)) {
+        const element = document.getElementById(id);
+        if (element) {
+            animateValue(element, parseInt(element.textContent) || 0, value);
+        }
+    }
+}
+
+// 數值動畫
+function animateValue(element, start, end) {
+    const duration = 500;
+    const range = end - start;
+    const increment = range / (duration / 16);
+    let current = start;
+    
+    const timer = setInterval(() => {
+        current += increment;
+        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+            current = end;
+            clearInterval(timer);
+        }
+        element.textContent = Math.round(current);
+    }, 16);
+}
+
+// 添加日誌
+function addLog(message, type = 'info') {
     const log = document.getElementById('downloadLog');
     if (!log) return;
     
     const entry = document.createElement('div');
-    entry.className = 'log-entry';
+    entry.className = `log-entry ${type}`;
     entry.innerHTML = `
         <span class="log-time">${new Date().toLocaleTimeString('zh-TW')}</span>
+        <span class="log-icon">
+            <i class="fas ${getLogIcon(type)}"></i>
+        </span>
         <span class="log-message">${message}</span>
     `;
+    
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
+}
+
+// 取得日誌圖示
+function getLogIcon(type) {
+    const icons = {
+        'info': 'fa-info-circle',
+        'success': 'fa-check-circle',
+        'warning': 'fa-exclamation-triangle',
+        'error': 'fa-times-circle',
+        'downloading': 'fa-download',
+        'completed': 'fa-check'
+    };
+    return icons[type] || icons.info;
+}
+
+// 清除日誌
+function clearLog() {
+    const log = document.getElementById('downloadLog');
+    if (log) {
+        log.innerHTML = '';
+    }
 }
 
 // 顯示下載結果
@@ -305,27 +587,33 @@ function showDownloadResults(results) {
     const stats = results.stats || {};
     const summary = `
         <div class="summary-grid">
-            <div class="summary-item success">
-                <i class="fas fa-check"></i>
-                <span>成功下載 ${stats.downloaded || 0} 個檔案</span>
+            <div class="summary-item">
+                <i class="fas fa-check-circle text-success"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.downloaded || 0}</div>
+                    <div class="summary-label">成功下載</div>
+                </div>
             </div>
-            <div class="summary-item info">
-                <i class="fas fa-forward"></i>
-                <span>跳過 ${stats.skipped || 0} 個已存在檔案</span>
+            <div class="summary-item">
+                <i class="fas fa-forward text-info"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.skipped || 0}</div>
+                    <div class="summary-label">跳過檔案</div>
+                </div>
             </div>
             ${stats.failed > 0 ? `
-                <div class="summary-item error">
-                    <i class="fas fa-times"></i>
-                    <span>${stats.failed} 個檔案下載失敗</span>
+                <div class="summary-item">
+                    <i class="fas fa-times-circle text-danger"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${stats.failed}</div>
+                        <div class="summary-label">下載失敗</div>
+                    </div>
                 </div>
             ` : ''}
         </div>
     `;
     
-    const summaryEl = document.getElementById('downloadSummary');
-    if (summaryEl) {
-        summaryEl.innerHTML = summary;
-    }
+    document.getElementById('resultSummary').innerHTML = summary;
     
     // 生成資料夾樹
     if (results.folder_structure) {
@@ -333,33 +621,95 @@ function showDownloadResults(results) {
     }
 }
 
-// 生成資料夾樹狀結構
+// 生成資料夾樹
 function generateFolderTree(structure) {
-    const tree = buildTreeHTML(structure, 'downloads');
-    const treeEl = document.getElementById('folderTree');
-    if (treeEl) {
-        treeEl.innerHTML = tree;
-    }
+    const tree = buildTreeHTML(structure, 'downloads', '');
+    document.getElementById('folderTree').innerHTML = tree;
 }
 
 // 建立樹狀結構 HTML
-function buildTreeHTML(node, name) {
+function buildTreeHTML(node, name, path) {
+    const fullPath = path ? `${path}/${name}` : name;
+    
     if (typeof node === 'string') {
-        return `<div class="tree-node"><i class="fas fa-file"></i> ${name}</div>`;
+        // 檔案節點
+        return `
+            <div class="tree-node">
+                <div class="tree-node-content" data-path="${fullPath}">
+                    <i class="tree-icon tree-file fas fa-file"></i>
+                    <span class="tree-name">${name}</span>
+                    <div class="tree-actions">
+                        <button class="tree-action" onclick="previewFile('${fullPath}')" title="預覽">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="tree-action" onclick="downloadFile('${fullPath}')" title="下載">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
     
+    // 資料夾節點
     let html = `
         <div class="tree-node">
-            <i class="fas fa-folder-open"></i> ${name}/
+            <div class="tree-node-content folder" onclick="toggleFolder(this)">
+                <i class="tree-icon tree-folder fas fa-folder"></i>
+                <span class="tree-name">${name}/</span>
+            </div>
             <div class="tree-children">
     `;
     
     for (const [key, value] of Object.entries(node)) {
-        html += buildTreeHTML(value, key);
+        html += buildTreeHTML(value, key, fullPath);
     }
     
     html += '</div></div>';
     return html;
+}
+
+// 切換資料夾展開/摺疊
+function toggleFolder(element) {
+    const node = element.parentElement;
+    const children = node.querySelector('.tree-children');
+    const icon = element.querySelector('.tree-folder');
+    
+    if (children.style.display === 'none') {
+        children.style.display = 'block';
+        icon.classList.remove('fa-folder');
+        icon.classList.add('fa-folder-open');
+    } else {
+        children.style.display = 'none';
+        icon.classList.remove('fa-folder-open');
+        icon.classList.add('fa-folder');
+    }
+}
+
+// 預覽檔案
+async function previewFile(path) {
+    const modal = document.getElementById('filePreviewModal');
+    const content = document.getElementById('previewContent');
+    
+    content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
+    modal.classList.remove('hidden');
+    
+    try {
+        const response = await utils.apiRequest(`/api/preview-file?path=${encodeURIComponent(path)}`);
+        content.innerHTML = `<pre>${response.content}</pre>`;
+    } catch (error) {
+        content.innerHTML = `<div class="error">無法預覽檔案</div>`;
+    }
+}
+
+// 下載檔案
+function downloadFile(path) {
+    window.open(`/api/download-file?path=${encodeURIComponent(path)}`, '_blank');
+}
+
+// 關閉預覽
+function closePreview() {
+    document.getElementById('filePreviewModal').classList.add('hidden');
 }
 
 // 輪詢下載狀態
@@ -388,27 +738,15 @@ function resetDownloadForm() {
     document.getElementById('downloadProgress').classList.add('hidden');
     document.getElementById('downloadResults').classList.add('hidden');
     
-    // 清空日誌
-    const log = document.getElementById('downloadLog');
-    if (log) {
-        log.innerHTML = '';
-    }
+    clearLog();
     
     // 重置進度
-    const progressFill = document.getElementById('downloadProgressFill');
-    const progressText = document.getElementById('downloadProgressText');
-    
-    if (progressFill) {
-        progressFill.style.width = '0%';
-    }
-    
-    if (progressText) {
-        progressText.textContent = '0%';
-    }
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressText').textContent = '0%';
 }
 
-// 查看下載報表
-function viewDownloadReport() {
+// 查看報表
+function viewReport() {
     if (downloadTaskId) {
         window.location.href = `/api/download-report/${downloadTaskId}`;
     }
@@ -419,15 +757,26 @@ function proceedToCompare() {
     window.location.href = '/compare';
 }
 
-// 開始新的下載
-function startNewDownload() {
+// 新的下載
+function newDownload() {
     location.reload();
 }
 
-// 匯出函數到全域
-window.removeDownloadFile = removeDownloadFile;
-window.testConnection = testConnection;
-window.executeDownload = executeDownload;
-window.viewDownloadReport = viewDownloadReport;
+// 匯出全域函數
+window.switchTab = switchTab;
+window.removeFile = removeFile;
+window.navigateTo = navigateTo;
+window.navigateUp = navigateUp;
+window.toggleServerFile = toggleServerFile;
+window.refreshServerFiles = refreshServerFiles;
+window.adjustDepth = adjustDepth;
+window.testSftpConnection = testSftpConnection;
+window.startDownload = startDownload;
+window.clearLog = clearLog;
+window.toggleFolder = toggleFolder;
+window.previewFile = previewFile;
+window.downloadFile = downloadFile;
+window.closePreview = closePreview;
+window.viewReport = viewReport;
 window.proceedToCompare = proceedToCompare;
-window.startNewDownload = startNewDownload;
+window.newDownload = newDownload;

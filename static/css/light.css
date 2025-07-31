@@ -1,0 +1,54 @@
+/* 北歐藍風格 - Light 模式 */
+
+:root {
+    /* 主題色彩 - Light 模式 */
+    --bg-primary: #F5F8FA;
+    --bg-secondary: #FFFFFF;
+    --bg-tertiary: #F0F4F8;
+    --bg-hover: #E8F0F8;
+    
+    --text-primary: #263238;
+    --text-secondary: #455A64;
+    --text-muted: #78909C;
+    --text-light: #90A4AE;
+    
+    --border-color: #E1F5FE;
+    --border-hover: #B3E5FC;
+    
+    /* 陰影 */
+    --shadow-card: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+    --shadow-card-hover: 0 8px 16px 0 rgba(0, 0, 0, 0.15);
+    
+    /* 上傳區域 - 北歐藍 */
+    --upload-bg: #F8FBFF;
+    --upload-border: #B3D9FF;
+    --upload-hover-bg: #F0F7FF;
+    --upload-hover-border: #80BFFF;
+    --upload-drag-bg: #E6F2FF;
+    --upload-drag-border: #4D9FFF;
+    
+    /* 樹狀結構 */
+    --tree-bg: #FFFFFF;
+    --tree-border: #E3F2FD;
+    --tree-hover-bg: #E8F4FD;
+    --tree-folder-color: #2196F3;
+    --tree-file-color: #546E7A;
+    
+    /* 結果卡片 */
+    --result-card-bg: #FFFFFF;
+    --result-card-border: #E1F5FE;
+    --result-success-bg: #E8F5E9;
+    --result-success-border: #81C784;
+    --result-info-bg: #E3F2FD;
+    --result-info-border: #64B5F6;
+    
+    /* 按鈕漸層 - 北歐藍 */
+    --gradient-primary: linear-gradient(135deg, #5B9FEF 0%, #4A8FE7 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #4A8FE7 0%, #3A7FDF 100%);
+    --gradient-secondary: linear-gradient(135deg, #E8F2FD 0%, #D4E6FA 100%);
+    
+    /* 北歐藍主色 */
+    --nordic-primary: #4A8FE7;
+    --nordic-primary-dark: #3A7FDF;
+    --nordic-primary-light: #6BA5EF;
+}
