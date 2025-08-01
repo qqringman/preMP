@@ -1871,3 +1871,316 @@ input:checked + .switch-slider::before {
     font-size: 1.125rem;
     color: #2d3748;
 }
+
+/* 改善檔案列表容器 */
+.file-list-container {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid #e3f2fd;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.08);
+}
+
+.file-list-header {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.file-list-title {
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.file-count-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* 改善檔案項目卡片 */
+.file-item-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: white;
+    border-bottom: 1px solid #f0f7ff;
+    transition: all 0.2s ease;
+}
+
+.file-item-card:hover {
+    background: #f8fbff;
+}
+
+.file-item-card:last-child {
+    border-bottom: none;
+}
+
+.file-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1976D2;
+    font-size: 1.5rem;
+}
+
+.file-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-weight: 500;
+    color: #1a237e;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.file-size {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.file-size::before {
+    content: "📊";
+    font-size: 0.875rem;
+}
+
+.file-type {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.btn-remove-file {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    color: #757575;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-remove-file:hover {
+    background: #ffebee;
+    border-color: #ef5350;
+    color: #ef5350;
+    transform: scale(1.05);
+}
+
+/* 改善上傳區域 */
+.upload-container {
+    background: linear-gradient(135deg, #f0f7ff 0%, #e3f2fd 100%);
+    border: 2px dashed #90caf9;
+    position: relative;
+    overflow: hidden;
+}
+
+.upload-container::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(33, 150, 243, 0.05) 0%, transparent 70%);
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(-20px, -20px) rotate(180deg); }
+}
+
+/* 改善日誌樣式 */
+.log-content {
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    background: #f8fafb;
+}
+
+.log-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    background: white;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.log-entry:hover {
+    transform: translateX(4px);
+}
+
+.log-entry.info {
+    border-left-color: #2196F3;
+    background: #e3f2fd;
+}
+
+.log-entry.success {
+    border-left-color: #4caf50;
+    background: #e8f5e9;
+}
+
+.log-entry.error {
+    border-left-color: #f44336;
+    background: #ffebee;
+}
+
+.log-entry.warning {
+    border-left-color: #ff9800;
+    background: #fff3e0;
+}
+
+.log-entry.downloading {
+    border-left-color: #9c27b0;
+    background: #f3e5f5;
+}
+
+.log-time {
+    font-size: 0.875rem;
+    color: #546e7a;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.log-icon {
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.log-message {
+    flex: 1;
+    color: #37474f;
+}
+
+/* 改善進度條 */
+.progress-bar {
+    height: 12px;
+    background: #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2196F3 0%, #1976D2 100%);
+    border-radius: 6px;
+    transition: width 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.3) 50%,
+        transparent 100%
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* 改善按鈕樣式 */
+.btn-download {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    box-shadow: 0 4px 16px rgba(33, 150, 243, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-download::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn-download:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+/* 改善選項卡片 */
+.option-card {
+    background: white;
+    border: 1px solid #e3f2fd;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.option-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: #2196F3;
+    transform: scaleY(0);
+    transition: transform 0.3s ease;
+}
+
+.option-card:hover {
+    border-color: #90caf9;
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.15);
+}
+
+.option-card:hover::before {
+    transform: scaleY(1);
+}
+

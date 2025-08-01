@@ -10,7 +10,7 @@ let serverFilesLoaded = false;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
-    // 立即將需要的函數綁定到 window
+    // 綁定函數到 window
     window.selectSource = selectSource;
     window.switchTab = switchTab;
     window.toggleDepthControl = toggleDepthControl;
@@ -36,6 +36,16 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeUploadAreas();
     initializeConfigToggles();
     updateDownloadButton();
+    
+    // 修正預設設定開關
+    const useDefaultConfig = document.getElementById('useDefaultConfig');
+    if (useDefaultConfig) {
+        useDefaultConfig.addEventListener('change', (e) => {
+            toggleSftpConfig(e.target.checked);
+        });
+        // 初始化狀態
+        toggleSftpConfig(useDefaultConfig.checked);
+    }
 });
 
 // 初始化標籤切換
@@ -149,7 +159,7 @@ function handleLocalFiles(files) {
     updateDownloadButton();
 }
 
-// 顯示本地檔案列表
+// 改善處理本地檔案的顯示
 function displayLocalFiles() {
     const listEl = document.getElementById('localFileList');
     
@@ -161,27 +171,32 @@ function displayLocalFiles() {
     }
     
     let html = `
-        <div class="selected-files-container">
-            <div class="selected-files-header">
-                <div class="selected-files-title">
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h4 class="file-list-title">
                     <i class="fas fa-check-circle"></i>
-                    已選擇 ${selectedFiles.length} 個檔案
-                </div>
+                    已選擇的檔案
+                </h4>
+                <span class="file-count-badge">${selectedFiles.length}</span>
             </div>
             <div class="file-items">
     `;
     
     selectedFiles.forEach((file, index) => {
+        const fileSize = utils.formatFileSize(file.size);
         html += `
-            <div class="file-item">
-                <div class="file-icon">
+            <div class="file-item-card">
+                <div class="file-icon-wrapper">
                     <i class="fas fa-file-excel"></i>
                 </div>
-                <div class="file-info">
-                    <div class="file-name">${file.name}</div>
-                    <div class="file-size">${utils.formatFileSize(file.size)}</div>
+                <div class="file-details">
+                    <div class="file-name" title="${file.name}">${file.name}</div>
+                    <div class="file-meta">
+                        <span class="file-size">${fileSize}</span>
+                        <span class="file-type">Excel 檔案</span>
+                    </div>
                 </div>
-                <button class="file-remove" onclick="removeFile(${index})" title="移除檔案">
+                <button class="btn-remove-file" onclick="removeFile(${index})" title="移除檔案">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -484,11 +499,13 @@ async function testSftpConnection() {
     }
 }
 
-// 取得 SFTP 設定
+// 修正取得 SFTP 設定函數
 function getSftpConfig() {
     const config = {};
     
-    if (!document.getElementById('useDefaultConfig').checked) {
+    const useDefault = document.getElementById('useDefaultConfig');
+    if (!useDefault || !useDefault.checked) {
+        // 使用自訂設定
         config.host = document.getElementById('sftpHost').value;
         config.port = parseInt(document.getElementById('sftpPort').value) || 22;
         config.username = document.getElementById('sftpUsername').value;
@@ -499,11 +516,12 @@ function getSftpConfig() {
             throw new Error('請填寫完整的 SFTP 設定');
         }
     }
+    // 如果使用預設設定，返回空物件（後端會使用 config.py 的設定）
     
     return config;
 }
 
-// 修改開始下載函數
+// 修正開始下載函數
 async function startDownload() {
     if (selectedFiles.length === 0) {
         utils.showNotification('請先選擇檔案', 'error');
@@ -511,6 +529,7 @@ async function startDownload() {
     }
     
     try {
+        // 取得 SFTP 設定
         const sftpConfig = getSftpConfig();
         
         // 隱藏表單，顯示進度
@@ -531,40 +550,40 @@ async function startDownload() {
             }
         };
         
+        // 處理檔案來源
         if (selectedSource === 'local') {
-            // 本地檔案模式
-            const uploadedFiles = [];
+            // 本地檔案模式 - 上傳檔案
+            const file = selectedFiles[0]; // 只處理第一個檔案
             
-            addLog('開始上傳 Excel 檔案...', 'info');
+            addLog('正在上傳 Excel 檔案...', 'info');
             
-            for (const file of selectedFiles) {
-                try {
-                    addLog(`上傳檔案: ${file.name}`, 'info');
-                    const result = await utils.uploadFile(file);
-                    uploadedFiles.push(result.filepath);
-                    addLog(`檔案 ${file.name} 上傳成功`, 'success');
-                } catch (error) {
-                    addLog(`上傳檔案 ${file.name} 失敗: ${error.message}`, 'error');
-                    utils.showNotification(`上傳檔案 ${file.name} 失敗`, 'error');
-                    resetDownloadForm();
-                    return;
+            try {
+                const uploadResult = await utils.uploadFile(file);
+                
+                // 檢查返回的數據結構
+                if (!uploadResult.filepath) {
+                    throw new Error('上傳檔案失敗：返回數據格式錯誤');
                 }
+                
+                requestData.excel_file = uploadResult.filepath;
+                addLog(`檔案 ${file.name} 上傳成功`, 'success');
+                
+            } catch (error) {
+                addLog(`上傳檔案失敗: ${error.message}`, 'error');
+                utils.showNotification('上傳檔案失敗', 'error');
+                resetDownloadForm();
+                return;
             }
-            
-            requestData.excel_file = uploadedFiles[0];
         } else {
             // 伺服器檔案模式
-            const excelFile = selectedFiles.find(f => f.name.endsWith('.xlsx'));
-            if (excelFile) {
-                requestData.excel_file = excelFile.path;
-                addLog(`使用伺服器檔案: ${excelFile.name}`, 'info');
+            const excelFile = serverSelectedFiles.find(f => f.name.endsWith('.xlsx'));
+            if (!excelFile) {
+                utils.showNotification('請選擇一個 Excel 檔案', 'error');
+                resetDownloadForm();
+                return;
             }
-        }
-        
-        if (!requestData.excel_file) {
-            utils.showNotification('請至少選擇一個 Excel 檔案', 'error');
-            resetDownloadForm();
-            return;
+            requestData.excel_file = excelFile.path;
+            addLog(`使用伺服器檔案: ${excelFile.name}`, 'info');
         }
         
         addLog('正在初始化下載任務...', 'info');
@@ -575,13 +594,17 @@ async function startDownload() {
             body: JSON.stringify(requestData)
         });
         
+        if (!response.task_id) {
+            throw new Error('無法建立下載任務');
+        }
+        
         downloadTaskId = response.task_id;
         
         addLog(`任務 ID: ${downloadTaskId}`, 'info');
         addLog('開始下載檔案...', 'downloading');
         
         // 如果有 socket 連接，加入任務房間
-        if (window.socket) {
+        if (window.socket && socket.connected) {
             socket.emit('join_task', { task_id: downloadTaskId });
         }
         
@@ -671,17 +694,33 @@ function animateValue(element, start, end) {
     }, 16);
 }
 
-// 添加日誌
+// 改善日誌顯示
 function addLog(message, type = 'info') {
     const log = document.getElementById('downloadLog');
     if (!log) return;
     
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString('zh-TW', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+    });
+    
+    const iconMap = {
+        'info': 'fa-info-circle',
+        'success': 'fa-check-circle',
+        'warning': 'fa-exclamation-triangle',
+        'error': 'fa-times-circle',
+        'downloading': 'fa-download',
+        'completed': 'fa-flag-checkered'
+    };
+    
     entry.innerHTML = `
-        <span class="log-time">${new Date().toLocaleTimeString('zh-TW')}</span>
+        <span class="log-time">${timestamp}</span>
         <span class="log-icon">
-            <i class="fas ${getLogIcon(type)}"></i>
+            <i class="fas ${iconMap[type] || iconMap.info}"></i>
         </span>
         <span class="log-message">${message}</span>
     `;

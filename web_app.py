@@ -57,6 +57,7 @@ class WebProcessor:
         self.status = 'idle'
         self.message = ''
         self.results = {}
+        self.logger = utils.setup_logger(f'WebProcessor_{task_id}')  # 添加 logger
         
     def update_progress(self, progress, status, message, stats=None):
         """更新處理進度"""
@@ -167,60 +168,56 @@ class WebProcessor:
         try:
             self.update_progress(10, 'downloading', '正在連接 SFTP 伺服器...')
             
-            # 建立 SFTP 下載器
-            self.downloader = SFTPDownloader(
+            # 使用新的 Web 下載器
+            from sftp_web_downloader import SFTPWebDownloader
+            
+            self.downloader = SFTPWebDownloader(
                 sftp_config.get('host', config.SFTP_HOST),
                 sftp_config.get('port', config.SFTP_PORT),
                 sftp_config.get('username', config.SFTP_USERNAME),
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            # 設定選項（使用屬性而不是參數）
-            if options:
-                for key, value in options.items():
-                    if hasattr(self.downloader, key):
-                        setattr(self.downloader, key, value)
+            # 設定進度回調
+            self.downloader.set_progress_callback(
+                lambda p, s, m: self.update_progress(int(20 + p * 0.7), s, m)
+            )
             
-            self.update_progress(20, 'downloading', '正在準備下載...')
+            self.update_progress(20, 'downloading', '開始下載檔案...')
             
             # 建立下載目錄
             download_dir = os.path.join('downloads', self.task_id)
-            if not os.path.exists(download_dir):
-                os.makedirs(download_dir)
             
-            # 記錄下載選項（供日誌使用）
-            print(f"Download options: {options}")
-            
-            self.update_progress(30, 'downloading', '開始下載檔案...')
-            
-            # 執行下載
             try:
-                # 只傳遞必要的參數，不傳遞 options
-                report_path = self.downloader.download_from_excel(excel_file, download_dir)
+                # 執行下載
+                report_path = self.downloader.download_from_excel_with_progress(
+                    excel_file, download_dir
+                )
                 
-                # 如果成功，繼續處理
-                self.update_progress(80, 'downloading', '下載完成，正在處理結果...')
+                # 取得統計資料
+                stats = self.downloader.get_download_stats()
                 
-                # 從下載器獲取統計資料
-                stats = self.downloader.stats.copy()
+                # 生成資料夾結構 - 修正：傳入兩個參數
+                folder_structure = self._generate_folder_structure(download_dir, report_path)
                 
                 # 儲存結果
                 self.results['download_report'] = report_path
                 self.results['stats'] = stats
-                self.results['folder_structure'] = self._generate_simple_folder_structure(download_dir)
+                self.results['folder_structure'] = folder_structure
                 
                 self.update_progress(100, 'completed', '下載完成！', stats)
-                add_activity('下載 SFTP 檔案', 'success', f'成功下載 {stats["downloaded"]} 個檔案')
+                add_activity('下載 SFTP 檔案', 'success', 
+                            f'成功下載 {stats["downloaded"]} 個檔案')
                 
             except Exception as e:
                 error_msg = str(e)
-                self.update_progress(0, 'error', f'下載過程發生錯誤：{error_msg}')
+                self.update_progress(0, 'error', f'下載失敗：{error_msg}')
                 add_activity('下載失敗', 'error', error_msg)
                 raise
                 
         except Exception as e:
             error_msg = str(e)
-            self.update_progress(0, 'error', f'初始化失敗：{error_msg}')
+            self.update_progress(0, 'error', f'處理失敗：{error_msg}')
             add_activity('下載失敗', 'error', error_msg)
             raise
 
@@ -250,6 +247,10 @@ class WebProcessor:
         folder_structure = {}
         
         try:
+            # 確保目錄存在
+            if not os.path.exists(download_dir):
+                return folder_structure
+                
             for root, dirs, files in os.walk(download_dir):
                 # 獲取相對路徑
                 rel_path = os.path.relpath(root, download_dir)
@@ -257,6 +258,7 @@ class WebProcessor:
                 if rel_path == '.':
                     # 根目錄
                     for file in files:
+                        # 排除報告檔案
                         if report_path and file != os.path.basename(report_path):
                             folder_structure[file] = file
                 else:
@@ -275,6 +277,7 @@ class WebProcessor:
                         current[file] = file
                         
         except Exception as e:
+            self.logger.error(f"Error generating folder structure: {e}")
             print(f"Error generating folder structure: {e}")
             
         return folder_structure
