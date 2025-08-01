@@ -58,7 +58,7 @@ class WebProcessor:
         self.message = ''
         self.results = {}
         self.logger = utils.setup_logger(f'WebProcessor_{task_id}')  # 添加 logger
-        
+
     def update_progress(self, progress, status, message, stats=None):
         """更新處理進度"""
         self.progress = progress
@@ -251,30 +251,28 @@ class WebProcessor:
             if not os.path.exists(download_dir):
                 return folder_structure
                 
-            for root, dirs, files in os.walk(download_dir):
-                # 獲取相對路徑
-                rel_path = os.path.relpath(root, download_dir)
-                
-                if rel_path == '.':
-                    # 根目錄
-                    for file in files:
-                        # 排除報告檔案
-                        if report_path and file != os.path.basename(report_path):
-                            folder_structure[file] = file
-                else:
-                    # 子目錄
-                    parts = rel_path.split(os.sep)
-                    current = folder_structure
+            # 遞迴建立資料夾結構
+            def build_tree(path, tree_dict):
+                try:
+                    items = os.listdir(path)
+                    for item in sorted(items):
+                        item_path = os.path.join(path, item)
+                        
+                        # 跳過報告檔案
+                        if report_path and item_path == report_path:
+                            continue
+                            
+                        if os.path.isdir(item_path):
+                            # 資料夾
+                            tree_dict[item] = {}
+                            build_tree(item_path, tree_dict[item])
+                        else:
+                            # 檔案
+                            tree_dict[item] = os.path.relpath(item_path, os.getcwd())
+                except Exception as e:
+                    self.logger.error(f"Error building tree for {path}: {e}")
                     
-                    # 建立巢狀結構
-                    for part in parts:
-                        if part not in current:
-                            current[part] = {}
-                        current = current[part]
-                    
-                    # 加入檔案
-                    for file in files:
-                        current[file] = file
+            build_tree(download_dir, folder_structure)
                         
         except Exception as e:
             self.logger.error(f"Error generating folder structure: {e}")
@@ -850,31 +848,43 @@ def preview_file():
         return jsonify({'error': '缺少檔案路徑'}), 400
         
     try:
-        # 這裡應該讀取實際檔案
-        # 目前返回模擬資料
-        if file_path.endswith('.xml'):
-            content = """<?xml version="1.0" encoding="UTF-8"?>
-<manifest>
-    <project name="bootcode" revision="abc123def456">
-        <source>realtek/mac7p/bootcode</source>
-    </project>
-    <project name="emcu" revision="def456ghi789">
-        <source>realtek/emcu</source>
-    </project>
-</manifest>"""
-        elif file_path.endswith('.txt'):
-            content = """Version Information
-==================
-Build Date: 2025-01-15
-Build Number: 1234
-Branch: master
-Commit: abc123def456"""
-        else:
-            content = "檔案預覽不支援此格式"
+        # 建構真實的檔案路徑
+        full_path = os.path.join(os.getcwd(), file_path)
+        
+        # 安全性檢查
+        allowed_dirs = ['downloads', 'compare_results']
+        path_parts = file_path.split('/')
+        
+        if len(path_parts) > 0 and path_parts[0] not in allowed_dirs:
+            return jsonify({'error': '無效的檔案路徑'}), 403
             
+        # 檢查檔案是否存在
+        if not os.path.exists(full_path):
+            return jsonify({'error': '檔案不存在'}), 404
+            
+        # 讀取檔案內容（限制大小）
+        max_size = 1024 * 1024  # 1MB
+        file_size = os.path.getsize(full_path)
+        
+        if file_size > max_size:
+            return jsonify({'content': f'檔案太大 ({utils.formatFileSize(file_size)})，無法預覽'})
+            
+        # 讀取檔案
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            # 嘗試其他編碼
+            try:
+                with open(full_path, 'r', encoding='big5') as f:
+                    content = f.read()
+            except:
+                content = '無法解碼檔案內容（可能是二進位檔案）'
+                
         return jsonify({'content': content})
         
     except Exception as e:
+        print(f"Preview file error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download-file')
@@ -886,17 +896,30 @@ def download_single_file():
         return jsonify({'error': '缺少檔案路徑'}), 400
         
     try:
-        # 這裡應該返回實際檔案
-        # 目前返回一個示例檔案
-        import tempfile
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.txt')
-        temp_file.write(b'This is a sample file content')
-        temp_file.close()
+        # 建構真實的檔案路徑
+        # 假設檔案路徑格式為: downloads/task_xxx/DailyBuild/Merlin7/DB2302/Version.txt
+        full_path = os.path.join(os.getcwd(), file_path)
         
-        return send_file(temp_file.name, as_attachment=True, 
-                       download_name=os.path.basename(file_path))
+        # 安全性檢查 - 確保路徑在允許的目錄內
+        allowed_dirs = ['downloads', 'compare_results', 'zip_output']
+        path_parts = file_path.split('/')
+        
+        if len(path_parts) > 0 and path_parts[0] not in allowed_dirs:
+            return jsonify({'error': '無效的檔案路徑'}), 403
+            
+        # 檢查檔案是否存在
+        if not os.path.exists(full_path):
+            return jsonify({'error': '檔案不存在'}), 404
+            
+        # 返回真實檔案
+        return send_file(
+            full_path, 
+            as_attachment=True,
+            download_name=os.path.basename(file_path)
+        )
         
     except Exception as e:
+        print(f"Download file error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download-report/<task_id>')

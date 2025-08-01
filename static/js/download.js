@@ -766,7 +766,7 @@ function showDownloadResults(results) {
         return;
     }
     
-    // 生成摘要
+    // 生成摘要 - 使用北歐藍配色
     const stats = results.stats || {};
     const summary = `
         <div class="summary-grid">
@@ -793,6 +793,13 @@ function showDownloadResults(results) {
                     </div>
                 </div>
             ` : ''}
+            <div class="summary-item">
+                <i class="fas fa-folder-tree text-info"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.total || 0}</div>
+                    <div class="summary-label">總檔案數</div>
+                </div>
+            </div>
         </div>
     `;
     
@@ -806,49 +813,66 @@ function showDownloadResults(results) {
 
 // 生成資料夾樹
 function generateFolderTree(structure) {
-    const tree = buildTreeHTML(structure, 'downloads', '');
-    document.getElementById('folderTree').innerHTML = tree;
+    const treeContainer = document.getElementById('folderTree');
+    
+    if (!structure || Object.keys(structure).length === 0) {
+        treeContainer.innerHTML = '<div class="empty-message">沒有檔案</div>';
+        return;
+    }
+    
+    const tree = buildTreeHTML(structure, '', '');
+    treeContainer.innerHTML = tree;
 }
 
 // 建立樹狀結構 HTML
-function buildTreeHTML(node, name, path) {
-    const fullPath = path ? `${path}/${name}` : name;
+function buildTreeHTML(node, name, parentPath) {
+    let html = '';
     
+    // 如果是字串，表示是檔案（包含完整路徑）
     if (typeof node === 'string') {
-        // 檔案節點
-        return `
+        const fileName = name;
+        const filePath = node; // node 就是完整路徑
+        
+        html = `
             <div class="tree-node">
-                <div class="tree-node-content" data-path="${fullPath}">
+                <div class="tree-node-content" data-path="${filePath}">
                     <i class="tree-icon tree-file fas fa-file"></i>
-                    <span class="tree-name">${name}</span>
+                    <span class="tree-name">${fileName}</span>
                     <div class="tree-actions">
-                        <button class="tree-action" onclick="previewFile('${fullPath}')" title="預覽">
+                        <button class="tree-action" onclick="previewFile('${filePath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="tree-action" onclick="downloadFile('${fullPath}')" title="下載">
+                        <button class="tree-action" onclick="downloadFile('${filePath}')" title="下載">
                             <i class="fas fa-download"></i>
                         </button>
                     </div>
                 </div>
             </div>
         `;
+    } else if (typeof node === 'object') {
+        // 資料夾
+        if (name) {
+            html = `
+                <div class="tree-node">
+                    <div class="tree-node-content folder" onclick="toggleFolder(this)">
+                        <i class="tree-icon tree-folder fas fa-folder"></i>
+                        <span class="tree-name">${name}/</span>
+                    </div>
+                    <div class="tree-children">
+            `;
+        }
+        
+        // 遞迴處理子項目
+        for (const [key, value] of Object.entries(node)) {
+            const currentPath = parentPath ? `${parentPath}/${name}` : name;
+            html += buildTreeHTML(value, key, currentPath);
+        }
+        
+        if (name) {
+            html += '</div></div>';
+        }
     }
     
-    // 資料夾節點
-    let html = `
-        <div class="tree-node">
-            <div class="tree-node-content folder" onclick="toggleFolder(this)">
-                <i class="tree-icon tree-folder fas fa-folder"></i>
-                <span class="tree-name">${name}/</span>
-            </div>
-            <div class="tree-children">
-    `;
-    
-    for (const [key, value] of Object.entries(node)) {
-        html += buildTreeHTML(value, key, fullPath);
-    }
-    
-    html += '</div></div>';
     return html;
 }
 
