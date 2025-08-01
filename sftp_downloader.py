@@ -1,4 +1,4 @@
-"""
+﻿"""
 SFTP 下載模組
 處理從 SFTP 伺服器下載檔案的功能
 """
@@ -35,22 +35,7 @@ class SFTPDownloader:
         self.excel_handler = ExcelHandler()
         self._sftp = None
         self._transport = None
-        self.progress_callback = None
         
-        # 加入下載選項屬性
-        self.skip_existing = True
-        self.recursive_search = True
-        self.search_depth = 3
-        self.enable_resume = False
-        
-        # 統計資料
-        self.stats = {
-            'total': 0,
-            'downloaded': 0,
-            'skipped': 0,
-            'failed': 0
-        }
-
     def connect(self) -> None:
         """建立 SFTP 連線"""
         try:
@@ -92,11 +77,6 @@ class SFTPDownloader:
             找到的檔案名稱，或 None
         """
         try:
-            # 檢查路徑是否有效
-            if not remote_path or not remote_path.strip():
-                self.logger.error("遠端路徑為空")
-                return None
-                
             files = self._sftp.listdir(remote_path)
             filename_lower = filename.lower()
             
@@ -124,11 +104,6 @@ class SFTPDownloader:
             (檔案完整路徑, 實際檔案名稱) 或 None
         """
         if current_depth > max_depth:
-            return None
-            
-        # 檢查路徑是否有效
-        if not remote_path or not remote_path.strip():
-            self.logger.error("遠端路徑為空，無法搜尋檔案")
             return None
             
         try:
@@ -173,11 +148,6 @@ class SFTPDownloader:
         downloaded_files = []
         file_paths = {}  # 記錄每個檔案的實際路徑
         
-        # 檢查 FTP 路徑是否有效
-        if not ftp_path or not ftp_path.strip():
-            self.logger.error("FTP 路徑為空，無法下載檔案")
-            return downloaded_files, file_paths
-        
         try:
             # 確保本地目錄存在
             utils.create_directory(local_dir)
@@ -189,6 +159,8 @@ class SFTPDownloader:
             
             if is_db_format:
                 # DB 格式：從路徑中提取版本號
+                # 例如：/DailyBuild/MacArthur7P/DB1857_Mac7p_FW_Android12_Ref_Design_Cert/904_all_202507300838
+                # 或：/DailyBuild/Merlin7/DB2857_Merlin7_32Bit_FW_Android14_Ref_Plus_PreMP_GoogleGMS/69_202507292300
                 path_parts = ftp_path.rstrip('/').split('/')
                 if path_parts:
                     last_part = path_parts[-1]
@@ -280,152 +252,147 @@ class SFTPDownloader:
             
         return downloaded_files, file_paths
         
-    def download_from_excel(self, excel_file, download_dir, progress_callback=None):
-        """從 Excel 檔案下載檔案"""
-        self.progress_callback = progress_callback
+    def download_from_excel(self, excel_path: str, output_dir: str = None) -> str:
+        """
+        從 Excel 檔案讀取 FTP 路徑並下載檔案
         
-        # 讀取 Excel 檔案
-        df = pd.read_excel(excel_file)
-        total_files = len(df)
-        self.stats['total'] = total_files
-        
-        # 顯示 Excel 檔案的欄位資訊（診斷用）
-        self.logger.info(f"Excel 檔案包含 {len(df)} 行資料")
-        self.logger.info(f"Excel 檔案的欄位: {list(df.columns)}")
-        
-        # 建立下載目錄
-        if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
+        Args:
+            excel_path: Excel 檔案路徑
+            output_dir: 輸出目錄
             
-        # 下載結果記錄
-        results = []
-        
-        # 連接到 SFTP
-        self.connect()
+        Returns:
+            報表檔案路徑
+        """
+        output_dir = output_dir or config.DEFAULT_OUTPUT_DIR
+        utils.create_directory(output_dir)
         
         try:
+            # 讀取 Excel
+            df = self.excel_handler.read_excel(excel_path)
+            
+            # 驗證必要欄位
+            if not utils.validate_excel_columns(df, [config.FTP_PATH_COLUMN]):
+                raise ValueError(f"Excel 必須包含 '{config.FTP_PATH_COLUMN}' 欄位")
+                
+            # 建立連線
+            self.connect()
+            
+            # 處理每一筆資料
+            report_data = []
             for idx, row in df.iterrows():
-                # 獲取檔案資訊
-                ftp_path = None
+                ftp_path = row[config.FTP_PATH_COLUMN]
                 
-                # 首先檢查 config 是否有指定欄位名稱
-                if hasattr(config, 'FTP_PATH_COLUMN') and config.FTP_PATH_COLUMN:
-                    if config.FTP_PATH_COLUMN in row:
-                        value = row[config.FTP_PATH_COLUMN]
-                        if pd.notna(value) and str(value).strip():
-                            ftp_path = str(value).strip()
-                            self.logger.info(f"使用指定欄位 '{config.FTP_PATH_COLUMN}' 的路徑: {ftp_path}")
-                
-                # 如果沒有指定或找不到，嘗試多個可能的欄位名稱
-                if not ftp_path:
-                    possible_columns = ['ftp_path', 'FTP_PATH', 'path', 'PATH', '路徑', 'ftp路徑', 
-                                        'FTP Path', 'FTP_Path', 'FtpPath', 'ftpPath', 'ftp', 'FTP',
-                                        'File Path', 'FilePath', 'file_path', 'FILE_PATH',
-                                        'Remote Path', 'remote_path', 'REMOTE_PATH',
-                                        'Server Path', 'server_path', 'SERVER_PATH']
-                    
-                    # 先顯示第一行的所有欄位值（僅診斷第一行）
-                    if idx == 0:
-                        self.logger.debug(f"第一行資料內容:")
-                        for col in df.columns:
-                            self.logger.debug(f"  {col}: {row[col]}")
-                    
-                    # 優先嘗試預定義的欄位名稱
-                    for col in possible_columns:
-                        if col in row and pd.notna(row[col]) and str(row[col]).strip():
-                            ftp_path = str(row[col]).strip()
-                            self.logger.debug(f"從欄位 '{col}' 找到路徑: {ftp_path}")
-                
-                # 先顯示第一行的所有欄位值（僅診斷第一行）
-                if idx == 0:
-                    self.logger.debug(f"第一行資料內容:")
-                    for col in df.columns:
-                        self.logger.debug(f"  {col}: {row[col]}")
-                
-                # 優先嘗試預定義的欄位名稱
-                for col in possible_columns:
-                    if col in row and pd.notna(row[col]) and str(row[col]).strip():
-                        ftp_path = str(row[col]).strip()
-                        self.logger.debug(f"從欄位 '{col}' 找到路徑: {ftp_path}")
-                        break
-                
-                # 如果還是找不到，嘗試檢查所有欄位的值是否像路徑
-                if not ftp_path:
-                    for col in df.columns:
-                        if pd.notna(row[col]) and str(row[col]).strip():
-                            value = str(row[col]).strip()
-                            # 檢查是否包含路徑特徵
-                            if (value.startswith('/') or 
-                                '/DailyBuild/' in value or 
-                                '/PrebuildFW/' in value or
-                                'mmsftpx' in value or
-                                (value.count('/') >= 2)):  # 至少有2個斜線
-                                ftp_path = value
-                                self.logger.info(f"從欄位 '{col}' 自動檢測到路徑: {ftp_path}")
-                                break
-                
-                # 檢查是否找到有效的 FTP 路徑
-                if not ftp_path:
-                    self.logger.error(f"第 {idx + 1} 行沒有找到有效的 FTP 路徑")
-                    self.stats['failed'] += 1
-                    results.append({
-                        'row': idx + 1,
-                        'ftp_path': '未找到路徑',
-                        'status': 'failed',
-                        'message': '沒有找到有效的 FTP 路徑欄位'
-                    })
+                if pd.isna(ftp_path):
+                    self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空")
                     continue
-                
-                file_name = os.path.basename(ftp_path)
-                
-                # 更新進度
-                if self.progress_callback:
-                    self.progress_callback(idx + 1, total_files, f"下載 {file_name}")
-                
-                try:
-                    # 使用 download_files 方法
-                    local_subdir = os.path.join(download_dir, f"module_{idx}")
-                    downloaded, paths = self.download_files(ftp_path, local_subdir)
                     
-                    if downloaded:
-                        self.stats['downloaded'] += len(downloaded)
-                        results.append({
-                            'row': idx + 1,
-                            'ftp_path': ftp_path,
-                            'status': 'downloaded',
-                            'message': f'下載成功 {len(downloaded)} 個檔案',
-                            'files': ', '.join(downloaded)
-                        })
+                # 解析模組和 JIRA ID
+                module, jira_id = utils.parse_module_and_jira(ftp_path)
+                
+                if module:
+                    # 根據路徑類型決定頂層目錄
+                    if '/DailyBuild/PrebuildFW' in ftp_path:
+                        # RDDB 格式：PrebuildFW/模組/RDDB-XXX
+                        top_dir = 'PrebuildFW'
+                        is_prebuild = True
                     else:
-                        self.stats['failed'] += 1
-                        results.append({
-                            'row': idx + 1,
-                            'ftp_path': ftp_path,
-                            'status': 'failed',
-                            'message': '找不到任何目標檔案'
-                        })
+                        # DB 格式：DailyBuild/平台/DBXXXX
+                        top_dir = 'DailyBuild'
+                        is_prebuild = False
                     
-                except Exception as e:
-                    self.stats['failed'] += 1
-                    results.append({
-                        'row': idx + 1,
-                        'ftp_path': ftp_path,
-                        'status': 'failed',
-                        'message': str(e)
+                    # 檢查路徑中的關鍵字並決定資料夾後綴
+                    folder_suffix = ""
+                    
+                    if is_prebuild:
+                        # PrebuildFW 的關鍵字規則（原有邏輯）
+                        if "mp.google-refplus.wave.backup" in ftp_path:
+                            folder_suffix = "-wave.backup"
+                        elif "mp.google-refplus.wave" in ftp_path:
+                            folder_suffix = "-wave"
+                        elif "premp.google-refplus" in ftp_path:
+                            folder_suffix = "-premp"
+                    else:
+                        # DailyBuild 的關鍵字規則（新邏輯）
+                        # 不區分大小寫的檢查
+                        ftp_path_upper = ftp_path.upper()
+                        if "WAVE_BACKUP" in ftp_path_upper or "WAVEBACKUP" in ftp_path_upper:
+                            folder_suffix = "-wave.backup"
+                        elif "WAVE" in ftp_path_upper and "BACKUP" not in ftp_path_upper:
+                            folder_suffix = "-wave"
+                        elif "PREMP" in ftp_path_upper:
+                            folder_suffix = "-premp"
+                    
+                    if jira_id:  # RDDB 格式（有 JIRA ID）
+                        # 建立本地目錄結構：PrebuildFW/模組/RDDB-XXX-後綴
+                        folder_name = f"{jira_id}{folder_suffix}"
+                        local_dir = os.path.join(output_dir, top_dir, module, folder_name)
+                        
+                        # 用於報表顯示的路徑
+                        local_folder_display = f"{top_dir}/{module}/{folder_name}"
+                    else:
+                        # DB 格式（如 Merlin7/DB2302）
+                        # module 格式為 "Merlin7/DB2302"，需要分解
+                        if '/' in module:
+                            platform, db_number = module.split('/', 1)
+                            # 建立本地目錄結構：DailyBuild/平台/DBXXXX-後綴
+                            folder_name = f"{db_number}{folder_suffix}"
+                            local_dir = os.path.join(output_dir, top_dir, platform, folder_name)
+                            
+                            # 用於報表顯示的路徑
+                            local_folder_display = f"{top_dir}/{platform}/{folder_name}"
+                        else:
+                            # 備用處理
+                            local_dir = os.path.join(output_dir, top_dir, module)
+                            local_folder_display = f"{top_dir}/{module}"
+                    
+                    # 下載檔案
+                    downloaded_files, file_paths = self.download_files(ftp_path, local_dir)
+                    
+                    # 準備檔案資訊字串
+                    file_info = []
+                    for file in downloaded_files:
+                        if file in file_paths:
+                            path = file_paths[file]
+                            if path == "已存在":
+                                file_info.append(f"{file} (已存在)")
+                            elif path and path != file:
+                                file_info.append(f"{file} ({path})")
+                            else:
+                                file_info.append(file)
+                        else:
+                            file_info.append(file)
+                    
+                    # 加入報表資料
+                    report_data.append({
+                        'SN': idx + 1,
+                        '模組': module.split('/')[0] if '/' in module else module,  # 對於 Merlin7/DB2302，只顯示 Merlin7
+                        'sftp 路徑': ftp_path,
+                        '本地資料夾': local_folder_display,
+                        '版本資訊檔案': ', '.join(file_info) if file_info else '無'
                     })
-        
+                else:
+                    self.logger.warning(f"無法解析 FTP 路徑: {ftp_path}")
+                    report_data.append({
+                        'SN': idx + 1,
+                        '模組': '未知',
+                        'sftp 路徑': ftp_path,
+                        '本地資料夾': '解析失敗',
+                        '版本資訊檔案': '解析失敗'
+                    })
+                    
+            # 寫入報表
+            report_path = self.excel_handler.write_download_report(
+                report_data, output_dir, excel_path
+            )
+            
+            return report_path
+            
+        except Exception as e:
+            self.logger.error(f"下載過程發生錯誤: {str(e)}")
+            raise
+            
         finally:
             self.disconnect()
-        
-        # 生成報告
-        report_path = os.path.join(download_dir, 'download_report.xlsx')
-        pd.DataFrame(results).to_excel(report_path, index=False)
-        
-        # 記錄統計資訊
-        self.logger.info(f"下載完成 - 總計: {self.stats['total']}, 成功: {self.stats['downloaded']}, "
-                         f"跳過: {self.stats['skipped']}, 失敗: {self.stats['failed']}")
-        
-        return report_path
             
     def test_connection(self) -> bool:
         """
@@ -440,10 +407,3 @@ class SFTPDownloader:
             return True
         except Exception:
             return False
-
-    def set_options(self, **options):
-        """設定下載選項"""
-        for key, value in options.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-                self.logger.info(f"設定 {key} = {value}")
