@@ -6,6 +6,7 @@ let selectedFiles = [];
 let downloadTaskId = null;
 let currentServerPath = '/';
 let serverSelectedFiles = [];
+let serverFilesLoaded = false;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,10 +18,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 初始化標籤切換
 function initializeTabs() {
-    // 如果是伺服器標籤，載入檔案列表
-    if (selectedSource === 'server') {
-        loadServerFiles(currentServerPath);
+    // 設定預設選中的標籤
+    const defaultSource = 'local';
+    selectedSource = defaultSource;
+    
+    // 確保正確的選項卡片和內容面板顯示
+    document.querySelectorAll('.source-card').forEach((card, index) => {
+        if (index === 0) { // 第一個是 local
+            card.classList.add('active');
+        } else {
+            card.classList.remove('active');
+        }
+    });
+    
+    // 確保只有本地面板顯示
+    document.querySelectorAll('.content-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    const localPanel = document.getElementById('local-panel');
+    if (localPanel) {
+        localPanel.classList.add('active');
     }
+    
+    // 重置伺服器載入狀態
+    serverFilesLoaded = false;
 }
 
 // 切換標籤
@@ -116,19 +137,34 @@ function displayLocalFiles() {
         return;
     }
     
-    let html = '<div class="selected-files-info"><div class="file-items">';
+    let html = `
+        <div class="selected-files-container">
+            <div class="selected-files-header">
+                <div class="selected-files-title">
+                    <i class="fas fa-check-circle"></i>
+                    已選擇 ${selectedFiles.length} 個檔案
+                </div>
+            </div>
+            <div class="file-items">
+    `;
+    
     selectedFiles.forEach((file, index) => {
         html += `
             <div class="file-item">
-                <i class="fas fa-file-excel text-success"></i>
-                <span class="file-name">${file.name}</span>
-                <span class="file-size">${utils.formatFileSize(file.size)}</span>
-                <button class="file-remove" onclick="removeFile(${index})">
+                <div class="file-icon">
+                    <i class="fas fa-file-excel"></i>
+                </div>
+                <div class="file-info">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${utils.formatFileSize(file.size)}</div>
+                </div>
+                <button class="file-remove" onclick="removeFile(${index})" title="移除檔案">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         `;
     });
+    
     html += '</div></div>';
     
     listEl.innerHTML = html;
@@ -147,7 +183,7 @@ async function loadServerFiles(path) {
     const browser = document.getElementById('serverBrowser');
     if (!browser) return;
     
-    browser.innerHTML = '<div class="loading-center"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
+    browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span> 載入中...</span></div>';
     
     try {
         const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
@@ -160,8 +196,8 @@ async function loadServerFiles(path) {
                 <i class="fas fa-exclamation-triangle"></i>
                 <p>無法載入檔案列表</p>
                 <p class="text-muted">${error.message}</p>
-                <button class="btn btn-small btn-outline mt-3" onclick="loadServerFiles('${path}')">
-                    重試
+                <button class="btn-retry" onclick="loadServerFiles('${path}')">
+                    <i class="fas fa-redo"></i> 重試
                 </button>
             </div>
         `;
@@ -177,9 +213,9 @@ function displayServerFiles(data) {
     
     if (files.length === 0 && folders.length === 0) {
         browser.innerHTML = `
-            <div class="empty-message">
-                <i class="fas fa-folder-open fa-3x text-muted"></i>
-                <p class="text-muted mt-3">此資料夾是空的</p>
+            <div class="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <p>此資料夾是空的</p>
             </div>
         `;
         return;
@@ -190,9 +226,9 @@ function displayServerFiles(data) {
     // 顯示資料夾
     folders.forEach(folder => {
         html += `
-            <div class="file-grid-item folder" onclick="navigateTo('${folder.path}')">
-                <i class="fas fa-folder fa-2x"></i>
-                <span class="item-name">${folder.name}</span>
+            <div class="file-item folder" onclick="navigateTo('${folder.path}')">
+                <i class="fas fa-folder"></i>
+                <span class="file-name">${folder.name}</span>
             </div>
         `;
     });
@@ -201,12 +237,12 @@ function displayServerFiles(data) {
     files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
         const isSelected = serverSelectedFiles.some(f => f.path === file.path);
         html += `
-            <div class="file-grid-item file ${isSelected ? 'selected' : ''}" 
+            <div class="file-item file ${isSelected ? 'selected' : ''}" 
                  onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
-                <i class="fas fa-file-excel fa-2x text-success"></i>
-                <span class="item-name">${file.name}</span>
-                <span class="item-size">${utils.formatFileSize(file.size)}</span>
-                ${isSelected ? '<i class="fas fa-check-circle selected-icon"></i>' : ''}
+                <i class="fas fa-file-excel"></i>
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                ${isSelected ? '<i class="fas fa-check-circle check-icon"></i>' : ''}
             </div>
         `;
     });
@@ -266,16 +302,17 @@ function toggleServerFile(path, name, size) {
 // 顯示已選擇的伺服器檔案
 function displaySelectedServerFiles() {
     const container = document.getElementById('serverSelectedFiles');
+    if (!container) return;
     
     if (serverSelectedFiles.length === 0) {
         container.innerHTML = '';
         return;
     }
     
-    let html = '<h4 class="mb-3">已選擇的檔案：</h4><div class="selected-server-files">';
+    let html = '<div class="selected-info"><h4>已選擇的檔案：</h4><div class="selected-chips">';
     serverSelectedFiles.forEach((file, index) => {
         html += `
-            <div class="selected-file-chip">
+            <div class="file-chip">
                 <i class="fas fa-file-excel"></i>
                 <span>${file.name}</span>
                 <button class="chip-remove" onclick="removeServerFile(${index})">
@@ -284,7 +321,7 @@ function displaySelectedServerFiles() {
             </div>
         `;
     });
-    html += '</div>';
+    html += '</div></div>';
     
     container.innerHTML = html;
 }
@@ -306,26 +343,40 @@ function refreshServerFiles() {
 
 // 初始化設定開關
 function initializeConfigToggles() {
-    // SFTP 設定開關
     const useDefault = document.getElementById('useDefaultConfig');
     const customConfig = document.getElementById('customSftpConfig');
     
-    useDefault.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            customConfig.classList.add('disabled');
-            customConfig.querySelectorAll('input').forEach(input => {
-                input.disabled = true;
-            });
-        } else {
-            customConfig.classList.remove('disabled');
-            customConfig.querySelectorAll('input').forEach(input => {
-                input.disabled = false;
-            });
-        }
-    });
+    if (useDefault && customConfig) {
+        // 初始狀態處理
+        toggleSftpConfig(useDefault.checked);
+        
+        useDefault.addEventListener('change', (e) => {
+            toggleSftpConfig(e.target.checked);
+        });
+    }
     
     // 初始化深度控制顯示
     toggleDepthControl();
+}
+
+// 切換 SFTP 設定狀態
+function toggleSftpConfig(useDefault) {
+    const customConfig = document.getElementById('customSftpConfig');
+    if (!customConfig) return;
+    
+    if (useDefault) {
+        customConfig.classList.add('disabled');
+        // 禁用所有輸入框和按鈕
+        customConfig.querySelectorAll('input, button').forEach(element => {
+            element.disabled = true;
+        });
+    } else {
+        customConfig.classList.remove('disabled');
+        // 啟用所有輸入框和按鈕
+        customConfig.querySelectorAll('input, button').forEach(element => {
+            element.disabled = false;
+        });
+    }
 }
 
 // 切換深度控制顯示
@@ -410,6 +461,7 @@ function getSftpConfig() {
         config.username = document.getElementById('sftpUsername').value;
         config.password = document.getElementById('sftpPassword').value;
         
+        // 驗證必要欄位
         if (!config.host || !config.username || !config.password) {
             throw new Error('請填寫完整的 SFTP 設定');
         }
@@ -418,7 +470,7 @@ function getSftpConfig() {
     return config;
 }
 
-// 開始下載
+// 開始下載函數也需要更新
 async function startDownload() {
     if (selectedFiles.length === 0) {
         utils.showNotification('請先選擇檔案', 'error');
@@ -428,56 +480,60 @@ async function startDownload() {
     try {
         const sftpConfig = getSftpConfig();
         
-        // 準備檔案資料
-        let fileData = [];
+        // 準備請求數據
+        let requestData = {
+            sftp_config: sftpConfig,
+            options: {
+                skip_existing: document.getElementById('skipExisting').checked,
+                recursive_search: document.getElementById('recursiveSearch').checked,
+                search_depth: parseInt(document.getElementById('searchDepth').value),
+                enable_resume: document.getElementById('enableResume').checked
+            }
+        };
         
         if (selectedSource === 'local') {
-            // 上傳本地檔案
+            // 本地檔案模式
+            const uploadedFiles = [];
+            
             for (const file of selectedFiles) {
-                const result = await utils.uploadFile(file);
-                fileData.push({
-                    type: 'local',
-                    path: result.filepath,
-                    name: file.name
-                });
+                try {
+                    const result = await utils.uploadFile(file);
+                    uploadedFiles.push(result.filepath);
+                } catch (error) {
+                    utils.showNotification(`上傳檔案 ${file.name} 失敗`, 'error');
+                    return;
+                }
             }
+            
+            requestData.excel_file = uploadedFiles[0];
         } else {
-            // 使用伺服器檔案
-            fileData = selectedFiles.map(f => ({
-                type: 'server',
-                path: f.path,
-                name: f.name
-            }));
+            // 伺服器檔案模式
+            const excelFile = selectedFiles.find(f => f.name.endsWith('.xlsx'));
+            if (excelFile) {
+                requestData.excel_file = excelFile.path;
+            }
         }
         
-        // 隱藏表單，顯示進度
-        document.querySelector('.download-form').classList.add('hidden');
-        document.getElementById('downloadProgress').classList.remove('hidden');
+        if (!requestData.excel_file) {
+            utils.showNotification('請至少選擇一個 Excel 檔案', 'error');
+            return;
+        }
         
         // 發送下載請求
         const response = await utils.apiRequest('/api/download', {
             method: 'POST',
-            body: JSON.stringify({
-                files: fileData,
-                sftp_config: sftpConfig,
-                options: {
-                    skip_existing: document.getElementById('skipExisting').checked,
-                    recursive_search: document.getElementById('recursiveSearch').checked,
-                    search_depth: parseInt(document.getElementById('searchDepth').value),
-                    enable_resume: document.getElementById('enableResume').checked
-                }
-            })
+            body: JSON.stringify(requestData)
         });
         
         downloadTaskId = response.task_id;
         
-        // 加入任務房間
-        if (socket) {
+        // 顯示進度區域（這裡需要確保有這些元素）
+        utils.showNotification('開始下載...', 'info');
+        
+        // 如果有 socket 連接，加入任務房間
+        if (window.socket) {
             socket.emit('join_task', { task_id: downloadTaskId });
         }
-        
-        // 監聽進度更新
-        document.addEventListener('task-progress', handleDownloadProgress);
         
         // 開始輪詢狀態
         pollDownloadStatus();
@@ -485,7 +541,6 @@ async function startDownload() {
     } catch (error) {
         console.error('Download error:', error);
         utils.showNotification(error.message || '下載失敗', 'error');
-        resetDownloadForm();
     }
 }
 
@@ -757,15 +812,35 @@ async function pollDownloadStatus() {
 
 // 重置下載表單
 function resetDownloadForm() {
-    document.querySelector('.download-form').classList.remove('hidden');
-    document.getElementById('downloadProgress').classList.add('hidden');
-    document.getElementById('downloadResults').classList.add('hidden');
+    const downloadForm = document.querySelector('.download-form');
+    const downloadProgress = document.getElementById('downloadProgress');
+    const downloadResults = document.getElementById('downloadResults');
+    
+    if (downloadForm) {
+        downloadForm.classList.remove('hidden');
+    }
+    
+    if (downloadProgress) {
+        downloadProgress.classList.add('hidden');
+    }
+    
+    if (downloadResults) {
+        downloadResults.classList.add('hidden');
+    }
     
     clearLog();
     
     // 重置進度
-    document.getElementById('progressFill').style.width = '0%';
-    document.getElementById('progressText').textContent = '0%';
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    if (progressFill) {
+        progressFill.style.width = '0%';
+    }
+    
+    if (progressText) {
+        progressText.textContent = '0%';
+    }
 }
 
 // 查看報表
@@ -787,22 +862,19 @@ function newDownload() {
 
 // 選擇檔案來源
 function selectSource(source) {
-    // 如果從 onclick 調用，event 可能是全域的
     const clickedCard = event ? event.currentTarget : null;
     
     selectedSource = source;
     
     // 更新選項卡片狀態
-    document.querySelectorAll('.option-card').forEach(card => {
+    document.querySelectorAll('.source-card').forEach(card => {
         card.classList.remove('active');
     });
     
-    // 如果有點擊的卡片，將其設為 active
     if (clickedCard) {
         clickedCard.classList.add('active');
     } else {
-        // 如果沒有 event，根據 source 找到對應的卡片
-        document.querySelectorAll('.option-card').forEach((card, index) => {
+        document.querySelectorAll('.source-card').forEach((card, index) => {
             if ((source === 'local' && index === 0) || (source === 'server' && index === 1)) {
                 card.classList.add('active');
             }
@@ -813,14 +885,42 @@ function selectSource(source) {
     document.querySelectorAll('.content-panel').forEach(panel => {
         panel.classList.remove('active');
     });
+    
     const targetPanel = document.getElementById(`${source}-panel`);
     if (targetPanel) {
         targetPanel.classList.add('active');
-    }
-    
-    // 如果選擇伺服器，載入檔案列表
-    if (source === 'server') {
-        loadServerFiles(currentServerPath);
+        
+        // 如果選擇伺服器且尚未載入內容，動態生成
+        if (source === 'server' && !serverFilesLoaded) {
+            targetPanel.innerHTML = `
+                <div class="browser-container">
+                    <div class="browser-header">
+                        <div class="breadcrumb" id="pathBreadcrumb">
+                            <span class="breadcrumb-item" onclick="navigateTo('/')">
+                                <i class="fas fa-home"></i>
+                            </span>
+                        </div>
+                        <button class="btn-refresh" onclick="refreshServerFiles()">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                    <div class="browser-content" id="serverBrowser">
+                        <div class="loading">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>載入中...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="selected-files" id="serverSelectedFiles">
+                    <!-- 顯示已選擇的伺服器檔案 -->
+                </div>
+            `;
+            
+            // 載入檔案列表
+            loadServerFiles(currentServerPath);
+            serverFilesLoaded = true;
+        }
     }
     
     // 重置選擇
@@ -831,6 +931,7 @@ function selectSource(source) {
         selectedFiles = serverSelectedFiles;
         displaySelectedServerFiles();
     }
+    
     updateSelectedHint();
     updateDownloadButton();
 }

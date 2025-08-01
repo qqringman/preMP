@@ -396,26 +396,36 @@ def process_one_step():
 @app.route('/api/download', methods=['POST'])
 def process_download():
     """下載處理 API"""
-    data = request.json
-    excel_file = data.get('excel_file')
-    sftp_config = data.get('sftp_config', {})
-    options = data.get('options', {})
-    
-    if not excel_file:
-        return jsonify({'error': '缺少 Excel 檔案'}), 400
+    try:
+        data = request.json
         
-    # 生成任務 ID
-    task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
-    
-    # 在背景執行處理
-    processor = WebProcessor(task_id)
-    thread = threading.Thread(
-        target=processor.process_download,
-        args=(excel_file, sftp_config, options)
-    )
-    thread.start()
-    
-    return jsonify({'task_id': task_id})
+        # 驗證必要參數
+        excel_file = data.get('excel_file')
+        if not excel_file:
+            return jsonify({'error': '缺少 Excel 檔案'}), 400
+            
+        sftp_config = data.get('sftp_config', {})
+        options = data.get('options', {})
+        
+        # 處理伺服器檔案（如果有）
+        server_files = data.get('server_files', [])
+        
+        # 生成任務 ID
+        task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+        
+        # 在背景執行處理
+        processor = WebProcessor(task_id)
+        thread = threading.Thread(
+            target=processor.process_download,
+            args=(excel_file, sftp_config, options)
+        )
+        thread.start()
+        
+        return jsonify({'task_id': task_id})
+        
+    except Exception as e:
+        print(f"Download API error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/compare', methods=['POST'])
 def process_compare():

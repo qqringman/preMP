@@ -103,16 +103,22 @@ async function apiRequest(url, options = {}) {
             ...options
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
         const contentType = response.headers.get('content-type');
+        let data;
+        
         if (contentType && contentType.includes('application/json')) {
-            return await response.json();
+            data = await response.json();
+        } else {
+            data = await response.text();
         }
         
-        return response;
+        if (!response.ok) {
+            // 如果有錯誤訊息，使用它；否則使用狀態碼
+            const errorMessage = (data && data.error) ? data.error : `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+        
+        return data;
     } catch (error) {
         console.error('API request failed:', error);
         showNotification('請求失敗：' + error.message, 'error');
