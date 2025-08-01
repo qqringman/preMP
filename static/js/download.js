@@ -10,6 +10,28 @@ let serverFilesLoaded = false;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
+    // 立即將需要的函數綁定到 window
+    window.selectSource = selectSource;
+    window.switchTab = switchTab;
+    window.toggleDepthControl = toggleDepthControl;
+    window.removeFile = removeFile;
+    window.navigateTo = navigateTo;
+    window.toggleServerFile = toggleServerFile;
+    window.removeServerFile = removeServerFile;
+    window.refreshServerFiles = refreshServerFiles;
+    window.adjustDepth = adjustDepth;
+    window.testSftpConnection = testSftpConnection;
+    window.startDownload = startDownload;
+    window.clearLog = clearLog;
+    window.toggleFolder = toggleFolder;
+    window.previewFile = previewFile;
+    window.downloadFile = downloadFile;
+    window.closePreview = closePreview;
+    window.viewReport = viewReport;
+    window.proceedToCompare = proceedToCompare;
+    window.newDownload = newDownload;
+    
+    // 初始化功能
     initializeTabs();
     initializeUploadAreas();
     initializeConfigToggles();
@@ -52,7 +74,7 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    document.querySelector(`.tab-btn[onclick*="${tab}"]`).classList.add('active');
+    event.currentTarget.classList.add('active');
     
     // 更新標籤內容
     document.querySelectorAll('.tab-content').forEach(content => {
@@ -61,8 +83,9 @@ function switchTab(tab) {
     document.getElementById(`${tab}-tab`).classList.add('active');
     
     // 如果切換到伺服器，載入檔案列表
-    if (tab === 'server') {
+    if (tab === 'server' && !serverFilesLoaded) {
         loadServerFiles(currentServerPath);
+        serverFilesLoaded = true;
     }
     
     // 重置選擇
@@ -362,20 +385,30 @@ function initializeConfigToggles() {
 // 切換 SFTP 設定狀態
 function toggleSftpConfig(useDefault) {
     const customConfig = document.getElementById('customSftpConfig');
+    const testButton = customConfig.querySelector('.btn-test');
+    
     if (!customConfig) return;
     
     if (useDefault) {
         customConfig.classList.add('disabled');
-        // 禁用所有輸入框和按鈕
-        customConfig.querySelectorAll('input, button').forEach(element => {
+        // 禁用所有輸入框
+        customConfig.querySelectorAll('input').forEach(element => {
             element.disabled = true;
         });
+        // 禁用測試按鈕
+        if (testButton) {
+            testButton.disabled = true;
+        }
     } else {
         customConfig.classList.remove('disabled');
-        // 啟用所有輸入框和按鈕
-        customConfig.querySelectorAll('input, button').forEach(element => {
+        // 啟用所有輸入框
+        customConfig.querySelectorAll('input').forEach(element => {
             element.disabled = false;
         });
+        // 啟用測試按鈕
+        if (testButton) {
+            testButton.disabled = false;
+        }
     }
 }
 
@@ -470,7 +503,7 @@ function getSftpConfig() {
     return config;
 }
 
-// 開始下載函數也需要更新
+// 修改開始下載函數
 async function startDownload() {
     if (selectedFiles.length === 0) {
         utils.showNotification('請先選擇檔案', 'error');
@@ -479,6 +512,13 @@ async function startDownload() {
     
     try {
         const sftpConfig = getSftpConfig();
+        
+        // 隱藏表單，顯示進度
+        document.getElementById('downloadForm').classList.add('hidden');
+        document.getElementById('downloadProgress').classList.remove('hidden');
+        
+        // 清除之前的日誌
+        clearLog();
         
         // 準備請求數據
         let requestData = {
@@ -495,12 +535,18 @@ async function startDownload() {
             // 本地檔案模式
             const uploadedFiles = [];
             
+            addLog('開始上傳 Excel 檔案...', 'info');
+            
             for (const file of selectedFiles) {
                 try {
+                    addLog(`上傳檔案: ${file.name}`, 'info');
                     const result = await utils.uploadFile(file);
                     uploadedFiles.push(result.filepath);
+                    addLog(`檔案 ${file.name} 上傳成功`, 'success');
                 } catch (error) {
+                    addLog(`上傳檔案 ${file.name} 失敗: ${error.message}`, 'error');
                     utils.showNotification(`上傳檔案 ${file.name} 失敗`, 'error');
+                    resetDownloadForm();
                     return;
                 }
             }
@@ -511,13 +557,17 @@ async function startDownload() {
             const excelFile = selectedFiles.find(f => f.name.endsWith('.xlsx'));
             if (excelFile) {
                 requestData.excel_file = excelFile.path;
+                addLog(`使用伺服器檔案: ${excelFile.name}`, 'info');
             }
         }
         
         if (!requestData.excel_file) {
             utils.showNotification('請至少選擇一個 Excel 檔案', 'error');
+            resetDownloadForm();
             return;
         }
+        
+        addLog('正在初始化下載任務...', 'info');
         
         // 發送下載請求
         const response = await utils.apiRequest('/api/download', {
@@ -527,20 +577,25 @@ async function startDownload() {
         
         downloadTaskId = response.task_id;
         
-        // 顯示進度區域（這裡需要確保有這些元素）
-        utils.showNotification('開始下載...', 'info');
+        addLog(`任務 ID: ${downloadTaskId}`, 'info');
+        addLog('開始下載檔案...', 'downloading');
         
         // 如果有 socket 連接，加入任務房間
         if (window.socket) {
             socket.emit('join_task', { task_id: downloadTaskId });
         }
         
+        // 監聽進度更新
+        document.addEventListener('task-progress', handleDownloadProgress);
+        
         // 開始輪詢狀態
         pollDownloadStatus();
         
     } catch (error) {
         console.error('Download error:', error);
+        addLog(`下載失敗: ${error.message}`, 'error');
         utils.showNotification(error.message || '下載失敗', 'error');
+        resetDownloadForm();
     }
 }
 
@@ -658,8 +713,19 @@ function clearLog() {
 
 // 顯示下載結果
 function showDownloadResults(results) {
-    document.getElementById('downloadProgress').classList.add('hidden');
-    document.getElementById('downloadResults').classList.remove('hidden');
+    const downloadProgress = document.getElementById('downloadProgress');
+    const downloadResults = document.getElementById('downloadResults');
+    
+    if (downloadProgress) {
+        downloadProgress.classList.add('hidden');
+    }
+    
+    if (downloadResults) {
+        downloadResults.classList.remove('hidden');
+    } else {
+        console.error('downloadResults element not found');
+        return;
+    }
     
     // 生成摘要
     const stats = results.stats || {};
@@ -804,9 +870,13 @@ async function pollDownloadStatus() {
         // 如果任務未完成，繼續輪詢
         if (status.status !== 'completed' && status.status !== 'error') {
             setTimeout(pollDownloadStatus, 1000);
+        } else {
+            // 移除事件監聽
+            document.removeEventListener('task-progress', handleDownloadProgress);
         }
     } catch (error) {
         console.error('Poll status error:', error);
+        addLog('無法獲取任務狀態', 'error');
     }
 }
 
@@ -935,32 +1005,3 @@ function selectSource(source) {
     updateSelectedHint();
     updateDownloadButton();
 }
-
-// 初始化
-document.addEventListener('DOMContentLoaded', () => {
-    // 立即將需要的函數綁定到 window
-    window.selectSource = selectSource;
-    window.toggleDepthControl = toggleDepthControl;
-    window.removeFile = removeFile;
-    window.navigateTo = navigateTo;
-    window.toggleServerFile = toggleServerFile;
-    window.removeServerFile = removeServerFile;
-    window.refreshServerFiles = refreshServerFiles;
-    window.adjustDepth = adjustDepth;
-    window.testSftpConnection = testSftpConnection;
-    window.startDownload = startDownload;
-    window.clearLog = clearLog;
-    window.toggleFolder = toggleFolder;
-    window.previewFile = previewFile;
-    window.downloadFile = downloadFile;
-    window.closePreview = closePreview;
-    window.viewReport = viewReport;
-    window.proceedToCompare = proceedToCompare;
-    window.newDownload = newDownload;
-    
-    // 初始化功能
-    initializeTabs();
-    initializeUploadAreas();
-    initializeConfigToggles();
-    updateDownloadButton();
-});

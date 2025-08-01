@@ -167,6 +167,7 @@ class WebProcessor:
         try:
             self.update_progress(10, 'downloading', '正在連接 SFTP 伺服器...')
             
+            # 建立 SFTP 下載器
             self.downloader = SFTPDownloader(
                 sftp_config.get('host', config.SFTP_HOST),
                 sftp_config.get('port', config.SFTP_PORT),
@@ -174,67 +175,168 @@ class WebProcessor:
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            # 模擬逐步下載進度
+            self.update_progress(20, 'downloading', '正在準備下載...')
+            
+            # 建立下載目錄
             download_dir = os.path.join('downloads', self.task_id)
-            total_files = 15
-            downloaded = 0
-            skipped = 0
-            failed = 0
+            if not os.path.exists(download_dir):
+                os.makedirs(download_dir)
             
-            for i in range(total_files):
-                progress = 20 + (60 * i / total_files)
-                file_name = f"file_{i+1}.xml"
+            # 記錄下載選項（供日誌使用）
+            print(f"Download options: {options}")
+            
+            self.update_progress(30, 'downloading', '開始下載檔案...')
+            
+            # 執行下載
+            try:
+                # 基本呼叫 - 只使用必要參數
+                report_path = self.downloader.download_from_excel(excel_file, download_dir)
                 
-                # 模擬下載
-                time.sleep(0.5)  # 模擬網路延遲
+                # 如果成功，繼續處理
+                self.update_progress(80, 'downloading', '下載完成，正在處理結果...')
                 
-                if i % 5 == 0:  # 每 5 個檔案跳過一個
-                    skipped += 1
-                    message = f"跳過已存在檔案: {file_name}"
-                else:
-                    downloaded += 1
-                    message = f"下載檔案: {file_name}"
-                
+                # 獲取統計資料
                 stats = {
-                    'total': total_files,
-                    'downloaded': downloaded,
-                    'skipped': skipped,
-                    'failed': failed
+                    'total': 0,
+                    'downloaded': 0,
+                    'skipped': 0,
+                    'failed': 0
                 }
                 
-                self.update_progress(progress, 'downloading', message, stats)
-            
-            # 完成下載
-            report_path = os.path.join(download_dir, 'download_report.xlsx')
-            self.results['download_report'] = report_path
-            self.results['stats'] = stats
-            
-            # 生成資料夾結構
-            self.results['folder_structure'] = {
-                'PrebuildFW': {
-                    'bootcode': {
-                        'RDDB-320': ['manifest.xml', 'Version.txt'],
-                        'RDDB-320-premp': ['manifest.xml', 'Version.txt']
-                    },
-                    'emcu': {
-                        'RDDB-321': ['manifest.xml', 'Version.txt']
-                    }
-                },
-                'DailyBuild': {
-                    'Merlin7': {
-                        'DB2302': ['manifest_69.xml', 'Version_69.txt']
-                    }
-                }
-            }
-            
-            self.update_progress(100, 'completed', '下載完成！', stats)
-            add_activity('下載 SFTP 檔案', 'success', f'{downloaded} 個檔案下載完成')
-            
+                # 嘗試讀取實際下載的檔案數
+                file_count = 0
+                for root, dirs, files in os.walk(download_dir):
+                    file_count += len([f for f in files if not f.endswith('.xlsx')])
+                
+                stats['total'] = file_count
+                stats['downloaded'] = file_count
+                
+                # 儲存結果
+                self.results['download_report'] = report_path
+                self.results['stats'] = stats
+                self.results['folder_structure'] = self._generate_simple_folder_structure(download_dir)
+                
+                self.update_progress(100, 'completed', '下載完成！', stats)
+                add_activity('下載 SFTP 檔案', 'success', f'成功下載 {file_count} 個檔案')
+                
+            except Exception as e:
+                error_msg = str(e)
+                self.update_progress(0, 'error', f'下載過程發生錯誤：{error_msg}')
+                add_activity('下載失敗', 'error', error_msg)
+                raise
+                
         except Exception as e:
-            self.update_progress(0, 'error', f'下載失敗：{str(e)}')
-            add_activity('下載失敗', 'error', str(e))
+            error_msg = str(e)
+            self.update_progress(0, 'error', f'初始化失敗：{error_msg}')
+            add_activity('下載失敗', 'error', error_msg)
             raise
+
+    def _generate_simple_folder_structure(self, download_dir):
+        """生成簡單的資料夾結構"""
+        structure = {}
+        
+        try:
+            for item in os.listdir(download_dir):
+                item_path = os.path.join(download_dir, item)
+                if os.path.isdir(item_path):
+                    # 遞迴處理子目錄
+                    structure[item] = {}
+                    for subitem in os.listdir(item_path):
+                        structure[item][subitem] = subitem
+                else:
+                    # 檔案
+                    if not item.endswith('.xlsx'):  # 排除報告檔案
+                        structure[item] = item
+        except Exception as e:
+            print(f"Error generating folder structure: {e}")
             
+        return structure
+        
+    def _generate_folder_structure(self, download_dir, report_path):
+        """生成資料夾結構"""
+        folder_structure = {}
+        
+        try:
+            for root, dirs, files in os.walk(download_dir):
+                # 獲取相對路徑
+                rel_path = os.path.relpath(root, download_dir)
+                
+                if rel_path == '.':
+                    # 根目錄
+                    for file in files:
+                        if report_path and file != os.path.basename(report_path):
+                            folder_structure[file] = file
+                else:
+                    # 子目錄
+                    parts = rel_path.split(os.sep)
+                    current = folder_structure
+                    
+                    # 建立巢狀結構
+                    for part in parts:
+                        if part not in current:
+                            current[part] = {}
+                        current = current[part]
+                    
+                    # 加入檔案
+                    for file in files:
+                        current[file] = file
+                        
+        except Exception as e:
+            print(f"Error generating folder structure: {e}")
+            
+        return folder_structure
+        
+    def _get_download_stats(self, report_path, download_dir):
+        """從下載報告或目錄中獲取統計資料"""
+        stats = {
+            'total': 0,
+            'downloaded': 0,
+            'skipped': 0,
+            'failed': 0
+        }
+        
+        # 嘗試從報告檔案讀取統計
+        if report_path and os.path.exists(report_path):
+            try:
+                import pandas as pd
+                df = pd.read_excel(report_path)
+                stats['total'] = len(df)
+                
+                # 檢查可能的狀態欄位名稱
+                status_columns = ['status', 'Status', '狀態', 'download_status', 'result']
+                status_column = None
+                
+                for col in status_columns:
+                    if col in df.columns:
+                        status_column = col
+                        break
+                
+                if status_column:
+                    # 統計各種狀態
+                    for status in df[status_column].unique():
+                        status_lower = str(status).lower()
+                        if 'download' in status_lower or 'success' in status_lower or '成功' in status:
+                            stats['downloaded'] += len(df[df[status_column] == status])
+                        elif 'skip' in status_lower or '跳過' in status:
+                            stats['skipped'] += len(df[df[status_column] == status])
+                        elif 'fail' in status_lower or 'error' in status_lower or '失敗' in status:
+                            stats['failed'] += len(df[df[status_column] == status])
+                else:
+                    # 如果沒有狀態欄位，計算下載目錄中的檔案數
+                    file_count = 0
+                    for root, dirs, files in os.walk(download_dir):
+                        # 排除報告檔案
+                        files = [f for f in files if not f.endswith('_report.xlsx')]
+                        file_count += len(files)
+                    stats['downloaded'] = file_count
+                    
+            except Exception as e:
+                print(f"Error reading report: {e}")
+                # 如果無法讀取報告，使用預設值
+                stats['downloaded'] = stats['total']
+        
+        return stats
+                    
     def process_comparison(self, source_dir, scenarios):
         """執行比對處理"""
         try:
@@ -800,7 +902,33 @@ def download_single_file():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-report/<task_id>')
+def download_report(task_id):
+    """下載報表 API"""
+    try:
+        # 查找任務的下載報告
+        if task_id in processing_status:
+            task_data = processing_status[task_id]
+            report_path = task_data.get('results', {}).get('download_report')
             
+            if report_path and os.path.exists(report_path):
+                return send_file(report_path, as_attachment=True, 
+                               download_name=f'download_report_{task_id}.xlsx')
+        
+        # 如果沒有找到，嘗試在下載目錄中查找
+        download_dir = os.path.join('downloads', task_id)
+        report_path = os.path.join(download_dir, 'download_report.xlsx')
+        
+        if os.path.exists(report_path):
+            return send_file(report_path, as_attachment=True,
+                           download_name=f'download_report_{task_id}.xlsx')
+        
+        return jsonify({'error': '找不到下載報表'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
