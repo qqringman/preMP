@@ -27,22 +27,15 @@ function initializeTabs() {
 function switchTab(tab) {
     selectedSource = tab;
     
-    // 更新選擇器卡片狀態
-    document.querySelectorAll('.selector-card').forEach(card => {
-        card.classList.remove('active');
+    // 更新標籤按鈕狀態
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
     });
-    
-    // 找到對應的選擇器卡片並激活
-    const cards = document.querySelectorAll('.selector-card');
-    if (tab === 'local' && cards[0]) {
-        cards[0].classList.add('active');
-    } else if (tab === 'server' && cards[1]) {
-        cards[1].classList.add('active');
-    }
+    document.querySelector(`.tab-btn[onclick*="${tab}"]`).classList.add('active');
     
     // 更新標籤內容
-    document.querySelectorAll('.tab-panel').forEach(panel => {
-        panel.classList.remove('active');
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
     });
     document.getElementById(`${tab}-tab`).classList.add('active');
     
@@ -57,6 +50,7 @@ function switchTab(tab) {
     } else {
         selectedFiles = serverSelectedFiles;
     }
+    updateSelectedHint();
     updateDownloadButton();
 }
 
@@ -107,22 +101,22 @@ function handleLocalFiles(files) {
     
     selectedFiles = excelFiles;
     displayLocalFiles();
+    updateSelectedHint();
     updateDownloadButton();
 }
 
 // 顯示本地檔案列表
 function displayLocalFiles() {
     const listEl = document.getElementById('localFileList');
-    const containerEl = document.getElementById('localFileListContainer');
+    
+    if (!listEl) return;
     
     if (selectedFiles.length === 0) {
-        containerEl.classList.add('hidden');
+        listEl.innerHTML = '';
         return;
     }
     
-    containerEl.classList.remove('hidden');
-    
-    let html = '';
+    let html = '<div class="selected-files-info"><div class="file-items">';
     selectedFiles.forEach((file, index) => {
         html += `
             <div class="file-item">
@@ -135,6 +129,7 @@ function displayLocalFiles() {
             </div>
         `;
     });
+    html += '</div></div>';
     
     listEl.innerHTML = html;
 }
@@ -143,69 +138,41 @@ function displayLocalFiles() {
 function removeFile(index) {
     selectedFiles.splice(index, 1);
     displayLocalFiles();
+    updateSelectedHint();
     updateDownloadButton();
 }
 
 // 載入伺服器檔案列表
 async function loadServerFiles(path) {
     const browser = document.getElementById('serverBrowser');
-    browser.innerHTML = `
-        <div class="loading-state">
-            <div class="loading-spinner-container">
-                <div class="loading-spinner"></div>
-            </div>
-            <p>載入檔案列表...</p>
-        </div>
-    `;
+    if (!browser) return;
+    
+    browser.innerHTML = '<div class="loading-center"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
     
     try {
         const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
         currentServerPath = path;
         displayServerFiles(response);
         updateBreadcrumb(path);
-        updateItemCount(response);
     } catch (error) {
         browser.innerHTML = `
             <div class="error-message">
-                <i class="fas fa-exclamation-triangle fa-3x"></i>
-                <h3>無法載入檔案列表</h3>
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>無法載入檔案列表</p>
                 <p class="text-muted">${error.message}</p>
-                <button class="btn btn-primary mt-3" onclick="loadServerFiles('${path}')">
-                    <i class="fas fa-redo"></i> 重試
+                <button class="btn btn-small btn-outline mt-3" onclick="loadServerFiles('${path}')">
+                    重試
                 </button>
             </div>
         `;
     }
 }
 
-// 更新項目計數
-function updateItemCount(data) {
-    const { files = [], folders = [] } = data;
-    const totalItems = files.length + folders.length;
-    const excelFiles = files.filter(f => f.name.endsWith('.xlsx')).length;
-    
-    document.getElementById('itemCount').textContent = 
-        `${totalItems} 個項目 (${excelFiles} 個 Excel 檔案)`;
-    updateSelectedStatus();
-}
-
-// 更新選擇狀態
-function updateSelectedStatus() {
-    document.getElementById('selectedStatus').textContent = 
-        `已選擇 ${serverSelectedFiles.length} 個檔案`;
-}
-
-// 導航到上一層
-function navigateUp() {
-    const parts = currentServerPath.split('/').filter(p => p);
-    parts.pop();
-    const parentPath = '/' + parts.join('/');
-    navigateTo(parentPath);
-}
-
 // 顯示伺服器檔案
 function displayServerFiles(data) {
     const browser = document.getElementById('serverBrowser');
+    if (!browser) return;
+    
     const { files = [], folders = [] } = data;
     
     if (files.length === 0 && folders.length === 0) {
@@ -291,7 +258,44 @@ function toggleServerFile(path, name, size) {
     selectedFiles = serverSelectedFiles;
     displayServerFiles({ files: [], folders: [] }); // 重新渲染以更新選中狀態
     loadServerFiles(currentServerPath); // 重新載入當前目錄
-    updateSelectedStatus();
+    displaySelectedServerFiles();
+    updateSelectedHint();
+    updateDownloadButton();
+}
+
+// 顯示已選擇的伺服器檔案
+function displaySelectedServerFiles() {
+    const container = document.getElementById('serverSelectedFiles');
+    
+    if (serverSelectedFiles.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '<h4 class="mb-3">已選擇的檔案：</h4><div class="selected-server-files">';
+    serverSelectedFiles.forEach((file, index) => {
+        html += `
+            <div class="selected-file-chip">
+                <i class="fas fa-file-excel"></i>
+                <span>${file.name}</span>
+                <button class="chip-remove" onclick="removeServerFile(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// 移除伺服器檔案
+function removeServerFile(index) {
+    serverSelectedFiles.splice(index, 1);
+    selectedFiles = serverSelectedFiles;
+    loadServerFiles(currentServerPath);
+    displaySelectedServerFiles();
+    updateSelectedHint();
     updateDownloadButton();
 }
 
@@ -320,17 +324,21 @@ function initializeConfigToggles() {
         }
     });
     
-    // 遞迴搜尋開關
-    const recursiveSearch = document.getElementById('recursiveSearch');
-    const depthOption = document.getElementById('searchDepthOption');
+    // 初始化深度控制顯示
+    toggleDepthControl();
+}
+
+// 更新已選擇提示
+function updateSelectedHint() {
+    const hint = document.getElementById('selectedHint');
+    const count = document.getElementById('selectedCount');
     
-    recursiveSearch.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            depthOption.classList.remove('disabled');
-        } else {
-            depthOption.classList.add('disabled');
-        }
-    });
+    if (selectedFiles.length > 0) {
+        count.textContent = selectedFiles.length;
+        hint.classList.remove('hidden');
+    } else {
+        hint.classList.add('hidden');
+    }
 }
 
 // 更新下載按鈕狀態
@@ -342,13 +350,13 @@ function updateDownloadButton() {
 // 調整搜尋深度
 function adjustDepth(delta) {
     const input = document.getElementById('searchDepth');
-    const text = document.getElementById('depthText');
+    
+    if (!input) return;
     
     let value = parseInt(input.value) + delta;
     value = Math.max(1, Math.min(10, value));
     
     input.value = value;
-    text.textContent = value;
 }
 
 // 測試連線
@@ -407,24 +415,25 @@ async function startDownload() {
         const sftpConfig = getSftpConfig();
         
         // 準備檔案資料
-        let excelFile = null;
+        let fileData = [];
         
         if (selectedSource === 'local') {
-            // 上傳本地檔案 - 只支援單一檔案作為主要 Excel
-            if (selectedFiles.length > 0) {
-                const result = await utils.uploadFile(selectedFiles[0]);
-                excelFile = result.filepath;
+            // 上傳本地檔案
+            for (const file of selectedFiles) {
+                const result = await utils.uploadFile(file);
+                fileData.push({
+                    type: 'local',
+                    path: result.filepath,
+                    name: file.name
+                });
             }
         } else {
-            // 使用伺服器檔案的第一個作為主要 Excel
-            if (selectedFiles.length > 0) {
-                excelFile = selectedFiles[0].path;
-            }
-        }
-        
-        if (!excelFile) {
-            utils.showNotification('請選擇至少一個 Excel 檔案', 'error');
-            return;
+            // 使用伺服器檔案
+            fileData = selectedFiles.map(f => ({
+                type: 'server',
+                path: f.path,
+                name: f.name
+            }));
         }
         
         // 隱藏表單，顯示進度
@@ -435,7 +444,7 @@ async function startDownload() {
         const response = await utils.apiRequest('/api/download', {
             method: 'POST',
             body: JSON.stringify({
-                excel_file: excelFile,
+                files: fileData,
                 sftp_config: sftpConfig,
                 options: {
                     skip_existing: document.getElementById('skipExisting').checked,
@@ -763,11 +772,12 @@ function newDownload() {
 }
 
 // 匯出全域函數
-window.switchTab = switchTab;
+window.selectSource = selectSource;
+window.toggleDepthControl = toggleDepthControl;
 window.removeFile = removeFile;
 window.navigateTo = navigateTo;
-window.navigateUp = navigateUp;
 window.toggleServerFile = toggleServerFile;
+window.removeServerFile = removeServerFile;
 window.refreshServerFiles = refreshServerFiles;
 window.adjustDepth = adjustDepth;
 window.testSftpConnection = testSftpConnection;

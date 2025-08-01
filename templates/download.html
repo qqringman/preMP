@@ -2,6 +2,10 @@
 
 {% block title %}下載檔案 - SFTP 下載與比較系統{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/download.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="page-header">
@@ -13,255 +17,242 @@
 
     <!-- 下載表單 -->
     <div class="download-form">
-        <!-- Excel 上傳區 - 重新設計 -->
-        <div class="file-source-section">
-            <div class="section-header">
+        <!-- 步驟 1：選擇檔案來源 -->
+        <div class="step-section">
+            <div class="step-header">
                 <div class="step-number">1</div>
-                <div class="section-info">
-                    <h2 class="section-title">選擇檔案來源</h2>
-                    <p class="section-desc">選擇 Excel 檔案或從伺服器瀏覽</p>
+                <div class="step-content">
+                    <h2 class="step-title">選擇檔案來源</h2>
+                    <p class="step-subtitle">選擇 Excel 檔案或從伺服器瀏覽</p>
                 </div>
             </div>
             
-            <div class="source-selector">
-                <div class="selector-card active" onclick="switchTab('local')">
-                    <div class="selector-icon">
-                        <i class="fas fa-laptop fa-2x"></i>
+            <div class="source-options">
+                <div class="option-card active" onclick="selectSource('local')">
+                    <div class="option-icon">
+                        <i class="fas fa-file-excel"></i>
                     </div>
-                    <div class="selector-content">
-                        <h3>載入 Excel 檔案</h3>
-                        <p>從本機上傳 Excel 檔案</p>
+                    <div class="option-content">
+                        <h3 class="option-title">載入 Excel 檔案</h3>
+                        <p class="option-desc">從本機上傳 Excel 檔案</p>
                     </div>
-                    <div class="selector-check">
+                    <div class="option-check">
                         <i class="fas fa-check-circle"></i>
                     </div>
                 </div>
                 
-                <div class="selector-card" onclick="switchTab('server')">
-                    <div class="selector-icon">
-                        <i class="fas fa-server fa-2x"></i>
+                <div class="option-card" onclick="selectSource('server')">
+                    <div class="option-icon">
+                        <i class="fas fa-server"></i>
                     </div>
-                    <div class="selector-content">
-                        <h3>選擇伺服器檔案</h3>
-                        <p>瀏覽伺服器上的檔案</p>
+                    <div class="option-content">
+                        <h3 class="option-title">選擇伺服器檔案</h3>
+                        <p class="option-desc">瀏覽伺服器上的檔案</p>
                     </div>
-                    <div class="selector-check">
+                    <div class="option-check">
                         <i class="fas fa-check-circle"></i>
                     </div>
                 </div>
             </div>
 
-            <!-- 本地 Excel 上傳 -->
-            <div class="tab-panel active" id="local-tab">
-                <div class="upload-zone" id="localUploadArea">
-                    <input type="file" id="localFileInput" accept=".xlsx" multiple style="display: none;">
-                    <div class="upload-visual">
-                        <div class="upload-icon-bg">
-                            <i class="fas fa-cloud-upload-alt fa-3x"></i>
-                        </div>
-                        <h3 class="upload-title">拖曳 Excel 檔案至此處</h3>
-                        <p class="upload-desc">支援多個 .xlsx 檔案同時上傳</p>
-                        <div class="upload-divider">
-                            <span>或</span>
-                        </div>
+            <!-- 檔案選擇區域 -->
+            <div class="source-content">
+                <!-- 本地上傳 -->
+                <div class="content-panel active" id="local-panel">
+                    <div class="upload-drop-zone" id="localUploadArea">
+                        <input type="file" id="localFileInput" accept=".xlsx" multiple style="display: none;">
+                        <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                        <p class="upload-text">拖曳 Excel 檔案至此處</p>
+                        <p class="upload-hint">支援多檔 .xlsx 檔案同時上傳</p>
+                        <p class="upload-or">或</p>
                         <button class="btn btn-primary" onclick="document.getElementById('localFileInput').click()">
                             <i class="fas fa-folder-open"></i> 選擇檔案
                         </button>
                     </div>
                     
-                    <div class="upload-hints">
-                        <div class="hint-item">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <span>支援 Excel 2007+ (.xlsx)</span>
-                        </div>
-                        <div class="hint-item">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <span>檔案需包含 "ftp path" 欄位</span>
-                        </div>
-                        <div class="hint-item">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <span>可同時處理多個檔案</span>
-                        </div>
+                    <div class="file-list mt-3" id="localFileList">
+                        <!-- 顯示已選擇的檔案 -->
                     </div>
                 </div>
                 
-                <div class="file-list-container hidden" id="localFileListContainer">
-                    <h4 class="file-list-title">已選擇的檔案</h4>
-                    <div class="file-list" id="localFileList">
-                        <!-- 動態顯示已選擇的檔案 -->
+                <!-- 伺服器瀏覽 -->
+                <div class="content-panel" id="server-panel">
+                    <div class="server-browser-card">
+                        <div class="browser-toolbar">
+                            <div class="path-bar">
+                                <div class="path-breadcrumb" id="pathBreadcrumb">
+                                    <span class="breadcrumb-item" onclick="navigateTo('/')">
+                                        <i class="fas fa-home"></i>
+                                    </span>
+                                </div>
+                            </div>
+                            <button class="btn btn-small btn-outline" onclick="refreshServerFiles()">
+                                <i class="fas fa-sync"></i> 重新整理
+                            </button>
+                        </div>
+                        <div class="browser-content" id="serverBrowser">
+                            <div class="loading-center">
+                                <i class="fas fa-spinner fa-spin"></i> 載入中...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="selected-files mt-3" id="serverSelectedFiles">
+                        <!-- 顯示已選擇的伺服器檔案 -->
                     </div>
                 </div>
             </div>
-
-            <!-- 伺服器檔案選擇 -->
-            <div class="tab-panel" id="server-tab">
-                <div class="server-browser-container">
-                    <div class="browser-toolbar">
-                        <div class="path-navigation">
-                            <button class="nav-btn" onclick="navigateUp()" title="上一層">
-                                <i class="fas fa-arrow-up"></i>
-                            </button>
-                            <div class="path-breadcrumb" id="pathBreadcrumb">
-                                <span class="breadcrumb-item" onclick="navigateTo('/')">
-                                    <i class="fas fa-home"></i>
-                                </span>
-                            </div>
-                        </div>
-                        <button class="btn btn-small btn-outline" onclick="refreshServerFiles()">
-                            <i class="fas fa-sync"></i> 重新整理
-                        </button>
-                    </div>
-                    
-                    <div class="browser-viewport" id="serverBrowser">
-                        <div class="loading-state">
-                            <div class="loading-spinner-container">
-                                <div class="loading-spinner"></div>
-                            </div>
-                            <p>載入檔案列表...</p>
-                        </div>
-                    </div>
-                    
-                    <div class="browser-status">
-                        <span id="itemCount">0 個項目</span>
-                        <span class="separator">•</span>
-                        <span id="selectedStatus">已選擇 0 個檔案</span>
-                    </div>
+            
+            <!-- 底部資訊 -->
+            <div class="step-footer">
+                <div class="footer-info">
+                    <i class="fas fa-check-circle text-success"></i>
+                    <span>支援 Excel 2007+ (.xlsx)</span>
+                </div>
+                <div class="footer-info">
+                    <i class="fas fa-check-circle text-success"></i>
+                    <span>檔案需包含 "ftp path" 欄位</span>
+                </div>
+                <div class="footer-info">
+                    <i class="fas fa-check-circle text-success"></i>
+                    <span>可同時處理多個檔案</span>
                 </div>
             </div>
         </div>
 
-        <!-- SFTP 設定 - 北歐藍風格 -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <i class="card-icon fas fa-server"></i>
-                <h2 class="card-title">步驟 2：SFTP 連線設定</h2>
+        <!-- 步驟 2：SFTP 連線設定 -->
+        <div class="step-section mt-4">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h2 class="step-title">SFTP 連線設定</h2>
+                    <p class="step-subtitle">設定 SFTP 伺服器連線資訊</p>
+                </div>
             </div>
             
-            <div class="form-group">
-                <label class="switch-label">
-                    <label class="switch">
+            <div class="section-body">
+                <div class="config-toggle">
+                    <label class="toggle-switch">
                         <input type="checkbox" id="useDefaultConfig" checked>
-                        <span class="switch-slider"></span>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">使用 config.py 中的預設值</span>
                     </label>
-                    <span>使用 config.py 中的預設值</span>
-                </label>
-            </div>
-            
-            <div id="customSftpConfig" class="custom-config disabled">
-                <div class="config-grid">
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-network-wired"></i> 伺服器位址
-                        </label>
-                        <input type="text" class="form-input" id="sftpHost" placeholder="sftp.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-ethernet"></i> 連接埠
-                        </label>
-                        <input type="number" class="form-input" id="sftpPort" value="22">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-user"></i> 使用者名稱
-                        </label>
-                        <input type="text" class="form-input" id="sftpUsername" placeholder="username">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-key"></i> 密碼
-                        </label>
-                        <input type="password" class="form-input" id="sftpPassword" placeholder="••••••••">
-                    </div>
                 </div>
                 
-                <div class="test-connection mt-3">
-                    <button class="btn btn-outline btn-small" onclick="testSftpConnection()">
-                        <i class="fas fa-plug"></i> 測試連線
-                    </button>
-                    <span class="connection-status ml-3" id="connectionStatus"></span>
+                <div id="customSftpConfig" class="config-form disabled">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="field-label">
+                                <i class="fas fa-network-wired"></i> 伺服器位址
+                            </label>
+                            <input type="text" class="field-input" id="sftpHost" placeholder="sftp.example.com">
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">
+                                <i class="fas fa-ethernet"></i> 連接埠
+                            </label>
+                            <input type="number" class="field-input" id="sftpPort" value="22">
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">
+                                <i class="fas fa-user"></i> 使用者名稱
+                            </label>
+                            <input type="text" class="field-input" id="sftpUsername" placeholder="username">
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">
+                                <i class="fas fa-key"></i> 密碼
+                            </label>
+                            <input type="password" class="field-input" id="sftpPassword" placeholder="••••••••">
+                        </div>
+                    </div>
+                    
+                    <div class="test-connection-area mt-4">
+                        <button class="btn btn-outline" onclick="testSftpConnection()">
+                            <i class="fas fa-plug"></i> 測試連線
+                        </button>
+                        <span class="test-status" id="connectionStatus"></span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- 下載選項 - 北歐藍風格 -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <i class="card-icon fas fa-cog"></i>
-                <h2 class="card-title">步驟 3：下載選項</h2>
+        <!-- 步驟 3：下載選項 -->
+        <div class="step-section mt-4">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h2 class="step-title">下載選項</h2>
+                    <p class="step-subtitle">設定下載行為與搜尋選項</p>
+                </div>
             </div>
             
-            <div class="options-grid">
-                <div class="option-card">
-                    <div class="option-header">
-                        <label class="switch-label">
-                            <label class="switch">
+            <div class="section-body">
+                <div class="options-list">
+                    <div class="option-item">
+                        <div class="option-control">
+                            <label class="toggle-switch">
                                 <input type="checkbox" id="skipExisting" checked>
-                                <span class="switch-slider"></span>
+                                <span class="toggle-slider"></span>
                             </label>
-                            <div>
-                                <span class="option-title">跳過已存在的檔案</span>
-                                <p class="option-desc">若本地已有相同檔案，將不會重新下載</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="option-card">
-                    <div class="option-header">
-                        <label class="switch-label">
-                            <label class="switch">
-                                <input type="checkbox" id="recursiveSearch" checked>
-                                <span class="switch-slider"></span>
-                            </label>
-                            <div>
-                                <span class="option-title">遞迴搜尋子目錄</span>
-                                <p class="option-desc">在 FTP 路徑的子目錄中搜尋目標檔案</p>
-                            </div>
-                        </label>
+                        </div>
+                        <div class="option-info">
+                            <h4 class="option-name">跳過已存在的檔案</h4>
+                            <p class="option-description">若本地已有相同檔案，將不會重新下載</p>
+                        </div>
                     </div>
                     
-                    <div class="option-sub mt-3" id="searchDepthOption">
-                        <label class="form-label">搜尋深度</label>
-                        <div class="depth-selector">
-                            <button class="depth-btn" onclick="adjustDepth(-1)">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                            <input type="number" class="depth-input" id="searchDepth" value="3" min="1" max="10" readonly>
-                            <button class="depth-btn" onclick="adjustDepth(1)">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                        <p class="option-desc mt-2">最多搜尋 <span id="depthText">3</span> 層子目錄</p>
-                    </div>
-                </div>
-                
-                <div class="option-card">
-                    <div class="option-header">
-                        <label class="switch-label">
-                            <label class="switch">
-                                <input type="checkbox" id="enableResume">
-                                <span class="switch-slider"></span>
+                    <div class="option-item">
+                        <div class="option-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="recursiveSearch" checked onchange="toggleDepthControl()">
+                                <span class="toggle-slider"></span>
                             </label>
-                            <div>
-                                <span class="option-title">啟用斷點續傳</span>
-                                <p class="option-desc">支援大檔案下載中斷後繼續</p>
+                        </div>
+                        <div class="option-info">
+                            <h4 class="option-name">遞迴搜尋子目錄</h4>
+                            <p class="option-description">在 FTP 路徑的子目錄中搜尋目標檔案</p>
+                            <div class="option-extra" id="searchDepthOption">
+                                <label class="extra-label">搜尋深度</label>
+                                <div class="number-control">
+                                    <button class="control-btn" onclick="adjustDepth(-1)">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                    <input type="number" class="control-value" id="searchDepth" value="3" min="1" max="10" readonly>
+                                    <button class="control-btn" onclick="adjustDepth(1)">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <span class="extra-hint">層</span>
                             </div>
-                        </label>
+                        </div>
+                    </div>
+                    
+                    <div class="option-item">
+                        <div class="option-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="enableResume">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="option-info">
+                            <h4 class="option-name">啟用斷點續傳</h4>
+                            <p class="option-description">支援大檔案下載中斷後繼續</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 執行按鈕 -->
-        <div class="form-actions mt-4 text-center">
+        <div class="action-section">
             <button class="btn btn-primary btn-large" id="downloadBtn" onclick="startDownload()" disabled>
                 <i class="fas fa-download"></i> 開始下載
             </button>
         </div>
     </div>
 
-    <!-- 下載進度 - 北歐藍風格 -->
+    <!-- 下載進度 -->
     <div class="download-progress hidden" id="downloadProgress">
         <div class="card">
             <div class="card-header">
@@ -334,7 +325,7 @@
         </div>
     </div>
 
-    <!-- 下載結果 - 北歐藍風格 -->
+    <!-- 下載結果 -->
     <div class="download-results hidden" id="downloadResults">
         <!-- 成功訊息卡片 -->
         <div class="result-card result-success">
@@ -360,7 +351,7 @@
             </button>
         </div>
 
-        <!-- 資料夾結構 - 北歐藍風格 -->
+        <!-- 資料夾結構 -->
         <div class="card mt-4">
             <div class="card-header">
                 <i class="card-icon fas fa-folder-tree"></i>
