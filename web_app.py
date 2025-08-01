@@ -175,6 +175,12 @@ class WebProcessor:
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
+            # 設定選項（使用屬性而不是參數）
+            if options:
+                for key, value in options.items():
+                    if hasattr(self.downloader, key):
+                        setattr(self.downloader, key, value)
+            
             self.update_progress(20, 'downloading', '正在準備下載...')
             
             # 建立下載目錄
@@ -189,27 +195,14 @@ class WebProcessor:
             
             # 執行下載
             try:
-                # 基本呼叫 - 只使用必要參數
+                # 只傳遞必要的參數，不傳遞 options
                 report_path = self.downloader.download_from_excel(excel_file, download_dir)
                 
                 # 如果成功，繼續處理
                 self.update_progress(80, 'downloading', '下載完成，正在處理結果...')
                 
-                # 獲取統計資料
-                stats = {
-                    'total': 0,
-                    'downloaded': 0,
-                    'skipped': 0,
-                    'failed': 0
-                }
-                
-                # 嘗試讀取實際下載的檔案數
-                file_count = 0
-                for root, dirs, files in os.walk(download_dir):
-                    file_count += len([f for f in files if not f.endswith('.xlsx')])
-                
-                stats['total'] = file_count
-                stats['downloaded'] = file_count
+                # 從下載器獲取統計資料
+                stats = self.downloader.stats.copy()
                 
                 # 儲存結果
                 self.results['download_report'] = report_path
@@ -217,7 +210,7 @@ class WebProcessor:
                 self.results['folder_structure'] = self._generate_simple_folder_structure(download_dir)
                 
                 self.update_progress(100, 'completed', '下載完成！', stats)
-                add_activity('下載 SFTP 檔案', 'success', f'成功下載 {file_count} 個檔案')
+                add_activity('下載 SFTP 檔案', 'success', f'成功下載 {stats["downloaded"]} 個檔案')
                 
             except Exception as e:
                 error_msg = str(e)

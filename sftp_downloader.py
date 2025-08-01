@@ -36,6 +36,20 @@ class SFTPDownloader:
         self._sftp = None
         self._transport = None
         self.progress_callback = None
+        
+        # 加入下載選項屬性
+        self.skip_existing = True
+        self.recursive_search = True
+        self.search_depth = 3
+        self.enable_resume = False
+        
+        # 統計資料
+        self.stats = {
+            'total': 0,
+            'downloaded': 0,
+            'skipped': 0,
+            'failed': 0
+        }
 
     def connect(self) -> None:
         """建立 SFTP 連線"""
@@ -260,6 +274,7 @@ class SFTPDownloader:
         # 讀取 Excel 檔案
         df = pd.read_excel(excel_file)
         total_files = len(df)
+        self.stats['total'] = total_files
         
         # 建立下載目錄
         if not os.path.exists(download_dir):
@@ -268,43 +283,57 @@ class SFTPDownloader:
         # 下載結果記錄
         results = []
         
-        for idx, row in df.iterrows():
-            # 獲取檔案資訊
-            ftp_path = row.get('ftp_path', '')
-            file_name = os.path.basename(ftp_path)
-            
-            # 更新進度
-            if self.progress_callback:
-                self.progress_callback(idx + 1, total_files, f"下載 {file_name}")
-            
-            try:
-                # 下載檔案邏輯
-                local_path = os.path.join(download_dir, file_name)
+        # 連接到 SFTP
+        self.connect()
+        
+        try:
+            for idx, row in df.iterrows():
+                # 獲取檔案資訊
+                ftp_path = row.get('ftp_path', '')
+                if not ftp_path:
+                    # 嘗試其他可能的欄位名稱
+                    for col in ['FTP_PATH', 'path', 'PATH', '路徑', 'ftp路徑']:
+                        if col in row:
+                            ftp_path = row[col]
+                            break
                 
-                # 檢查是否跳過
-                if self.skip_existing and os.path.exists(local_path):
+                file_name = os.path.basename(ftp_path)
+                
+                # 更新進度
+                if self.progress_callback:
+                    self.progress_callback(idx + 1, total_files, f"下載 {file_name}")
+                
+                try:
+                    # 使用 download_files 方法
+                    local_subdir = os.path.join(download_dir, f"module_{idx}")
+                    downloaded, paths = self.download_files(ftp_path, local_subdir)
+                    
+                    if downloaded:
+                        self.stats['downloaded'] += len(downloaded)
+                        results.append({
+                            'ftp_path': ftp_path,
+                            'status': 'downloaded',
+                            'message': f'下載成功 {len(downloaded)} 個檔案',
+                            'files': ', '.join(downloaded)
+                        })
+                    else:
+                        self.stats['failed'] += 1
+                        results.append({
+                            'ftp_path': ftp_path,
+                            'status': 'failed',
+                            'message': '找不到檔案'
+                        })
+                    
+                except Exception as e:
+                    self.stats['failed'] += 1
                     results.append({
-                        'file': file_name,
-                        'status': 'skipped',
-                        'message': '檔案已存在'
+                        'ftp_path': ftp_path,
+                        'status': 'failed',
+                        'message': str(e)
                     })
-                    continue
-                
-                # 執行下載
-                self._download_file(ftp_path, local_path)
-                
-                results.append({
-                    'file': file_name,
-                    'status': 'downloaded',
-                    'message': '下載成功'
-                })
-                
-            except Exception as e:
-                results.append({
-                    'file': file_name,
-                    'status': 'failed',
-                    'message': str(e)
-                })
+        
+        finally:
+            self.disconnect()
         
         # 生成報告
         report_path = os.path.join(download_dir, 'download_report.xlsx')
@@ -325,3 +354,10 @@ class SFTPDownloader:
             return True
         except Exception:
             return False
+
+    def set_options(self, **options):
+        """設定下載選項"""
+        for key, value in options.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                self.logger.info(f"設定 {key} = {value}")
