@@ -92,6 +92,11 @@ class SFTPDownloader:
             找到的檔案名稱，或 None
         """
         try:
+            # 檢查路徑是否有效
+            if not remote_path or not remote_path.strip():
+                self.logger.error("遠端路徑為空")
+                return None
+                
             files = self._sftp.listdir(remote_path)
             filename_lower = filename.lower()
             
@@ -119,6 +124,11 @@ class SFTPDownloader:
             (檔案完整路徑, 實際檔案名稱) 或 None
         """
         if current_depth > max_depth:
+            return None
+            
+        # 檢查路徑是否有效
+        if not remote_path or not remote_path.strip():
+            self.logger.error("遠端路徑為空，無法搜尋檔案")
             return None
             
         try:
@@ -163,6 +173,11 @@ class SFTPDownloader:
         downloaded_files = []
         file_paths = {}  # 記錄每個檔案的實際路徑
         
+        # 檢查 FTP 路徑是否有效
+        if not ftp_path or not ftp_path.strip():
+            self.logger.error("FTP 路徑為空，無法下載檔案")
+            return downloaded_files, file_paths
+        
         try:
             # 確保本地目錄存在
             utils.create_directory(local_dir)
@@ -174,8 +189,6 @@ class SFTPDownloader:
             
             if is_db_format:
                 # DB 格式：從路徑中提取版本號
-                # 例如：/DailyBuild/MacArthur7P/DB1857_Mac7p_FW_Android12_Ref_Design_Cert/904_all_202507300838
-                # 或：/DailyBuild/Merlin7/DB2857_Merlin7_32Bit_FW_Android14_Ref_Plus_PreMP_GoogleGMS/69_202507292300
                 path_parts = ftp_path.rstrip('/').split('/')
                 if path_parts:
                     last_part = path_parts[-1]
@@ -276,6 +289,10 @@ class SFTPDownloader:
         total_files = len(df)
         self.stats['total'] = total_files
         
+        # 顯示 Excel 檔案的欄位資訊（診斷用）
+        self.logger.info(f"Excel 檔案包含 {len(df)} 行資料")
+        self.logger.info(f"Excel 檔案的欄位: {list(df.columns)}")
+        
         # 建立下載目錄
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
@@ -289,13 +306,75 @@ class SFTPDownloader:
         try:
             for idx, row in df.iterrows():
                 # 獲取檔案資訊
-                ftp_path = row.get('ftp_path', '')
+                ftp_path = None
+                
+                # 首先檢查 config 是否有指定欄位名稱
+                if hasattr(config, 'FTP_PATH_COLUMN') and config.FTP_PATH_COLUMN:
+                    if config.FTP_PATH_COLUMN in row:
+                        value = row[config.FTP_PATH_COLUMN]
+                        if pd.notna(value) and str(value).strip():
+                            ftp_path = str(value).strip()
+                            self.logger.info(f"使用指定欄位 '{config.FTP_PATH_COLUMN}' 的路徑: {ftp_path}")
+                
+                # 如果沒有指定或找不到，嘗試多個可能的欄位名稱
                 if not ftp_path:
-                    # 嘗試其他可能的欄位名稱
-                    for col in ['FTP_PATH', 'path', 'PATH', '路徑', 'ftp路徑']:
-                        if col in row:
-                            ftp_path = row[col]
-                            break
+                    possible_columns = ['ftp_path', 'FTP_PATH', 'path', 'PATH', '路徑', 'ftp路徑', 
+                                        'FTP Path', 'FTP_Path', 'FtpPath', 'ftpPath', 'ftp', 'FTP',
+                                        'File Path', 'FilePath', 'file_path', 'FILE_PATH',
+                                        'Remote Path', 'remote_path', 'REMOTE_PATH',
+                                        'Server Path', 'server_path', 'SERVER_PATH']
+                    
+                    # 先顯示第一行的所有欄位值（僅診斷第一行）
+                    if idx == 0:
+                        self.logger.debug(f"第一行資料內容:")
+                        for col in df.columns:
+                            self.logger.debug(f"  {col}: {row[col]}")
+                    
+                    # 優先嘗試預定義的欄位名稱
+                    for col in possible_columns:
+                        if col in row and pd.notna(row[col]) and str(row[col]).strip():
+                            ftp_path = str(row[col]).strip()
+                            self.logger.debug(f"從欄位 '{col}' 找到路徑: {ftp_path}")
+                
+                # 先顯示第一行的所有欄位值（僅診斷第一行）
+                if idx == 0:
+                    self.logger.debug(f"第一行資料內容:")
+                    for col in df.columns:
+                        self.logger.debug(f"  {col}: {row[col]}")
+                
+                # 優先嘗試預定義的欄位名稱
+                for col in possible_columns:
+                    if col in row and pd.notna(row[col]) and str(row[col]).strip():
+                        ftp_path = str(row[col]).strip()
+                        self.logger.debug(f"從欄位 '{col}' 找到路徑: {ftp_path}")
+                        break
+                
+                # 如果還是找不到，嘗試檢查所有欄位的值是否像路徑
+                if not ftp_path:
+                    for col in df.columns:
+                        if pd.notna(row[col]) and str(row[col]).strip():
+                            value = str(row[col]).strip()
+                            # 檢查是否包含路徑特徵
+                            if (value.startswith('/') or 
+                                '/DailyBuild/' in value or 
+                                '/PrebuildFW/' in value or
+                                'mmsftpx' in value or
+                                (value.count('/') >= 2)):  # 至少有2個斜線
+                                ftp_path = value
+                                self.logger.info(f"從欄位 '{col}' 自動檢測到路徑: {ftp_path}")
+                                break
+                
+                # 檢查是否找到有效的 FTP 路徑
+                if not ftp_path:
+                    self.logger.error(f"第 {idx + 1} 行沒有找到有效的 FTP 路徑")
+                    self.stats['failed'] += 1
+                    results.append({
+                        'row': idx + 1,
+                        'ftp_path': '未找到路徑',
+                        'status': 'failed',
+                        'message': '沒有找到有效的 FTP 路徑欄位'
+                    })
+                    continue
                 
                 file_name = os.path.basename(ftp_path)
                 
@@ -311,6 +390,7 @@ class SFTPDownloader:
                     if downloaded:
                         self.stats['downloaded'] += len(downloaded)
                         results.append({
+                            'row': idx + 1,
                             'ftp_path': ftp_path,
                             'status': 'downloaded',
                             'message': f'下載成功 {len(downloaded)} 個檔案',
@@ -319,14 +399,16 @@ class SFTPDownloader:
                     else:
                         self.stats['failed'] += 1
                         results.append({
+                            'row': idx + 1,
                             'ftp_path': ftp_path,
                             'status': 'failed',
-                            'message': '找不到檔案'
+                            'message': '找不到任何目標檔案'
                         })
                     
                 except Exception as e:
                     self.stats['failed'] += 1
                     results.append({
+                        'row': idx + 1,
                         'ftp_path': ftp_path,
                         'status': 'failed',
                         'message': str(e)
@@ -338,6 +420,10 @@ class SFTPDownloader:
         # 生成報告
         report_path = os.path.join(download_dir, 'download_report.xlsx')
         pd.DataFrame(results).to_excel(report_path, index=False)
+        
+        # 記錄統計資訊
+        self.logger.info(f"下載完成 - 總計: {self.stats['total']}, 成功: {self.stats['downloaded']}, "
+                         f"跳過: {self.stats['skipped']}, 失敗: {self.stats['failed']}")
         
         return report_path
             
