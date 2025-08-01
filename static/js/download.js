@@ -328,6 +328,20 @@ function initializeConfigToggles() {
     toggleDepthControl();
 }
 
+// 切換深度控制顯示
+function toggleDepthControl() {
+    const recursiveSearch = document.getElementById('recursiveSearch');
+    const depthOption = document.getElementById('searchDepthOption');
+    
+    if (recursiveSearch && depthOption) {
+        if (recursiveSearch.checked) {
+            depthOption.style.display = 'flex';
+        } else {
+            depthOption.style.display = 'none';
+        }
+    }
+}
+
 // 更新已選擇提示
 function updateSelectedHint() {
     const hint = document.getElementById('selectedHint');
@@ -771,22 +785,81 @@ function newDownload() {
     location.reload();
 }
 
-// 匯出全域函數
-window.selectSource = selectSource;
-window.toggleDepthControl = toggleDepthControl;
-window.removeFile = removeFile;
-window.navigateTo = navigateTo;
-window.toggleServerFile = toggleServerFile;
-window.removeServerFile = removeServerFile;
-window.refreshServerFiles = refreshServerFiles;
-window.adjustDepth = adjustDepth;
-window.testSftpConnection = testSftpConnection;
-window.startDownload = startDownload;
-window.clearLog = clearLog;
-window.toggleFolder = toggleFolder;
-window.previewFile = previewFile;
-window.downloadFile = downloadFile;
-window.closePreview = closePreview;
-window.viewReport = viewReport;
-window.proceedToCompare = proceedToCompare;
-window.newDownload = newDownload;
+// 選擇檔案來源
+function selectSource(source) {
+    // 如果從 onclick 調用，event 可能是全域的
+    const clickedCard = event ? event.currentTarget : null;
+    
+    selectedSource = source;
+    
+    // 更新選項卡片狀態
+    document.querySelectorAll('.option-card').forEach(card => {
+        card.classList.remove('active');
+    });
+    
+    // 如果有點擊的卡片，將其設為 active
+    if (clickedCard) {
+        clickedCard.classList.add('active');
+    } else {
+        // 如果沒有 event，根據 source 找到對應的卡片
+        document.querySelectorAll('.option-card').forEach((card, index) => {
+            if ((source === 'local' && index === 0) || (source === 'server' && index === 1)) {
+                card.classList.add('active');
+            }
+        });
+    }
+    
+    // 更新內容面板
+    document.querySelectorAll('.content-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    const targetPanel = document.getElementById(`${source}-panel`);
+    if (targetPanel) {
+        targetPanel.classList.add('active');
+    }
+    
+    // 如果選擇伺服器，載入檔案列表
+    if (source === 'server') {
+        loadServerFiles(currentServerPath);
+    }
+    
+    // 重置選擇
+    if (source === 'local') {
+        selectedFiles = [];
+        displayLocalFiles();
+    } else {
+        selectedFiles = serverSelectedFiles;
+        displaySelectedServerFiles();
+    }
+    updateSelectedHint();
+    updateDownloadButton();
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    // 立即將需要的函數綁定到 window
+    window.selectSource = selectSource;
+    window.toggleDepthControl = toggleDepthControl;
+    window.removeFile = removeFile;
+    window.navigateTo = navigateTo;
+    window.toggleServerFile = toggleServerFile;
+    window.removeServerFile = removeServerFile;
+    window.refreshServerFiles = refreshServerFiles;
+    window.adjustDepth = adjustDepth;
+    window.testSftpConnection = testSftpConnection;
+    window.startDownload = startDownload;
+    window.clearLog = clearLog;
+    window.toggleFolder = toggleFolder;
+    window.previewFile = previewFile;
+    window.downloadFile = downloadFile;
+    window.closePreview = closePreview;
+    window.viewReport = viewReport;
+    window.proceedToCompare = proceedToCompare;
+    window.newDownload = newDownload;
+    
+    // 初始化功能
+    initializeTabs();
+    initializeUploadAreas();
+    initializeConfigToggles();
+    updateDownloadButton();
+});
