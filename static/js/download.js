@@ -159,7 +159,7 @@ function handleLocalFiles(files) {
     updateDownloadButton();
 }
 
-// 改善處理本地檔案的顯示
+// 使用真實檔案名稱顯示
 function displayLocalFiles() {
     const listEl = document.getElementById('localFileList');
     
@@ -216,7 +216,7 @@ function removeFile(index) {
     updateDownloadButton();
 }
 
-// 載入伺服器檔案列表
+// 改進的載入伺服器檔案
 async function loadServerFiles(path) {
     const browser = document.getElementById('serverBrowser');
     if (!browser) return;
@@ -443,7 +443,7 @@ function toggleDepthControl() {
 
 // 更新已選擇提示
 function updateSelectedHint() {
-    const hint = document.getElementById('selectedHint');
+    /*const hint = document.getElementById('selectedHint');
     const count = document.getElementById('selectedCount');
     
     if (selectedFiles.length > 0) {
@@ -451,7 +451,7 @@ function updateSelectedHint() {
         hint.classList.remove('hidden');
     } else {
         hint.classList.add('hidden');
-    }
+    }*/
 }
 
 // 更新下載按鈕狀態
@@ -897,16 +897,74 @@ function toggleFolder(element) {
 async function previewFile(path) {
     const modal = document.getElementById('filePreviewModal');
     const content = document.getElementById('previewContent');
+    const filename = document.getElementById('previewFilename');
+    
+    // 顯示檔名
+    const fileName = path.split('/').pop();
+    if (filename) {
+        filename.textContent = fileName;
+    }
     
     content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
     modal.classList.remove('hidden');
     
     try {
         const response = await utils.apiRequest(`/api/preview-file?path=${encodeURIComponent(path)}`);
-        content.innerHTML = `<pre>${response.content}</pre>`;
+        
+        // 根據檔案類型處理內容
+        if (response.type === 'xml') {
+            // XML語法高亮
+            let formattedContent = response.content
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/(&lt;\/?)(\w+)(.*?)(&gt;)/g, 
+                    '$1<span class="xml-tag">$2</span>$3$4')
+                .replace(/(\w+)="([^"]*)"/g, 
+                    '<span class="xml-attr">$1</span>="<span class="xml-value">$2</span>"');
+            
+            content.innerHTML = `<code class="xml">${formattedContent}</code>`;
+            content.classList.add('xml');
+        } else {
+            content.textContent = response.content;
+            content.classList.remove('xml');
+        }
     } catch (error) {
-        content.innerHTML = `<div class="error">無法預覽檔案</div>`;
+        content.innerHTML = `<div class="error">無法預覽檔案：${error.message}</div>`;
     }
+}
+
+// 複製預覽內容
+function copyPreviewContent() {
+    const content = document.getElementById('previewContent');
+    const text = content.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        utils.showNotification('內容已複製到剪貼簿', 'success');
+    }).catch(() => {
+        utils.showNotification('複製失敗', 'error');
+    });
+}
+
+// 展開所有資料夾
+function expandAllFolders() {
+    document.querySelectorAll('.tree-children').forEach(el => {
+        el.style.display = 'block';
+    });
+    document.querySelectorAll('.tree-folder').forEach(el => {
+        el.classList.remove('fa-folder');
+        el.classList.add('fa-folder-open');
+    });
+}
+
+// 摺疊所有資料夾
+function collapseAllFolders() {
+    document.querySelectorAll('.tree-children').forEach(el => {
+        el.style.display = 'none';
+    });
+    document.querySelectorAll('.tree-folder').forEach(el => {
+        el.classList.remove('fa-folder-open');
+        el.classList.add('fa-folder');
+    });
 }
 
 // 下載檔案

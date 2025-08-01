@@ -308,18 +308,20 @@
         </div>
     </div>
 
-    <!-- 下載結果 -->
+    <!-- 修改下載結果區域的HTML結構 -->
     <div class="download-results hidden" id="downloadResults">
-        <div class="result-card result-success">
+        <div class="result-card">
             <div class="result-header">
-                <i class="fas fa-check-circle text-success"></i>
-                <div>
-                    <h2>下載完成！</h2>
-                    <p class="text-muted">所有檔案已成功下載並分類整理</p>
+                <div class="result-icon-wrapper">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="result-text">
+                    <h2 class="result-title">下載完成！</h2>
+                    <p class="result-subtitle">所有檔案已成功下載並分類整理</p>
                 </div>
             </div>
             
-            <div id="resultSummary" class="mt-4">
+            <div id="resultSummary" class="result-summary">
                 <!-- 動態生成的摘要 -->
             </div>
             
@@ -336,31 +338,47 @@
             </div>
         </div>
 
-        <!-- 資料夾結構預覽 -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <h3 class="card-title">
+        <!-- 重新設計的檔案結構預覽 -->
+        <div class="file-structure-card">
+            <div class="structure-header">
+                <h3 class="structure-title">
                     <i class="fas fa-folder-tree"></i> 下載的檔案結構
                 </h3>
+                <div class="structure-actions">
+                    <button class="btn-icon" onclick="expandAllFolders()" title="展開全部">
+                        <i class="fas fa-expand-alt"></i>
+                    </button>
+                    <button class="btn-icon" onclick="collapseAllFolders()" title="摺疊全部">
+                        <i class="fas fa-compress-alt"></i>
+                    </button>
+                </div>
             </div>
-            <div class="tree-container" id="folderTree">
+            <div class="file-tree-container" id="folderTree">
                 <!-- 動態生成的資料夾樹 -->
             </div>
         </div>
     </div>
 </div>
 
-<!-- 檔案預覽模態框 -->
+<!-- 改進的檔案預覽模態框 -->
 <div class="modal hidden" id="filePreviewModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 class="modal-title">檔案預覽</h3>
+            <h3 class="modal-title">
+                <i class="fas fa-file-code"></i> 檔案預覽
+            </h3>
             <button class="modal-close" onclick="closePreview()">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         <div class="modal-body">
-            <pre id="previewContent"></pre>
+            <div class="preview-toolbar">
+                <span class="preview-filename" id="previewFilename"></span>
+                <button class="btn-icon" onclick="copyPreviewContent()" title="複製內容">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </div>
+            <pre id="previewContent" class="preview-content"></pre>
         </div>
     </div>
 </div>

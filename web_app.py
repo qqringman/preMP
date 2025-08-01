@@ -793,12 +793,18 @@ def internal_error(error):
 
 @app.route('/api/browse-server')
 def browse_server():
-    """瀏覽伺服器檔案 API"""
+    """瀏覽伺服器檔案 API - 使用真實路徑"""
     path = request.args.get('path', '/')
     
     try:
-        # 這裡應該連接到實際的檔案系統或 SFTP
-        # 目前返回模擬資料
+        # 定義基礎路徑（根據您的實際需求調整）
+        base_paths = {
+            '/R306_ShareFolder': '/home/vince_lin/ai/R306_ShareFolder',
+            '/DailyBuild': '/home/vince_lin/ai/DailyBuild',
+            '/PrebuildFW': '/home/vince_lin/ai/PrebuildFW'
+        }
+        
+        # 如果是根目錄，返回可用的頂層目錄
         if path == '/':
             return jsonify({
                 'folders': [
@@ -808,36 +814,82 @@ def browse_server():
                 ],
                 'files': []
             })
-        elif path == '/R306_ShareFolder':
-            return jsonify({
-                'folders': [
-                    {'name': 'nightrun_log', 'path': '/R306_ShareFolder/nightrun_log'},
-                    {'name': 'test_results', 'path': '/R306_ShareFolder/test_results'}
-                ],
-                'files': []
-            })
-        elif path == '/R306_ShareFolder/nightrun_log':
-            return jsonify({
-                'folders': [
-                    {'name': 'Demo_stress_Test_log', 'path': '/R306_ShareFolder/nightrun_log/Demo_stress_Test_log'}
-                ],
-                'files': [
-                    {'name': 'sample_ftp_paths.xlsx', 'path': '/R306_ShareFolder/nightrun_log/sample_ftp_paths.xlsx', 'size': 5270},
-                    {'name': 'test_data.xlsx', 'path': '/R306_ShareFolder/nightrun_log/test_data.xlsx', 'size': 8432}
-                ]
-            })
+            
+        # 解析真實路徑
+        real_path = None
+        for prefix, base in base_paths.items():
+            if path.startswith(prefix):
+                real_path = path.replace(prefix, base)
+                break
+                
+        if not real_path:
+            # 如果沒有匹配的基礎路徑，使用模擬資料
+            return get_mock_server_files(path)
+            
+        # 檢查路徑是否存在
+        if os.path.exists(real_path):
+            folders = []
+            files = []
+            
+            try:
+                for item in os.listdir(real_path):
+                    item_path = os.path.join(real_path, item)
+                    relative_path = os.path.join(path, item)
+                    
+                    if os.path.isdir(item_path):
+                        folders.append({
+                            'name': item,
+                            'path': relative_path
+                        })
+                    elif item.endswith('.xlsx'):  # 只顯示Excel檔案
+                        files.append({
+                            'name': item,
+                            'path': relative_path,
+                            'size': os.path.getsize(item_path)
+                        })
+                        
+                # 排序
+                folders.sort(key=lambda x: x['name'])
+                files.sort(key=lambda x: x['name'])
+                
+                return jsonify({
+                    'folders': folders,
+                    'files': files
+                })
+                
+            except PermissionError:
+                return jsonify({'error': '沒有權限訪問此目錄'}), 403
         else:
-            # 返回一些示例檔案
-            return jsonify({
-                'folders': [],
-                'files': [
-                    {'name': 'ftp_paths_2025.xlsx', 'path': f'{path}/ftp_paths_2025.xlsx', 'size': 12345},
-                    {'name': 'module_list.xlsx', 'path': f'{path}/module_list.xlsx', 'size': 8765}
-                ]
-            })
+            # 使用模擬資料
+            return get_mock_server_files(path)
             
     except Exception as e:
+        print(f"Browse server error: {e}")
         return jsonify({'error': str(e)}), 500
+
+def get_mock_server_files(path):
+    """提供模擬的伺服器檔案資料"""
+    mock_data = {
+        '/R306_ShareFolder/nightrun_log': {
+            'folders': [
+                {'name': 'Demo_stress_Test_log', 'path': '/R306_ShareFolder/nightrun_log/Demo_stress_Test_log'},
+                {'name': 'FTP_Paths_2025', 'path': '/R306_ShareFolder/nightrun_log/FTP_Paths_2025'}
+            ],
+            'files': [
+                {'name': 'sample_ftp_paths.xlsx', 'path': '/R306_ShareFolder/nightrun_log/sample_ftp_paths.xlsx', 'size': 5270},
+                {'name': 'test_data.xlsx', 'path': '/R306_ShareFolder/nightrun_log/test_data.xlsx', 'size': 8432}
+            ]
+        },
+        '/DailyBuild/Merlin7': {
+            'folders': [
+                {'name': 'DB2302', 'path': '/DailyBuild/Merlin7/DB2302'},
+                {'name': 'DB2857-premp', 'path': '/DailyBuild/Merlin7/DB2857-premp'}
+            ],
+            'files': []
+        }
+    }
+    
+    return jsonify(mock_data.get(path, {'folders': [], 'files': []}))
 
 @app.route('/api/preview-file')
 def preview_file():
@@ -867,12 +919,29 @@ def preview_file():
         file_size = os.path.getsize(full_path)
         
         if file_size > max_size:
-            return jsonify({'content': f'檔案太大 ({utils.formatFileSize(file_size)})，無法預覽'})
+            return jsonify({'content': f'檔案太大 ({file_size} bytes)，無法預覽'})
             
+        # 判斷檔案類型
+        file_ext = os.path.splitext(full_path)[1].lower()
+        
         # 讀取檔案
         try:
             with open(full_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+                
+            # 針對XML特別處理
+            if file_ext == '.xml':
+                import xml.dom.minidom
+                try:
+                    # 格式化XML
+                    dom = xml.dom.minidom.parseString(content)
+                    content = dom.toprettyxml(indent="  ")
+                    # 移除多餘的空白行
+                    content = '\n'.join([line for line in content.split('\n') if line.strip()])
+                except:
+                    # 如果解析失敗，返回原始內容
+                    pass
+                    
         except UnicodeDecodeError:
             # 嘗試其他編碼
             try:
@@ -881,7 +950,10 @@ def preview_file():
             except:
                 content = '無法解碼檔案內容（可能是二進位檔案）'
                 
-        return jsonify({'content': content})
+        return jsonify({
+            'content': content,
+            'type': file_ext[1:] if file_ext else 'txt'
+        })
         
     except Exception as e:
         print(f"Preview file error: {e}")
