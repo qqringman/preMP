@@ -324,8 +324,8 @@
                             <i class="fas fa-terminal"></i>
                         </div>
                         <div class="log-content-wrapper">
-                            <div class="log-title">執行日誌</div>
-                            <div class="log-subtitle">即時顯示下載進度與狀態訊息</div>
+                            <h2 class="log-title">執行日誌</h2>
+                            <p class="log-subtitle">即時顯示下載進度與狀態訊息</p>
                         </div>
                         <button class="btn btn-small btn-secondary" onclick="clearLog()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">
                             <i class="fas fa-eraser"></i> 清除
@@ -384,11 +384,9 @@
             </div>
             <div class="section-body">
                 <div class="structure-actions mb-3">
-                    <button class="btn btn-small" onclick="expandAllFolders()" title="展開全部">
-                        <i class="fas fa-expand-alt"></i> 展開全部
-                    </button>
-                    <button class="btn btn-small" onclick="collapseAllFolders()" title="摺疊全部">
-                        <i class="fas fa-compress-alt"></i> 摺疊全部
+                    <button class="btn btn-small" id="toggleFoldersBtn" onclick="toggleAllFolders()" title="展開/摺疊全部">
+                        <i class="fas fa-expand-alt"></i>
+                        <span id="toggleFoldersText">摺疊全部</span>
                     </button>
                 </div>
                 <div class="file-tree-container" id="folderTree">

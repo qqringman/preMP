@@ -4266,7 +4266,7 @@ input:checked + .switch-slider::before {
     }
 }
 
-/* 日誌區域 - 北歐藍風格 */
+/* 日誌區域 - 修正表頭樣式與步驟區塊一致 */
 .log-container {
   background: var(--bg-card);
   border-radius: var(--radius-xl);
@@ -4318,4 +4318,26 @@ input:checked + .switch-slider::before {
 
 .log-number i {
   font-size: 1.25rem;
+}
+
+.log-content-wrapper {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.log-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: white;
+  letter-spacing: -0.025em;
+}
+
+.log-subtitle {
+  font-size: 0.9375rem;
+  opacity: 0.9;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 400;
 }

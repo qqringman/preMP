@@ -1059,6 +1059,25 @@ async function startDownload() {
 function handleDownloadProgress(event) {
     const data = event.detail;
     if (data.task_id === downloadTaskId) {
+        // 確保統計資料存在且不會歸零
+        if (data.stats) {
+            // 保存當前統計，避免歸零
+            const currentStats = {
+                total: parseInt(document.getElementById('totalFiles').textContent) || 0,
+                downloaded: parseInt(document.getElementById('downloadedFiles').textContent) || 0,
+                skipped: parseInt(document.getElementById('skippedFiles').textContent) || 0,
+                failed: parseInt(document.getElementById('failedFiles').textContent) || 0
+            };
+            
+            // 只更新增加的值，不允許減少
+            data.stats = {
+                total: Math.max(data.stats.total || 0, currentStats.total),
+                downloaded: Math.max(data.stats.downloaded || 0, currentStats.downloaded),
+                skipped: Math.max(data.stats.skipped || 0, currentStats.skipped),
+                failed: Math.max(data.stats.failed || 0, currentStats.failed)
+            };
+        }
+        
         updateDownloadProgress(data);
     }
 }
@@ -1123,29 +1142,23 @@ function updateStats(stats) {
     if (!stats) return;
     
     const elements = {
-        totalFiles: { value: stats.total || 0, type: 'total' },
-        downloadedFiles: { value: stats.downloaded || 0, type: 'downloaded' },
-        skippedFiles: { value: stats.skipped || 0, type: 'skipped' },
-        failedFiles: { value: stats.failed || 0, type: 'failed' }
+        totalFiles: stats.total || 0,
+        downloadedFiles: stats.downloaded || 0,
+        skippedFiles: stats.skipped || 0,
+        failedFiles: stats.failed || 0
     };
     
-    for (const [id, data] of Object.entries(elements)) {
+    for (const [id, value] of Object.entries(elements)) {
         const element = document.getElementById(id);
         if (element) {
-            // 獲取當前值
-            const currentValue = parseInt(element.textContent) || 0;
-            const newValue = data.value;
-            
-            // 只有在新值大於等於當前值時才更新（避免歸零）
-            if (newValue >= currentValue || id === 'totalFiles') {
-                animateValue(element, currentValue, newValue);
-            }
+            // 直接更新數值，不要動畫效果避免亂跳
+            element.textContent = value;
             
             // 讓統計卡片可點擊
             const card = element.closest('.stat-card');
-            if (card && data.value > 0) {
+            if (card && value > 0) {
                 card.style.cursor = 'pointer';
-                card.onclick = () => showFilesList(data.type);
+                card.onclick = () => showFilesList(id.replace('Files', ''));
                 card.title = '點擊查看檔案列表';
             }
         }
