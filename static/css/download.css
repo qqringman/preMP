@@ -2424,13 +2424,13 @@ body {
 
 .upload-icon-wrapper i {
   font-size: 4.5rem;
-  color: var(--nordic-blue-light);
+  color: var(--success);
   filter: drop-shadow(0 2px 8px rgba(33, 150, 243, 0.15));
   transition: all 0.3s ease;
 }
 
 .upload-container:hover .upload-icon-wrapper i {
-  color: var(--nordic-blue);
+  color: var(--success);
   transform: scale(1.05);
 }
 
