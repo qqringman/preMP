@@ -1676,15 +1676,6 @@ input:checked + .switch-slider::before {
   box-shadow: var(--shadow-sm);
 }
 
-.file-tree-container {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: 24px;
-  max-height: 600px;
-  overflow-y: auto;
-  border: 1px solid var(--border-color);
-}
-
 /* 樹狀結構 - 北歐藍風格 */
 .tree-node {
   margin-bottom: 4px;
