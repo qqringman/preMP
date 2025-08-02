@@ -1,4 +1,4 @@
-// 下載頁面 JavaScript - 修正版（含路徑輸入功能）
+// 下載頁面 JavaScript - 修正版（統一檔案顯示格式）
 
 // 頁面變數
 let selectedSource = 'local';
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeTabs();
     initializeUploadAreas();
     initializeConfigToggles();
-    initializePathInput(); // 新增
+    initializePathInput();
     updateDownloadButton();
     
     // 修正預設設定開關
@@ -168,7 +168,7 @@ function handleLocalFiles(files) {
     updateDownloadButton();
 }
 
-// 使用真實檔案名稱顯示
+// 使用統一格式顯示本地檔案
 function displayLocalFiles() {
     const listEl = document.getElementById('localFileList');
     
@@ -558,7 +558,7 @@ function toggleServerFile(path, name, size) {
     updateDownloadButton();
 }
 
-// 顯示已選擇的伺服器檔案
+// 使用統一格式顯示已選擇的伺服器檔案
 function displaySelectedServerFiles() {
     const container = document.getElementById('serverSelectedFiles');
     if (!container) return;
@@ -568,18 +568,39 @@ function displaySelectedServerFiles() {
         return;
     }
     
-    let html = '<div class="selected-info"><h4><i class="fas fa-check-circle"></i> 已選擇的檔案</h4><div class="selected-chips">';
+    let html = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h4 class="file-list-title">
+                    <i class="fas fa-check-circle"></i>
+                    已選擇的檔案
+                </h4>
+                <span class="file-count-badge">${serverSelectedFiles.length}</span>
+            </div>
+            <div class="file-items">
+    `;
+    
     serverSelectedFiles.forEach((file, index) => {
+        const fileSize = utils.formatFileSize(file.size);
         html += `
-            <div class="file-chip">
-                <i class="fas fa-file-excel"></i>
-                <span>${file.name}</span>
-                <button class="chip-remove" onclick="removeServerFile(${index})">
+            <div class="file-item-card">
+                <div class="file-icon-wrapper">
+                    <i class="fas fa-file-excel"></i>
+                </div>
+                <div class="file-details">
+                    <div class="file-name" title="${file.name}">${file.name}</div>
+                    <div class="file-meta">
+                        <span class="file-size">${fileSize}</span>
+                        <span class="file-path">${file.path.substring(0, file.path.lastIndexOf('/'))}</span>
+                    </div>
+                </div>
+                <button class="btn-remove-file" onclick="removeServerFile(${index})" title="移除檔案">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         `;
     });
+    
     html += '</div></div>';
     
     container.innerHTML = html;
@@ -1020,7 +1041,7 @@ function showDownloadResults(results) {
     }
 }
 
-// 生成資料夾樹
+// 生成資料夾樹 - 改善顏色配色
 function generateFolderTree(structure) {
     const treeContainer = document.getElementById('folderTree');
     
@@ -1033,7 +1054,7 @@ function generateFolderTree(structure) {
     treeContainer.innerHTML = tree;
 }
 
-// 建立樹狀結構 HTML
+// 建立樹狀結構 HTML - 改善顏色
 function buildTreeHTML(node, name, parentPath) {
     let html = '';
     
@@ -1048,10 +1069,10 @@ function buildTreeHTML(node, name, parentPath) {
                     <i class="tree-icon tree-file fas fa-file"></i>
                     <span class="tree-name">${fileName}</span>
                     <div class="tree-actions">
-                        <button class="tree-action" onclick="event.stopPropagation(); previewFile('${filePath}')" title="預覽">
+                        <button class="tree-action preview" onclick="event.stopPropagation(); previewFile('${filePath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="tree-action" onclick="event.stopPropagation(); downloadFile('${filePath}')" title="下載">
+                        <button class="tree-action download" onclick="event.stopPropagation(); downloadFile('${filePath}')" title="下載">
                             <i class="fas fa-download"></i>
                         </button>
                     </div>

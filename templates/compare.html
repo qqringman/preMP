@@ -2,6 +2,10 @@
 
 {% block title %}比較檔案 - SFTP 下載與比較系統{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/compare.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="page-header">

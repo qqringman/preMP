@@ -385,12 +385,13 @@ body {
 
 /* 檔案列表 - 北歐藍風格 */
 .file-list-container {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-color);
-  position: relative;
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
+    position: relative;
+    margin-top: 1.5rem;
 }
 
 .file-list-container:hover {
@@ -430,6 +431,10 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
+.file-items {
+  background: var(--bg-secondary);
+}
+
 .file-item-card {
   display: flex;
   align-items: center;
@@ -452,7 +457,7 @@ body {
 .file-icon-wrapper {
   width: 56px;
   height: 56px;
-  background: transparent;
+  background: var(--nordic-gradient-soft);
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
@@ -482,6 +487,11 @@ body {
   gap: 1rem;
   font-size: 0.875rem;
   color: var(--text-secondary);
+}
+
+.file-meta .file-path {
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .btn-remove-file {
