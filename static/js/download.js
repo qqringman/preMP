@@ -1460,6 +1460,28 @@ function collapseAllFolders() {
     });
 }
 
+// 切換所有資料夾展開/摺疊
+function toggleAllFolders() {
+    const btn = document.getElementById('toggleFoldersBtn');
+    const btnText = document.getElementById('toggleFoldersText');
+    const btnIcon = btn.querySelector('i');
+    
+    // 檢查當前狀態
+    const isExpanded = btnText.textContent === '摺疊全部';
+    
+    if (isExpanded) {
+        // 摺疊全部
+        collapseAllFolders();
+        btnText.textContent = '展開全部';
+        btnIcon.className = 'fas fa-expand-alt';
+    } else {
+        // 展開全部
+        expandAllFolders();
+        btnText.textContent = '摺疊全部';
+        btnIcon.className = 'fas fa-compress-alt';
+    }
+}
+
 // 下載檔案
 function downloadFile(path) {
     window.open(`/api/download-file?path=${encodeURIComponent(path)}`, '_blank');

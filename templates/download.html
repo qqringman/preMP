@@ -320,10 +320,14 @@
                 <!-- 日誌區域 -->
                 <div class="log-container">
                     <div class="log-header">
-                        <div class="log-title">
-                            <i class="fas fa-terminal"></i> 執行日誌
+                        <div class="log-number">
+                            <i class="fas fa-terminal"></i>
                         </div>
-                        <button class="btn btn-small" onclick="clearLog()">
+                        <div class="log-content-wrapper">
+                            <div class="log-title">執行日誌</div>
+                            <div class="log-subtitle">即時顯示下載進度與狀態訊息</div>
+                        </div>
+                        <button class="btn btn-small btn-secondary" onclick="clearLog()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">
                             <i class="fas fa-eraser"></i> 清除
                         </button>
                     </div>

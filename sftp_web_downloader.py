@@ -74,7 +74,7 @@ class SFTPWebDownloader(SFTPDownloader):
             progress = 20 + (processed / max(self.stats['total'], 1)) * 70
             self.current_progress = progress
             
-            # 確保傳送完整的統計資料
+            # 確保傳送完整的累積統計資料（不會歸零）
             self.progress_callback(
                 progress, 
                 'downloading', 
