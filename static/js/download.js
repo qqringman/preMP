@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.toggleDepthControl = toggleDepthControl;
     window.removeFile = removeFile;
     window.navigateTo = navigateTo;
+    window.navigateToParent = navigateToParent;
     window.toggleServerFile = toggleServerFile;
     window.removeServerFile = removeServerFile;
     window.refreshServerFiles = refreshServerFiles;
@@ -459,17 +460,17 @@ function displayServerFiles(data) {
     
     const { files = [], folders = [] } = data;
     
-    if (files.length === 0 && folders.length === 0) {
-        browser.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-folder-open"></i>
-                <p>此資料夾是空的</p>
+    let html = '<div class="file-grid">';
+    
+    // 添加返回上層目錄項（如果不是根目錄）
+    if (currentServerPath !== '/' && currentServerPath !== '') {
+        html += `
+            <div class="file-item folder" onclick="navigateToParent()">
+                <i class="fas fa-level-up-alt"></i>
+                <span class="file-name">..</span>
             </div>
         `;
-        return;
     }
-    
-    let html = '<div class="file-grid">';
     
     // 顯示資料夾
     folders.forEach(folder => {
@@ -527,6 +528,12 @@ function updateBreadcrumb(path) {
 // 導航到資料夾
 function navigateTo(path) {
     loadServerFiles(path);
+}
+
+// 導航到上層目錄
+function navigateToParent() {
+    const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
+    loadServerFiles(parentPath);
 }
 
 // 切換伺服器檔案選擇
@@ -1037,14 +1044,14 @@ function buildTreeHTML(node, name, parentPath) {
         
         html = `
             <div class="tree-node">
-                <div class="tree-node-content" data-path="${filePath}">
+                <div class="tree-node-content file" data-path="${filePath}" ondblclick="previewFile('${filePath}')">
                     <i class="tree-icon tree-file fas fa-file"></i>
                     <span class="tree-name">${fileName}</span>
                     <div class="tree-actions">
-                        <button class="tree-action" onclick="previewFile('${filePath}')" title="預覽">
+                        <button class="tree-action" onclick="event.stopPropagation(); previewFile('${filePath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="tree-action" onclick="downloadFile('${filePath}')" title="下載">
+                        <button class="tree-action" onclick="event.stopPropagation(); downloadFile('${filePath}')" title="下載">
                             <i class="fas fa-download"></i>
                         </button>
                     </div>

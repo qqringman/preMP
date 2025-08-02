@@ -244,123 +244,145 @@
 
     <!-- 下載進度 -->
     <div class="download-progress hidden" id="downloadProgress">
-        <!-- 進度統計 -->
-        <div class="progress-stats">
-            <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-file text-info"></i>
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-spinner fa-spin"></i>
                 </div>
-                <div class="stat-content">
-                    <div class="stat-value" id="totalFiles">0</div>
-                    <div class="stat-label">總檔案數</div>
-                </div>
-            </div>
-            
-            <div class="stat-card success">
-                <div class="stat-icon">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value" id="downloadedFiles">0</div>
-                    <div class="stat-label">已下載</div>
+                <div class="step-content">
+                    <h2 class="step-title">正在下載檔案</h2>
+                    <p class="step-subtitle">請稍候，系統正在處理您的請求...</p>
                 </div>
             </div>
             
-            <div class="stat-card info">
-                <div class="stat-icon">
-                    <i class="fas fa-forward"></i>
+            <div class="section-body">
+                <!-- 進度統計 -->
+                <div class="progress-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-file text-info"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="totalFiles">0</div>
+                            <div class="stat-label">總檔案數</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card success">
+                        <div class="stat-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="downloadedFiles">0</div>
+                            <div class="stat-label">已下載</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card info">
+                        <div class="stat-icon">
+                            <i class="fas fa-forward"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="skippedFiles">0</div>
+                            <div class="stat-label">已跳過</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card danger">
+                        <div class="stat-icon">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="failedFiles">0</div>
+                            <div class="stat-label">失敗</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-content">
-                    <div class="stat-value" id="skippedFiles">0</div>
-                    <div class="stat-label">已跳過</div>
-                </div>
-            </div>
-            
-            <div class="stat-card danger">
-                <div class="stat-icon">
-                    <i class="fas fa-times-circle"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value" id="failedFiles">0</div>
-                    <div class="stat-label">失敗</div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 總進度條 -->
-        <div class="progress-bar-wrapper">
-            <div class="progress-header">
-                <div class="progress-title">下載進度</div>
-                <div class="progress-percentage" id="progressText">0%</div>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <!-- 日誌區域 -->
-        <div class="log-container">
-            <div class="log-header">
-                <div class="log-title">
-                    <i class="fas fa-terminal"></i> 執行日誌
+                <!-- 總進度條 -->
+                <div class="progress-bar-wrapper">
+                    <div class="progress-header">
+                        <div class="progress-title">下載進度</div>
+                        <div class="progress-percentage" id="progressText">0%</div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
                 </div>
-                <button class="btn btn-small" onclick="clearLog()">
-                    <i class="fas fa-eraser"></i> 清除
-                </button>
-            </div>
-            <div class="log-content" id="downloadLog">
-                <!-- 動態添加日誌 -->
+
+                <!-- 日誌區域 -->
+                <div class="log-container">
+                    <div class="log-header">
+                        <div class="log-title">
+                            <i class="fas fa-terminal"></i> 執行日誌
+                        </div>
+                        <button class="btn btn-small" onclick="clearLog()">
+                            <i class="fas fa-eraser"></i> 清除
+                        </button>
+                    </div>
+                    <div class="log-content" id="downloadLog">
+                        <!-- 動態添加日誌 -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- 下載結果區域 -->
     <div class="download-results hidden" id="downloadResults">
-        <div class="result-card">
-            <div class="result-header">
-                <div class="result-icon-wrapper">
-                    <i class="fas fa-check-circle"></i>
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-check"></i>
                 </div>
-                <div class="result-text">
-                    <h2 class="result-title">下載完成！</h2>
-                    <p class="result-subtitle">所有檔案已成功下載並分類整理</p>
+                <div class="step-content">
+                    <h2 class="step-title">下載完成</h2>
+                    <p class="step-subtitle">所有檔案已成功下載並分類整理</p>
                 </div>
             </div>
             
-            <div id="resultSummary" class="result-summary">
-                <!-- 動態生成的摘要 -->
-            </div>
-            
-            <div class="result-actions">
-                <button class="btn btn-primary" onclick="viewReport()">
-                    <i class="fas fa-file-alt"></i> 查看下載報表
-                </button>
-                <button class="btn btn-secondary" onclick="proceedToCompare()">
-                    <i class="fas fa-code-compare"></i> 繼續比對
-                </button>
-                <button class="btn btn-outline" onclick="newDownload()">
-                    <i class="fas fa-redo"></i> 新的下載
-                </button>
+            <div class="section-body">
+                <div id="resultSummary" class="result-summary">
+                    <!-- 動態生成的摘要 -->
+                </div>
+                
+                <div class="result-actions">
+                    <button class="btn btn-primary" onclick="viewReport()">
+                        <i class="fas fa-file-alt"></i> 查看下載報表
+                    </button>
+                    <button class="btn btn-secondary" onclick="proceedToCompare()">
+                        <i class="fas fa-code-compare"></i> 繼續比對
+                    </button>
+                    <button class="btn btn-outline" onclick="newDownload()">
+                        <i class="fas fa-redo"></i> 新的下載
+                    </button>
+                </div>
             </div>
         </div>
 
         <!-- 檔案結構預覽 -->
-        <div class="file-structure-card">
-            <div class="structure-header">
-                <h3 class="structure-title">
-                    <i class="fas fa-folder-tree"></i> 下載的檔案結構
-                </h3>
-                <div class="structure-actions">
-                    <button class="btn-icon" onclick="expandAllFolders()" title="展開全部">
-                        <i class="fas fa-expand-alt"></i>
-                    </button>
-                    <button class="btn-icon" onclick="collapseAllFolders()" title="摺疊全部">
-                        <i class="fas fa-compress-alt"></i>
-                    </button>
+        <div class="step-section mt-4">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-folder-tree"></i>
+                </div>
+                <div class="step-content">
+                    <h2 class="step-title">下載的檔案結構</h2>
+                    <p class="step-subtitle">雙擊檔案可預覽內容</p>
                 </div>
             </div>
-            <div class="file-tree-container" id="folderTree">
-                <!-- 動態生成的資料夾樹 -->
+            <div class="section-body">
+                <div class="structure-actions mb-3">
+                    <button class="btn btn-small" onclick="expandAllFolders()" title="展開全部">
+                        <i class="fas fa-expand-alt"></i> 展開全部
+                    </button>
+                    <button class="btn btn-small" onclick="collapseAllFolders()" title="摺疊全部">
+                        <i class="fas fa-compress-alt"></i> 摺疊全部
+                    </button>
+                </div>
+                <div class="file-tree-container" id="folderTree">
+                    <!-- 動態生成的資料夾樹 -->
+                </div>
             </div>
         </div>
     </div>
