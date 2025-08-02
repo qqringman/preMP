@@ -254,7 +254,7 @@ body {
 
 .tab-btn:hover {
   color: var(--nordic-blue);
-  background: rgba(0, 102, 204, 0.05);
+  background: rgba(21, 45, 70, 0.05);
 }
 
 .tab-btn.active {
@@ -262,18 +262,6 @@ body {
   color: white;
   box-shadow: var(--shadow-blue);
   font-weight: 600;
-}
-
-.tab-btn.active::after {
-  content: '';
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 4px;
-  background: var(--nordic-blue);
-  border-radius: 2px;
 }
 
 .tab-btn i {
@@ -350,23 +338,6 @@ body {
   transform: scale(1.1) rotate(-5deg);
 }
 
-.upload-text {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--nordic-blue-dark);
-  margin-bottom: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.upload-hint {
-  font-size: 1rem;
-  color: var(--text-secondary);
-  margin-bottom: 32px;
-  position: relative;
-  z-index: 1;
-}
-
 .hint-card {
   display: inline-flex;
   align-items: center;
@@ -378,7 +349,6 @@ body {
   font-size: 0.9rem;
   position: relative;
   z-index: 1;
-  margin-top: 24px;
   font-weight: 500;
   border: 1px solid var(--nordic-blue-light);
 }
@@ -392,6 +362,7 @@ body {
     border: 1px solid var(--border-color);
     position: relative;
     margin-top: 1.5rem;
+    width: 100%;
 }
 
 .file-list-container:hover {
@@ -920,31 +891,6 @@ input:checked + .switch-slider::before {
   position: relative;
 }
 
-.file-item.selected::before {
-  content: '';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  background: #FF4444;
-  border-radius: 50%;
-  z-index: 2;
-}
-
-.file-item.selected::after {
-  content: '\f058';
-  font-family: 'Font Awesome 5 Free';
-  font-weight: 900;
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  color: var(--nordic-blue);
-  font-size: 1.25rem;
-  background: white;
-  border-radius: 50%;
-}
-
 .file-name {
   font-size: 0.875rem;
   font-weight: 500;
@@ -964,7 +910,7 @@ input:checked + .switch-slider::before {
 
 /* 已選擇的伺服器檔案區域 - 北歐藍風格 */
 .selected-server-files {
-  margin-top: 32px;
+  margin-top: 5px;
 }
 
 .selected-info {
@@ -2147,15 +2093,7 @@ input:checked + .switch-slider::before {
   .step-title {
     font-size: 1.25rem;
   }
-  
-  .upload-container {
-    padding: 60px 40px;
-  }
-  
-  .upload-icon-wrapper i {
-    font-size: 4rem;
-  }
-  
+
   .form-row {
     grid-template-columns: 1fr;
   }
@@ -2456,7 +2394,6 @@ body {
   background: #FAFBFD;
   border: 2px dashed #C5CAE9;
   border-radius: var(--radius-xl);
-  padding: 72px 56px;
   text-align: center;
   transition: all 0.3s ease;
   cursor: pointer;
@@ -2510,7 +2447,7 @@ body {
   font-size: 1.375rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin-bottom: 0px;
   position: relative;
   z-index: 1;
 }
@@ -2518,7 +2455,6 @@ body {
 .upload-hint {
   font-size: 0.9375rem;
   color: var(--text-secondary);
-  margin-bottom: 28px;
   position: relative;
   z-index: 1;
 }
@@ -2527,15 +2463,14 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 10px 20px;
   background: var(--nordic-sky);
   border-radius: var(--radius-full);
   color: var(--nordic-blue);
   font-size: 0.875rem;
   position: relative;
   z-index: 1;
-  margin-top: 20px;
   font-weight: 500;
+  margin-bottom: 10px;
   border: 1px solid var(--nordic-blue-lighter);
 }
 
@@ -2581,10 +2516,6 @@ body {
   font-size: 0.8125rem;
   font-weight: 600;
   border: 1px solid rgba(255, 255, 255, 0.4);
-}
-
-.file-items {
-  background: var(--bg-secondary);
 }
 
 .file-item-card {
@@ -2795,7 +2726,7 @@ input:checked + .switch-slider::before {
 
 .btn-secondary:hover {
   background: var(--nordic-sky);
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+  box-shadow: 0 2px 8px rgba(32, 6, 179, 0.15);
 }
 
 .btn-large {
@@ -3205,10 +3136,6 @@ input:checked + .switch-slider::before {
   
   .step-title {
     font-size: 1.125rem;
-  }
-  
-  .upload-container {
-    padding: 48px 32px;
   }
   
   .upload-icon-wrapper i {
@@ -3703,4 +3630,647 @@ input:checked + .switch-slider::before {
     white-space: nowrap;
     pointer-events: none;
     z-index: 10;
+}
+
+/* 通知樣式 - 確保在最上層 */
+.notification {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    min-width: 300px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card-hover);
+    padding: var(--spacing-md);
+    z-index: 9999;  /* 提高到最高層級 */
+    transform: translateX(400px);
+    transition: transform var(--transition-normal);
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+/* 通知類型樣式 */
+.notification.success {
+    background: var(--success-light);
+    border: 1px solid var(--success);
+}
+
+.notification.error {
+    background: var(--danger-light);
+    border: 1px solid var(--danger);
+}
+
+.notification.info {
+    background: var(--info-light);
+    border: 1px solid var(--info);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.notification-icon {
+    font-size: 1.25rem;
+}
+
+.notification.success .notification-icon {
+    color: var(--success);
+}
+
+.notification.error .notification-icon {
+    color: var(--danger);
+}
+
+.notification.info .notification-icon {
+    color: var(--info);
+}
+
+.notification-message {
+    flex: 1;
+    font-weight: 500;
+}
+
+/* 確保通知在所有模態框之上 */
+#filePreviewModal {
+    z-index: 2100;
+}
+
+#filesListModal {
+    z-index: 2000;
+}
+
+.loading-overlay {
+    z-index: 3000;
+}
+
+.notification {
+    z-index: 9999;  /* 最高層級 */
+}
+
+/* 伺服器瀏覽器 - 北歐藍風格（與本地上傳保持一致） */
+.server-browser {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 400px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 瀏覽器內容網格 - 改進樣式 */
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+/* 檔案項目卡片樣式 - 更現代化 */
+.file-item {
+  background: var(--bg-primary);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--nordic-gradient);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.file-item:hover {
+  border-color: var(--nordic-blue-light);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  background: var(--bg-hover);
+}
+
+.file-item:hover::before {
+  opacity: 1;
+}
+
+/* 檔案圖標樣式 */
+.file-item i {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+}
+
+.file-item:hover i {
+  transform: scale(1.1);
+}
+
+.file-item.folder i {
+  color: var(--nordic-blue);
+}
+
+.file-item.file i {
+  color: var(--success);
+}
+
+/* 選中狀態 - 更明顯的視覺效果 */
+.file-item.selected {
+  background: lch(96.53% 49.42 105.42 / 0.295);
+  border-color: var(--success);
+  border-width: 2px;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.file-item.selected::before {
+  opacity: 1;
+  height: 4px;
+  background: var(--success);
+}
+
+/* 選中標記 - 更優雅的設計 */
+.file-item.selected::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--nordic-blue);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.file-item.selected .check-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--nordic-blue);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.875rem;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.file-item .check-icon::before {
+  content: '\f00c';
+  font-family: 'Font Awesome 5 Free';
+  font-weight: 900;
+}
+
+/* 檔案名稱樣式改進 */
+.file-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+}
+
+.file-size {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.selected-server-files .file-list-container {
+  /* 使用與本地上傳相同的樣式 */
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  position: relative;
+}
+
+.selected-server-files .file-list-container:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.selected-server-files .file-list-header {
+  background: #2196F3;  /* 使用主藍色 */
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: white;
+}
+
+.selected-server-files .file-list-title {
+  color: white;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.selected-server-files .file-list-title i {
+  color: white;
+}
+
+.selected-server-files .file-count-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 修正檔案項目卡片（與本地一致） */
+.selected-server-files .file-item-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.selected-server-files .file-item-card:hover {
+  background: var(--bg-hover);
+}
+
+.selected-server-files .file-item-card:last-child {
+  border-bottom: none;
+}
+
+/* 路徑瀏覽器標題改進 */
+.browser-header {
+  background: var(--nordic-gradient-soft);
+  padding: 20px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  gap: 16px;
+}
+
+/* 路徑輸入改進 */
+.path-input-container {
+  position: relative;
+  flex: 1;
+  margin-right: 0;
+}
+
+.path-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+/* 前往按鈕樣式 */
+.btn-go {
+  padding: 12px 24px;
+  background: var(--nordic-blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.btn-go:hover {
+  background: var(--nordic-blue-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 重新整理按鈕 */
+.btn-refresh {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+  .browser-header {
+    flex-wrap: wrap;
+  }
+  
+  .path-input-container {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+  
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+  
+  .file-item {
+    padding: 20px 12px;
+    min-height: 120px;
+  }
+  
+  .file-item i {
+    font-size: 2rem;
+  }
+}
+
+/* 檔案路徑樣式 */
+.file-meta .file-path {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--nordic-blue);
+    font-style: normal;
+    margin-left: 8px;
+}
+
+.file-meta .file-path i {
+    font-size: 0.75rem;
+    color: var(--nordic-blue-light);
+}
+
+/* 檔案類型標籤 */
+.file-meta .file-type {
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    margin: 0 4px;
+}
+
+/* 確保檔案圖標包裝器使用正確的顏色 */
+.file-icon-wrapper {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #2196F3;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+/* 移除按鈕改進 */
+.btn-remove-file {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.btn-remove-file:hover {
+    background: var(--danger-light);
+    border-color: var(--danger);
+    color: var(--danger);
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+}
+
+/* 檔案項目卡片調整 */
+.file-item-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 24px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+/* 檔案詳情區域 */
+.file-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-details .file-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-details .file-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+/* 空狀態訊息 */
+.empty-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    text-align: center;
+    color: var(--text-muted);
+    padding: 40px;
+}
+
+.empty-message i {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    color: var(--nordic-blue-light);
+    opacity: 0.5;
+}
+
+.empty-message p {
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* 檔案圖標動畫效果 */
+.file-icon-wrapper {
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.file-icon-wrapper::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+    transform: rotate(45deg);
+    transition: all 0.3s ease;
+    opacity: 0;
+}
+
+.file-item-card:hover .file-icon-wrapper::before {
+    opacity: 1;
+    transform: rotate(45deg) translate(20px, 20px);
+}
+
+.file-icon-wrapper i {
+    position: relative;
+    z-index: 1;
+    transition: transform 0.3s ease;
+}
+
+.file-item-card:hover .file-icon-wrapper i {
+    transform: scale(1.1);
+}
+
+/* 檔案類型標籤動畫 */
+.file-meta .file-type {
+    transition: all 0.2s ease;
+}
+
+.file-item-card:hover .file-meta .file-type {
+    background: var(--nordic-blue);
+    color: white;
+    transform: scale(1.05);
+}
+
+/* 資料夾路徑動畫 */
+.file-meta .file-path {
+    transition: all 0.2s ease;
+}
+
+.file-item-card:hover .file-meta .file-path {
+    color: var(--nordic-blue-dark);
+}
+
+.file-item-card:hover .file-meta .file-path i {
+    animation: folderBounce 0.5s ease;
+}
+
+@keyframes folderBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+/* 選中動畫 */
+@keyframes checkIn {
+    0% { 
+        transform: scale(0) rotate(-180deg);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.2) rotate(10deg);
+    }
+    100% { 
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+.file-item.selected .check-icon {
+    animation: checkIn 0.3s ease-out;
+}
+
+/* 檔案大小標籤 */
+.file-meta .file-size {
+    position: relative;
+    padding-left: 16px;
+}
+
+.file-meta .file-size::before {
+    content: '\f15b';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 400;
+    position: absolute;
+    left: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* 刪除按鈕動畫 */
+.btn-remove-file i {
+    transition: transform 0.2s ease;
+}
+
+.btn-remove-file:hover i {
+    transform: rotate(90deg);
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+    .file-icon-wrapper {
+        width: 44px;
+        height: 44px;
+        font-size: 1.25rem;
+    }
+    
+    .file-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .file-meta .file-path {
+        margin-left: 0;
+        margin-top: 4px;
+    }
 }

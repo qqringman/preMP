@@ -27,6 +27,7 @@ class SFTPWebDownloader(SFTPDownloader):
         self.downloaded_files_list = []  # 記錄下載的檔案詳情
         self.skipped_files_list = []     # 記錄跳過的檔案詳情
         self.failed_files_list = []      # 記錄失敗的檔案詳情
+        self.current_progress = 0         # 記錄當前進度
         
     def set_progress_callback(self, callback):
         """設定進度回調函數"""
@@ -69,12 +70,21 @@ class SFTPWebDownloader(SFTPDownloader):
         
         # 觸發進度回調，包含詳細的檔案列表
         if self.progress_callback:
-            progress = (processed / max(self.stats['total'], 1)) * 100
+            # 計算真實進度，從 20% 開始到 90%
+            progress = 20 + (processed / max(self.stats['total'], 1)) * 70
+            self.current_progress = progress
+            
+            # 確保傳送完整的統計資料
             self.progress_callback(
                 progress, 
                 'downloading', 
                 f'已處理 {processed}/{self.stats["total"]} 個檔案',
-                stats=self.stats.copy(),  # 傳送統計的副本
+                stats={
+                    'total': self.stats['total'],
+                    'downloaded': self.stats['downloaded'],
+                    'skipped': self.stats['skipped'],
+                    'failed': self.stats['failed']
+                },
                 files={
                     'downloaded': self.downloaded_files_list.copy(),
                     'skipped': self.skipped_files_list.copy(),
@@ -84,26 +94,9 @@ class SFTPWebDownloader(SFTPDownloader):
         
         return downloaded_files, file_paths
         
-        # 觸發進度回調，包含詳細的檔案列表
-        if self.progress_callback:
-            progress = (self.stats['downloaded'] + self.stats['skipped'] + self.stats['failed']) / max(self.stats['total'], 1) * 100
-            self.progress_callback(
-                progress, 
-                'downloading', 
-                f'已處理 {len(downloaded_files)} 個檔案',
-                stats=self.stats,
-                files={
-                    'downloaded': self.downloaded_files_list,
-                    'skipped': self.skipped_files_list,
-                    'failed': self.failed_files_list
-                }
-            )
-        
-        return downloaded_files, file_paths
-        
     def download_from_excel_with_progress(self, excel_path: str, output_dir: str = None):
         """從 Excel 下載並提供進度更新"""
-        # 重置統計和檔案列表
+        # 重置統計和檔案列表（只在開始時重置一次）
         self.stats = {
             'total': 0,
             'downloaded': 0,
@@ -113,11 +106,17 @@ class SFTPWebDownloader(SFTPDownloader):
         self.downloaded_files_list = []
         self.skipped_files_list = []
         self.failed_files_list = []
+        self.current_progress = 0
         
         try:
-            # 初始進度
+            # 初始進度，傳送初始統計
             if self.progress_callback:
-                self.progress_callback(0, 'downloading', '開始讀取 Excel 檔案...', stats=self.stats)
+                self.progress_callback(
+                    0, 
+                    'downloading', 
+                    '開始讀取 Excel 檔案...', 
+                    stats=self.stats.copy()
+                )
             
             # 讀取 Excel 來計算總數
             import pandas as pd
@@ -126,9 +125,14 @@ class SFTPWebDownloader(SFTPDownloader):
             # 計算總檔案數（每個FTP路徑 × 目標檔案數）
             self.stats['total'] = len(df) * len(config.TARGET_FILES)
             
-            # 更新初始統計
+            # 更新初始統計，傳送總數
             if self.progress_callback:
-                self.progress_callback(5, 'downloading', f'預計處理 {self.stats["total"]} 個檔案...', stats=self.stats)
+                self.progress_callback(
+                    5, 
+                    'downloading', 
+                    f'預計處理 {self.stats["total"]} 個檔案...', 
+                    stats=self.stats.copy()
+                )
             
             # 呼叫父類方法
             report_path = self.download_from_excel(excel_path, output_dir)
@@ -140,7 +144,12 @@ class SFTPWebDownloader(SFTPDownloader):
                     100, 
                     'completed', 
                     '下載完成',
-                    stats=self.stats,
+                    stats={
+                        'total': self.stats['total'],
+                        'downloaded': self.stats['downloaded'],
+                        'skipped': self.stats['skipped'],
+                        'failed': self.stats['failed']
+                    },
                     files={
                         'downloaded': self.downloaded_files_list,
                         'skipped': self.skipped_files_list,
@@ -151,15 +160,20 @@ class SFTPWebDownloader(SFTPDownloader):
             return report_path
             
         except Exception as e:
-            self.stats['failed'] = self.stats['total'] - self.stats['downloaded'] - self.stats['skipped']
+            # 確保錯誤時也傳送統計
             if self.progress_callback:
-                self.progress_callback(0, 'error', f'下載失敗: {str(e)}', stats=self.stats)
+                self.progress_callback(
+                    self.current_progress, 
+                    'error', 
+                    f'下載失敗: {str(e)}', 
+                    stats=self.stats.copy()
+                )
             raise
 
     def get_download_stats(self):
         """取得下載統計資料（包含檔案列表）"""
         return {
-            'stats': self.stats,
+            'stats': self.stats.copy(),
             'files': {
                 'downloaded': self.downloaded_files_list,
                 'skipped': self.skipped_files_list,

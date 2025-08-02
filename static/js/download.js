@@ -278,6 +278,11 @@ function switchTab(tab) {
     
     // 如果切換到伺服器，載入檔案列表
     if (tab === 'server' && !serverFilesLoaded) {
+        // 確保伺服器瀏覽器顯示載入中而非空訊息
+        const browser = document.getElementById('serverBrowser');
+        if (browser) {
+            browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span> 載入中...</span></div>';
+        }
         loadServerFiles(currentServerPath);
         serverFilesLoaded = true;
     }
@@ -668,7 +673,7 @@ function displayServerFiles(data) {
                 <i class="fas fa-file-excel"></i>
                 <span class="file-name">${file.name}</span>
                 <span class="file-size">${utils.formatFileSize(file.size)}</span>
-                ${isSelected ? '<i class="fas fa-check-circle check-icon"></i>' : ''}
+                ${isSelected ? '<div class="check-icon"></div>' : ''}
             </div>
         `;
     });
@@ -745,6 +750,7 @@ function displaySelectedServerFiles() {
         return;
     }
     
+    // 使用與本地檔案完全相同的結構
     let html = `
         <div class="file-list-container">
             <div class="file-list-header">
@@ -759,6 +765,10 @@ function displaySelectedServerFiles() {
     
     serverSelectedFiles.forEach((file, index) => {
         const fileSize = utils.formatFileSize(file.size);
+        // 從路徑中提取資料夾名稱
+        const folderPath = file.path.substring(0, file.path.lastIndexOf('/'));
+        const folderName = folderPath.split('/').pop() || folderPath;
+        
         html += `
             <div class="file-item-card">
                 <div class="file-icon-wrapper">
@@ -768,7 +778,10 @@ function displaySelectedServerFiles() {
                     <div class="file-name" title="${file.name}">${file.name}</div>
                     <div class="file-meta">
                         <span class="file-size">${fileSize}</span>
-                        <span class="file-path">${file.path.substring(0, file.path.lastIndexOf('/'))}</span>
+                        <span class="file-type">Excel 檔案</span>
+                        <span class="file-path" title="${folderPath}">
+                            <i class="fas fa-folder-open"></i> ${folderName}
+                        </span>
                     </div>
                 </div>
                 <button class="btn-remove-file" onclick="removeServerFile(${index})" title="移除檔案">
@@ -1063,8 +1076,9 @@ function updateDownloadProgress(data) {
         progressText.textContent = `${Math.round(progress)}%`;
     }
     
-    // 更新統計
-    if (stats) {
+    // 更新統計 - 確保統計資料存在
+    if (stats && typeof stats === 'object') {
+        console.log('Updating stats:', stats); // 除錯用
         updateStats(stats);
     }
     
@@ -1095,8 +1109,19 @@ function updateDownloadProgress(data) {
     }
 }
 
+function debugStats() {
+    console.log('Current stats:', {
+        total: document.getElementById('totalFiles').textContent,
+        downloaded: document.getElementById('downloadedFiles').textContent,
+        skipped: document.getElementById('skippedFiles').textContent,
+        failed: document.getElementById('failedFiles').textContent
+    });
+}
+
 // 更新統計數據
 function updateStats(stats) {
+    if (!stats) return;
+    
     const elements = {
         totalFiles: { value: stats.total || 0, type: 'total' },
         downloadedFiles: { value: stats.downloaded || 0, type: 'downloaded' },
@@ -1107,7 +1132,14 @@ function updateStats(stats) {
     for (const [id, data] of Object.entries(elements)) {
         const element = document.getElementById(id);
         if (element) {
-            animateValue(element, parseInt(element.textContent) || 0, data.value);
+            // 獲取當前值
+            const currentValue = parseInt(element.textContent) || 0;
+            const newValue = data.value;
+            
+            // 只有在新值大於等於當前值時才更新（避免歸零）
+            if (newValue >= currentValue || id === 'totalFiles') {
+                animateValue(element, currentValue, newValue);
+            }
             
             // 讓統計卡片可點擊
             const card = element.closest('.stat-card');

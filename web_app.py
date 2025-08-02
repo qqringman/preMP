@@ -181,12 +181,21 @@ class WebProcessor:
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            # 設定進度回調，包含檔案列表
-            self.downloader.set_progress_callback(
-                lambda p, s, m, stats=None, files=None: self.update_progress(
-                    int(20 + p * 0.7), s, m, stats, files
-                )
-            )
+            # 設定進度回調，確保正確傳遞所有參數
+            def progress_callback(progress, status, message, stats=None, files=None):
+                # 確保統計資料完整
+                if stats:
+                    self.update_progress(
+                        int(progress),  # 不再調整進度
+                        status, 
+                        message, 
+                        stats=stats,  # 直接傳遞統計
+                        files=files
+                    )
+                else:
+                    self.update_progress(int(progress), status, message)
+            
+            self.downloader.set_progress_callback(progress_callback)
             
             self.update_progress(20, 'downloading', '開始下載檔案...')
             
@@ -213,13 +222,17 @@ class WebProcessor:
                 self.results['files'] = files
                 self.results['folder_structure'] = folder_structure
                 
+                # 確保最終統計正確
                 self.update_progress(100, 'completed', '下載完成！', stats, files)
                 add_activity('下載 SFTP 檔案', 'success', 
                             f'成功下載 {stats["downloaded"]} 個檔案')
                 
             except Exception as e:
                 error_msg = str(e)
-                self.update_progress(0, 'error', f'下載失敗：{error_msg}')
+                # 獲取當前統計
+                current_stats = self.downloader.get_download_stats()
+                self.update_progress(0, 'error', f'下載失敗：{error_msg}', 
+                                   stats=current_stats['stats'])
                 add_activity('下載失敗', 'error', error_msg)
                 raise
                 

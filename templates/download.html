@@ -48,13 +48,14 @@
                             </div>
                             <div class="upload-text">拖曳 Excel 檔案到這裡</div>
                             <div class="upload-hint">或點擊選擇檔案</div>
-                            <button class="btn btn-secondary" onclick="document.getElementById('localFileInput').click()">
-                                <i class="fas fa-folder-open"></i> 選擇檔案
-                            </button>
-                            <div class="hint-card mt-3">
+                            <div class="hint-card">
                                 <i class="fas fa-info-circle"></i>
                                 <span>支援 .xlsx 格式，可同時選擇多個檔案</span>
                             </div>
+                            <p></p>                            
+                            <button class="btn btn-primary" onclick="document.getElementById('localFileInput').click()">
+                                <i class="fas fa-folder-open"></i> 選擇檔案
+                            </button>
                         </div>
                         
                         <div class="file-list mt-4" id="localFileList">
@@ -98,7 +99,7 @@
                             </div>
                         </div>
                         
-                        <div class="selected-server-files mt-4" id="serverSelectedFiles">
+                        <div class="selected-server-files" id="serverSelectedFiles">
                             <!-- 顯示已選擇的伺服器檔案 -->
                         </div>
                     </div>
@@ -353,13 +354,13 @@
                 </div>
                 
                 <div class="result-actions">
-                    <button class="btn btn-primary" onclick="viewReport()">
-                        <i class="fas fa-file-alt"></i> 查看下載報表
-                    </button>
-                    <button class="btn btn-secondary" onclick="proceedToCompare()">
+                    <button class="btn btn-primary" onclick="proceedToCompare()">
                         <i class="fas fa-code-compare"></i> 繼續比對
                     </button>
-                    <button class="btn btn-outline" onclick="newDownload()">
+                    <button class="btn btn-secondary" onclick="viewReport()">
+                        <i class="fas fa-file-alt"></i> 查看下載報表
+                    </button>                    
+                    <button class="btn btn-secondary" onclick="newDownload()">
                         <i class="fas fa-redo"></i> 新的下載
                     </button>
                 </div>
