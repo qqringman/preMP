@@ -277,6 +277,20 @@ class SFTPDownloader:
             # 建立連線
             self.connect()
             
+            # 初始化統計（如果是 WebDownloader，這會被覆寫）
+            if hasattr(self, 'stats'):
+                # 如果有 stats 屬性，表示是 WebDownloader
+                # 統計已經在 download_from_excel_with_progress 中初始化
+                pass
+            else:
+                # 普通 downloader，建立臨時統計
+                stats = {
+                    'total': len(df) * len(config.TARGET_FILES),
+                    'downloaded': 0,
+                    'skipped': 0,
+                    'failed': 0
+                }
+            
             # 處理每一筆資料
             report_data = []
             for idx, row in df.iterrows():

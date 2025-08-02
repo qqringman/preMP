@@ -3463,3 +3463,146 @@ input:checked + .switch-slider::before {
 .stat-card[onclick]:hover::after {
     opacity: 0.6;
 }
+
+/* 可點擊的統計項目樣式 */
+.summary-item.clickable {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.summary-item.clickable:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--nordic-blue);
+    background: var(--bg-hover);
+}
+
+.summary-item.clickable:hover i {
+    transform: scale(1.2);
+}
+
+/* 統計項目點擊效果 */
+.summary-item.clickable:active {
+    transform: translateY(-2px);
+}
+
+/* 完成頁面的提示文字 */
+.summary-hint {
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 24px;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.summary-hint i {
+    color: var(--nordic-blue);
+}
+
+/* 為可點擊的統計項目添加視覺提示標記 */
+.summary-item.clickable::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 24px 24px 0;
+    border-color: transparent var(--nordic-blue) transparent transparent;
+    opacity: 0.2;
+}
+
+.summary-item.clickable:hover::after {
+    opacity: 0.4;
+}
+
+/* 統計數值的動畫效果 */
+.summary-value {
+    transition: all 0.3s ease;
+}
+
+.summary-item.clickable:hover .summary-value {
+    transform: scale(1.1);
+    font-weight: 700;
+}
+
+/* 檔案列表表格增強樣式 */
+.index-cell {
+    text-align: center;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.files-table th:first-child,
+.files-table td:first-child {
+    text-align: center;
+}
+
+/* 路徑欄位樣式改進 */
+.file-path-cell {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* 檔案統計摘要 */
+.files-summary {
+    padding: 16px 24px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-light);
+    text-align: center;
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.files-summary i {
+    color: var(--nordic-blue);
+}
+
+/* 表格行號樣式 */
+.files-table tbody tr:hover .index-cell {
+    color: var(--nordic-blue);
+    font-weight: 600;
+}
+
+/* 檔案圖標顏色 */
+.file-name-cell i {
+    color: var(--nordic-blue);
+    margin-right: 8px;
+    font-size: 0.875rem;
+}
+
+/* 調整表格寬度分配 */
+.files-table {
+    table-layout: fixed;
+}
+
+.files-table th:nth-child(2),
+.files-table td:nth-child(2) {
+    width: 200px; /* 檔案名稱 */
+}
+
+.files-table th:nth-child(3),
+.files-table td:nth-child(3) {
+    width: 30%; /* FTP 路徑 */
+}
+
+.files-table th:nth-child(4),
+.files-table td:nth-child(4) {
+    width: 30%; /* 本地路徑 */
+}

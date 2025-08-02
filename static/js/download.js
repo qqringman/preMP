@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.selectSuggestion = selectSuggestion;
     window.showFilesList = showFilesList;
     window.closeFilesModal = closeFilesModal;
+    window.previewFileFromList = previewFileFromList;
 
     // 初始化功能
     initializeTabs();
@@ -98,6 +99,11 @@ function showFilesList(type) {
     const modalTitle = document.getElementById('filesModalTitle');
     const modalBody = document.getElementById('filesModalBody');
     
+    if (!modal || !modalTitle || !modalBody) {
+        console.error('Files list modal elements not found');
+        return;
+    }
+    
     modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     modal.className = `modal ${modalClass}`;
     
@@ -107,26 +113,30 @@ function showFilesList(type) {
     } else {
         let html = '<div class="files-table-container"><table class="files-table">';
         html += '<thead><tr>';
+        html += '<th style="width: 50px">#</th>';
         html += '<th>檔案名稱</th>';
-        html += '<th>路徑</th>';
+        html += '<th>FTP 路徑</th>';
+        html += '<th>本地路徑</th>';
         
         if (type === 'total') {
-            html += '<th>狀態</th>';
+            html += '<th style="width: 100px">狀態</th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
             html += '<th>原因</th>';
         }
         
-        html += '<th>操作</th>';
+        html += '<th style="width: 80px">操作</th>';
         html += '</tr></thead><tbody>';
         
         files.forEach((file, index) => {
             html += '<tr>';
+            html += `<td class="index-cell">${index + 1}</td>`;
             html += `<td class="file-name-cell">
                         <i class="fas fa-file-alt"></i> ${file.name}
                      </td>`;
-            html += `<td class="file-path-cell">${file.path || file.ftp_path || '-'}</td>`;
+            html += `<td class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
+            html += `<td class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
             
             if (type === 'total') {
                 const statusClass = file.status === 'downloaded' ? 'success' : 
@@ -143,7 +153,9 @@ function showFilesList(type) {
             // 操作按鈕
             html += '<td class="action-cell">';
             if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
-                html += `<button class="btn-icon" onclick="previewFile('${file.path}')" title="預覽">
+                // 確保路徑格式正確
+                const cleanPath = file.path.replace(/\\/g, '/');
+                html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                          </button>`;
             }
@@ -153,14 +165,37 @@ function showFilesList(type) {
         });
         
         html += '</tbody></table></div>';
+        
+        // 添加統計摘要
+        if (files.length > 0) {
+            html += `<div class="files-summary">
+                        <i class="fas fa-chart-bar"></i>
+                        共 ${files.length} 個檔案
+                     </div>`;
+        }
+        
         modalBody.innerHTML = html;
     }
     
     modal.classList.remove('hidden');
 }
 
+// 新增專門處理從列表預覽的函數
+function previewFileFromList(path) {
+    // 關閉檔案列表模態框
+    closeFilesModal();
+    
+    // 延遲一下再開啟預覽，避免衝突
+    setTimeout(() => {
+        previewFile(path);
+    }, 300);
+}
+
 function closeFilesModal() {
-    document.getElementById('filesListModal').classList.add('hidden');
+    const modal = document.getElementById('filesListModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 // 初始化標籤切換
@@ -983,7 +1018,7 @@ function handleDownloadProgress(event) {
 
 // 更新下載進度
 function updateDownloadProgress(data) {
-    const { progress, status, message, stats, files } = data;
+    const { progress, status, message, stats, files, results } = data;
     
     // 更新進度條
     const progressFill = document.getElementById('progressFill');
@@ -1011,10 +1046,15 @@ function updateDownloadProgress(data) {
     
     // 處理完成或錯誤
     if (status === 'completed') {
-        // 儲存最終的檔案列表到結果中
-        data.results = data.results || {};
-        data.results.files = files;
-        showDownloadResults(data.results);
+        // 確保 results 包含最新的檔案列表
+        const finalResults = results || {};
+        if (!finalResults.files && files) {
+            finalResults.files = files;
+        }
+        if (!finalResults.stats && stats) {
+            finalResults.stats = stats;
+        }
+        showDownloadResults(finalResults);
     } else if (status === 'error') {
         utils.showNotification(`下載失敗：${message}`, 'error');
         resetDownloadForm();
@@ -1122,18 +1162,25 @@ function showDownloadResults(results) {
         return;
     }
     
-    // 生成摘要 - 使用北歐藍配色
+    // 確保檔案列表資料被保存
+    if (results.files) {
+        downloadedFilesList = results.files.downloaded || [];
+        skippedFilesList = results.files.skipped || [];
+        failedFilesList = results.files.failed || [];
+    }
+    
+    // 生成摘要 - 使用北歐藍配色並添加點擊功能
     const stats = results.stats || {};
     const summary = `
         <div class="summary-grid">
-            <div class="summary-item">
+            <div class="summary-item clickable" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
                 <i class="fas fa-check-circle text-success"></i>
                 <div class="summary-content">
                     <div class="summary-value">${stats.downloaded || 0}</div>
                     <div class="summary-label">成功下載</div>
                 </div>
             </div>
-            <div class="summary-item">
+            <div class="summary-item clickable" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
                 <i class="fas fa-forward text-info"></i>
                 <div class="summary-content">
                     <div class="summary-value">${stats.skipped || 0}</div>
@@ -1141,7 +1188,7 @@ function showDownloadResults(results) {
                 </div>
             </div>
             ${stats.failed > 0 ? `
-                <div class="summary-item">
+                <div class="summary-item clickable" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
                     <i class="fas fa-times-circle text-danger"></i>
                     <div class="summary-content">
                         <div class="summary-value">${stats.failed}</div>
@@ -1149,13 +1196,19 @@ function showDownloadResults(results) {
                     </div>
                 </div>
             ` : ''}
-            <div class="summary-item">
+            <div class="summary-item clickable" onclick="showFilesList('total')" title="點擊查看所有檔案">
                 <i class="fas fa-folder-tree text-info"></i>
                 <div class="summary-content">
                     <div class="summary-value">${stats.total || 0}</div>
                     <div class="summary-label">總檔案數</div>
                 </div>
             </div>
+        </div>
+        
+        <!-- 添加提示文字 -->
+        <div class="summary-hint">
+            <i class="fas fa-info-circle"></i>
+            <span>提示：點擊上方統計數字可查看詳細的檔案列表</span>
         </div>
     `;
     
