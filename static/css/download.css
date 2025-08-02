@@ -3606,3 +3606,101 @@ input:checked + .switch-slider::before {
 .files-table td:nth-child(4) {
     width: 30%; /* 本地路徑 */
 }
+
+/* 模態框狀態樣式 */
+.modal {
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.modal.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* 預覽時的檔案列表狀態 */
+#filesListModal[style*="display: none"] {
+    display: none !important;
+}
+
+/* 預覽模態框層級確保在最上層 */
+#filePreviewModal {
+    z-index: 2100;
+}
+
+#filesListModal {
+    z-index: 2000;
+}
+
+/* 添加過渡動畫 */
+.modal-content {
+    transform: scale(0.95);
+    transition: transform 0.3s ease;
+}
+
+.modal:not(.hidden) .modal-content {
+    transform: scale(1);
+}
+
+/* 複製按鈕增強 */
+.btn-icon[onclick*="copyPreviewContent"] {
+    position: relative;
+}
+
+.btn-icon[onclick*="copyPreviewContent"]:hover::after {
+    content: '複製';
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* 複製成功動畫 */
+@keyframes copySuccess {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+.btn-icon.copy-success {
+    animation: copySuccess 0.3s ease;
+}
+
+/* 檔案列表表格改進 */
+.files-table tbody tr {
+    transition: all 0.2s ease;
+    cursor: default;
+}
+
+.files-table tbody tr:hover {
+    background: var(--bg-hover);
+    transform: translateX(2px);
+}
+
+/* 預覽按鈕提示 */
+.action-cell .btn-icon {
+    position: relative;
+}
+
+.action-cell .btn-icon:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+}

@@ -12,6 +12,7 @@ let pathInputTimer = null;
 let downloadedFilesList = [];
 let skippedFilesList = [];
 let failedFilesList = [];
+let previewSource = null; // 記錄預覽是從哪裡開啟的
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -42,6 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.showFilesList = showFilesList;
     window.closeFilesModal = closeFilesModal;
     window.previewFileFromList = previewFileFromList;
+    window.copyPreviewContent = copyPreviewContent;
+    window.fallbackCopyToClipboard = fallbackCopyToClipboard;    
 
     // 初始化功能
     initializeTabs();
@@ -180,17 +183,48 @@ function showFilesList(type) {
     modal.classList.remove('hidden');
 }
 
-// 新增專門處理從列表預覽的函數
+// 定義 previewFileFromList 函數
 function previewFileFromList(path) {
-    // 關閉檔案列表模態框
-    closeFilesModal();
+    // 記錄是從檔案列表開啟預覽
+    previewSource = 'filesList';
     
-    // 延遲一下再開啟預覽，避免衝突
+    // 隱藏檔案列表（不是關閉）
+    const filesModal = document.getElementById('filesListModal');
+    if (filesModal) {
+        filesModal.style.display = 'none';
+    }
+    
+    // 開啟預覽
     setTimeout(() => {
         previewFile(path);
-    }, 300);
+    }, 100);
 }
 
+// 定義備用的複製方法
+function fallbackCopyToClipboard(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-999999px';
+    document.body.appendChild(textarea);
+    
+    try {
+        textarea.select();
+        const successful = document.execCommand('copy');
+        if (successful) {
+            utils.showNotification('內容已複製到剪貼簿', 'success');
+        } else {
+            utils.showNotification('複製失敗', 'error');
+        }
+    } catch (err) {
+        console.error('複製失敗:', err);
+        utils.showNotification('複製失敗', 'error');
+    } finally {
+        document.body.removeChild(textarea);
+    }
+}
+
+// 先定義 closeFilesModal 函數
 function closeFilesModal() {
     const modal = document.getElementById('filesListModal');
     if (modal) {
@@ -1304,6 +1338,11 @@ function toggleFolder(element) {
 
 // 預覽檔案
 async function previewFile(path) {
+    // 如果不是從檔案列表開啟，設定來源為 null
+    if (!previewSource) {
+        previewSource = null;
+    }
+    
     const modal = document.getElementById('filePreviewModal');
     const content = document.getElementById('previewContent');
     const filename = document.getElementById('previewFilename');
@@ -1345,13 +1384,26 @@ async function previewFile(path) {
 // 複製預覽內容
 function copyPreviewContent() {
     const content = document.getElementById('previewContent');
-    const text = content.textContent;
+    if (!content) {
+        utils.showNotification('找不到預覽內容', 'error');
+        return;
+    }
     
-    navigator.clipboard.writeText(text).then(() => {
-        utils.showNotification('內容已複製到剪貼簿', 'success');
-    }).catch(() => {
-        utils.showNotification('複製失敗', 'error');
-    });
+    const text = content.textContent || content.innerText;
+    
+    // 檢查瀏覽器是否支援 clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+        // 使用新的 Clipboard API
+        navigator.clipboard.writeText(text).then(() => {
+            utils.showNotification('內容已複製到剪貼簿', 'success');
+        }).catch(err => {
+            console.error('複製失敗:', err);
+            fallbackCopyToClipboard(text);
+        });
+    } else {
+        // 使用傳統方法
+        fallbackCopyToClipboard(text);
+    }
 }
 
 // 展開所有資料夾
@@ -1383,7 +1435,18 @@ function downloadFile(path) {
 
 // 關閉預覽
 function closePreview() {
-    document.getElementById('filePreviewModal').classList.add('hidden');
+    const previewModal = document.getElementById('filePreviewModal');
+    previewModal.classList.add('hidden');
+    
+    // 如果是從檔案列表開啟的，重新顯示檔案列表
+    if (previewSource === 'filesList') {
+        const filesModal = document.getElementById('filesListModal');
+        if (filesModal) {
+            filesModal.style.display = ''; // 恢復顯示
+            filesModal.classList.remove('hidden');
+        }
+        previewSource = null; // 重置來源
+    }
 }
 
 // 輪詢下載狀態

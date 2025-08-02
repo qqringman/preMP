@@ -37,7 +37,7 @@ class SFTPWebDownloader(SFTPDownloader):
         # 呼叫父類方法
         downloaded_files, file_paths = super().download_files(ftp_path, local_dir)
         
-        # 更新統計和檔案列表
+        # 更新統計和檔案列表（累積，不重置）
         for file in config.TARGET_FILES:
             if file in downloaded_files:
                 if file in file_paths and file_paths[file] == "已存在":
@@ -45,7 +45,8 @@ class SFTPWebDownloader(SFTPDownloader):
                     self.skipped_files_list.append({
                         'name': file,
                         'path': os.path.join(local_dir, file),
-                        'reason': '檔案已存在'
+                        'reason': '檔案已存在',
+                        'ftp_path': ftp_path
                     })
                 else:
                     self.stats['downloaded'] += 1
@@ -58,8 +59,30 @@ class SFTPWebDownloader(SFTPDownloader):
                 self.stats['failed'] += 1
                 self.failed_files_list.append({
                     'name': file,
-                    'reason': '找不到檔案'
+                    'path': os.path.join(local_dir, file),
+                    'reason': '找不到檔案',
+                    'ftp_path': ftp_path
                 })
+        
+        # 計算當前進度（基於累積統計）
+        processed = self.stats['downloaded'] + self.stats['skipped'] + self.stats['failed']
+        
+        # 觸發進度回調，包含詳細的檔案列表
+        if self.progress_callback:
+            progress = (processed / max(self.stats['total'], 1)) * 100
+            self.progress_callback(
+                progress, 
+                'downloading', 
+                f'已處理 {processed}/{self.stats["total"]} 個檔案',
+                stats=self.stats.copy(),  # 傳送統計的副本
+                files={
+                    'downloaded': self.downloaded_files_list.copy(),
+                    'skipped': self.skipped_files_list.copy(),
+                    'failed': self.failed_files_list.copy()
+                }
+            )
+        
+        return downloaded_files, file_paths
         
         # 觸發進度回調，包含詳細的檔案列表
         if self.progress_callback:
