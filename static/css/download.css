@@ -4887,3 +4887,1367 @@ button:hover,
 .preview-content .xml-bracket {
     color: #6A737D;
 }
+
+/* 檔案預覽模態框 - 簡化設計 */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-content {
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);  /* 只有最外層保持圓角 */
+    max-width: 1000px;
+    max-height: 90vh;
+    width: 95%;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+/* 合併的標題列 - 整合檔案預覽和檔名 */
+.modal-header {
+    background: #2196F3;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.modal-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.modal-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.modal-title i {
+    font-size: 1.125rem;
+}
+
+/* 分隔符 */
+.modal-header-separator {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 檔案名稱 */
+.preview-filename {
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9375rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.preview-filename i {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+}
+
+/* 標題列右側按鈕組 */
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 複製按鈕 */
+.btn-copy {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-copy:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 關閉按鈕 */
+.modal-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.25rem;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+}
+
+/* 預覽主體 - 移除工具列 */
+.modal-body {
+    padding: 0;
+    max-height: calc(90vh - 60px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 預覽內容 - 支援橫向捲軸 */
+.preview-content {
+    background: #1E1E1E;
+    border: none;
+    border-radius: 0;  /* 完全無圓角 */
+    padding: 24px;
+    margin: 0;
+    overflow: auto;  /* 支援雙向捲軸 */
+    flex: 1;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #D4D4D4;
+    white-space: pre;  /* 保持原始格式，不自動換行 */
+    word-wrap: normal;  /* 不強制換行 */
+}
+
+/* 確保程式碼不會自動換行 */
+.preview-content code,
+.preview-content pre {
+    white-space: pre;
+    word-wrap: normal;
+    overflow-x: auto;
+}
+
+/* 美化捲軸 */
+.preview-content::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: #2D2D30;
+    border-radius: 0;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: #424242;
+    border-radius: 0;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: #4E4E51;
+}
+
+/* 捲軸交叉點 */
+.preview-content::-webkit-scrollbar-corner {
+    background: #2D2D30;
+}
+
+/* XML 語法高亮 */
+.preview-content .xml-tag {
+    color: #569CD6;
+}
+
+.preview-content .xml-attr {
+    color: #9CDCFE;
+}
+
+.preview-content .xml-value {
+    color: #CE9178;
+}
+
+/* 載入和錯誤狀態 */
+.preview-content .loading,
+.preview-content .error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    white-space: normal;
+}
+
+.preview-content .loading i {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    color: #569CD6;
+    animation: spin 1s linear infinite;
+}
+
+.preview-content .error {
+    color: #F44336;
+}
+
+.preview-content .error i {
+    font-size: 3rem;
+    margin-bottom: 20px;
+}
+
+/* 移除舊的 preview-toolbar 樣式 */
+.preview-toolbar {
+    display: none;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .modal-content {
+        max-width: 100%;
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+    
+    .modal-header {
+        flex-wrap: wrap;
+        padding: 12px 16px;
+    }
+    
+    .preview-content {
+        font-size: 12px;
+        padding: 16px;
+    }
+}
+
+/* 檔案圖標 - 根據檔案類型使用不同顏色 */
+.preview-filename i {
+    font-size: 1rem;
+    margin-right: 4px;
+}
+
+/* XML 檔案圖標 - 橙色 */
+.preview-filename.xml i {
+    color: #FF9800;
+}
+
+/* TXT 檔案圖標 - 綠色 */
+.preview-filename.txt i,
+.preview-filename.log i {
+    color: #4CAF50;
+}
+
+/* JSON 檔案圖標 - 紫色 */
+.preview-filename.json i {
+    color: #9C27B0;
+}
+
+/* 預設檔案圖標 - 白色半透明 */
+.preview-filename i {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* 預覽內容 - 改進文字樣式 */
+.preview-content {
+    background: #1E1E1E;
+    border: none;
+    border-radius: 0;
+    padding: 28px 32px;
+    margin: 0;
+    overflow: auto;
+    flex: 1;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-size: 14px;  /* 加大字體 */
+    line-height: 1.7;  /* 增加行高 */
+    color: #E4E4E4;   /* 更亮的文字顏色 */
+    white-space: pre;
+    word-wrap: normal;
+    font-weight: 400;  /* 正常字重 */
+    letter-spacing: 0.5px;  /* 增加字母間距 */
+}
+
+/* XML 文件的特殊樣式 */
+.preview-content.xml {
+    font-size: 14px;
+    color: #E4E4E4;
+}
+
+/* XML 語法高亮 - 更鮮豔的顏色 */
+.preview-content .xml-tag {
+    color: #4EC9B0;  /* 青色 */
+    font-weight: 600;
+}
+
+.preview-content .xml-attr {
+    color: #C586C0;  /* 紫色 */
+    font-weight: 500;
+}
+
+.preview-content .xml-value {
+    color: #CE9178;  /* 橙色 */
+    font-weight: 400;
+}
+
+.preview-content .xml-bracket {
+    color: #808080;  /* 灰色 */
+    font-weight: 400;
+}
+
+/* 純文字檔案（如 Version.txt）的特殊樣式 */
+.preview-content.plain-text {
+    background: #252526;  /* 稍微淺一點的背景 */
+    color: #CCCCCC;      /* 更亮的文字 */
+    font-size: 14px;
+    line-height: 1.8;
+    font-family: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+/* Version.txt 的關鍵字高亮 */
+.preview-content .keyword {
+    color: #569CD6;  /* 藍色 */
+    font-weight: 600;
+}
+
+.preview-content .git-label {
+    color: #4EC9B0;  /* 青色標籤 */
+    font-weight: 600;
+}
+
+.preview-content .git-path {
+    color: #DCDCAA;  /* 黃色路徑 */
+    font-weight: 500;
+}
+
+.preview-content .git-commit {
+    color: #D16969;  /* 紅色提交哈希 */
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.preview-content .git-branch {
+    color: #C586C0;  /* 紫色分支 */
+    font-weight: 500;
+}
+
+.preview-content .git-tag {
+    color: #9CDCFE;  /* 淺藍色標籤 */
+    font-weight: 500;
+}
+
+/* 為不同類型的內容提供更好的可讀性 */
+.preview-content .highlight {
+    background: rgba(255, 235, 59, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+/* 改進捲軸樣式 */
+.preview-content::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: #2D2D30;
+    border: 1px solid #1E1E1E;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: #484848;
+    border-radius: 0;
+    border: 1px solid #2D2D30;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: #5A5A5A;
+}
+
+/* 行號樣式（如果需要） */
+.preview-content .line-number {
+    color: #5A5A5A;
+    margin-right: 20px;
+    user-select: none;
+    display: inline-block;
+    width: 40px;
+    text-align: right;
+}
+
+/* ========================================
+   下載頁面樣式 - 北歐藍主題完整版
+   ======================================== */
+
+:root {
+  /* 北歐藍主色調 */
+  --nordic-blue: #2196F3;
+  --nordic-blue-dark: #1976D2;
+  --nordic-blue-light: #64B5F6;
+  --nordic-blue-lighter: #90CAF9;
+  --nordic-sky: #E3F2FD;
+  --nordic-ice: #F5F9FF;
+  --nordic-gradient: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+  --nordic-gradient-soft: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  
+  /* 次要色彩 */
+  --nordic-teal: #00BCD4;
+  --nordic-indigo: #3F51B5;
+  --nordic-accent: #03A9F4;
+  
+  /* 背景系統 */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FBFF;
+  --bg-tertiary: #F0F7FF;
+  --bg-hover: #E8F4FD;
+  
+  /* 文字色彩 */
+  --text-primary: #1A237E;
+  --text-secondary: #5C6BC0;
+  --text-muted: #9FA8DA;
+  
+  /* 邊框 */
+  --border-color: #E3E7F3;
+  --border-light: #EDF2FC;
+  
+  /* 狀態色彩 */
+  --success: #4CAF50;
+  --success-light: #E8F5E9;
+  --warning: #FF9800;
+  --warning-light: #FFF3E0;
+  --danger: #F44336;
+  --danger-light: #FFEBEE;
+  --info: #2196F3;
+  --info-light: #E3F2FD;
+  
+  /* 陰影 */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
+  
+  /* 圓角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+}
+
+/* 全域樣式 */
+body {
+  background: linear-gradient(180deg, #FAFBFD 0%, #FFFFFF 100%);
+  color: var(--text-primary);
+}
+
+/* 頁面標題 */
+.page-header {
+  text-align: center;
+  margin-bottom: 48px;
+  padding: 48px 0;
+}
+
+.page-title {
+  font-size: 2.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.page-title i {
+  color: var(--nordic-blue);
+  font-size: 2.5rem;
+}
+
+.page-subtitle {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+/* 步驟區塊 */
+.step-section {
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 28px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  transition: all 0.3s ease;
+}
+
+.step-section:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.step-header {
+  background: #2196F3;
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.step-header::before {
+  content: '';
+  position: absolute;
+  top: -100%;
+  right: -25%;
+  width: 70%;
+  height: 300%;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+  transform: rotate(35deg);
+  opacity: 0.5;
+}
+
+.step-number {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.step-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: white;
+}
+
+.step-subtitle {
+  font-size: 0.9375rem;
+  opacity: 0.9;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.section-body {
+  padding: 36px 32px;
+}
+
+/* 標籤切換 */
+.source-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 36px;
+  background: var(--bg-tertiary);
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.9375rem;
+}
+
+.tab-btn:hover {
+  color: var(--nordic-blue);
+  background: rgba(33, 150, 243, 0.08);
+}
+
+.tab-btn.active {
+  background: var(--nordic-blue);
+  color: white;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
+}
+
+/* 上傳區域 */
+.upload-container {
+  background: #FAFBFD;
+  border: 2px dashed #C5CAE9;
+  border-radius: var(--radius-xl);
+  padding: 80px 60px;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.upload-container:hover {
+  border-color: var(--nordic-blue-light);
+  background: var(--nordic-sky);
+  box-shadow: 0 4px 16px rgba(33, 150, 243, 0.1);
+  transform: translateY(-1px);
+}
+
+.upload-container.dragging {
+  background: var(--nordic-sky);
+  border-color: var(--nordic-blue);
+  border-style: solid;
+}
+
+.upload-icon-wrapper i {
+  font-size: 4.5rem;
+  color: var(--success);
+  transition: all 0.3s ease;
+}
+
+.upload-text {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.upload-hint {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+/* 檔案列表 */
+.file-list-container {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  margin-top: 1.5rem;
+}
+
+.file-list-header {
+  background: #2196F3;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: white;
+}
+
+.file-list-title {
+  color: white;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-count-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.file-item-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.2s ease;
+}
+
+.file-item-card:hover {
+  background: var(--bg-hover);
+}
+
+.file-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2196F3;
+  font-size: 1.5rem;
+}
+
+/* 伺服器瀏覽器 */
+.server-browser {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 400px;
+  box-shadow: var(--shadow-sm);
+}
+
+.browser-header {
+  background: var(--nordic-gradient-soft);
+  padding: 20px 28px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.file-item {
+  background: var(--bg-primary);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-item:hover {
+  border-color: var(--nordic-blue-light);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  background: var(--bg-hover);
+}
+
+.file-item.selected {
+  background: #E8F5E9;
+  border-color: var(--success);
+  border-width: 2px;
+}
+
+/* 按鈕樣式 */
+.btn {
+  padding: 12px 28px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9375rem;
+}
+
+.btn-primary {
+  background: var(--nordic-blue);
+  color: white;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+}
+
+.btn-primary:hover {
+  background: var(--nordic-blue-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+}
+
+.btn-secondary {
+  background: var(--bg-primary);
+  color: var(--nordic-blue);
+  border: 1.5px solid var(--nordic-blue);
+}
+
+.btn-secondary:hover {
+  background: var(--nordic-sky);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+}
+
+.btn-large {
+  padding: 18px 48px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  border-radius: var(--radius-lg);
+}
+
+/* 統計卡片 */
+.progress-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--nordic-blue);
+}
+
+.stat-card.success {
+  background: #E8F5E9;
+  border-color: #4CAF50;
+}
+
+.stat-card.success::before {
+  background: #4CAF50;
+}
+
+.stat-card.success:hover {
+  box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
+  border-width: 2px;
+}
+
+.stat-card.info {
+  background: #E3F2FD;
+  border-color: #2196F3;
+}
+
+.stat-card.info::before {
+  background: #2196F3;
+}
+
+.stat-card.info:hover {
+  box-shadow: 0 8px 24px rgba(33, 150, 243, 0.15);
+  border-width: 2px;
+}
+
+.stat-card.danger {
+  background: #FFEBEE;
+  border-color: #F44336;
+}
+
+.stat-card.danger::before {
+  background: #F44336;
+}
+
+.stat-card.danger:hover {
+  box-shadow: 0 8px 24px rgba(244, 67, 54, 0.15);
+  border-width: 2px;
+}
+
+.stat-card[onclick] {
+  cursor: pointer;
+}
+
+.stat-card[onclick]:hover {
+  transform: translateY(-3px);
+}
+
+.stat-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 1.5rem;
+}
+
+.stat-card.success .stat-icon {
+  background: #E8F5E9;
+  color: #4CAF50;
+}
+
+.stat-card.info .stat-icon {
+  background: #E3F2FD;
+  color: #2196F3;
+}
+
+.stat-card.danger .stat-icon {
+  background: #FFEBEE;
+  color: #F44336;
+}
+
+/* 進度條 */
+.progress-bar-wrapper {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.progress-bar {
+  height: 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2196F3 0%, #64B5F6 100%);
+  transition: width 0.4s ease;
+  position: relative;
+}
+
+/* 日誌區域 */
+.log-container {
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.log-header {
+  background: #2196F3;
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.log-number {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.log-content {
+  height: 280px;
+  overflow-y: auto;
+  padding: 0;
+  background: var(--bg-secondary);
+}
+
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.2s ease;
+}
+
+.log-entry:hover {
+  background: var(--bg-primary);
+}
+
+/* ========================================
+   檔案預覽模態框 - 統一優雅設計
+   ======================================== */
+   
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: #FFFFFF;
+  border-radius: 16px;
+  max-width: 1100px;
+  max-height: 90vh;
+  width: 95%;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+/* 預覽標題列 */
+.modal-header {
+  background: #2196F3;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.modal-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.modal-header-separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.preview-filename {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 檔案圖標顏色 */
+.preview-filename.xml i { color: #FFB74D; }
+.preview-filename.txt i { color: #81C784; }
+.preview-filename.log i { color: #81C784; }
+.preview-filename i { color: rgba(255, 255, 255, 0.9); }
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-copy {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-copy:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1.25rem;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+/* 預覽內容 - 統一風格 */
+.modal-body {
+  padding: 0;
+  max-height: calc(90vh - 60px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-content {
+  background: #1E1E1E;  /* VS Code 深色背景 */
+  border: none;
+  border-radius: 0;
+  padding: 24px 32px;
+  margin: 0;
+  overflow: auto;
+  flex: 1;
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #D4D4D4;  /* 預設文字顏色 */
+  white-space: pre;
+  word-wrap: normal;
+  tab-size: 4;
+}
+
+/* XML 語法高亮 - 簡潔配色 */
+.preview-content.xml {
+  color: #D4D4D4;
+}
+
+.xml-tag { 
+  color: #569CD6;  /* 藍色標籤 */
+  font-weight: normal;
+}
+
+.xml-attr { 
+  color: #9CDCFE;  /* 淺藍色屬性 */
+}
+
+.xml-value { 
+  color: #CE9178;  /* 橙色值 */
+}
+
+.xml-bracket { 
+  color: #808080;  /* 灰色括號 */
+}
+
+/* 純文字檔案樣式 - 與 XML 統一 */
+.preview-content.plain-text {
+  background: #1E1E1E;  /* 相同背景 */
+  color: #D4D4D4;      /* 相同文字顏色 */
+}
+
+/* Git 資訊高亮 - 簡潔配色 */
+.git-label { 
+  color: #569CD6;  /* 藍色標籤 */
+  font-weight: normal;
+}
+
+.git-path { 
+  color: #CE9178;  /* 橙色路徑 */
+}
+
+.git-commit { 
+  color: #B5CEA8;  /* 綠色提交 */
+}
+
+.git-branch { 
+  color: #C586C0;  /* 紫色分支 */
+}
+
+/* 滾動條 */
+.preview-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+  background: #2D2D30;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 0;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+  background: #4E4E51;
+}
+
+.preview-content::-webkit-scrollbar-corner {
+  background: #2D2D30;
+}
+
+/* 載入和錯誤狀態 */
+.preview-content .loading,
+.preview-content .error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  white-space: normal;
+}
+
+.preview-content .loading i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  color: #569CD6;
+  animation: spin 1s linear infinite;
+}
+
+.preview-content .error {
+  color: #F44336;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+  .modal-content {
+    max-width: 100%;
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  
+  .preview-content {
+    font-size: 13px;
+    padding: 20px;
+  }
+}
+
+/* ========================================
+   其他元件樣式
+   ======================================== */
+
+/* 表單樣式 */
+.form-input {
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--nordic-blue);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+}
+
+/* 開關樣式 */
+.switch-slider {
+  width: 52px;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: all 0.3s ease;
+  margin-right: 12px;
+}
+
+.switch-slider::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 50%;
+  top: 1px;
+  left: 1px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+input:checked + .switch-slider {
+  background: var(--nordic-blue);
+  border-color: var(--nordic-blue);
+}
+
+input:checked + .switch-slider::before {
+  transform: translateX(24px);
+}
+
+/* 選項卡片 */
+.option-card {
+  padding: 28px;
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.option-card:hover {
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--nordic-sky) 100%);
+  border-color: var(--nordic-blue-light);
+  transform: translateX(4px);
+  box-shadow: var(--shadow-md);
+}
+
+/* 樹狀結構 */
+.tree-node-content {
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  background: var(--bg-primary);
+  border: 1px solid transparent;
+}
+
+.tree-node-content:hover {
+  background: var(--bg-hover);
+  border-color: var(--nordic-blue-lighter);
+  transform: translateX(2px);
+}
+
+.tree-folder { color: var(--nordic-blue); }
+.tree-file { color: var(--nordic-teal); }
+
+/* 摘要項目 */
+.summary-item {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-light);
+}
+
+.summary-item.clickable:hover {
+  transform: translateY(-4px);
+  background: var(--bg-primary);
+  border-color: var(--nordic-blue);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 工具類別 */
+.hidden { display: none !important; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 1.25rem; }
+.mt-4 { margin-top: 2rem; }
+.mb-3 { margin-bottom: 1.25rem; }
+.mb-4 { margin-bottom: 2rem; }

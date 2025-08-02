@@ -1382,6 +1382,7 @@ function toggleFolder(element) {
 }
 
 // 預覽檔案
+// 預覽檔案 - 統一風格版本
 async function previewFile(path) {
     if (!previewSource) {
         previewSource = null;
@@ -1389,47 +1390,78 @@ async function previewFile(path) {
     
     const modal = document.getElementById('filePreviewModal');
     const content = document.getElementById('previewContent');
-    const filename = document.getElementById('previewFilename');
+    const filenameText = document.getElementById('previewFilenameText');
+    const filenameElement = document.getElementById('previewFilename');
     
-    // 顯示檔名和檔案類型
+    // 顯示檔名和設定檔案類型
     const fileName = path.split('/').pop();
     const fileExt = fileName.split('.').pop().toLowerCase();
     
-    if (filename) {
-        filename.textContent = fileName;
-        filename.className = `preview-filename ${fileExt}`;
+    if (filenameText) {
+        filenameText.textContent = fileName;
     }
     
-    content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span>載入中...</span></div>';
+    // 設定檔案類型類別和圖標
+    if (filenameElement) {
+        filenameElement.className = `preview-filename ${fileExt}`;
+        const icon = filenameElement.querySelector('i');
+        if (icon) {
+            switch(fileExt) {
+                case 'xml':
+                    icon.className = 'fas fa-code';
+                    break;
+                case 'txt':
+                case 'log':
+                    icon.className = 'fas fa-file-alt';
+                    break;
+                default:
+                    icon.className = 'fas fa-file';
+            }
+        }
+    }
+    
+    content.innerHTML = '<div class="loading"><i class="fas fa-spinner"></i><span>載入中...</span></div>';
     modal.classList.remove('hidden');
     
     try {
         const response = await utils.apiRequest(`/api/preview-file?path=${encodeURIComponent(path)}`);
         
-        // 根據檔案類型處理內容
-        if (response.type === 'xml') {
-            // 改進的 XML 語法高亮
+        if (response.type === 'xml' || fileExt === 'xml') {
+            // XML 語法高亮 - 簡潔版
             let formattedContent = response.content
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                // 處理 XML 標籤
-                .replace(/(&lt;\/?)([a-zA-Z0-9\-:]+)(.*?)(&gt;)/g, 
-                    '<span class="xml-bracket">$1</span><span class="xml-tag">$2</span>$3<span class="xml-bracket">$4</span>')
-                // 處理屬性
-                .replace(/(\s)([a-zA-Z0-9\-:]+)(=)(".*?")/g, 
-                    '$1<span class="xml-attr">$2</span><span class="xml-bracket">$3</span><span class="xml-value">$4</span>')
-                // 處理註釋
-                .replace(/(&lt;!--.*?--&gt;)/g, 
-                    '<span class="xml-comment">$1</span>');
+                .replace(/(&lt;)(\/?)([^&\s]+?)(&gt;)/g, 
+                    '<span class="xml-bracket">$1</span>$2<span class="xml-tag">$3</span><span class="xml-bracket">$4</span>')
+                .replace(/(\s)([a-zA-Z\-:]+)(=)("[^"]*")/g, 
+                    '$1<span class="xml-attr">$2</span>$3<span class="xml-value">$4</span>');
             
             content.innerHTML = formattedContent;
             content.className = 'preview-content xml';
+            
+        } else if (fileName.toLowerCase().includes('version') || fileExt === 'txt') {
+            // Version.txt 高亮 - 統一風格
+            let highlightedContent = response.content
+                .replace(/(GIT Project:|Local Path :|commit |Branch:|Tag Info:|P_[A-Z_]+:)/gi, 
+                    '<span class="git-label">$1</span>')
+                .replace(/(\/[^\s]+)/g, '<span class="git-path">$1</span>')
+                .replace(/\b([a-f0-9]{40})\b/g, '<span class="git-commit">$1</span>')
+                .replace(/(rtk\/realtek\/[^\s]+)/g, '<span class="git-branch">$1</span>');
+            
+            content.innerHTML = highlightedContent;
+            content.className = 'preview-content plain-text';
+            
         } else {
             content.textContent = response.content;
             content.className = 'preview-content';
         }
+        
+        // 重置捲軸位置
+        content.scrollTop = 0;
+        content.scrollLeft = 0;
+        
     } catch (error) {
-        content.innerHTML = `<div class="error"><i class="fas fa-exclamation-circle"></i> 無法預覽檔案：${error.message}</div>`;
+        content.innerHTML = `<div class="error"><i class="fas fa-exclamation-circle"></i><br>無法預覽檔案：${error.message}</div>`;
         content.className = 'preview-content';
     }
 }
@@ -1437,6 +1469,8 @@ async function previewFile(path) {
 // 複製預覽內容
 function copyPreviewContent() {
     const content = document.getElementById('previewContent');
+    const copyBtn = document.querySelector('.btn-copy');
+    
     if (!content) {
         utils.showNotification('找不到預覽內容', 'error');
         return;
@@ -1444,17 +1478,26 @@ function copyPreviewContent() {
     
     const text = content.textContent || content.innerText;
     
-    // 檢查瀏覽器是否支援 clipboard API
     if (navigator.clipboard && window.isSecureContext) {
-        // 使用新的 Clipboard API
         navigator.clipboard.writeText(text).then(() => {
             utils.showNotification('內容已複製到剪貼簿', 'success');
+            
+            // 按鈕動畫反饋
+            if (copyBtn) {
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check"></i> 已複製';
+                copyBtn.style.background = 'rgba(76, 175, 80, 0.3)';
+                
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHTML;
+                    copyBtn.style.background = '';
+                }, 2000);
+            }
         }).catch(err => {
             console.error('複製失敗:', err);
             fallbackCopyToClipboard(text);
         });
     } else {
-        // 使用傳統方法
         fallbackCopyToClipboard(text);
     }
 }

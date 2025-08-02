@@ -401,20 +401,26 @@
 <div class="modal hidden" id="filePreviewModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 class="modal-title">
-                <i class="fas fa-file-code"></i> 檔案預覽
-            </h3>
-            <button class="modal-close" onclick="closePreview()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <div class="preview-toolbar">
-                <span class="preview-filename" id="previewFilename"></span>
-                <button class="btn-icon" onclick="copyPreviewContent()" title="複製內容">
-                    <i class="fas fa-copy"></i>
+            <div class="modal-header-left">
+                <h3 class="modal-title">
+                    <i class="fas fa-file-code"></i> 檔案預覽
+                </h3>
+                <div class="modal-header-separator"></div>
+                <span class="preview-filename" id="previewFilename">
+                    <i class="fas fa-file"></i>
+                    <span id="previewFilenameText"></span>
+                </span>
+            </div>
+            <div class="modal-header-actions">
+                <button class="btn-copy" onclick="copyPreviewContent()" title="複製內容">
+                    <i class="fas fa-copy"></i> 複製
+                </button>
+                <button class="modal-close" onclick="closePreview()">
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
+        </div>
+        <div class="modal-body">
             <pre id="previewContent" class="preview-content"></pre>
         </div>
     </div>
