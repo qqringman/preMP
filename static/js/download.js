@@ -1,12 +1,14 @@
-// 下載頁面 JavaScript - 北歐藍版本
+// 下載頁面 JavaScript - 修正版（含路徑輸入功能）
 
 // 頁面變數
 let selectedSource = 'local';
-let selectedFiles = [];
+let selectedFiles = [];  // 當前選擇的檔案
+let localSelectedFiles = []; // 本地選擇的檔案
+let serverSelectedFiles = []; // 伺服器選擇的檔案  
 let downloadTaskId = null;
-let currentServerPath = '/';
-let serverSelectedFiles = [];
+let currentServerPath = '/home/vince_lin/ai/preMP'; // 使用 config.py 的預設路徑
 let serverFilesLoaded = false;
+let pathInputTimer = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -30,11 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
     window.viewReport = viewReport;
     window.proceedToCompare = proceedToCompare;
     window.newDownload = newDownload;
+    window.goToPath = goToPath;
+    window.hideSuggestions = hideSuggestions;
+    window.selectSuggestion = selectSuggestion;
     
     // 初始化功能
     initializeTabs();
     initializeUploadAreas();
     initializeConfigToggles();
+    initializePathInput(); // 新增
     updateDownloadButton();
     
     // 修正預設設定開關
@@ -76,7 +82,7 @@ function initializeTabs() {
     serverFilesLoaded = false;
 }
 
-// 切換標籤
+// 切換標籤 - 修正版
 function switchTab(tab) {
     selectedSource = tab;
     
@@ -98,12 +104,13 @@ function switchTab(tab) {
         serverFilesLoaded = true;
     }
     
-    // 重置選擇
+    // 根據標籤設定當前的檔案選擇
     if (tab === 'local') {
-        selectedFiles = [];
+        selectedFiles = localSelectedFiles;
     } else {
         selectedFiles = serverSelectedFiles;
     }
+    
     updateSelectedHint();
     updateDownloadButton();
 }
@@ -153,7 +160,8 @@ function handleLocalFiles(files) {
         return;
     }
     
-    selectedFiles = excelFiles;
+    localSelectedFiles = excelFiles;  // 儲存到本地選擇
+    selectedFiles = excelFiles;       // 更新當前選擇
     displayLocalFiles();
     updateSelectedHint();
     updateDownloadButton();
@@ -165,7 +173,7 @@ function displayLocalFiles() {
     
     if (!listEl) return;
     
-    if (selectedFiles.length === 0) {
+    if (localSelectedFiles.length === 0) {
         listEl.innerHTML = '';
         return;
     }
@@ -177,12 +185,12 @@ function displayLocalFiles() {
                     <i class="fas fa-check-circle"></i>
                     已選擇的檔案
                 </h4>
-                <span class="file-count-badge">${selectedFiles.length}</span>
+                <span class="file-count-badge">${localSelectedFiles.length}</span>
             </div>
             <div class="file-items">
     `;
     
-    selectedFiles.forEach((file, index) => {
+    localSelectedFiles.forEach((file, index) => {
         const fileSize = utils.formatFileSize(file.size);
         html += `
             <div class="file-item-card">
@@ -210,10 +218,206 @@ function displayLocalFiles() {
 
 // 移除檔案
 function removeFile(index) {
-    selectedFiles.splice(index, 1);
+    localSelectedFiles.splice(index, 1);
+    selectedFiles = localSelectedFiles;
     displayLocalFiles();
     updateSelectedHint();
     updateDownloadButton();
+}
+
+// 初始化路徑輸入功能 - 新增
+function initializePathInput() {
+    const pathInput = document.getElementById('serverPathInput');
+    if (!pathInput) return;
+    
+    // 設定預設值
+    pathInput.value = currentServerPath;
+    
+    // 監聽輸入事件
+    pathInput.addEventListener('input', (e) => {
+        clearTimeout(pathInputTimer);
+        pathInputTimer = setTimeout(() => {
+            showPathSuggestions(e.target.value);
+        }, 300);
+    });
+    
+    // 監聽按鍵事件
+    pathInput.addEventListener('keydown', (e) => {
+        const suggestions = document.getElementById('pathSuggestions');
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        const selected = suggestions.querySelector('.suggestion-item.selected');
+        let selectedIndex = -1;
+        
+        if (selected) {
+            selectedIndex = Array.from(items).indexOf(selected);
+        }
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedIndex < items.length - 1) {
+                selectedIndex++;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selected) {
+                selectSuggestion(selected.dataset.path);
+            } else {
+                goToPath();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+    
+    // 點擊外部時隱藏建議
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.path-input-container')) {
+            hideSuggestions();
+        }
+    });
+}
+
+// 顯示路徑建議 - 新增
+async function showPathSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (!suggestions) return;
+    
+    // 清空現有建議
+    suggestions.innerHTML = '';
+    
+    if (!inputValue) {
+        hideSuggestions();
+        return;
+    }
+    
+    try {
+        // 從後端獲取建議
+        const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(inputValue)}`);
+        const { directories, files } = response;
+        
+        if (directories.length === 0 && files.length === 0) {
+            suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+        } else {
+            // 顯示目錄
+            directories.forEach(dir => {
+                const item = createSuggestionItem(dir.path, dir.name, 'folder');
+                suggestions.appendChild(item);
+            });
+            
+            // 顯示 Excel 檔案
+            files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+                const item = createSuggestionItem(file.path, file.name, 'file');
+                suggestions.appendChild(item);
+            });
+        }
+        
+        suggestions.classList.add('show');
+        
+    } catch (error) {
+        // 如果後端沒有實現，使用靜態建議
+        showStaticSuggestions(inputValue);
+    }
+}
+
+// 顯示靜態建議 - 新增
+function showStaticSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    
+    // 從 config.py 定義的常用路徑
+    const commonPaths = [
+        '/home/vince_lin/ai/preMP',
+        '/home/vince_lin/ai/R306_ShareFolder',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log/Demo_stress_Test_log',
+        '/home/vince_lin/ai/DailyBuild',
+        '/home/vince_lin/ai/DailyBuild/Merlin7',
+        '/home/vince_lin/ai/PrebuildFW'
+    ];
+    
+    // 過濾匹配的路徑
+    const matches = commonPaths.filter(path => 
+        path.toLowerCase().includes(inputValue.toLowerCase())
+    );
+    
+    if (matches.length === 0) {
+        suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+    } else {
+        matches.forEach(path => {
+            const name = path.split('/').pop() || path;
+            const item = createSuggestionItem(path, name, 'folder');
+            suggestions.appendChild(item);
+        });
+    }
+    
+    suggestions.classList.add('show');
+}
+
+// 建立建議項目 - 新增
+function createSuggestionItem(path, name, type) {
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.dataset.path = path;
+    div.onclick = () => selectSuggestion(path);
+    
+    const icon = type === 'folder' ? 'fa-folder' : 'fa-file-excel';
+    const typeText = type === 'folder' ? '資料夾' : 'Excel 檔案';
+    
+    div.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <span>${path}</span>
+        <span class="suggestion-type">${typeText}</span>
+    `;
+    
+    return div;
+}
+
+// 更新選中的建議 - 新增
+function updateSelectedSuggestion(items, index) {
+    items.forEach((item, i) => {
+        if (i === index) {
+            item.classList.add('selected');
+            // 確保選中項目在視野內
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// 選擇建議 - 新增
+function selectSuggestion(path) {
+    const pathInput = document.getElementById('serverPathInput');
+    pathInput.value = path;
+    hideSuggestions();
+    
+    // 如果是資料夾，導航到該路徑
+    goToPath();
+}
+
+// 隱藏建議 - 新增
+function hideSuggestions() {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (suggestions) {
+        suggestions.classList.remove('show');
+    }
+}
+
+// 前往指定路徑 - 新增
+function goToPath() {
+    const pathInput = document.getElementById('serverPathInput');
+    const path = pathInput.value.trim();
+    
+    if (path) {
+        currentServerPath = path;
+        loadServerFiles(path);
+    }
 }
 
 // 改進的載入伺服器檔案
@@ -228,6 +432,12 @@ async function loadServerFiles(path) {
         currentServerPath = path;
         displayServerFiles(response);
         updateBreadcrumb(path);
+        
+        // 更新路徑輸入框
+        const pathInput = document.getElementById('serverPathInput');
+        if (pathInput) {
+            pathInput.value = path;
+        }
     } catch (error) {
         browser.innerHTML = `
             <div class="error-message">
@@ -329,7 +539,11 @@ function toggleServerFile(path, name, size) {
         serverSelectedFiles.splice(index, 1);
     }
     
-    selectedFiles = serverSelectedFiles;
+    // 如果在伺服器標籤，更新當前選擇
+    if (selectedSource === 'server') {
+        selectedFiles = serverSelectedFiles;
+    }
+    
     displayServerFiles({ files: [], folders: [] }); // 重新渲染以更新選中狀態
     loadServerFiles(currentServerPath); // 重新載入當前目錄
     displaySelectedServerFiles();
@@ -347,7 +561,7 @@ function displaySelectedServerFiles() {
         return;
     }
     
-    let html = '<div class="selected-info"><h4>已選擇的檔案：</h4><div class="selected-chips">';
+    let html = '<div class="selected-info"><h4><i class="fas fa-check-circle"></i> 已選擇的檔案</h4><div class="selected-chips">';
     serverSelectedFiles.forEach((file, index) => {
         html += `
             <div class="file-chip">
@@ -367,7 +581,12 @@ function displaySelectedServerFiles() {
 // 移除伺服器檔案
 function removeServerFile(index) {
     serverSelectedFiles.splice(index, 1);
-    selectedFiles = serverSelectedFiles;
+    
+    // 如果在伺服器標籤，更新當前選擇
+    if (selectedSource === 'server') {
+        selectedFiles = serverSelectedFiles;
+    }
+    
     loadServerFiles(currentServerPath);
     displaySelectedServerFiles();
     updateSelectedHint();
@@ -443,21 +662,14 @@ function toggleDepthControl() {
 
 // 更新已選擇提示
 function updateSelectedHint() {
-    /*const hint = document.getElementById('selectedHint');
-    const count = document.getElementById('selectedCount');
-    
-    if (selectedFiles.length > 0) {
-        count.textContent = selectedFiles.length;
-        hint.classList.remove('hidden');
-    } else {
-        hint.classList.add('hidden');
-    }*/
+    // 可以顯示選擇提示
 }
 
 // 更新下載按鈕狀態
 function updateDownloadButton() {
     const btn = document.getElementById('downloadBtn');
-    btn.disabled = selectedFiles.length === 0;
+    const currentFiles = selectedSource === 'local' ? localSelectedFiles : serverSelectedFiles;
+    btn.disabled = currentFiles.length === 0;
 }
 
 // 調整搜尋深度
@@ -523,7 +735,10 @@ function getSftpConfig() {
 
 // 修正開始下載函數
 async function startDownload() {
-    if (selectedFiles.length === 0) {
+    // 根據當前標籤決定使用哪些檔案
+    const currentFiles = selectedSource === 'local' ? localSelectedFiles : serverSelectedFiles;
+    
+    if (currentFiles.length === 0) {
         utils.showNotification('請先選擇檔案', 'error');
         return;
     }
@@ -553,7 +768,7 @@ async function startDownload() {
         // 處理檔案來源
         if (selectedSource === 'local') {
             // 本地檔案模式 - 上傳檔案
-            const file = selectedFiles[0]; // 只處理第一個檔案
+            const file = localSelectedFiles[0]; // 只處理第一個檔案
             
             addLog('正在上傳 Excel 檔案...', 'info');
             
@@ -727,19 +942,6 @@ function addLog(message, type = 'info') {
     
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
-}
-
-// 取得日誌圖示
-function getLogIcon(type) {
-    const icons = {
-        'info': 'fa-info-circle',
-        'success': 'fa-check-circle',
-        'warning': 'fa-exclamation-triangle',
-        'error': 'fa-times-circle',
-        'downloading': 'fa-download',
-        'completed': 'fa-check'
-    };
-    return icons[type] || icons.info;
 }
 
 // 清除日誌

@@ -1,5 +1,5 @@
 """
-SFTP 下載與比較系統 - Flask Web 應用程式 (改進版)
+SFTP 下載與比較系統 - Flask Web 應用程式 (完整更新版)
 """
 import os
 import sys
@@ -686,6 +686,126 @@ def get_mock_pivot_data():
         }
     }
 
+# 路徑建議 API - 新增
+@app.route('/api/path-suggestions')
+def get_path_suggestions():
+    """獲取路徑建議 API"""
+    path = request.args.get('path', '')
+    
+    if not path:
+        return jsonify({'directories': [], 'files': []})
+    
+    try:
+        # 嘗試獲取真實路徑建議
+        suggestions = {'directories': [], 'files': []}
+        
+        # 檢查路徑是否存在
+        if os.path.exists(path):
+            # 如果路徑存在，列出子目錄和檔案
+            try:
+                for item in os.listdir(path):
+                    item_path = os.path.join(path, item)
+                    if os.path.isdir(item_path):
+                        suggestions['directories'].append({
+                            'name': item,
+                            'path': item_path
+                        })
+                    elif item.endswith('.xlsx'):
+                        suggestions['files'].append({
+                            'name': item,
+                            'path': item_path,
+                            'size': os.path.getsize(item_path)
+                        })
+            except PermissionError:
+                pass
+        else:
+            # 如果路徑不存在，嘗試尋找相似的路徑
+            parent_path = os.path.dirname(path)
+            if os.path.exists(parent_path):
+                base_name = os.path.basename(path).lower()
+                try:
+                    for item in os.listdir(parent_path):
+                        if base_name in item.lower():
+                            item_path = os.path.join(parent_path, item)
+                            if os.path.isdir(item_path):
+                                suggestions['directories'].append({
+                                    'name': item,
+                                    'path': item_path
+                                })
+                            elif item.endswith('.xlsx'):
+                                suggestions['files'].append({
+                                    'name': item,
+                                    'path': item_path,
+                                    'size': os.path.getsize(item_path)
+                                })
+                except PermissionError:
+                    pass
+            
+        # 如果沒有找到建議，提供常用路徑
+        if not suggestions['directories'] and not suggestions['files']:
+            from config import COMMON_PATHS
+            for common_path in COMMON_PATHS:
+                if path.lower() in common_path.lower():
+                    if os.path.exists(common_path):
+                        name = common_path.split('/')[-1] or common_path
+                        suggestions['directories'].append({
+                            'name': name,
+                            'path': common_path
+                        })
+        
+        # 限制建議數量
+        suggestions['directories'] = suggestions['directories'][:10]
+        suggestions['files'] = suggestions['files'][:10]
+        
+        return jsonify(suggestions)
+        
+    except Exception as e:
+        print(f"Path suggestions error: {e}")
+        return jsonify({'directories': [], 'files': []})
+
+# 瀏覽伺服器 API - 更新
+@app.route('/api/browse-server')
+def browse_server():
+    """瀏覽伺服器檔案 API - 使用真實路徑"""
+    path = request.args.get('path', config.DEFAULT_SERVER_PATH)  # 使用 config 的預設路徑
+    
+    try:
+        # 檢查路徑是否存在
+        if os.path.exists(path) and os.path.isdir(path):
+            folders = []
+            files = []
+            
+            try:
+                for item in sorted(os.listdir(path)):
+                    item_path = os.path.join(path, item)
+                    
+                    if os.path.isdir(item_path):
+                        folders.append({
+                            'name': item,
+                            'path': item_path
+                        })
+                    elif item.endswith('.xlsx'):  # 只顯示Excel檔案
+                        files.append({
+                            'name': item,
+                            'path': item_path,
+                            'size': os.path.getsize(item_path)
+                        })
+                        
+                return jsonify({
+                    'folders': folders,
+                    'files': files
+                })
+                
+            except PermissionError:
+                return jsonify({'error': '沒有權限訪問此目錄'}), 403
+        else:
+            # 如果路徑不存在，返回錯誤
+            return jsonify({'error': '目錄不存在'}), 404
+            
+    except Exception as e:
+        print(f"Browse server error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # 非同步下載支援
 @app.route('/api/prepare-download/<task_id>', methods=['POST'])
 def prepare_download(task_id):
@@ -760,136 +880,6 @@ def create_mock_excel(task_id):
             df.to_excel(writer, sheet_name=sheet_name, index=False)
     
     return temp_file.name
-
-# SocketIO 事件處理
-@socketio.on('connect')
-def handle_connect():
-    """處理連線事件"""
-    print(f'Client connected: {request.sid}')
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """處理斷線事件"""
-    print(f'Client disconnected: {request.sid}')
-
-@socketio.on('join_task')
-def handle_join_task(data):
-    """加入任務房間"""
-    task_id = data.get('task_id')
-    if task_id:
-        join_room(task_id)
-        emit('joined', {'task_id': task_id})
-
-# 錯誤處理
-@app.errorhandler(404)
-def not_found(error):
-    """404 錯誤處理"""
-    return jsonify({'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """500 錯誤處理"""
-    return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/browse-server')
-def browse_server():
-    """瀏覽伺服器檔案 API - 使用真實路徑"""
-    path = request.args.get('path', '/')
-    
-    try:
-        # 定義基礎路徑（根據您的實際需求調整）
-        base_paths = {
-            '/R306_ShareFolder': '/home/vince_lin/ai/R306_ShareFolder',
-            '/DailyBuild': '/home/vince_lin/ai/DailyBuild',
-            '/PrebuildFW': '/home/vince_lin/ai/PrebuildFW'
-        }
-        
-        # 如果是根目錄，返回可用的頂層目錄
-        if path == '/':
-            return jsonify({
-                'folders': [
-                    {'name': 'R306_ShareFolder', 'path': '/R306_ShareFolder'},
-                    {'name': 'DailyBuild', 'path': '/DailyBuild'},
-                    {'name': 'PrebuildFW', 'path': '/PrebuildFW'}
-                ],
-                'files': []
-            })
-            
-        # 解析真實路徑
-        real_path = None
-        for prefix, base in base_paths.items():
-            if path.startswith(prefix):
-                real_path = path.replace(prefix, base)
-                break
-                
-        if not real_path:
-            # 如果沒有匹配的基礎路徑，使用模擬資料
-            return get_mock_server_files(path)
-            
-        # 檢查路徑是否存在
-        if os.path.exists(real_path):
-            folders = []
-            files = []
-            
-            try:
-                for item in os.listdir(real_path):
-                    item_path = os.path.join(real_path, item)
-                    relative_path = os.path.join(path, item)
-                    
-                    if os.path.isdir(item_path):
-                        folders.append({
-                            'name': item,
-                            'path': relative_path
-                        })
-                    elif item.endswith('.xlsx'):  # 只顯示Excel檔案
-                        files.append({
-                            'name': item,
-                            'path': relative_path,
-                            'size': os.path.getsize(item_path)
-                        })
-                        
-                # 排序
-                folders.sort(key=lambda x: x['name'])
-                files.sort(key=lambda x: x['name'])
-                
-                return jsonify({
-                    'folders': folders,
-                    'files': files
-                })
-                
-            except PermissionError:
-                return jsonify({'error': '沒有權限訪問此目錄'}), 403
-        else:
-            # 使用模擬資料
-            return get_mock_server_files(path)
-            
-    except Exception as e:
-        print(f"Browse server error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-def get_mock_server_files(path):
-    """提供模擬的伺服器檔案資料"""
-    mock_data = {
-        '/R306_ShareFolder/nightrun_log': {
-            'folders': [
-                {'name': 'Demo_stress_Test_log', 'path': '/R306_ShareFolder/nightrun_log/Demo_stress_Test_log'},
-                {'name': 'FTP_Paths_2025', 'path': '/R306_ShareFolder/nightrun_log/FTP_Paths_2025'}
-            ],
-            'files': [
-                {'name': 'sample_ftp_paths.xlsx', 'path': '/R306_ShareFolder/nightrun_log/sample_ftp_paths.xlsx', 'size': 5270},
-                {'name': 'test_data.xlsx', 'path': '/R306_ShareFolder/nightrun_log/test_data.xlsx', 'size': 8432}
-            ]
-        },
-        '/DailyBuild/Merlin7': {
-            'folders': [
-                {'name': 'DB2302', 'path': '/DailyBuild/Merlin7/DB2302'},
-                {'name': 'DB2857-premp', 'path': '/DailyBuild/Merlin7/DB2857-premp'}
-            ],
-            'files': []
-        }
-    }
-    
-    return jsonify(mock_data.get(path, {'folders': [], 'files': []}))
 
 @app.route('/api/preview-file')
 def preview_file():
@@ -969,7 +959,6 @@ def download_single_file():
         
     try:
         # 建構真實的檔案路徑
-        # 假設檔案路徑格式為: downloads/task_xxx/DailyBuild/Merlin7/DB2302/Version.txt
         full_path = os.path.join(os.getcwd(), file_path)
         
         # 安全性檢查 - 確保路徑在允許的目錄內
@@ -1019,6 +1008,36 @@ def download_report(task_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# SocketIO 事件處理
+@socketio.on('connect')
+def handle_connect():
+    """處理連線事件"""
+    print(f'Client connected: {request.sid}')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """處理斷線事件"""
+    print(f'Client disconnected: {request.sid}')
+
+@socketio.on('join_task')
+def handle_join_task(data):
+    """加入任務房間"""
+    task_id = data.get('task_id')
+    if task_id:
+        join_room(task_id)
+        emit('joined', {'task_id': task_id})
+
+# 錯誤處理
+@app.errorhandler(404)
+def not_found(error):
+    """404 錯誤處理"""
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """500 錯誤處理"""
+    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     # 開發模式執行

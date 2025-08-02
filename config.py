@@ -1,5 +1,5 @@
 """
-系統設定檔
+系統設定檔 - 更新版
 """
 
 # SFTP 連線設定
@@ -23,6 +23,20 @@ DEFAULT_ZIP_DIR = './zip_output'
 # Excel 設定
 FTP_PATH_COLUMN = 'ftp path'  # Excel 中 FTP 路徑的欄位名稱
 
+# 伺服器瀏覽預設路徑
+DEFAULT_SERVER_PATH = '/home/vince_lin/ai/preMP'  # 預設的伺服器瀏覽路徑
+
+# 常用路徑建議（用於自動補全）
+COMMON_PATHS = [
+    '/home/vince_lin/ai/preMP',
+    '/home/vince_lin/ai/R306_ShareFolder',
+    '/home/vince_lin/ai/R306_ShareFolder/nightrun_log',
+    '/home/vince_lin/ai/R306_ShareFolder/nightrun_log/Demo_stress_Test_log',
+    '/home/vince_lin/ai/DailyBuild',
+    '/home/vince_lin/ai/DailyBuild/Merlin7',
+    '/home/vince_lin/ai/PrebuildFW'
+]
+
 # 路徑解析規則
 MODULE_PATTERN = r'/PrebuildFW/([^/]+)/(RDDB-\d+)'  # RDDB 格式
 DB_PATTERN = r'/DailyBuild/([^/]+)/(DB\d+)_'  # DB 格式
@@ -30,13 +44,6 @@ DB_PATTERN = r'/DailyBuild/([^/]+)/(DB\d+)_'  # DB 格式
 # 檔案格式設定
 RDDB_TARGET_FILES = ['F_Version.txt', 'manifest.xml', 'Version.txt']
 DB_TARGET_FILES = ['manifest_{version}.xml', 'Version_{version}.txt']  # {version} 會被替換
-
-# 正則表達式說明：
-# - /PrebuildFW/ : 固定的路徑前綴
-# - ([^/]+) : 匹配模組名稱（任何非斜線的字符，如 bootcode, emcu, dolby_ta, ufsd_ko 等）
-# - (RDDB-\d+) : 匹配 JIRA ID（RDDB- 後接數字）
-
-# 特殊格式也會自動處理：/DailyBuild/Merlin7/DB2302_... → Merlin7/DB2302
 
 # 資料夾後綴規則（根據 FTP 路徑中的關鍵字）
 # - premp.google-refplus → -premp
@@ -47,7 +54,6 @@ DB_TARGET_FILES = ['manifest_{version}.xml', 'Version_{version}.txt']  # {versio
 # manifest.xml 比較會檢查 revision 差異、動態分支檢查、新增/刪除的專案
 
 # Gerrit URL 設定（用於產生連結，根據您的環境修改）
-# 會自動根據 project name 中是否包含 'prebuilt' 或 'prebuild' 來選擇 URL
 GERRIT_BASE_URL_PREBUILT = "https://mm2sd-git2.rtkbf.com/gerrit/plugins/gitiles/"
 GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 

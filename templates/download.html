@@ -19,7 +19,7 @@
     <div class="download-form" id="downloadForm">
         <!-- 步驟 1：選擇檔案來源 -->
         <div class="step-section">
-            <div class="step-header nordic-blue">
+            <div class="step-header">
                 <div class="step-number">1</div>
                 <div class="step-content">
                     <h2 class="step-title">選擇檔案來源</h2>
@@ -66,11 +66,19 @@
                     <div class="tab-content" id="server-tab">
                         <div class="server-browser">
                             <div class="browser-header">
-                                <div class="path-breadcrumb" id="pathBreadcrumb">
-                                    <span class="breadcrumb-item" onclick="navigateTo('/')">
-                                        <i class="fas fa-home"></i>
-                                    </span>
+                                <div class="path-input-container">
+                                    <input type="text" 
+                                           class="path-input" 
+                                           id="serverPathInput" 
+                                           placeholder="輸入或貼上路徑..."
+                                           value="/home/vince_lin/ai/preMP">
+                                    <div class="path-suggestions" id="pathSuggestions">
+                                        <!-- 動態生成路徑建議 -->
+                                    </div>
                                 </div>
+                                <button class="btn-go" onclick="goToPath()">
+                                    <i class="fas fa-arrow-right"></i> 前往
+                                </button>
                                 <button class="btn-refresh" onclick="refreshServerFiles()">
                                     <i class="fas fa-sync"></i>
                                 </button>
@@ -81,20 +89,18 @@
                                     <p>切換到此標籤時將載入檔案列表</p>
                                 </div>
                             </div>
+                            
+                            <!-- 路徑麵包屑 -->
+                            <div class="path-breadcrumb" id="pathBreadcrumb" style="display: none;">
+                                <span class="breadcrumb-item" onclick="navigateTo('/')">
+                                    <i class="fas fa-home"></i>
+                                </span>
+                            </div>
                         </div>
                         
                         <div class="selected-server-files mt-4" id="serverSelectedFiles">
                             <!-- 顯示已選擇的伺服器檔案 -->
                         </div>
-                    </div>
-                </div>
-                
-                <!-- 已選擇檔案提示 -->
-                <div id="selectedHint" class="path-card nordic-blue mt-4 hidden">
-                    <i class="fas fa-check-circle fa-2x"></i>
-                    <div>
-                        <div class="folder-name">已選擇檔案</div>
-                        <div class="folder-stats">共 <span id="selectedCount">0</span> 個檔案</div>
                     </div>
                 </div>
             </div>
@@ -308,7 +314,7 @@
         </div>
     </div>
 
-    <!-- 修改下載結果區域的HTML結構 -->
+    <!-- 下載結果區域 -->
     <div class="download-results hidden" id="downloadResults">
         <div class="result-card">
             <div class="result-header">
@@ -338,7 +344,7 @@
             </div>
         </div>
 
-        <!-- 重新設計的檔案結構預覽 -->
+        <!-- 檔案結構預覽 -->
         <div class="file-structure-card">
             <div class="structure-header">
                 <h3 class="structure-title">
@@ -360,7 +366,7 @@
     </div>
 </div>
 
-<!-- 改進的檔案預覽模態框 -->
+<!-- 檔案預覽模態框 -->
 <div class="modal hidden" id="filePreviewModal">
     <div class="modal-content">
         <div class="modal-header">
