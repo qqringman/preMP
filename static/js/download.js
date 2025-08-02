@@ -9,6 +9,9 @@ let downloadTaskId = null;
 let currentServerPath = '/home/vince_lin/ai/preMP'; // 使用 config.py 的預設路徑
 let serverFilesLoaded = false;
 let pathInputTimer = null;
+let downloadedFilesList = [];
+let skippedFilesList = [];
+let failedFilesList = [];
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,7 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.goToPath = goToPath;
     window.hideSuggestions = hideSuggestions;
     window.selectSuggestion = selectSuggestion;
-    
+    window.showFilesList = showFilesList;
+    window.closeFilesModal = closeFilesModal;
+
     // 初始化功能
     initializeTabs();
     initializeUploadAreas();
@@ -54,6 +59,109 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleSftpConfig(useDefaultConfig.checked);
     }
 });
+
+function showFilesList(type) {
+    let files = [];
+    let title = '';
+    let modalClass = '';
+    
+    switch(type) {
+        case 'downloaded':
+            files = downloadedFilesList;
+            title = '已下載的檔案';
+            modalClass = 'success';
+            break;
+        case 'skipped':
+            files = skippedFilesList;
+            title = '已跳過的檔案';
+            modalClass = 'info';
+            break;
+        case 'failed':
+            files = failedFilesList;
+            title = '下載失敗的檔案';
+            modalClass = 'danger';
+            break;
+        case 'total':
+            // 合併所有檔案
+            files = [
+                ...downloadedFilesList.map(f => ({...f, status: 'downloaded'})),
+                ...skippedFilesList.map(f => ({...f, status: 'skipped'})),
+                ...failedFilesList.map(f => ({...f, status: 'failed'}))
+            ];
+            title = '所有檔案';
+            modalClass = 'info';
+            break;
+    }
+    
+    // 顯示模態框
+    const modal = document.getElementById('filesListModal');
+    const modalTitle = document.getElementById('filesModalTitle');
+    const modalBody = document.getElementById('filesModalBody');
+    
+    modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
+    modal.className = `modal ${modalClass}`;
+    
+    // 生成檔案列表 HTML
+    if (files.length === 0) {
+        modalBody.innerHTML = '<div class="empty-message">沒有檔案</div>';
+    } else {
+        let html = '<div class="files-table-container"><table class="files-table">';
+        html += '<thead><tr>';
+        html += '<th>檔案名稱</th>';
+        html += '<th>路徑</th>';
+        
+        if (type === 'total') {
+            html += '<th>狀態</th>';
+        }
+        
+        if (type === 'skipped' || type === 'failed') {
+            html += '<th>原因</th>';
+        }
+        
+        html += '<th>操作</th>';
+        html += '</tr></thead><tbody>';
+        
+        files.forEach((file, index) => {
+            html += '<tr>';
+            html += `<td class="file-name-cell">
+                        <i class="fas fa-file-alt"></i> ${file.name}
+                     </td>`;
+            html += `<td class="file-path-cell">${file.path || file.ftp_path || '-'}</td>`;
+            
+            if (type === 'total') {
+                const statusClass = file.status === 'downloaded' ? 'success' : 
+                                  file.status === 'skipped' ? 'info' : 'danger';
+                const statusText = file.status === 'downloaded' ? '已下載' : 
+                                 file.status === 'skipped' ? '已跳過' : '失敗';
+                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+            }
+            
+            if (type === 'skipped' || type === 'failed') {
+                html += `<td>${file.reason || '-'}</td>`;
+            }
+            
+            // 操作按鈕
+            html += '<td class="action-cell">';
+            if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
+                html += `<button class="btn-icon" onclick="previewFile('${file.path}')" title="預覽">
+                            <i class="fas fa-eye"></i>
+                         </button>`;
+            }
+            html += '</td>';
+            
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table></div>';
+        modalBody.innerHTML = html;
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+function closeFilesModal() {
+    document.getElementById('filesListModal').classList.add('hidden');
+}
 
 // 初始化標籤切換
 function initializeTabs() {
@@ -875,7 +983,7 @@ function handleDownloadProgress(event) {
 
 // 更新下載進度
 function updateDownloadProgress(data) {
-    const { progress, status, message, stats } = data;
+    const { progress, status, message, stats, files } = data;
     
     // 更新進度條
     const progressFill = document.getElementById('progressFill');
@@ -891,11 +999,21 @@ function updateDownloadProgress(data) {
         updateStats(stats);
     }
     
+    // 儲存檔案列表
+    if (files) {
+        downloadedFilesList = files.downloaded || [];
+        skippedFilesList = files.skipped || [];
+        failedFilesList = files.failed || [];
+    }
+    
     // 添加日誌
     addLog(message, status);
     
     // 處理完成或錯誤
     if (status === 'completed') {
+        // 儲存最終的檔案列表到結果中
+        data.results = data.results || {};
+        data.results.files = files;
         showDownloadResults(data.results);
     } else if (status === 'error') {
         utils.showNotification(`下載失敗：${message}`, 'error');
@@ -906,16 +1024,24 @@ function updateDownloadProgress(data) {
 // 更新統計數據
 function updateStats(stats) {
     const elements = {
-        totalFiles: stats.total || 0,
-        downloadedFiles: stats.downloaded || 0,
-        skippedFiles: stats.skipped || 0,
-        failedFiles: stats.failed || 0
+        totalFiles: { value: stats.total || 0, type: 'total' },
+        downloadedFiles: { value: stats.downloaded || 0, type: 'downloaded' },
+        skippedFiles: { value: stats.skipped || 0, type: 'skipped' },
+        failedFiles: { value: stats.failed || 0, type: 'failed' }
     };
     
-    for (const [id, value] of Object.entries(elements)) {
+    for (const [id, data] of Object.entries(elements)) {
         const element = document.getElementById(id);
         if (element) {
-            animateValue(element, parseInt(element.textContent) || 0, value);
+            animateValue(element, parseInt(element.textContent) || 0, data.value);
+            
+            // 讓統計卡片可點擊
+            const card = element.closest('.stat-card');
+            if (card && data.value > 0) {
+                card.style.cursor = 'pointer';
+                card.onclick = () => showFilesList(data.type);
+                card.title = '點擊查看檔案列表';
+            }
         }
     }
 }
@@ -1215,7 +1341,15 @@ async function pollDownloadStatus() {
         const status = await utils.apiRequest(`/api/status/${downloadTaskId}`);
         
         if (status.status !== 'not_found') {
+            // 確保包含檔案列表資訊
             updateDownloadProgress(status);
+            
+            // 如果有檔案列表，更新全域變數
+            if (status.files) {
+                downloadedFilesList = status.files.downloaded || [];
+                skippedFilesList = status.files.skipped || [];
+                failedFilesList = status.files.failed || [];
+            }
         }
         
         // 如果任務未完成，繼續輪詢
@@ -1224,6 +1358,11 @@ async function pollDownloadStatus() {
         } else {
             // 移除事件監聽
             document.removeEventListener('task-progress', handleDownloadProgress);
+            
+            // 如果是完成狀態，確保顯示結果
+            if (status.status === 'completed' && status.results) {
+                showDownloadResults(status.results);
+            }
         }
     } catch (error) {
         console.error('Poll status error:', error);

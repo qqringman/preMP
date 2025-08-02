@@ -59,7 +59,7 @@ class WebProcessor:
         self.results = {}
         self.logger = utils.setup_logger(f'WebProcessor_{task_id}')  # 添加 logger
 
-    def update_progress(self, progress, status, message, stats=None):
+    def update_progress(self, progress, status, message, stats=None, files=None):
         """更新處理進度"""
         self.progress = progress
         self.status = status
@@ -74,6 +74,9 @@ class WebProcessor:
         
         if stats:
             update_data['stats'] = stats
+            
+        if files:
+            update_data['files'] = files
             
         processing_status[self.task_id] = update_data
         
@@ -178,9 +181,11 @@ class WebProcessor:
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            # 設定進度回調
+            # 設定進度回調，包含檔案列表
             self.downloader.set_progress_callback(
-                lambda p, s, m: self.update_progress(int(20 + p * 0.7), s, m)
+                lambda p, s, m, stats=None, files=None: self.update_progress(
+                    int(20 + p * 0.7), s, m, stats, files
+                )
             )
             
             self.update_progress(20, 'downloading', '開始下載檔案...')
@@ -194,18 +199,21 @@ class WebProcessor:
                     excel_file, download_dir
                 )
                 
-                # 取得統計資料
-                stats = self.downloader.get_download_stats()
+                # 取得統計資料和檔案列表
+                download_data = self.downloader.get_download_stats()
+                stats = download_data['stats']
+                files = download_data['files']
                 
-                # 生成資料夾結構 - 修正：傳入兩個參數
+                # 生成資料夾結構
                 folder_structure = self._generate_folder_structure(download_dir, report_path)
                 
                 # 儲存結果
                 self.results['download_report'] = report_path
                 self.results['stats'] = stats
+                self.results['files'] = files
                 self.results['folder_structure'] = folder_structure
                 
-                self.update_progress(100, 'completed', '下載完成！', stats)
+                self.update_progress(100, 'completed', '下載完成！', stats, files)
                 add_activity('下載 SFTP 檔案', 'success', 
                             f'成功下載 {stats["downloaded"]} 個檔案')
                 

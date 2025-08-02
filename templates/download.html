@@ -299,6 +299,12 @@
                     </div>
                 </div>
 
+                <!-- 新增提示文字 -->
+                <div class="stats-hint">
+                    <i class="fas fa-info-circle"></i>
+                    <span>提示：點擊上方統計卡片可查看詳細的檔案列表</span>
+                </div>
+
                 <!-- 總進度條 -->
                 <div class="progress-bar-wrapper">
                     <div class="progress-header">
@@ -410,6 +416,24 @@
         </div>
     </div>
 </div>
+
+<!-- 檔案列表模態框 -->
+<div class="modal hidden" id="filesListModal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 class="modal-title" id="filesModalTitle">
+                <i class="fas fa-list"></i> 檔案列表
+            </h3>
+            <button class="modal-close" onclick="closeFilesModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="filesModalBody">
+            <!-- 動態生成的檔案列表 -->
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}

@@ -23,7 +23,10 @@ class SFTPWebDownloader(SFTPDownloader):
             'failed': 0
         }
         self.progress_callback = None
-        self.last_report_path = None  # 記錄最後的報告路徑
+        self.last_report_path = None
+        self.downloaded_files_list = []  # 記錄下載的檔案詳情
+        self.skipped_files_list = []     # 記錄跳過的檔案詳情
+        self.failed_files_list = []      # 記錄失敗的檔案詳情
         
     def set_progress_callback(self, callback):
         """設定進度回調函數"""
@@ -31,73 +34,112 @@ class SFTPWebDownloader(SFTPDownloader):
         
     def download_files(self, ftp_path: str, local_dir: str) -> Tuple[List[str], Dict[str, str]]:
         """覆寫下載方法以支援進度更新"""
-        # 更新統計
-        self.stats['total'] += len(config.TARGET_FILES)
-        
         # 呼叫父類方法
         downloaded_files, file_paths = super().download_files(ftp_path, local_dir)
         
-        # 更新統計
-        self.stats['downloaded'] += len(downloaded_files)
-        self.stats['skipped'] += len([f for f in config.TARGET_FILES if f not in downloaded_files])
+        # 更新統計和檔案列表
+        for file in config.TARGET_FILES:
+            if file in downloaded_files:
+                if file in file_paths and file_paths[file] == "已存在":
+                    self.stats['skipped'] += 1
+                    self.skipped_files_list.append({
+                        'name': file,
+                        'path': os.path.join(local_dir, file),
+                        'reason': '檔案已存在'
+                    })
+                else:
+                    self.stats['downloaded'] += 1
+                    self.downloaded_files_list.append({
+                        'name': file,
+                        'path': os.path.join(local_dir, file),
+                        'ftp_path': ftp_path
+                    })
+            else:
+                self.stats['failed'] += 1
+                self.failed_files_list.append({
+                    'name': file,
+                    'reason': '找不到檔案'
+                })
         
-        # 觸發進度回調
+        # 觸發進度回調，包含詳細的檔案列表
         if self.progress_callback:
-            progress = (self.stats['downloaded'] + self.stats['skipped']) / max(self.stats['total'], 1) * 100
-            self.progress_callback(progress, 'downloading', f'已處理 {len(downloaded_files)} 個檔案')
+            progress = (self.stats['downloaded'] + self.stats['skipped'] + self.stats['failed']) / max(self.stats['total'], 1) * 100
+            self.progress_callback(
+                progress, 
+                'downloading', 
+                f'已處理 {len(downloaded_files)} 個檔案',
+                stats=self.stats,
+                files={
+                    'downloaded': self.downloaded_files_list,
+                    'skipped': self.skipped_files_list,
+                    'failed': self.failed_files_list
+                }
+            )
         
         return downloaded_files, file_paths
         
     def download_from_excel_with_progress(self, excel_path: str, output_dir: str = None):
         """從 Excel 下載並提供進度更新"""
-        # 重置統計
+        # 重置統計和檔案列表
         self.stats = {
             'total': 0,
             'downloaded': 0,
             'skipped': 0,
             'failed': 0
         }
+        self.downloaded_files_list = []
+        self.skipped_files_list = []
+        self.failed_files_list = []
         
         try:
             # 初始進度
             if self.progress_callback:
-                self.progress_callback(0, 'downloading', '開始讀取 Excel 檔案...')
+                self.progress_callback(0, 'downloading', '開始讀取 Excel 檔案...', stats=self.stats)
+            
+            # 讀取 Excel 來計算總數
+            import pandas as pd
+            df = pd.read_excel(excel_path)
+            
+            # 計算總檔案數（每個FTP路徑 × 目標檔案數）
+            self.stats['total'] = len(df) * len(config.TARGET_FILES)
+            
+            # 更新初始統計
+            if self.progress_callback:
+                self.progress_callback(5, 'downloading', f'預計處理 {self.stats["total"]} 個檔案...', stats=self.stats)
             
             # 呼叫父類方法
             report_path = self.download_from_excel(excel_path, output_dir)
             self.last_report_path = report_path
             
-            # 最終進度更新
+            # 最終進度更新，包含完整的檔案列表
             if self.progress_callback:
-                self.progress_callback(100, 'completed', '下載完成')
+                self.progress_callback(
+                    100, 
+                    'completed', 
+                    '下載完成',
+                    stats=self.stats,
+                    files={
+                        'downloaded': self.downloaded_files_list,
+                        'skipped': self.skipped_files_list,
+                        'failed': self.failed_files_list
+                    }
+                )
                 
             return report_path
             
         except Exception as e:
             self.stats['failed'] = self.stats['total'] - self.stats['downloaded'] - self.stats['skipped']
             if self.progress_callback:
-                self.progress_callback(0, 'error', f'下載失敗: {str(e)}')
+                self.progress_callback(0, 'error', f'下載失敗: {str(e)}', stats=self.stats)
             raise
 
     def get_download_stats(self):
-        """取得下載統計資料"""
-        # 如果沒有統計資料，嘗試從報告中讀取
-        if self.stats['total'] == 0 and self.last_report_path:
-            try:
-                import pandas as pd
-                df = pd.read_excel(self.last_report_path)
-                self.stats['total'] = len(df)
-                
-                # 嘗試從報告中提取更詳細的統計
-                if '版本資訊檔案' in df.columns:
-                    # 計算成功下載的數量
-                    self.stats['downloaded'] = len(df[df['版本資訊檔案'] != '無'])
-                    self.stats['skipped'] = len(df[df['版本資訊檔案'] == '無'])
-                else:
-                    # 預設都算成功
-                    self.stats['downloaded'] = self.stats['total']
-                    
-            except Exception as e:
-                logger.warning(f"無法從報告讀取統計: {e}")
-                
-        return self.stats
+        """取得下載統計資料（包含檔案列表）"""
+        return {
+            'stats': self.stats,
+            'files': {
+                'downloaded': self.downloaded_files_list,
+                'skipped': self.skipped_files_list,
+                'failed': self.failed_files_list
+            }
+        }
