@@ -1,5 +1,5 @@
 /* ========================================
-   下載頁面樣式 - 北歐藍主題增強版
+   下載頁面樣式 - 北歐藍主題完整版
    ======================================== */
 
 :root {
@@ -178,11 +178,6 @@ body {
   background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%);
   transform: rotate(35deg);
   opacity: 0.5;
-}
-
-@keyframes shimmer {
-  0%, 100% { transform: translateX(-100%) rotate(35deg); }
-  50% { transform: translateX(100%) rotate(35deg); }
 }
 
 .step-number {
@@ -403,16 +398,16 @@ body {
 }
 
 .file-list-header {
-  background: var(--nordic-gradient-soft);
+  background: var(--nordic-gradient);
   padding: 20px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border-color);
+  color: white;
 }
 
 .file-list-title {
-  color: var(--nordic-blue-dark);
+  color: white;
   font-size: 1.125rem;
   font-weight: 600;
   margin: 0;
@@ -422,16 +417,17 @@ body {
 }
 
 .file-list-title i {
-  color: var(--nordic-blue);
+  color: white;
 }
 
 .file-count-badge {
-  background: var(--nordic-blue);
+  background: rgba(255, 255, 255, 0.2);
   color: white;
   padding: 4px 12px;
   border-radius: var(--radius-full);
   font-size: 0.875rem;
   font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .file-item-card {
@@ -463,6 +459,51 @@ body {
   justify-content: center;
   color: var(--nordic-blue);
   font-size: 2rem;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.btn-remove-file {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-file:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
 }
 
 /* SFTP 設定表單 - 北歐藍風格 */
@@ -515,6 +556,128 @@ input:checked + .switch-slider {
 
 input:checked + .switch-slider::before {
   transform: translateX(26px);
+}
+
+.sftp-form {
+  transition: all 0.3s ease;
+}
+
+.sftp-form.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+  filter: grayscale(0.3);
+}
+
+.sftp-form.disabled .btn-test {
+  pointer-events: none !important;
+  opacity: 0.6 !important;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-label i {
+  color: var(--nordic-blue);
+  font-size: 0.875rem;
+}
+
+.form-input {
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--nordic-blue);
+  box-shadow: 0 0 0 3px var(--border-focus);
+  background: var(--bg-primary);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 測試連線區域 */
+.test-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.btn-test {
+  background: var(--bg-primary);
+  color: var(--nordic-blue);
+  border: 1px solid var(--nordic-blue);
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.btn-test:hover:not(:disabled) {
+  background: var(--nordic-blue);
+  color: white;
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.btn-test:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.connection-status {
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+}
+
+.connection-status.testing {
+  color: var(--nordic-blue);
+  background: var(--info-light);
+}
+
+.connection-status.success {
+  color: var(--success);
+  background: var(--success-light);
+}
+
+.connection-status.error {
+  color: var(--danger);
+  background: var(--danger-light);
 }
 
 /* 伺服器瀏覽器 - 北歐藍風格 */
@@ -772,6 +935,101 @@ input:checked + .switch-slider::before {
   border-radius: 50%;
 }
 
+.file-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.file-size {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* 已選擇的伺服器檔案區域 - 北歐藍風格 */
+.selected-server-files {
+  margin-top: 32px;
+}
+
+.selected-info {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.selected-info h4 {
+  background: var(--nordic-gradient);
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selected-info h4 i {
+  color: white;
+}
+
+.selected-chips {
+  padding: 24px 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.file-chip:hover {
+  background: var(--nordic-sky);
+  border-color: var(--nordic-blue-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.chip-remove {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--danger);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 6px;
+}
+
+.chip-remove:hover {
+  background: var(--danger);
+  color: white;
+  transform: scale(1.1);
+}
+
 /* 下載選項 - 北歐藍風格 */
 .options-grid {
   display: grid;
@@ -809,6 +1067,110 @@ input:checked + .switch-slider::before {
 
 .option-card:hover::before {
   transform: scaleY(1);
+}
+
+.option-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.option-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.option-switch input {
+  display: none;
+}
+
+.option-info {
+  flex: 1;
+}
+
+.option-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.option-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.option-sub {
+  padding-left: 68px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.option-sub.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.depth-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  border: 2px dashed #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+.depth-selector::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(219, 234, 254, 0.05) 0%, transparent 100%);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+.depth-selector:hover {
+  border-color: var(--nordic-blue-light);
+}
+
+.depth-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--nordic-blue);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.depth-btn:hover {
+  background: var(--nordic-blue);
+  color: white;
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
+}
+
+.depth-input {
+  width: 60px;
+  text-align: center;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 1.25rem;
 }
 
 /* 執行按鈕 - 北歐藍風格 */
@@ -876,6 +1238,18 @@ input:checked + .switch-slider::before {
   transform: translateY(-1px);
 }
 
+.btn-outline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-outline:hover {
+  border-color: var(--nordic-blue);
+  color: var(--nordic-blue);
+  background: var(--bg-secondary);
+}
+
 .btn-large {
   padding: 20px 56px;
   font-size: 1.25rem;
@@ -903,14 +1277,21 @@ input:checked + .switch-slider::before {
   100% { transform: translateX(100%) translateY(-100%); }
 }
 
+.btn-large:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-blue);
+}
+
+.btn-large:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* 下載進度 - 北歐藍風格 */
 .download-progress {
   animation: fadeIn 0.5s ease-out;
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border-radius: var(--radius-2xl);
-  padding: 48px;
-  position: relative;
-  box-shadow: var(--shadow-md);
 }
 
 /* 進度統計 - 北歐藍風格 */
@@ -974,6 +1355,38 @@ input:checked + .switch-slider::before {
   color: var(--nordic-blue);
 }
 
+.stat-card.success .stat-icon {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.stat-card.info .stat-icon {
+  background: var(--info-light);
+  color: var(--info);
+}
+
+.stat-card.danger .stat-icon {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
 /* 進度條 - 北歐藍風格 */
 .progress-bar-wrapper {
   background: var(--bg-primary);
@@ -982,6 +1395,25 @@ input:checked + .switch-slider::before {
   padding: 28px;
   margin-bottom: 32px;
   box-shadow: var(--shadow-sm);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.progress-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.progress-percentage {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--nordic-blue);
 }
 
 .progress-bar {
@@ -1008,6 +1440,11 @@ input:checked + .switch-slider::before {
   bottom: 0;
   background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
   animation: progress-shine 2s linear infinite;
+}
+
+@keyframes progress-shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* 日誌區域 - 北歐藍風格 */
@@ -1041,14 +1478,62 @@ input:checked + .switch-slider::before {
   color: var(--nordic-blue);
 }
 
+.log-content {
+  height: 300px;
+  overflow-y: auto;
+  padding: 0;
+  background: var(--bg-secondary);
+}
+
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.2s ease;
+}
+
+.log-entry:hover {
+  background: var(--bg-primary);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  min-width: 70px;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.log-icon {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.log-icon i {
+  font-size: 0.875rem;
+}
+
+.log-entry.info .log-icon { color: var(--info); }
+.log-entry.success .log-icon { color: var(--success); }
+.log-entry.error .log-icon { color: var(--danger); }
+.log-entry.downloading .log-icon { color: var(--nordic-blue); }
+
+.log-message {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
 /* 下載結果 - 北歐藍風格 */
 .download-results {
   animation: slideIn 0.5s ease-out;
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-  border-radius: var(--radius-2xl);
-  padding: 48px;
-  position: relative;
-  box-shadow: var(--shadow-md);
 }
 
 .result-card {
@@ -1072,6 +1557,13 @@ input:checked + .switch-slider::before {
   background: var(--nordic-gradient);
 }
 
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+  margin-bottom: 2.5rem;
+}
+
 .result-icon-wrapper {
   width: 96px;
   height: 96px;
@@ -1083,6 +1575,88 @@ input:checked + .switch-slider::before {
   color: white;
   font-size: 3.5rem;
   box-shadow: var(--shadow-blue);
+}
+
+.result-text {
+  flex: 1;
+}
+
+.result-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.025em;
+}
+
+.result-subtitle {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.summary-item {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-light);
+}
+
+.summary-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--nordic-blue-light);
+}
+
+.summary-item i {
+  font-size: 2.5rem;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.text-success { color: var(--success); }
+.text-info { color: var(--info); }
+.text-danger { color: var(--danger); }
+
+.summary-content {
+  flex: 1;
+}
+
+.summary-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
 }
 
 /* 檔案結構 - 北歐藍風格 */
@@ -1118,7 +1692,49 @@ input:checked + .switch-slider::before {
   color: var(--nordic-blue);
 }
 
+.structure-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+  background: var(--nordic-blue);
+  border-color: var(--nordic-blue);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.file-tree-container {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+}
+
 /* 樹狀結構 - 北歐藍風格 */
+.tree-node {
+  margin-bottom: 4px;
+  position: relative;
+}
+
 .tree-node-content {
   padding: 14px 18px;
   border-radius: var(--radius-md);
@@ -1148,12 +1764,78 @@ input:checked + .switch-slider::before {
   background: var(--nordic-sky);
 }
 
+.tree-node-content:hover .tree-actions {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.tree-icon {
+  margin-right: 12px;
+  font-size: 1.25rem;
+  width: 28px;
+  text-align: center;
+}
+
 .tree-folder {
   color: var(--nordic-blue);
 }
 
 .tree-file {
   color: var(--nordic-teal);
+}
+
+.tree-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.tree-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: all 0.2s ease;
+  transform: translateX(10px);
+}
+
+.tree-action {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.tree-action:hover {
+  background: var(--nordic-blue);
+  color: white;
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
+}
+
+.tree-children {
+  padding-left: 32px;
+  margin-left: 14px;
+  border-left: 2px solid var(--border-light);
+  margin-top: 4px;
+  position: relative;
+}
+
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--border-light) 0%, transparent 100%);
 }
 
 /* 模態框 - 北歐藍風格 */
@@ -1180,99 +1862,218 @@ input:checked + .switch-slider::before {
 }
 
 .modal-header {
-  background: var(--nordic-gradient-soft);
+  background: var(--nordic-gradient);
   padding: 28px 36px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
+  color: white;
 }
 
 .modal-title {
   font-size: 1.375rem;
   font-weight: 600;
-  color: var(--nordic-blue-dark);
+  color: white;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
 .modal-title i {
-  color: var(--nordic-blue);
+  color: white;
 }
 
-/* 已選擇的伺服器檔案區域 - 北歐藍風格 */
-.selected-server-files {
-  margin-top: 32px;
-}
-
-.selected-info {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
-  padding: 24px 28px;
-  position: relative;
-  box-shadow: var(--shadow-sm);
-}
-
-.selected-info h4 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--nordic-blue-dark);
-  margin: 0 0 20px 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.selected-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.file-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  background: var(--bg-primary);
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-full);
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  transition: all 0.2s ease;
-  font-weight: 500;
-}
-
-.file-chip:hover {
-  background: var(--nordic-sky);
-  border-color: var(--nordic-blue-light);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
-}
-
-.chip-remove {
-  width: 20px;
-  height: 20px;
+.modal-close {
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: var(--danger);
-  border: none;
-  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  color: white;
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-left: 6px;
 }
 
-.chip-remove:hover {
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+.modal-body {
+  padding: 32px;
+  max-height: calc(85vh - 100px);
+  overflow-y: auto;
+}
+
+.preview-toolbar {
+  background: var(--bg-tertiary);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+}
+
+.preview-filename {
+  font-weight: 600;
+  color: var(--nordic-blue);
+}
+
+.preview-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding: 1.5rem;
+  margin: 0;
+  overflow: auto;
+  max-height: calc(85vh - 200px);
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.preview-content.xml {
+  color: var(--text-primary);
+}
+
+.preview-content .xml-tag {
+  color: var(--nordic-blue);
+  font-weight: 600;
+}
+
+.preview-content .xml-attr {
+  color: var(--nordic-teal);
+}
+
+.preview-content .xml-value {
+  color: var(--danger);
+}
+
+/* 空狀態和載入 */
+.empty-state,
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-state i,
+.loading i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  color: var(--nordic-blue-light);
+}
+
+.error-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px dashed #F87171;
+  border-radius: var(--radius-xl);
+  padding: 48px;
+  position: relative;
+}
+
+.error-message::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(254, 226, 226, 0.3);
+  border-radius: var(--radius-xl);
+  pointer-events: none;
+}
+
+.error-message i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  color: var(--danger);
+  position: relative;
+  z-index: 1;
+}
+
+.error-message p {
+  color: var(--danger);
+  font-weight: 500;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.error-message .text-muted {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-retry {
+  margin-top: 20px;
+  padding: 10px 24px;
+  background: var(--bg-primary);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-retry:hover {
   background: var(--danger);
   color: white;
-  transform: scale(1.1);
+  box-shadow: var(--shadow-sm);
 }
 
-/* 滾動條樣式 - 北歐藍風格 */
+/* 動畫 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 滾動條樣式 */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -1290,6 +2091,30 @@ input:checked + .switch-slider::before {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--nordic-blue);
+}
+
+/* 工具類別 */
+.hidden {
+  display: none !important;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+.mt-2 { margin-top: var(--spacing-sm); }
+.mt-3 { margin-top: var(--spacing-md); }
+.mt-4 { margin-top: var(--spacing-lg); }
+.mb-3 { margin-bottom: var(--spacing-md); }
+.mb-4 { margin-bottom: var(--spacing-lg); }
+.ml-3 { margin-left: var(--spacing-md); }
+
+/* 小按鈕樣式 */
+.btn-small {
+  padding: 8px 16px;
+  font-size: 0.875rem;
 }
 
 /* 響應式設計 */
