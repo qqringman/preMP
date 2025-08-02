@@ -4341,3 +4341,168 @@ input:checked + .switch-slider::before {
   color: rgba(255, 255, 255, 0.9);
   font-weight: 400;
 }
+
+/* 統一並增強所有 hover 效果 */
+
+/* 上傳區域 hover */
+.upload-container {
+    background: #FAFBFD;
+    border: 2px dashed #B0BEC5;
+    transition: all 0.3s ease;
+}
+
+.upload-container:hover {
+    border-color: #1976D2;
+    background: #FFFFFF;  /* 純白背景 */
+    box-shadow: 0 8px 30px rgba(25, 118, 210, 0.15);
+    transform: translateY(-2px);
+}
+
+.upload-container.dragging {
+    background: #E3F2FD;
+    border-color: #1976D2;
+    border-style: solid;
+    box-shadow: 0 12px 40px rgba(25, 118, 210, 0.2);
+}
+
+/* 按鈕 hover 效果 */
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    box-shadow: 0 8px 25px rgba(25, 118, 210, 0.3);
+}
+
+.btn-secondary:hover {
+    background: #FFFFFF;
+    border-color: #1976D2;
+    color: #1976D2;
+    box-shadow: 0 6px 20px rgba(25, 118, 210, 0.15);
+}
+
+/* 統計卡片 hover */
+.stat-card:hover {
+    transform: translateY(-3px);
+    background: #FFFFFF;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border-color: #1976D2;
+}
+
+.stat-card[onclick]:hover {
+    cursor: pointer;
+    transform: translateY(-4px);
+    box-shadow: 0 12px 35px rgba(25, 118, 210, 0.15);
+}
+
+/* 輸入框 focus 效果 */
+.form-input:focus {
+    outline: none;
+    border-color: #1976D2;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+}
+
+/* 路徑輸入框 */
+.path-input:focus {
+    border-color: #1976D2;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+}
+
+/* 建議項目 hover */
+.suggestion-item:hover {
+    background: #E3F2FD;
+    color: #1565C0;
+}
+
+.suggestion-item.selected {
+    background: #1976D2;
+    color: white;
+}
+
+/* 標籤按鈕 hover */
+.tab-btn:hover {
+    background: rgba(25, 118, 210, 0.08);
+    color: #1976D2;
+}
+
+.tab-btn.active {
+    background: #1976D2;
+    color: white;
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.25);
+}
+
+/* 選項卡片 hover */
+.option-card:hover {
+    background: #FFFFFF;
+    border-color: #1976D2;
+    transform: translateX(4px);
+    box-shadow: 0 6px 20px rgba(25, 118, 210, 0.1);
+}
+
+/* 深度按鈕 hover */
+.depth-btn:hover {
+    background: #1976D2;
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* 重新整理按鈕 hover */
+.btn-refresh:hover {
+    background: #1976D2;
+    border-color: #1976D2;
+    color: white;
+    transform: rotate(180deg);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+/* 移除檔案按鈕 hover */
+.btn-remove-file:hover {
+    background: #FFEBEE;
+    border-color: #F44336;
+    color: #F44336;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.2);
+}
+
+/* 執行按鈕特殊效果 */
+.btn-large:hover {
+    background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(25, 118, 210, 0.3);
+}
+
+/* 資料夾樹操作按鈕 */
+.tree-action:hover {
+    background: #1976D2;
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* 檔案晶片 hover */
+.file-chip:hover {
+    background: #E3F2FD;
+    border-color: #1976D2;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+}
+
+/* 摘要項目 hover */
+.summary-item.clickable:hover {
+    transform: translateY(-4px);
+    background: #FFFFFF;
+    border-color: #1976D2;
+    box-shadow: 0 10px 30px rgba(25, 118, 210, 0.15);
+}
+
+/* 確保所有互動元素都有明顯的 hover 效果 */
+button:hover,
+.clickable:hover,
+[onclick]:hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
