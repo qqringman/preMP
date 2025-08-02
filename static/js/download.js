@@ -1383,7 +1383,6 @@ function toggleFolder(element) {
 
 // 預覽檔案
 async function previewFile(path) {
-    // 如果不是從檔案列表開啟，設定來源為 null
     if (!previewSource) {
         previewSource = null;
     }
@@ -1392,13 +1391,16 @@ async function previewFile(path) {
     const content = document.getElementById('previewContent');
     const filename = document.getElementById('previewFilename');
     
-    // 顯示檔名
+    // 顯示檔名和檔案類型
     const fileName = path.split('/').pop();
+    const fileExt = fileName.split('.').pop().toLowerCase();
+    
     if (filename) {
         filename.textContent = fileName;
+        filename.className = `preview-filename ${fileExt}`;
     }
     
-    content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
+    content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span>載入中...</span></div>';
     modal.classList.remove('hidden');
     
     try {
@@ -1406,23 +1408,29 @@ async function previewFile(path) {
         
         // 根據檔案類型處理內容
         if (response.type === 'xml') {
-            // XML語法高亮
+            // 改進的 XML 語法高亮
             let formattedContent = response.content
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/(&lt;\/?)(\w+)(.*?)(&gt;)/g, 
-                    '$1<span class="xml-tag">$2</span>$3$4')
-                .replace(/(\w+)="([^"]*)"/g, 
-                    '<span class="xml-attr">$1</span>="<span class="xml-value">$2</span>"');
+                // 處理 XML 標籤
+                .replace(/(&lt;\/?)([a-zA-Z0-9\-:]+)(.*?)(&gt;)/g, 
+                    '<span class="xml-bracket">$1</span><span class="xml-tag">$2</span>$3<span class="xml-bracket">$4</span>')
+                // 處理屬性
+                .replace(/(\s)([a-zA-Z0-9\-:]+)(=)(".*?")/g, 
+                    '$1<span class="xml-attr">$2</span><span class="xml-bracket">$3</span><span class="xml-value">$4</span>')
+                // 處理註釋
+                .replace(/(&lt;!--.*?--&gt;)/g, 
+                    '<span class="xml-comment">$1</span>');
             
-            content.innerHTML = `<code class="xml">${formattedContent}</code>`;
-            content.classList.add('xml');
+            content.innerHTML = formattedContent;
+            content.className = 'preview-content xml';
         } else {
             content.textContent = response.content;
-            content.classList.remove('xml');
+            content.className = 'preview-content';
         }
     } catch (error) {
-        content.innerHTML = `<div class="error">無法預覽檔案：${error.message}</div>`;
+        content.innerHTML = `<div class="error"><i class="fas fa-exclamation-circle"></i> 無法預覽檔案：${error.message}</div>`;
+        content.className = 'preview-content';
     }
 }
 

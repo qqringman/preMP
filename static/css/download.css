@@ -4506,3 +4506,384 @@ button:hover,
 [onclick]:hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* 統計卡片基礎樣式 */
+.stat-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* 成功統計 - 綠色主題 */
+.stat-card.success {
+    background: #E8F5E9;
+    border-color: #4CAF50;
+}
+
+.stat-card.success:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
+    border-color: #4CAF50;
+    border-width: 2px;
+}
+
+.stat-card.success .stat-icon {
+    background: #E8F5E9;
+    color: #4CAF50;
+}
+
+/* 資訊統計 - 藍色主題 */
+.stat-card.info {
+    background: #E3F2FD;
+    border-color: #2196F3;
+}
+
+.stat-card.info:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(33, 150, 243, 0.15);
+    border-color: #2196F3;
+    border-width: 2px;
+}
+
+.stat-card.info .stat-icon {
+    background: #E3F2FD;
+    color: #2196F3;
+}
+
+/* 危險統計 - 紅色主題 */
+.stat-card.danger {
+    background: #FFEBEE;
+    border-color: #F44336;
+}
+
+.stat-card.danger:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(244, 67, 54, 0.15);
+    border-color: #F44336;
+    border-width: 2px;
+}
+
+.stat-card.danger .stat-icon {
+    background: #FFEBEE;
+    color: #F44336;
+}
+
+/* 可點擊的統計卡片 */
+.stat-card[onclick] {
+    cursor: pointer;
+}
+
+.stat-card[onclick]:hover::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 檔案預覽模態框 - 修正版 */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-content {
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);  /* 保持外層圓角 */
+    max-width: 900px;
+    max-height: 85vh;
+    width: 90%;
+    overflow: hidden;
+    box-shadow: var(--shadow-xl);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+/* 預覽標題列 - 與頁面風格一致 */
+.modal-header {
+    background: #2196F3;  /* 使用主藍色 */
+    padding: 24px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-header::before {
+    content: '';
+    position: absolute;
+    top: -100%;
+    right: -25%;
+    width: 70%;
+    height: 300%;
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    transform: rotate(35deg);
+    opacity: 0.5;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.modal-title i {
+    font-size: 1.25rem;
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-md);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+}
+
+/* 預覽主體 */
+.modal-body {
+    padding: 0;
+    max-height: calc(85vh - 80px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+}
+
+/* 預覽工具列 - 與頁面一致的淺色背景 */
+.preview-toolbar {
+    background: var(--bg-tertiary);
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+.preview-filename {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.preview-filename::before {
+    content: '\f15b';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 400;
+    color: var(--nordic-blue);
+    font-size: 1.125rem;
+}
+
+/* 預覽內容區域 - 完全無圓角 */
+.preview-content {
+    background: #263238;  /* 深色背景 */
+    border: none;
+    border-radius: 0;  /* 無圓角 */
+    padding: 24px 32px;
+    margin: 0;
+    overflow: auto;
+    flex: 1;
+    font-family: 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #ECEFF1;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* 確保內容區域沒有任何圓角 */
+.preview-content * {
+    border-radius: 0 !important;
+}
+
+/* XML 語法高亮 */
+.preview-content .xml-tag {
+    color: #82B1FF;
+}
+
+.preview-content .xml-attr {
+    color: #C3E88D;
+}
+
+.preview-content .xml-value {
+    color: #FFAB40;
+}
+
+/* 複製按鈕 - 與頁面風格一致 */
+.btn-icon[onclick*="copyPreviewContent"] {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-icon[onclick*="copyPreviewContent"]:hover {
+    background: var(--nordic-blue);
+    border-color: var(--nordic-blue);
+    color: white;
+    transform: scale(1.05);
+    box-shadow: var(--shadow-sm);
+}
+
+/* 預覽內容滾動條樣式 */
+.preview-content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: #37474F;
+    border-radius: 0;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: #546E7A;
+    border-radius: 0;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: #607D8B;
+}
+
+/* 檔案類型圖標 */
+.preview-filename.xml::before {
+    content: '\f1c9';
+    color: #FF6B6B;
+}
+
+.preview-filename.txt::before {
+    content: '\f15c';
+    color: #4FC3F7;
+}
+
+.preview-filename.log::before {
+    content: '\f017';
+    color: #FFB74D;
+}
+
+/* 載入中和錯誤狀態 */
+.preview-content .loading,
+.preview-content .error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    background: transparent;
+}
+
+.preview-content .loading {
+    color: #B0BEC5;
+}
+
+.preview-content .loading i {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+    color: var(--nordic-blue);
+}
+
+.preview-content .error {
+    color: #FF5252;
+}
+
+.preview-content .error i {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .modal-content {
+        max-width: 100%;
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+    
+    .preview-content {
+        font-size: 0.875rem;
+        padding: 20px;
+    }
+    
+    .modal-header {
+        padding: 20px 24px;
+    }
+}
+
+/* 預覽內容 - GitHub 亮色風格 */
+.preview-content {
+    background: #FFFFFF;  /* 白色背景 */
+    color: #24292E;  /* 深色文字 */
+}
+
+/* XML 標籤 - 深藍色 */
+.preview-content .xml-tag {
+    color: #22863A;
+    font-weight: 600;
+}
+
+/* XML 屬性名稱 - 藍色 */
+.preview-content .xml-attr {
+    color: #005CC5;
+}
+
+/* XML 屬性值 - 深紅色 */
+.preview-content .xml-value {
+    color: #D73A49;
+}
+
+/* 特殊字符 - 灰色 */
+.preview-content .xml-bracket {
+    color: #6A737D;
+}
