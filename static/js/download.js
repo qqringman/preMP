@@ -1096,8 +1096,10 @@ function updateDownloadProgress(data) {
     
     // 更新統計 - 確保統計資料存在
     if (stats && typeof stats === 'object') {
-        console.log('Updating stats:', stats); // 除錯用
+        console.log('Received stats:', stats); // 除錯用
         updateStats(stats);
+    } else {
+        console.warn('No stats data in update'); // 除錯用
     }
     
     // 儲存檔案列表
@@ -1112,7 +1114,6 @@ function updateDownloadProgress(data) {
     
     // 處理完成或錯誤
     if (status === 'completed') {
-        // 確保 results 包含最新的檔案列表
         const finalResults = results || {};
         if (!finalResults.files && files) {
             finalResults.files = files;
@@ -1138,7 +1139,12 @@ function debugStats() {
 
 // 更新統計數據
 function updateStats(stats) {
-    if (!stats) return;
+    if (!stats) {
+        console.error('No stats data provided');
+        return;
+    }
+    
+    console.log('Updating stats:', stats); // 除錯用
     
     const elements = {
         totalFiles: stats.total || 0,
@@ -1150,16 +1156,20 @@ function updateStats(stats) {
     for (const [id, value] of Object.entries(elements)) {
         const element = document.getElementById(id);
         if (element) {
-            // 直接更新數值，不要動畫效果避免亂跳
             element.textContent = value;
+            console.log(`Updated ${id} to ${value}`); // 除錯用
             
             // 讓統計卡片可點擊
             const card = element.closest('.stat-card');
             if (card && value > 0) {
                 card.style.cursor = 'pointer';
-                card.onclick = () => showFilesList(id.replace('Files', ''));
+                // 確保 onclick 事件正確綁定
+                const type = id.replace('Files', '');
+                card.onclick = () => showFilesList(type);
                 card.title = '點擊查看檔案列表';
             }
+        } else {
+            console.error(`Element with id '${id}' not found`); // 除錯用
         }
     }
 }
