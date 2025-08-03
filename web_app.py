@@ -368,6 +368,17 @@ class WebProcessor:
                 # 執行單一比對情境
                 self.update_progress(30, 'comparing', f'正在執行 {scenarios} 比對...')
                 compare_files = self.comparator.compare_all_modules(source_dir, compare_dir, scenarios)
+                
+                # 建立與 all 模式相同的結果結構
+                self.results['compare_results'] = {
+                    scenarios: {
+                        'success': len(compare_files) if compare_files else 0,
+                        'failed': 0,
+                        'modules': [],
+                        'failed_modules': [],
+                        'reports': compare_files or []
+                    }
+                }
                 self.results['compare_files'] = compare_files
                 self.results['summary_report'] = os.path.join(compare_dir, 'all_compare.xlsx')
             

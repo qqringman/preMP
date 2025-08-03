@@ -474,6 +474,36 @@ function updateCompareProgress(data) {
     }
 }
 
+// 獲取當前選擇的情境
+function getSelectedScenario() {
+    const selectedInput = document.querySelector('input[name="scenario"]:checked');
+    return selectedInput ? selectedInput.value : 'all';
+}
+
+// 獲取情境資訊
+function getScenarioInfo(scenario) {
+    const scenarioMap = {
+        'master_vs_premp': {
+            name: 'Master vs PreMP',
+            icon: 'fa-code-branch'
+        },
+        'premp_vs_wave': {
+            name: 'PreMP vs Wave',
+            icon: 'fa-water'
+        },
+        'wave_vs_backup': {
+            name: 'Wave vs Backup',
+            icon: 'fa-database'
+        },
+        'all': {
+            name: '所有比對',
+            icon: 'fa-globe'
+        }
+    };
+    
+    return scenarioMap[scenario] || scenarioMap['all'];
+}
+
 // 顯示比對結果
 function showCompareResults(results) {
     document.getElementById('compareProgress').classList.add('hidden');
@@ -497,26 +527,22 @@ function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
     let html = '<div class="result-summary">';
     
-    if (compareResults.master_vs_premp) {
-        html += createSummaryCard('Master vs PreMP', compareResults.master_vs_premp, 'fa-code-branch');
+    // 遍歷所有比對結果
+    for (const [scenario, data] of Object.entries(compareResults)) {
+        const scenarioInfo = getScenarioInfo(scenario);
+        html += createSummaryCard(scenarioInfo.name, data, scenarioInfo.icon);
     }
     
-    if (compareResults.premp_vs_wave) {
-        html += createSummaryCard('PreMP vs Wave', compareResults.premp_vs_wave, 'fa-water');
-    }
-    
-    if (compareResults.wave_vs_backup) {
-        html += createSummaryCard('Wave vs Backup', compareResults.wave_vs_backup, 'fa-database');
-    }
-    
-    if (compareResults.failed > 0) {
+    // 如果有失敗的模組
+    const totalFailed = Object.values(compareResults).reduce((sum, data) => sum + (data.failed || 0), 0);
+    if (totalFailed > 0) {
         html += `
             <div class="summary-card error">
                 <div class="card-icon">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
                 <div class="card-content">
-                    <div class="card-value">${compareResults.failed}</div>
+                    <div class="card-value">${totalFailed}</div>
                     <div class="card-label">個模組無法比對</div>
                 </div>
             </div>
@@ -548,9 +574,22 @@ function createSummaryCard(title, data, icon) {
 function drawCharts(results) {
     const compareResults = results.compare_results || {};
     
+    // 獲取所有情境的數據
+    let scenarios = [];
+    let successData = [];
+    let failedData = [];
+    
+    // 遍歷所有比對結果
+    for (const [scenario, data] of Object.entries(compareResults)) {
+        const scenarioInfo = getScenarioInfo(scenario);
+        scenarios.push(scenarioInfo.name);
+        successData.push(data.success || 0);
+        failedData.push(data.failed || 0);
+    }
+    
     // 計算總數
-    const totalSuccess = getTotalSuccess(compareResults);
-    const totalFailed = compareResults.failed || 0;
+    const totalSuccess = successData.reduce((a, b) => a + b, 0);
+    const totalFailed = failedData.reduce((a, b) => a + b, 0);
     
     // 銷毀舊的圖表實例
     if (chartInstances.success) {
