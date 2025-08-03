@@ -126,12 +126,37 @@ async function apiRequest(url, options = {}) {
     }
 }
 
-// 上傳檔案
+// 改進的上傳檔案函數
 async function uploadFile(file) {
+    // 檢查檔案類型（可選）
+    const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+        showNotification(`不支援的檔案格式: ${fileExtension}`, 'error');
+        throw new Error(`不支援的檔案格式: ${fileExtension}`);
+    }
+    
+    // 檢查檔案大小
+    const maxSize = 16 * 1024 * 1024; // 16MB
+    if (file.size > maxSize) {
+        showNotification('檔案大小超過 16MB 限制', 'error');
+        throw new Error('檔案大小超過限制');
+    }
+    
     const formData = new FormData();
     formData.append('file', file);
     
-    showLoading('正在上傳檔案...');
+    // 顯示上傳進度
+    showLoading(`正在上傳檔案: ${file.name}...`);
+    
+    // 記錄檔案資訊（調試用）
+    console.log('Uploading file:', {
+        name: file.name,
+        size: file.size,
+        type: file.type || 'unknown',
+        extension: fileExtension
+    });
     
     try {
         const response = await fetch('/api/upload', {
@@ -139,18 +164,73 @@ async function uploadFile(file) {
             body: formData
         });
         
-        if (!response.ok) {
-            throw new Error('上傳失敗');
+        // 先嘗試解析回應
+        let responseData;
+        const contentType = response.headers.get('content-type');
+        
+        if (contentType && contentType.includes('application/json')) {
+            responseData = await response.json();
+        } else {
+            // 如果不是 JSON，嘗試讀取文字
+            const text = await response.text();
+            console.error('Non-JSON response:', text);
+            responseData = { error: text };
         }
         
-        const data = await response.json();
+        if (!response.ok) {
+            // 從後端獲取詳細錯誤訊息
+            const errorMessage = responseData.error || 
+                               responseData.message || 
+                               `上傳失敗 (${response.status})`;
+            
+            console.error('Upload failed:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorMessage,
+                response: responseData
+            });
+            
+            hideLoading();
+            showNotification(errorMessage, 'error');
+            throw new Error(errorMessage);
+        }
+        
+        // 驗證返回的資料結構
+        if (!responseData.filepath && !responseData.file_path) {
+            console.error('Invalid response structure:', responseData);
+            hideLoading();
+            showNotification('伺服器回應格式錯誤', 'error');
+            throw new Error('伺服器回應格式錯誤');
+        }
+        
         hideLoading();
-        showNotification('檔案上傳成功', 'success');
-        return data;
+        showNotification(`檔案 ${file.name} 上傳成功`, 'success');
+        
+        // 統一返回格式（相容不同的後端回應）
+        return {
+            filepath: responseData.filepath || responseData.file_path,
+            filename: responseData.filename || file.name,
+            size: responseData.size || file.size
+        };
+        
     } catch (error) {
         hideLoading();
+        
+        // 網路錯誤或其他錯誤
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+            showNotification('網路連線失敗，請檢查伺服器是否正常運行', 'error');
+            throw new Error('網路連線失敗');
+        }
+        
+        // 如果已經處理過的錯誤，直接拋出
+        if (error.message) {
+            throw error;
+        }
+        
+        // 未知錯誤
+        console.error('Upload error:', error);
         showNotification('檔案上傳失敗', 'error');
-        throw error;
+        throw new Error('檔案上傳失敗');
     }
 }
 

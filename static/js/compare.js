@@ -1050,8 +1050,25 @@ function createSuggestionItem(path, name, type) {
     div.dataset.path = path;
     div.onclick = () => selectSuggestion(path);
     
-    const icon = type === 'folder' ? 'fa-folder' : 'fa-file-excel';
-    const typeText = type === 'folder' ? '資料夾' : 'Excel 檔案';
+    // 比對頁面主要關注資料夾，但也要正確顯示檔案類型
+    let icon = 'fa-folder';
+    let typeText = '資料夾';
+    
+    if (type === 'file') {
+        if (name.endsWith('.csv')) {
+            icon = 'fa-file-csv';
+            typeText = 'CSV 檔案';
+        } else if (name.endsWith('.xls')) {
+            icon = 'fa-file-excel';
+            typeText = 'Excel 97-2003';
+        } else if (name.endsWith('.xlsx')) {
+            icon = 'fa-file-excel';
+            typeText = 'Excel 檔案';
+        } else {
+            icon = 'fa-file';
+            typeText = '檔案';
+        }
+    }
     
     div.innerHTML = `
         <i class="fas ${icon}"></i>

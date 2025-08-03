@@ -95,7 +95,7 @@ class SFTPWebDownloader(SFTPDownloader):
         return downloaded_files, file_paths
         
     def download_from_excel_with_progress(self, excel_path: str, output_dir: str = None):
-        """從 Excel 下載並提供進度更新"""
+        """從 Excel 或 CSV 下載並提供進度更新"""
         # 重置統計和檔案列表（只在開始時重置一次）
         self.stats = {
             'total': 0,
@@ -111,16 +111,18 @@ class SFTPWebDownloader(SFTPDownloader):
         try:
             # 初始進度，傳送初始統計
             if self.progress_callback:
+                file_type = "CSV" if excel_path.lower().endswith('.csv') else "Excel"
                 self.progress_callback(
                     0, 
                     'downloading', 
-                    '開始讀取 Excel 檔案...', 
+                    f'開始讀取 {file_type} 檔案...', 
                     stats=self.stats.copy()
                 )
             
-            # 讀取 Excel 來計算總數
+            # 讀取 Excel 或 CSV 來計算總數
             import pandas as pd
-            df = pd.read_excel(excel_path)
+            # 使用 excel_handler 來處理檔案讀取（支援自動編碼偵測）
+            df = self.excel_handler.read_excel(excel_path)
             
             # 計算總檔案數（每個FTP路徑 × 目標檔案數）
             self.stats['total'] = len(df) * len(config.TARGET_FILES)

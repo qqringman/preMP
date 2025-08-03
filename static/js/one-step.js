@@ -123,8 +123,12 @@ async function showPathSuggestions(inputValue) {
                 suggestions.appendChild(item);
             });
             
-            // 顯示 Excel 檔案
-            files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+            // 顯示 Excel 和 CSV 檔案
+            files.filter(f => 
+                f.name.endsWith('.xlsx') || 
+                f.name.endsWith('.xls') || 
+                f.name.endsWith('.csv')
+            ).forEach(file => {
                 const item = createSuggestionItem(file.path, file.name, 'file');
                 suggestions.appendChild(item);
             });
@@ -178,8 +182,21 @@ function createSuggestionItem(path, name, type) {
     div.dataset.path = path;
     div.onclick = () => selectSuggestion(path);
     
-    const icon = type === 'folder' ? 'fa-folder' : 'fa-file-excel';
-    const typeText = type === 'folder' ? '資料夾' : 'Excel 檔案';
+    let icon = 'fa-folder';
+    let typeText = '資料夾';
+    
+    if (type === 'file') {
+        if (name.endsWith('.csv')) {
+            icon = 'fa-file-csv';
+            typeText = 'CSV 檔案';
+        } else if (name.endsWith('.xls')) {
+            icon = 'fa-file-excel';
+            typeText = 'Excel 97-2003';
+        } else {
+            icon = 'fa-file-excel';
+            typeText = 'Excel 檔案';
+        }
+    }
     
     div.innerHTML = `
         <i class="fas ${icon}"></i>
@@ -278,8 +295,11 @@ function initializeUpload() {
 // 處理檔案選擇
 async function handleFileSelect(file) {
     // 驗證檔案類型
-    if (!file.name.endsWith('.xlsx')) {
-        utils.showNotification('請選擇 Excel (.xlsx) 檔案', 'error');
+    const validExtensions = ['.xlsx', '.xls', '.csv'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!validExtensions.includes(fileExtension)) {
+        utils.showNotification('請選擇 Excel (.xlsx, .xls) 或 CSV (.csv) 檔案', 'error');
         return;
     }
     
@@ -308,23 +328,34 @@ function displayLocalFile(file) {
     const fileList = document.getElementById('localFileList');
     fileList.classList.remove('hidden');
     
+    // 根據檔案類型決定圖標和顯示的類型文字
+    let fileIcon = 'fa-file-excel';
+    let fileType = 'Excel 檔案';
+    
+    if (file.name.endsWith('.csv')) {
+        fileIcon = 'fa-file-csv';
+        fileType = 'CSV 檔案';
+    } else if (file.name.endsWith('.xls')) {
+        fileType = 'Excel 97-2003';
+    }
+    
     fileList.innerHTML = `
         <div class="file-list-container">
             <div class="file-list-header">
                 <h3 class="file-list-title">
-                    <i class="fas fa-file-excel"></i> 已選擇的檔案
+                    <i class="fas ${fileIcon}"></i> 已選擇的檔案
                 </h3>
                 <span class="file-count-badge">1 個檔案</span>
             </div>
             <div class="file-items">
                 <div class="file-item-card">
                     <div class="file-icon-wrapper">
-                        <i class="fas fa-file-excel"></i>
+                        <i class="fas ${fileIcon}"></i>
                     </div>
                     <div class="file-details">
                         <div class="file-name">${file.name}</div>
                         <div class="file-meta">
-                            <span>Excel 檔案</span>
+                            <span>${fileType}</span>
                             <span class="file-size">${utils.formatFileSize(file.size)}</span>
                         </div>
                     </div>
@@ -405,13 +436,24 @@ function displayServerFiles(data) {
         `;
     });
     
-    // 顯示 Excel 檔案
-    files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+    // 顯示 Excel 和 CSV 檔案
+    files.filter(f => 
+        f.name.endsWith('.xlsx') || 
+        f.name.endsWith('.xls') || 
+        f.name.endsWith('.csv')
+    ).forEach(file => {
         const isSelected = selectedServerFiles.some(f => f.path === file.path);
+        
+        // 根據檔案類型決定圖標
+        let fileIcon = 'fa-file-excel';
+        if (file.name.endsWith('.csv')) {
+            fileIcon = 'fa-file-csv';
+        }
+        
         html += `
             <div class="file-item file ${isSelected ? 'selected' : ''}" 
                  onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
-                <i class="fas fa-file-excel"></i>
+                <i class="fas ${fileIcon}"></i>
                 <span class="file-name">${file.name}</span>
                 <span class="file-size">${utils.formatFileSize(file.size)}</span>
                 ${isSelected ? '<div class="check-icon"><i></i></div>' : ''}
@@ -462,6 +504,18 @@ function updateServerFileSelection() {
     container.classList.remove('hidden');
     selectedFile = selectedServerFiles[0].path; // 使用第一個選擇的檔案
     
+    // 根據檔案類型決定圖標和顯示的類型文字
+    const file = selectedServerFiles[0];
+    let fileIcon = 'fa-file-excel';
+    let fileType = 'Excel 檔案';
+    
+    if (file.name.endsWith('.csv')) {
+        fileIcon = 'fa-file-csv';
+        fileType = 'CSV 檔案';
+    } else if (file.name.endsWith('.xls')) {
+        fileType = 'Excel 97-2003';
+    }
+    
     let html = `
         <div class="file-list-container">
             <div class="file-list-header">
@@ -471,30 +525,27 @@ function updateServerFileSelection() {
                 <span class="file-count-badge">1 個檔案</span>
             </div>
             <div class="file-items">
-    `;
-    
-    const file = selectedServerFiles[0];
-    html += `
-        <div class="file-item-card">
-            <div class="file-icon-wrapper">
-                <i class="fas fa-file-excel"></i>
-            </div>
-            <div class="file-details">
-                <div class="file-name">${file.name}</div>
-                <div class="file-meta">
-                    <span class="file-path">
-                        <i class="fas fa-folder"></i> ${file.path}
-                    </span>
-                    <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                <div class="file-item-card">
+                    <div class="file-icon-wrapper">
+                        <i class="fas ${fileIcon}"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-meta">
+                            <span class="file-path">
+                                <i class="fas fa-folder"></i> ${file.path}
+                            </span>
+                            <span class="file-type">${fileType}</span>
+                            <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                        </div>
+                    </div>
+                    <button class="btn-remove-file" onclick="removeServerFile('${file.path}')">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
             </div>
-            <button class="btn-remove-file" onclick="removeServerFile('${file.path}')">
-                <i class="fas fa-times"></i>
-            </button>
         </div>
     `;
-    
-    html += '</div></div>';
     container.innerHTML = html;
     
     // 重新載入檔案列表以更新選中狀態

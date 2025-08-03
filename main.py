@@ -76,27 +76,30 @@ class SFTPCompareSystem:
         print("步驟 1/3：下載 SFTP 檔案")
         print("="*50)
         
-        # 列出當前目錄的 xlsx 檔案
+        # 列出當前目錄的 xlsx 和 csv 檔案
         xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.endswith('_report.xlsx')]
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+        all_files = xlsx_files + csv_files
         
-        if xlsx_files:
-            print("\n當前目錄的 Excel 檔案：")
-            for i, file in enumerate(xlsx_files, 1):
-                print(f"{i}. {file}")
+        if all_files:
+            print("\n當前目錄的 Excel/CSV 檔案：")
+            for i, file in enumerate(all_files, 1):
+                file_type = "Excel" if file.endswith('.xlsx') else "CSV"
+                print(f"{i}. {file} ({file_type})")
             print("\n您可以輸入檔案編號或完整路徑")
         
-        # 取得 Excel 檔案路徑
-        excel_input = input("請輸入 Excel 檔案路徑或編號 (預設: 1): ").strip()
+        # 取得檔案路徑
+        excel_input = input("請輸入 Excel/CSV 檔案路徑或編號 (預設: 1): ").strip()
         
-        # 如果空白且有 xlsx 檔案，預設選第一個
-        if not excel_input and xlsx_files:
+        # 如果空白且有檔案，預設選第一個
+        if not excel_input and all_files:
             excel_input = "1"
         
         # 檢查是否輸入編號
-        if excel_input.isdigit() and xlsx_files:
+        if excel_input.isdigit() and all_files:
             index = int(excel_input) - 1
-            if 0 <= index < len(xlsx_files):
-                excel_path = xlsx_files[index]
+            if 0 <= index < len(all_files):
+                excel_path = all_files[index]
             else:
                 print(f"錯誤：編號超出範圍")
                 return
@@ -105,6 +108,12 @@ class SFTPCompareSystem:
         
         if not os.path.exists(excel_path):
             print(f"錯誤：檔案不存在 - {excel_path}")
+            return
+        
+        # 檢查檔案類型
+        file_ext = os.path.splitext(excel_path)[1].lower()
+        if file_ext not in ['.xlsx', '.xls', '.csv']:
+            print(f"錯誤：不支援的檔案格式 - {file_ext}")
             return
         
         # 執行下載
@@ -219,27 +228,30 @@ class SFTPCompareSystem:
         """互動式下載功能"""
         print("\n--- 下載 SFTP 檔案 ---")
         
-        # 列出當前目錄的 xlsx 檔案
+        # 列出當前目錄的 xlsx 和 csv 檔案
         xlsx_files = [f for f in os.listdir('.') if f.endswith('.xlsx') and not f.endswith('_report.xlsx')]
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+        all_files = xlsx_files + csv_files
         
-        if xlsx_files:
-            print("\n當前目錄的 Excel 檔案：")
-            for i, file in enumerate(xlsx_files, 1):
-                print(f"{i}. {file}")
+        if all_files:
+            print("\n當前目錄的 Excel/CSV 檔案：")
+            for i, file in enumerate(all_files, 1):
+                file_type = "Excel" if file.endswith('.xlsx') else "CSV"
+                print(f"{i}. {file} ({file_type})")
             print("\n您可以輸入檔案編號或完整路徑")
         
-        # 取得 Excel 檔案路徑（預設選 1）
-        excel_input = input("請輸入 Excel 檔案路徑或編號 (預設: 1): ").strip()
+        # 取得檔案路徑（預設選 1）
+        excel_input = input("請輸入 Excel/CSV 檔案路徑或編號 (預設: 1): ").strip()
         
-        # 如果空白且有 xlsx 檔案，預設選第一個
-        if not excel_input and xlsx_files:
+        # 如果空白且有檔案，預設選第一個
+        if not excel_input and all_files:
             excel_input = "1"
         
         # 檢查是否輸入編號
-        if excel_input.isdigit() and xlsx_files:
+        if excel_input.isdigit() and all_files:
             index = int(excel_input) - 1
-            if 0 <= index < len(xlsx_files):
-                excel_path = xlsx_files[index]
+            if 0 <= index < len(all_files):
+                excel_path = all_files[index]
             else:
                 print(f"錯誤：編號超出範圍")
                 return
@@ -248,6 +260,12 @@ class SFTPCompareSystem:
         
         if not os.path.exists(excel_path):
             print(f"錯誤：檔案不存在 - {excel_path}")
+            return
+            
+        # 檢查檔案類型
+        file_ext = os.path.splitext(excel_path)[1].lower()
+        if file_ext not in ['.xlsx', '.xls', '.csv']:
+            print(f"錯誤：不支援的檔案格式 - {file_ext}")
             return
             
         # 取得 SFTP 設定
@@ -705,7 +723,7 @@ class SFTPCompareSystem:
 def create_parser():
     """建立命令列參數解析器"""
     parser = argparse.ArgumentParser(
-        description='SFTP 下載與比較系統',
+        description='SFTP 下載與比較系統 - 支援 Excel (.xlsx, .xls) 和 CSV (.csv) 檔案',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -714,7 +732,8 @@ def create_parser():
     
     # 下載功能
     download_parser = subparsers.add_parser('download', help='下載 SFTP 檔案')
-    download_parser.add_argument('--excel', required=True, help='Excel 檔案路徑')
+    download_parser.add_argument('--excel', required=True, 
+                                help='Excel 或 CSV 檔案路徑 (支援 .xlsx, .xls, .csv)')
     download_parser.add_argument('--host', default=config.SFTP_HOST, help='SFTP 伺服器')
     download_parser.add_argument('--port', type=int, default=config.SFTP_PORT, help='SFTP 連接埠')
     download_parser.add_argument('--username', default=config.SFTP_USERNAME, help='使用者名稱')
@@ -737,7 +756,8 @@ def create_parser():
     
     # 一步到位功能
     all_parser = subparsers.add_parser('all', help='一步到位：下載→比較→打包')
-    all_parser.add_argument('--excel', required=True, help='Excel 檔案路徑')
+    all_parser.add_argument('--excel', required=True, 
+                           help='Excel 或 CSV 檔案路徑 (支援 .xlsx, .xls, .csv)')
     all_parser.add_argument('--host', default=config.SFTP_HOST, help='SFTP 伺服器')
     all_parser.add_argument('--port', type=int, default=config.SFTP_PORT, help='SFTP 連接埠')
     all_parser.add_argument('--username', default=config.SFTP_USERNAME, help='使用者名稱')

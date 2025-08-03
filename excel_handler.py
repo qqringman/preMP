@@ -1,6 +1,6 @@
 """
 Excel 處理模組
-處理所有 Excel 檔案的讀寫操作
+處理所有 Excel 和 CSV 檔案的讀寫操作
 """
 import os
 import pandas as pd
@@ -50,20 +50,64 @@ class ExcelHandler:
             
     def read_excel(self, file_path: str) -> pd.DataFrame:
         """
-        讀取 Excel 檔案
+        讀取 Excel 或 CSV 檔案
         
         Args:
-            file_path: Excel 檔案路徑
+            file_path: Excel 或 CSV 檔案路徑
             
         Returns:
             pandas DataFrame
         """
         try:
-            df = pd.read_excel(file_path)
-            self.logger.info(f"成功讀取 Excel 檔案: {file_path}")
-            return df
+            # 根據副檔名判斷檔案類型
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            if file_ext == '.csv':
+                # 讀取 CSV 檔案，嘗試不同的編碼
+                encodings = ['utf-8', 'utf-8-sig', 'big5', 'cp950', 'gbk', 'gb18030', 
+                            'latin1', 'iso-8859-1', 'cp1252']
+                
+                df = None
+                last_error = None
+                
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(file_path, encoding=encoding)
+                        self.logger.info(f"成功使用 {encoding} 編碼讀取 CSV 檔案: {file_path}")
+                        break
+                    except UnicodeDecodeError as e:
+                        last_error = e
+                        continue
+                    except Exception as e:
+                        # 其他錯誤，直接拋出
+                        raise e
+                
+                if df is None:
+                    # 如果所有編碼都失敗，嘗試使用 errors='ignore' 參數
+                    try:
+                        df = pd.read_csv(file_path, encoding='utf-8', errors='ignore')
+                        self.logger.warning(f"使用 utf-8 編碼（忽略錯誤）讀取 CSV 檔案: {file_path}")
+                    except Exception:
+                        # 最後嘗試使用 python engine
+                        try:
+                            df = pd.read_csv(file_path, engine='python')
+                            self.logger.warning(f"使用 python engine 讀取 CSV 檔案: {file_path}")
+                        except Exception:
+                            raise ValueError(f"無法讀取 CSV 檔案，嘗試所有編碼都失敗: {last_error}")
+                
+                return df
+                
+            elif file_ext in ['.xlsx', '.xls']:
+                # 讀取 Excel 檔案
+                df = pd.read_excel(file_path)
+                self.logger.info(f"成功讀取 Excel 檔案: {file_path}")
+                return df
+                
+            else:
+                raise ValueError(f"不支援的檔案格式: {file_ext}。只支援 .csv, .xlsx, .xls")
+                
         except Exception as e:
-            self.logger.error(f"讀取 Excel 檔案失敗: {file_path}, 錯誤: {str(e)}")
+            self.logger.error(f"讀取檔案失敗: {file_path}, 錯誤: {str(e)}")
             raise
             
     def write_download_report(self, data: List[Dict[str, Any]], output_path: str, source_filename: str) -> str:
@@ -79,20 +123,31 @@ class ExcelHandler:
             輸出檔案路徑
         """
         try:
-            # 建立 DataFrame，確保欄位順序
+            # 建立 DataFrame
             df = pd.DataFrame(data)
             
-            # 如果有本地資料夾欄位，調整欄位順序
+            # 確保欄位順序正確
+            # 動態尋找 FTP 路徑欄位（可能是 'sftp 路徑' 或 'SftpURL'）
+            ftp_columns = ['sftp 路徑', 'SftpURL', 'ftp path']
+            ftp_column = None
+            for col in ftp_columns:
+                if col in df.columns:
+                    ftp_column = col
+                    break
+            
+            # 根據實際存在的欄位建立欄位順序
+            column_order = ['SN', '模組']
+            if ftp_column:
+                column_order.append(ftp_column)
             if '本地資料夾' in df.columns:
-                column_order = ['SN', '模組', 'sftp 路徑', '本地資料夾', '版本資訊檔案']
-            else:
-                column_order = ['SN', '模組', 'sftp 路徑', '版本資訊檔案']
+                column_order.append('本地資料夾')
+            column_order.append('版本資訊檔案')
             
             # 只保留存在的欄位
             column_order = [col for col in column_order if col in df.columns]
             df = df[column_order]
             
-            # 建立輸出檔名
+            # 建立輸出檔名（統一輸出為 .xlsx）
             base_name = os.path.splitext(os.path.basename(source_filename))[0]
             output_file = os.path.join(output_path, f"{base_name}_report.xlsx")
             

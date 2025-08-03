@@ -451,23 +451,41 @@ def results_page(task_id):
 # API 端點
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    """上傳檔案 API"""
+    """上傳檔案 API - 支援 Excel 和 CSV"""
     if 'file' not in request.files:
         return jsonify({'error': '沒有檔案'}), 400
         
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': '沒有選擇檔案'}), 400
-        
-    if file and file.filename.endswith('.xlsx'):
+    
+    # 支援的檔案格式
+    allowed_extensions = {'.xlsx', '.xls', '.csv'}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    if file and file_ext in allowed_extensions:
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{timestamp}_{filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # 確保上傳目錄存在
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
         file.save(filepath)
-        return jsonify({'filename': filename, 'filepath': filepath})
+        
+        # 記錄上傳資訊
+        app.logger.info(f'File uploaded: {filename} (type: {file_ext})')
+        
+        return jsonify({
+            'filename': filename, 
+            'filepath': filepath,
+            'file_type': file_ext[1:]  # 返回檔案類型（不含點）
+        })
     
-    return jsonify({'error': '只支援 Excel (.xlsx) 檔案'}), 400
+    return jsonify({
+        'error': f'只支援 Excel (.xlsx, .xls) 和 CSV (.csv) 檔案，您上傳的是 {file_ext} 檔案'
+    }), 400
 
 @app.route('/api/test-connection', methods=['POST'])
 def test_connection():
@@ -832,44 +850,35 @@ def get_path_suggestions():
 # 瀏覽伺服器 API - 更新
 @app.route('/api/browse-server')
 def browse_server():
-    """瀏覽伺服器檔案 API - 使用真實路徑"""
-    path = request.args.get('path', config.DEFAULT_SERVER_PATH)  # 使用 config 的預設路徑
+    path = request.args.get('path', '/')
     
     try:
-        # 檢查路徑是否存在
-        if os.path.exists(path) and os.path.isdir(path):
-            folders = []
-            files = []
-            
-            try:
-                for item in sorted(os.listdir(path)):
-                    item_path = os.path.join(path, item)
-                    
-                    if os.path.isdir(item_path):
-                        folders.append({
-                            'name': item,
-                            'path': item_path
-                        })
-                    elif item.endswith('.xlsx'):  # 只顯示Excel檔案
-                        files.append({
-                            'name': item,
-                            'path': item_path,
-                            'size': os.path.getsize(item_path)
-                        })
-                        
-                return jsonify({
-                    'folders': folders,
-                    'files': files
+        items = os.listdir(path)
+        folders = []
+        files = []
+        
+        for item in items:
+            item_path = os.path.join(path, item)
+            if os.path.isdir(item_path):
+                folders.append({
+                    'name': item,
+                    'path': item_path
                 })
-                
-            except PermissionError:
-                return jsonify({'error': '沒有權限訪問此目錄'}), 403
-        else:
-            # 如果路徑不存在，返回錯誤
-            return jsonify({'error': '目錄不存在'}), 404
-            
+            elif os.path.isfile(item_path):
+                # 檢查是否為支援的檔案類型
+                if item.lower().endswith(('.xlsx', '.xls', '.csv')):
+                    files.append({
+                        'name': item,
+                        'path': item_path,
+                        'size': os.path.getsize(item_path)
+                    })
+        
+        return jsonify({
+            'folders': folders,
+            'files': files
+        })
+        
     except Exception as e:
-        print(f"Browse server error: {e}")
         return jsonify({'error': str(e)}), 500
 
 # 非同步下載支援
