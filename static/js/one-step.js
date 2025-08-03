@@ -642,13 +642,21 @@ function updateProgress(data) {
     }
     
     // 添加日誌
-    addLogEntry(message);
-    
+    addLog(message, 'info');
+
     // 處理完成或錯誤
     if (status === 'completed') {
         handleComplete(data.results);
     } else if (status === 'error') {
         handleError(message);
+    }
+}
+
+// 清除日誌
+function clearLog() {
+    const log = document.getElementById('downloadLog');
+    if (log) {
+        log.innerHTML = '';
     }
 }
 
@@ -670,21 +678,38 @@ function updateStageStatus(stage, status) {
     }
 }
 
-// 添加日誌條目
-function addLogEntry(message) {
-    const logContent = document.getElementById('logContent');
-    const entry = document.createElement('div');
-    entry.className = 'log-entry';
+function addLog(message, type = 'info') {
+    const log = document.getElementById('downloadLog');
+    if (!log) return;
     
-    const time = new Date().toLocaleTimeString('zh-TW');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString('zh-TW', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+    });
+    
+    const iconMap = {
+        'info': 'fa-info-circle',
+        'success': 'fa-check-circle',
+        'warning': 'fa-exclamation-triangle',
+        'error': 'fa-times-circle',
+        'downloading': 'fa-download',
+        'completed': 'fa-flag-checkered'
+    };
+    
     entry.innerHTML = `
-        <span class="log-time">${time}</span>
-        <span class="log-icon"><i class="fas fa-info-circle"></i></span>
+        <span class="log-time">${timestamp}</span>
+        <span class="log-icon">
+            <i class="fas ${iconMap[type] || iconMap.info}"></i>
+        </span>
         <span class="log-message">${message}</span>
     `;
     
-    logContent.appendChild(entry);
-    logContent.scrollTop = logContent.scrollHeight;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
 }
 
 // 處理完成

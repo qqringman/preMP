@@ -2,60 +2,68 @@
 
 /* CSS 變數定義 (與 download.css 保持一致) */
 :root {
-    --bg-card: #FFFFFF;
-    --bg-hover: #E8F4FD;
-    --bg-input: #F5F9FF;
-    --bg-primary: #FFFFFF;
-    --bg-secondary: #F8FBFF;
-    --bg-tertiary: #F0F7FF;
-    --border-color: #E3E7F3;
-    --border-focus: rgba(33, 150, 243, 0.3);
-    --border-light: #EDF2FC;
-    --danger: #F44336;
-    --danger-light: #FFEBEE;
-    --info: #2196F3;
-    --info-light: #E3F2FD;
-    --nordic-blue: #2196F3;
-    --nordic-blue-dark: #1976D2;
-    --nordic-blue-light: #64B5F6;
-    --nordic-gradient: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
-    --nordic-gradient-soft: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-    --nordic-ice: #F5F9FF;
-    --nordic-sky: #E3F2FD;
-    --success: #4CAF50;
-    --success-light: #E8F5E9;
-    --text-primary: #1A237E;
-    --text-secondary: #5C6BC0;
-    --text-muted: #9FA8DA;
-    --warning: #FF9800;
-    --warning-light: #FFF3E0;
-    --nordic-gray-50: #FAFAFA;
-    --nordic-gray-100: #F5F5F5;
-    --nordic-gray-200: #EEEEEE;
-    --nordic-gray-500: #9E9E9E;
-    --nordic-gray-600: #757575;
-    --nordic-gray-800: #424242;
-    --nordic-green: #4CAF50;
-    --radius-2xl: 28px;
-    --radius-full: 9999px;
-    --radius-lg: 16px;
-    --radius-md: 12px;
-    --radius-sm: 8px;
-    --radius-xl: 20px;
-    --shadow-blue: 0 4px 20px rgba(33, 150, 243, 0.15);
-    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
-    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
-    --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
-    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.05);
-    --spacing-2xl: 4rem;
-    --spacing-lg: 2rem;
-    --spacing-md: 1.25rem;
-    --spacing-sm: 0.75rem;
-    --spacing-xl: 3rem;
-    --spacing-xs: 0.5rem;
-    --transition-fast: 0.2s ease;
-    --transition-normal: 0.3s ease;
+  --bg-card: #FFFFFF;
+  --bg-hover: #E8F4FD;
+  --bg-input: #F5F9FF;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FBFF;
+  --bg-tertiary: #F0F7FF;
+  --border-color: #E3E7F3;
+  --border-focus: rgba(33, 150, 243, 0.3);
+  --border-light: #EDF2FC;
+  --danger: #F44336;
+  --danger-light: #FFEBEE;
+  --info: #2196F3;
+  --info-light: #E3F2FD;
+  --nordic-accent: #03A9F4;
+  --nordic-blue: #2196F3;
+  --nordic-blue-dark: #1976D2;
+  --nordic-blue-light: #64B5F6;
+  --nordic-blue-lighter: #90CAF9;
+  --nordic-gradient: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+  --nordic-gradient-hero: linear-gradient(180deg, #2196F3 0%, #90CAF9 100%);
+  --nordic-gradient-soft: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  --nordic-ice: #F5F9FF;
+  --nordic-indigo: #3F51B5;
+  --nordic-sky: #E3F2FD;
+  --nordic-teal: #00BCD4;
+  --orange-100: #FFE0B2;
+  --orange-200: #FFCC80;
+  --orange-300: #FFB74D;
+  --orange-400: #FFA726;
+  --orange-500: #FF9800;
+  --orange-600: #FB8C00;
+  --orange-700: #F57C00;
+  --orange-800: #EF6C00;
+  --orange-900: #E65100;
+  --radius-2xl: 28px;
+  --radius-full: 9999px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-xl: 20px;
+  --shadow-blue: 0 4px 20px rgba(33, 150, 243, 0.15);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --spacing-2xl: 4rem;
+  --spacing-lg: 2rem;
+  --spacing-md: 1.25rem;
+  --spacing-sm: 0.75rem;
+  --spacing-xl: 3rem;
+  --spacing-xs: 0.5rem;
+  --success: #4CAF50;
+  --success-light: #E8F5E9;
+  --text-light: #C5CAE9;
+  --text-muted: #9FA8DA;
+  --text-primary: #1A237E;
+  --text-secondary: #5C6BC0;
+  --warning: #FF9800;
+  --warning-light: #FFF3E0;
+  /* 橘色系 */
+  --orange-50: #FFF3E0;
 }
 
 body {
@@ -115,8 +123,14 @@ body {
     border-radius: var(--radius-xl);
     padding: var(--spacing-2xl);
     box-shadow: var(--shadow-md);
-    margin-bottom: var(--spacing-2xl);
+    margin-bottom: var(--spacing-lg);
     border: 1px solid var(--border-light);
+}
+
+.process-steps-container:hover {
+    border-color: var(--nordic-blue-lighter);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
 }
 
 /* 步驟流程圖 */
@@ -1871,4 +1885,42 @@ input:checked + .switch-slider::before {
     .file-grid {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
+}
+
+/* 日誌容器樣式 */
+.log-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.log-header {
+    align-items: center;
+    background: #2196F3;
+    border-bottom: 1px solid var(--border-light);
+    color: white;
+    display: flex;
+    gap: 24px;
+    justify-content: space-between;
+    overflow: hidden;
+    padding: 24px 32px;
+    position: relative;
+}
+
+.log-content {
+    background: var(--bg-secondary);
+    height: 280px;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.log-entry {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px;
+    transition: all 0.2s ease;
 }

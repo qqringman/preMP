@@ -15,6 +15,60 @@
         <p class="page-subtitle">自動執行下載、比對、打包全流程</p>
     </div>
 
+    <!-- Info：處理選項 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">i</div>
+            <div class="step-content">
+                <h2 class="step-title">處理選項</h2>
+                <p class="step-subtitle">設定自動處理的流程選項</p>
+            </div>
+        </div>
+        
+        <div class="section-body">
+            <div class="process-options">
+                <div class="option-card">
+                    <div class="option-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="option-content">
+                        <h4 class="option-title">自動下載</h4>
+                        <p class="option-desc">從 SFTP 下載所有指定的檔案</p>
+                    </div>
+                    <div class="option-status">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+                
+                <div class="option-card">
+                    <div class="option-icon">
+                        <i class="fas fa-code-compare"></i>
+                    </div>
+                    <div class="option-content">
+                        <h4 class="option-title">自動比對</h4>
+                        <p class="option-desc">執行所有比對情境</p>
+                    </div>
+                    <div class="option-status">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+                
+                <div class="option-card">
+                    <div class="option-icon">
+                        <i class="fas fa-file-archive"></i>
+                    </div>
+                    <div class="option-content">
+                        <h4 class="option-title">自動打包</h4>
+                        <p class="option-desc">將所有結果打包成 ZIP 檔案</p>
+                    </div>
+                    <div class="option-status">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+        
     <!-- 改進的步驟指示器 -->
     <div class="process-steps-container">
         <div class="process-steps">
@@ -24,7 +78,7 @@
                 </div>
                 <div class="step-content">
                     <div class="step-title">上傳 Excel</div>
-                    <div class="step-desc">選擇 FTP 路徑檔案</div>
+                    <div class="step-desc">選擇 Excel 路徑檔案</div>
                 </div>
                 <div class="step-connector"></div>
             </div>
@@ -202,60 +256,6 @@
             </div>
         </div>
 
-        <!-- 步驟 3：處理選項 -->
-        <div class="step-section">
-            <div class="step-header">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <h2 class="step-title">處理選項</h2>
-                    <p class="step-subtitle">設定自動處理的流程選項</p>
-                </div>
-            </div>
-            
-            <div class="section-body">
-                <div class="process-options">
-                    <div class="option-card">
-                        <div class="option-icon">
-                            <i class="fas fa-download"></i>
-                        </div>
-                        <div class="option-content">
-                            <h4 class="option-title">自動下載</h4>
-                            <p class="option-desc">從 SFTP 下載所有指定的檔案</p>
-                        </div>
-                        <div class="option-status">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="option-card">
-                        <div class="option-icon">
-                            <i class="fas fa-code-compare"></i>
-                        </div>
-                        <div class="option-content">
-                            <h4 class="option-title">自動比對</h4>
-                            <p class="option-desc">執行所有比對情境</p>
-                        </div>
-                        <div class="option-status">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="option-card">
-                        <div class="option-icon">
-                            <i class="fas fa-file-archive"></i>
-                        </div>
-                        <div class="option-content">
-                            <h4 class="option-title">自動打包</h4>
-                            <p class="option-desc">將所有結果打包成 ZIP 檔案</p>
-                        </div>
-                        <div class="option-status">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- 執行按鈕 -->
         <div class="action-container">
             <button class="btn btn-primary btn-large" id="executeBtn" onclick="executeOneStep()" disabled>
@@ -331,15 +331,14 @@
                         </div>
                         <div class="log-content-wrapper">
                             <h2 class="log-title">執行日誌</h2>
-                            <p class="log-subtitle">即時顯示處理進度與狀態訊息</p>
+                            <p class="log-subtitle">即時顯示下載進度與狀態訊息</p>
                         </div>
+                        <button class="btn btn-small btn-secondary" onclick="clearLog()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">
+                            <i class="fas fa-eraser"></i> 清除
+                        </button>
                     </div>
-                    <div class="log-content" id="logContent">
-                        <div class="log-entry">
-                            <span class="log-time">--:--:--</span>
-                            <span class="log-icon"><i class="fas fa-info-circle"></i></span>
-                            <span class="log-message">等待開始...</span>
-                        </div>
+                    <div class="log-content" id="downloadLog">
+                        <!-- 動態添加日誌 -->
                     </div>
                 </div>
             </div>
