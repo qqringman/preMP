@@ -15,187 +15,277 @@
         <p class="page-subtitle">選擇來源目錄並執行比對分析</p>
     </div>
 
-    <!-- 比對選項 -->
-    <div class="compare-options">
-        <div class="card-style">
-            <h2 class="section-title mb-4">
-                <i class="fas fa-folder-open"></i> 選擇來源目錄
-            </h2>
+    <!-- 比對表單 -->
+    <div class="compare-form" id="compareForm">
+        <!-- 步驟 1：選擇來源目錄 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h2 class="step-title">選擇來源目錄</h2>
+                    <p class="step-subtitle">選擇要進行比對的目錄或路徑</p>
+                </div>
+            </div>
             
-            <div class="folder-selector">
-                <div class="folder-input-group">
-                    <input type="text" 
-                           class="folder-input" 
-                           id="folderPath" 
-                           placeholder="輸入伺服器路徑 (例如: /home/vince_lin/ai/preMP)">
-                    <button class="btn btn-primary" onclick="useServerPath()">
-                        <i class="fas fa-server"></i> 使用此路徑
+            <div class="section-body">
+                <div class="source-tabs">
+                    <button class="tab-btn active" onclick="switchSourceTab('local')">
+                        <i class="fas fa-folder"></i> 已下載目錄
+                    </button>
+                    <button class="tab-btn" onclick="switchSourceTab('server')">
+                        <i class="fas fa-server"></i> 伺服器路徑
                     </button>
                 </div>
-                
-                <div class="divider-text">或</div>
-                
-                <div class="directory-selector mt-3">
-                    <label class="form-label">選擇已下載的目錄</label>
-                    <select class="form-input" id="sourceDirectory">
-                        <option value="">請選擇目錄...</option>
-                    </select>
-                </div>
-                
-                <div class="folder-drop-area mt-4" id="folderDropArea">
-                    <i class="fas fa-folder-plus fa-3x mb-3"></i>
-                    <p>拖曳資料夾到此處</p>
-                    <small>或使用上方選項選擇</small>
-                </div>
-                
-                <div class="directory-info hidden mt-4" id="directoryInfo">
-                    <div class="info-card">
-                        <div class="info-item">
-                            <i class="fas fa-folder"></i>
-                            <span id="selectedPath"></span>
+
+                <!-- 標籤內容 -->
+                <div class="tab-container">
+                    <!-- 本地目錄 -->
+                    <div class="tab-content active" id="local-source-tab">
+                        <div class="directory-selector">
+                            <label class="form-label">
+                                <i class="fas fa-folder-tree"></i> 選擇已下載的目錄
+                            </label>
+                            <select class="form-input" id="sourceDirectory">
+                                <option value="">請選擇目錄...</option>
+                            </select>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-calendar"></i>
-                            <span id="directoryDate"></span>
+                        
+                        <div class="folder-drop-area mt-4" id="folderDropArea">
+                            <div class="drop-icon-wrapper">
+                                <i class="fas fa-folder-plus fa-3x"></i>
+                            </div>
+                            <div class="drop-text">拖曳資料夾到這裡</div>
+                            <div class="drop-hint">或使用上方選擇器選擇</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 伺服器路徑 -->
+                    <div class="tab-content" id="server-source-tab">
+                        <div class="path-input-group">
+                            <div class="path-input-container">
+                                <input type="text" 
+                                       class="path-input" 
+                                       id="serverPathInput" 
+                                       placeholder="輸入伺服器路徑 (例如: /home/vince_lin/ai/preMP)">
+                            </div>
+                            <button class="btn-go" onclick="useServerPath()">
+                                <i class="fas fa-server"></i> 使用此路徑
+                            </button>
+                        </div>
+                        
+                        <div class="path-hint mt-3">
+                            <i class="fas fa-info-circle"></i>
+                            <span>請確保路徑存在且有存取權限</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 已選擇的目錄資訊 -->
+                <div class="selected-directory-info hidden" id="directoryInfo">
+                    <div class="info-card">
+                        <div class="info-header">
+                            <i class="fas fa-folder-open"></i>
+                            <span>已選擇的目錄</span>
+                        </div>
+                        <div class="info-content">
+                            <div class="info-item">
+                                <span class="info-label">路徑：</span>
+                                <span class="info-value" id="selectedPath"></span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">選擇時間：</span>
+                                <span class="info-value" id="directoryDate"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="card-style mt-4">
-            <h2 class="section-title mb-4">
-                <i class="fas fa-cog"></i> 比對設定
-            </h2>
+        <!-- 步驟 2：比對設定 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h2 class="step-title">比對設定</h2>
+                    <p class="step-subtitle">選擇要執行的比對情境</p>
+                </div>
+            </div>
             
-            <div class="scenario-selector">
-                <div class="scenario-option">
-                    <input type="radio" name="scenario" id="scenario-all" value="all" checked>
-                    <label for="scenario-all" class="scenario-label">
-                        <div class="scenario-icon">
-                            <i class="fas fa-globe"></i>
-                        </div>
-                        <div class="scenario-info">
-                            <div class="scenario-name">執行所有比對</div>
-                            <div class="scenario-desc">自動執行所有可能的比對情境</div>
-                        </div>
-                    </label>
-                </div>
-                
-                <div class="scenario-option">
-                    <input type="radio" name="scenario" id="scenario-master-premp" value="master_vs_premp">
-                    <label for="scenario-master-premp" class="scenario-label">
-                        <div class="scenario-icon">
-                            <i class="fas fa-code-branch"></i>
-                        </div>
-                        <div class="scenario-info">
-                            <div class="scenario-name">Master vs PreMP</div>
-                            <div class="scenario-desc">比較主版本與預量產版本</div>
-                        </div>
-                    </label>
-                </div>
-                
-                <div class="scenario-option">
-                    <input type="radio" name="scenario" id="scenario-premp-wave" value="premp_vs_wave">
-                    <label for="scenario-premp-wave" class="scenario-label">
-                        <div class="scenario-icon">
-                            <i class="fas fa-water"></i>
-                        </div>
-                        <div class="scenario-info">
-                            <div class="scenario-name">PreMP vs Wave</div>
-                            <div class="scenario-desc">比較預量產與 Wave 版本</div>
-                        </div>
-                    </label>
-                </div>
-                
-                <div class="scenario-option">
-                    <input type="radio" name="scenario" id="scenario-wave-backup" value="wave_vs_backup">
-                    <label for="scenario-wave-backup" class="scenario-label">
-                        <div class="scenario-icon">
-                            <i class="fas fa-database"></i>
-                        </div>
-                        <div class="scenario-info">
-                            <div class="scenario-name">Wave vs Backup</div>
-                            <div class="scenario-desc">比較 Wave 版本與備份版本</div>
-                        </div>
-                    </label>
+            <div class="section-body">
+                <div class="scenario-grid">
+                    <div class="scenario-card">
+                        <input type="radio" name="scenario" id="scenario-all" value="all" checked>
+                        <label for="scenario-all" class="scenario-label">
+                            <div class="scenario-icon">
+                                <i class="fas fa-globe"></i>
+                            </div>
+                            <div class="scenario-content">
+                                <h4 class="scenario-title">執行所有比對</h4>
+                                <p class="scenario-desc">自動執行所有可能的比對情境</p>
+                            </div>
+                            <div class="scenario-check">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="scenario-card">
+                        <input type="radio" name="scenario" id="scenario-master-premp" value="master_vs_premp">
+                        <label for="scenario-master-premp" class="scenario-label">
+                            <div class="scenario-icon">
+                                <i class="fas fa-code-branch"></i>
+                            </div>
+                            <div class="scenario-content">
+                                <h4 class="scenario-title">Master vs PreMP</h4>
+                                <p class="scenario-desc">比較主版本與預量產版本</p>
+                            </div>
+                            <div class="scenario-check">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="scenario-card">
+                        <input type="radio" name="scenario" id="scenario-premp-wave" value="premp_vs_wave">
+                        <label for="scenario-premp-wave" class="scenario-label">
+                            <div class="scenario-icon">
+                                <i class="fas fa-water"></i>
+                            </div>
+                            <div class="scenario-content">
+                                <h4 class="scenario-title">PreMP vs Wave</h4>
+                                <p class="scenario-desc">比較預量產與 Wave 版本</p>
+                            </div>
+                            <div class="scenario-check">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="scenario-card">
+                        <input type="radio" name="scenario" id="scenario-wave-backup" value="wave_vs_backup">
+                        <label for="scenario-wave-backup" class="scenario-label">
+                            <div class="scenario-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="scenario-content">
+                                <h4 class="scenario-title">Wave vs Backup</h4>
+                                <p class="scenario-desc">比較 Wave 版本與備份版本</p>
+                            </div>
+                            <div class="scenario-check">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- 執行按鈕 -->
-    <div class="action-container text-center mt-4">
-        <button class="btn btn-primary btn-large" id="compareBtn" onclick="executeCompare()" disabled>
-            <i class="fas fa-play"></i> 開始比對
-        </button>
+        <!-- 執行按鈕 -->
+        <div class="action-container">
+            <button class="btn btn-primary btn-large" id="compareBtn" onclick="executeCompare()" disabled>
+                <i class="fas fa-play"></i>
+                <span>開始比對</span>
+            </button>
+        </div>
     </div>
 
     <!-- 比對進度 -->
-    <div class="card-style hidden mt-5" id="compareProgress">
-        <h2 class="section-title">
-            <i class="fas fa-spinner fa-pulse"></i> 比對進行中
-        </h2>
-        
-        <div class="progress-bar-container mt-4">
-            <div class="progress-bar">
-                <div class="progress-fill" id="compareProgressFill" style="width: 0%"></div>
+    <div class="compare-progress hidden" id="compareProgress">
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <div class="step-content">
+                    <h2 class="step-title">正在比對檔案</h2>
+                    <p class="step-subtitle">請稍候，系統正在分析檔案差異...</p>
+                </div>
             </div>
-            <div class="progress-text" id="compareProgressText">0%</div>
-        </div>
-        
-        <div class="progress-message mt-3" id="compareMessage">
-            正在準備比對...
-        </div>
-    </div>
-
-    <!-- 比對結果預覽 -->
-    <div class="card-style hidden mt-5" id="compareResults">
-        <h2 class="section-title mb-4">
-            <i class="fas fa-chart-bar"></i> 比對結果
-        </h2>
-        
-        <div class="results-summary" id="resultsSummary">
-            <!-- 動態填充 -->
-        </div>
-        
-        <div class="results-actions text-center mt-4">
-            <button class="btn btn-primary" onclick="viewDetailedResults()">
-                <i class="fas fa-table"></i> 查看詳細報表
-            </button>
-            <button class="btn btn-success" onclick="exportResults('excel')">
-                <i class="fas fa-file-excel"></i> 匯出 Excel
-            </button>
-            <button class="btn btn-info" onclick="exportResults('html')">
-                <i class="fas fa-file-code"></i> 匯出 HTML
-            </button>
-            <button class="btn btn-warning" onclick="exportResults('zip')">
-                <i class="fas fa-file-archive"></i> 下載 ZIP
-            </button>
-        </div>
-        
-        <!-- 快速預覽圖表 -->
-        <div class="charts-container mt-5">
-            <div class="chart-box">
-                <h3 class="chart-title">比對成功率</h3>
-                <canvas id="successChart"></canvas>
-            </div>
-            <div class="chart-box">
-                <h3 class="chart-title">差異分布</h3>
-                <canvas id="diffChart"></canvas>
+            
+            <div class="section-body">
+                <!-- 進度條 -->
+                <div class="progress-bar-wrapper">
+                    <div class="progress-header">
+                        <div class="progress-title">比對進度</div>
+                        <div class="progress-percentage" id="compareProgressText">0%</div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="compareProgressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-message mt-3" id="compareMessage">
+                        正在準備比對...
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 最近比對記錄 - 時間軸形式 -->
-    <div class="card-style mt-5">
-        <h2 class="section-title mb-4">
-            <i class="fas fa-history"></i> 最近比對記錄
-        </h2>
-        <div class="timeline" id="comparisonTimeline">
-            <div class="timeline-placeholder text-center p-4">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <p class="text-muted">暫無比對記錄</p>
+    <!-- 比對結果 -->
+    <div class="compare-results hidden" id="compareResults">
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h2 class="step-title">比對完成</h2>
+                    <p class="step-subtitle">檔案差異分析已完成</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="result-summary" id="resultsSummary">
+                    <!-- 動態生成結果摘要 -->
+                </div>
+                
+                <div class="result-actions">
+                    <button class="btn btn-primary" onclick="viewDetailedResults()">
+                        <i class="fas fa-table"></i> 查看詳細報表
+                    </button>
+                    <button class="btn btn-success" onclick="exportResults('excel')">
+                        <i class="fas fa-file-excel"></i> 匯出 Excel
+                    </button>
+                    <button class="btn btn-info" onclick="exportResults('html')">
+                        <i class="fas fa-file-code"></i> 匯出 HTML
+                    </button>
+                    <button class="btn btn-warning" onclick="exportResults('zip')">
+                        <i class="fas fa-file-archive"></i> 下載 ZIP
+                    </button>
+                </div>
+                
+                <!-- 圖表區域 -->
+                <div class="charts-container mt-4">
+                    <div class="chart-card">
+                        <h3 class="chart-title">比對成功率</h3>
+                        <canvas id="successChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3 class="chart-title">差異分布</h3>
+                        <canvas id="diffChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最近比對記錄 -->
+    <div class="step-section mt-4">
+        <div class="step-header">
+            <div class="step-number">
+                <i class="fas fa-history"></i>
+            </div>
+            <div class="step-content">
+                <h2 class="step-title">最近比對記錄</h2>
+                <p class="step-subtitle">查看之前的比對結果</p>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="timeline-container" id="comparisonTimeline">
+                <div class="timeline-empty">
+                    <i class="fas fa-inbox fa-3x"></i>
+                    <p>暫無比對記錄</p>
+                </div>
             </div>
         </div>
     </div>
@@ -203,14 +293,14 @@
 
 <!-- 非同步下載提示 -->
 <div class="async-download-toast hidden" id="asyncDownloadToast">
-    <div class="async-download-icon">
+    <div class="toast-icon">
         <i class="fas fa-check"></i>
     </div>
-    <div class="async-download-content">
-        <div class="async-download-title">下載準備完成</div>
-        <div class="async-download-desc">您的檔案已準備好下載</div>
+    <div class="toast-content">
+        <div class="toast-title">下載準備完成</div>
+        <div class="toast-desc">您的檔案已準備好下載</div>
     </div>
-    <button class="btn btn-primary btn-sm" onclick="downloadAsyncFile()">
+    <button class="btn btn-primary btn-small" onclick="downloadAsyncFile()">
         立即下載
     </button>
 </div>
