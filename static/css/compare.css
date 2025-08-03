@@ -441,6 +441,14 @@
     gap: 20px;
 }
 
+/* 比對情境選擇器 - 採用類似首頁卡片的設計 */
+.scenario-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
 .scenario-card {
     position: relative;
 }
@@ -448,6 +456,114 @@
 .scenario-card input[type="radio"] {
     position: absolute;
     opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.scenario-card label {
+    display: block;
+    background: white;
+    border: 2px solid #E3E8EF;
+    border-radius: 16px;
+    padding: 32px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    min-height: 280px;
+}
+
+.scenario-card label::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 40px 40px 0;
+    border-color: transparent;
+    transition: all 0.3s ease;
+}
+
+.scenario-card label:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border-color: #CCE5FF;
+}
+
+.scenario-card input[type="radio"]:checked + label {
+    border-color: var(--nordic-blue);
+    background: #F8FBFF;
+    box-shadow: 0 4px 16px rgba(33, 150, 243, 0.15);
+}
+
+.scenario-card input[type="radio"]:checked + label::before {
+    border-color: transparent var(--nordic-blue) transparent transparent;
+}
+
+.scenario-card input[type="radio"]:checked + label::after {
+    content: "✓";
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.scenario-icon {
+    width: 64px;
+    height: 64px;
+    background: #E3F2FD;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+}
+
+.scenario-icon i {
+    font-size: 28px;
+    color: var(--nordic-blue);
+}
+
+.scenario-info {
+    text-align: left;
+}
+
+.scenario-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1A237E;
+    margin-bottom: 8px;
+}
+
+.scenario-desc {
+    font-size: 0.9375rem;
+    color: #5C6BC0;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.scenario-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.scenario-features li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #5C6BC0;
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+}
+
+.scenario-features li i {
+    color: var(--success);
+    font-size: 12px;
 }
 
 .scenario-label {
@@ -1074,4 +1190,62 @@
     .section-body {
         padding: 24px 20px;
     }
+}
+
+/* 執行按鈕區域 */
+.scenario-action {
+    text-align: center;
+    margin-top: 32px;
+    padding-top: 32px;
+    border-top: 1px solid #E3E8EF;
+}
+
+.scenario-action .btn-large {
+    min-width: 200px;
+    font-size: 1rem;
+    padding: 16px 40px;
+    border-radius: 12px;
+}
+
+.scenario-action .btn-large span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* 移除原本的執行按鈕容器樣式 */
+.compare-form > .action-container {
+    display: none;
+}
+
+/* 目錄選擇下拉框 */
+.directory-dropdown {
+    margin-top: 2rem;
+}
+
+.directory-dropdown .form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.directory-dropdown .form-label i {
+    font-size: 0.875rem;
+    color: var(--nordic-blue);
+}
+
+.directory-dropdown .form-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
 }

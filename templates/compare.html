@@ -30,72 +30,79 @@
             <div class="section-body">
                 <div class="source-tabs">
                     <button class="tab-btn active" onclick="switchSourceTab('local')">
-                        <i class="fas fa-folder"></i> 已下載目錄
+                        <i class="fas fa-folder"></i> 選擇本地目錄
                     </button>
                     <button class="tab-btn" onclick="switchSourceTab('server')">
-                        <i class="fas fa-server"></i> 伺服器路徑
+                        <i class="fas fa-server"></i> 選擇伺服器目錄
                     </button>
                 </div>
 
                 <!-- 標籤內容 -->
                 <div class="tab-container">
                     <!-- 本地目錄 -->
-                    <div class="tab-content active" id="local-source-tab">
-                        <div class="directory-selector">
+                    <div class="tab-content active" id="local-tab">
+                        <div class="upload-container" id="localDirectoryArea">
+                            <input type="file" id="localDirectoryInput" webkitdirectory style="display: none;">
+                            <div class="upload-icon-wrapper">
+                                <i class="fas fa-folder-open fa-4x"></i>
+                            </div>
+                            <div class="upload-text">拖曳資料夾到這裡</div>
+                            <div class="upload-hint">或點擊選擇目錄</div>
+                            <div class="hint-card">
+                                <i class="fas fa-info-circle"></i>
+                                <span>請選擇包含模組檔案的目錄</span>
+                            </div>
+                            <p></p>
+                            <button class="btn btn-primary" onclick="selectLocalDirectory()">
+                                <i class="fas fa-folder-open"></i> 選擇目錄
+                            </button>
+                        </div>
+                        
+                        <div class="directory-dropdown mt-4">
                             <label class="form-label">
-                                <i class="fas fa-folder-tree"></i> 選擇已下載的目錄
+                                <i class="fas fa-folder-tree"></i> 或選擇已下載的目錄
                             </label>
-                            <select class="form-input" id="sourceDirectory">
+                            <select class="form-input" id="downloadedDirectories">
                                 <option value="">請選擇目錄...</option>
                             </select>
                         </div>
                         
-                        <div class="folder-drop-area mt-4" id="folderDropArea">
-                            <div class="drop-icon-wrapper">
-                                <i class="fas fa-folder-plus fa-3x"></i>
-                            </div>
-                            <div class="drop-text">拖曳資料夾到這裡</div>
-                            <div class="drop-hint">或使用上方選擇器選擇</div>
+                        <div class="file-list mt-4 hidden" id="selectedDirectoryInfo">
+                            <!-- 顯示已選擇的目錄資訊 -->
                         </div>
                     </div>
                     
-                    <!-- 伺服器路徑 -->
-                    <div class="tab-content" id="server-source-tab">
-                        <div class="path-input-group">
-                            <div class="path-input-container">
-                                <input type="text" 
-                                       class="path-input" 
-                                       id="serverPathInput" 
-                                       placeholder="輸入伺服器路徑 (例如: /home/vince_lin/ai/preMP)">
+                    <!-- 伺服器目錄 -->
+                    <div class="tab-content" id="server-tab">
+                        <div class="server-browser">
+                            <div class="browser-header">
+                                <div class="path-input-container">
+                                    <input type="text" 
+                                           class="path-input" 
+                                           id="serverPathInput" 
+                                           placeholder="輸入或貼上路徑..."
+                                           value="/home/vince_lin/ai/preMP">
+                                    <div class="path-suggestions" id="pathSuggestions">
+                                        <!-- 動態生成路徑建議 -->
+                                    </div>
+                                </div>
+                                <button class="btn-go" onclick="useServerPath()">
+                                    <i class="fas fa-arrow-right"></i> 使用此路徑
+                                </button>
+                                <button class="btn-refresh" onclick="refreshServerPath()">
+                                    <i class="fas fa-sync"></i>
+                                </button>
                             </div>
-                            <button class="btn-go" onclick="useServerPath()">
-                                <i class="fas fa-server"></i> 使用此路徑
-                            </button>
+                            <div class="browser-content" id="serverBrowser">
+                                <div class="empty-message">
+                                    <i class="fas fa-folder-open fa-3x"></i>
+                                    <p>輸入伺服器路徑或選擇預設路徑</p>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="path-hint mt-3">
-                            <i class="fas fa-info-circle"></i>
-                            <span>請確保路徑存在且有存取權限</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 已選擇的目錄資訊 -->
-                <div class="selected-directory-info hidden" id="directoryInfo">
-                    <div class="info-card">
-                        <div class="info-header">
-                            <i class="fas fa-folder-open"></i>
-                            <span>已選擇的目錄</span>
-                        </div>
-                        <div class="info-content">
-                            <div class="info-item">
-                                <span class="info-label">路徑：</span>
-                                <span class="info-value" id="selectedPath"></span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">選擇時間：</span>
-                                <span class="info-value" id="directoryDate"></span>
-                            </div>
+                        <div class="selected-server-files hidden" id="serverSelectedDirectory">
+                            <!-- 顯示已選擇的伺服器目錄 -->
                         </div>
                     </div>
                 </div>
@@ -113,80 +120,90 @@
             </div>
             
             <div class="section-body">
-                <div class="scenario-grid">
+                <div class="scenario-selector">
+                    <!-- 執行所有比對 -->
                     <div class="scenario-card">
                         <input type="radio" name="scenario" id="scenario-all" value="all" checked>
-                        <label for="scenario-all" class="scenario-label">
+                        <label for="scenario-all">
                             <div class="scenario-icon">
                                 <i class="fas fa-globe"></i>
                             </div>
-                            <div class="scenario-content">
-                                <h4 class="scenario-title">執行所有比對</h4>
-                                <p class="scenario-desc">自動執行所有可能的比對情境</p>
-                            </div>
-                            <div class="scenario-check">
-                                <i class="fas fa-check-circle"></i>
+                            <div class="scenario-info">
+                                <h3 class="scenario-name">執行所有比對</h3>
+                                <p class="scenario-desc">自動執行下列所有可能的比對情境</p>
+                                <ul class="scenario-features">
+                                    <li><i class="fas fa-check"></i> 包含所有版本</li>
+                                    <li><i class="fas fa-check"></i> 自動偵測路徑</li>
+                                    <li><i class="fas fa-check"></i> 可能的比對情境</li>
+                                </ul>
                             </div>
                         </label>
                     </div>
                     
+                    <!-- Master vs PreMP -->
                     <div class="scenario-card">
                         <input type="radio" name="scenario" id="scenario-master-premp" value="master_vs_premp">
-                        <label for="scenario-master-premp" class="scenario-label">
+                        <label for="scenario-master-premp">
                             <div class="scenario-icon">
                                 <i class="fas fa-code-branch"></i>
                             </div>
-                            <div class="scenario-content">
-                                <h4 class="scenario-title">Master vs PreMP</h4>
+                            <div class="scenario-info">
+                                <h3 class="scenario-name">Master vs PreMP</h3>
                                 <p class="scenario-desc">比較主版本與預量產版本</p>
-                            </div>
-                            <div class="scenario-check">
-                                <i class="fas fa-check-circle"></i>
+                                <ul class="scenario-features">
+                                    <li><i class="fas fa-check"></i> 比較主版</li>
+                                    <li><i class="fas fa-check"></i> 主物預量產版本</li>
+                                    <li><i class="fas fa-check"></i> 產成本</li>
+                                </ul>
                             </div>
                         </label>
                     </div>
                     
+                    <!-- PreMP vs Wave -->
                     <div class="scenario-card">
                         <input type="radio" name="scenario" id="scenario-premp-wave" value="premp_vs_wave">
-                        <label for="scenario-premp-wave" class="scenario-label">
+                        <label for="scenario-premp-wave">
                             <div class="scenario-icon">
                                 <i class="fas fa-water"></i>
                             </div>
-                            <div class="scenario-content">
-                                <h4 class="scenario-title">PreMP vs Wave</h4>
+                            <div class="scenario-info">
+                                <h3 class="scenario-name">PreMP vs Wave</h3>
                                 <p class="scenario-desc">比較預量產與 Wave 版本</p>
-                            </div>
-                            <div class="scenario-check">
-                                <i class="fas fa-check-circle"></i>
+                                <ul class="scenario-features">
+                                    <li><i class="fas fa-check"></i> 產品</li>
+                                    <li><i class="fas fa-check"></i> Wave 版本</li>
+                                </ul>
                             </div>
                         </label>
                     </div>
                     
+                    <!-- Wave vs Backup -->
                     <div class="scenario-card">
                         <input type="radio" name="scenario" id="scenario-wave-backup" value="wave_vs_backup">
-                        <label for="scenario-wave-backup" class="scenario-label">
+                        <label for="scenario-wave-backup">
                             <div class="scenario-icon">
                                 <i class="fas fa-database"></i>
                             </div>
-                            <div class="scenario-content">
-                                <h4 class="scenario-title">Wave vs Backup</h4>
+                            <div class="scenario-info">
+                                <h3 class="scenario-name">Wave vs Backup</h3>
                                 <p class="scenario-desc">比較 Wave 版本與備份版本</p>
-                            </div>
-                            <div class="scenario-check">
-                                <i class="fas fa-check-circle"></i>
+                                <ul class="scenario-features">
+                                    <li><i class="fas fa-check"></i> 比較 Wave</li>
+                                    <li><i class="fas fa-check"></i> 版本備份</li>
+                                    <li><i class="fas fa-check"></i> 份版本</li>
+                                </ul>
                             </div>
                         </label>
                     </div>
                 </div>
+                
+                <!-- 執行按鈕移到這裡 -->
+                <div class="scenario-action">
+                    <button class="btn btn-primary btn-large" id="compareBtn" onclick="executeCompare()" disabled>
+                        <span>開始執行 →</span>
+                    </button>
+                </div>
             </div>
-        </div>
-
-        <!-- 執行按鈕 -->
-        <div class="action-container">
-            <button class="btn btn-primary btn-large" id="compareBtn" onclick="executeCompare()" disabled>
-                <i class="fas fa-play"></i>
-                <span>開始比對</span>
-            </button>
         </div>
     </div>
 

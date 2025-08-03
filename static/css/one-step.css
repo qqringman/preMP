@@ -1,6 +1,6 @@
 /* 一步到位頁面專屬樣式 - 採用 download.css 設計風格 */
 
-/* CSS 變數定義 */
+/* CSS 變數定義 (與 download.css 保持一致) */
 :root {
     --bg-card: #FFFFFF;
     --bg-hover: #E8F4FD;
@@ -29,9 +29,36 @@
     --text-muted: #9FA8DA;
     --warning: #FF9800;
     --warning-light: #FFF3E0;
+    --nordic-gray-50: #FAFAFA;
+    --nordic-gray-100: #F5F5F5;
+    --nordic-gray-200: #EEEEEE;
+    --nordic-gray-500: #9E9E9E;
+    --nordic-gray-600: #757575;
+    --nordic-gray-800: #424242;
+    --nordic-green: #4CAF50;
+    --radius-2xl: 28px;
+    --radius-full: 9999px;
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 8px;
+    --radius-xl: 20px;
+    --shadow-blue: 0 4px 20px rgba(33, 150, 243, 0.15);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --spacing-2xl: 4rem;
+    --spacing-lg: 2rem;
+    --spacing-md: 1.25rem;
+    --spacing-sm: 0.75rem;
+    --spacing-xl: 3rem;
+    --spacing-xs: 0.5rem;
+    --transition-fast: 0.2s ease;
+    --transition-normal: 0.3s ease;
 }
 
-/* 頁面標題樣式 */
+/* 頁面標題 */
 .page-header {
     text-align: center;
     margin-bottom: 48px;
@@ -76,11 +103,93 @@
     font-weight: 400;
 }
 
-/* 步驟區塊樣式 */
+/* 步驟指示器容器 */
+.process-steps-container {
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-2xl);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-2xl);
+    border: 1px solid var(--border-light);
+}
+
+/* 步驟流程圖 */
+.process-steps {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+
+.step {
+    flex: 1;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.step-icon {
+    width: 80px;
+    height: 80px;
+    background: var(--nordic-gray-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--spacing-md);
+    font-size: 2rem;
+    color: var(--nordic-gray-500);
+    border: 4px solid var(--nordic-gray-200);
+    transition: all var(--transition-normal);
+}
+
+.step.active .step-icon {
+    background: linear-gradient(135deg, #E6F2FF 0%, #CCE5FF 100%);
+    border-color: var(--nordic-blue);
+    color: var(--nordic-blue-dark);
+    transform: scale(1.1);
+    box-shadow: 0 8px 24px rgba(0, 102, 204, 0.2);
+}
+
+.step.completed .step-icon {
+    background: var(--nordic-green);
+    border-color: var(--nordic-green);
+    color: white;
+}
+
+.step-connector {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    width: 100%;
+    height: 4px;
+    background: var(--nordic-gray-200);
+    z-index: -1;
+}
+
+.step:last-child .step-connector {
+    display: none;
+}
+
+.step.completed .step-connector {
+    background: var(--nordic-green);
+}
+
+.step-title {
+    font-weight: 600;
+    color: var(--nordic-gray-800);
+    margin-bottom: var(--spacing-xs);
+}
+
+.step-desc {
+    font-size: 0.9rem;
+    color: var(--nordic-gray-600);
+}
+
+/* 步驟區塊 */
 .step-section {
     background: var(--bg-primary);
-    border-radius: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
     margin-bottom: 28px;
     overflow: hidden;
     position: relative;
@@ -106,7 +215,7 @@
 
 .step-section:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
     border-color: var(--nordic-blue-lighter);
 }
 
@@ -178,11 +287,64 @@
     background: var(--bg-primary);
 }
 
-/* 上傳區域樣式 */
+/* 標籤切換 */
+.source-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 6px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 36px;
+    border: 1px solid var(--border-light);
+}
+
+.tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 24px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.tab-btn:hover {
+    background: rgba(33, 150, 243, 0.08);
+    color: var(--nordic-blue);
+}
+
+.tab-btn.active {
+    background: var(--nordic-blue);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
+}
+
+.tab-btn i {
+    font-size: 1.125rem;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* 上傳區域樣式 (與 download.css 一致) */
 .upload-container {
     background: #FAFBFD;
     border: 2px dashed #C5CAE9;
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     padding: 80px 60px;
     text-align: center;
     cursor: pointer;
@@ -264,11 +426,11 @@
 .hint-card {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--spacing-sm);
     padding: 12px 24px;
     background: var(--nordic-sky);
     border: 1px solid var(--nordic-blue-lighter);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     color: var(--nordic-blue);
     font-size: 0.875rem;
     font-weight: 500;
@@ -277,20 +439,283 @@
     z-index: 1;
 }
 
-/* 檔案列表樣式 */
+/* 伺服器瀏覽器 */
+.server-browser {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    min-height: 400px;
+    overflow: hidden;
+}
+
+.browser-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: space-between;
+    padding: 20px 28px;
+    background: var(--nordic-gradient-soft);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.path-input-container {
+    flex: 1;
+    margin-right: 0;
+    position: relative;
+}
+
+.path-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.path-input:focus {
+    outline: none;
+    border-color: #1976D2;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.1);
+}
+
+.path-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.path-suggestions.show {
+    display: block;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.suggestion-item:hover {
+    background: var(--bg-hover);
+    color: #1565C0;
+}
+
+.suggestion-item.selected {
+    background: var(--nordic-sky);
+    color: #1976D2;
+}
+
+.suggestion-item i {
+    width: 20px;
+    color: var(--nordic-blue-light);
+}
+
+.suggestion-type {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.btn-go {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--nordic-blue);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-go:hover {
+    background: var(--nordic-blue-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-refresh {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-refresh:hover {
+    background: #1976D2;
+    border-color: #1976D2;
+    color: white;
+    transform: rotate(180deg);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.browser-content {
+    background: var(--bg-secondary);
+    min-height: 350px;
+    padding: 28px;
+}
+
+.file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    padding: 20px;
+}
+
+.file-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    padding: 24px 16px;
+    background: var(--bg-primary);
+    border: 2px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+}
+
+.file-item::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--nordic-gradient);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.file-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--nordic-blue-light);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+}
+
+.file-item:hover::before {
+    opacity: 1;
+}
+
+.file-item i {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.file-item.folder i {
+    color: var(--nordic-blue);
+}
+
+.file-item.file i {
+    color: var(--success);
+}
+
+.file-item.selected {
+    background: #E8F5E9;
+    border-color: var(--success);
+    border-width: 2px;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.file-item.selected::before {
+    background: var(--success);
+    height: 4px;
+    opacity: 1;
+}
+
+.file-item .check-icon {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: var(--nordic-blue);
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    z-index: 2;
+    animation: checkIn 0.3s ease-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes checkIn {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.file-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    word-break: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.file-size {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* 檔案列表容器 (與 download.css 一致) */
 .file-list-container {
     background: var(--bg-primary);
-    border-radius: 16px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     overflow: hidden;
     position: relative;
     width: 100%;
     border: 1px solid var(--border-light);
-    margin-top: 1.5rem;
 }
 
 .file-list-container:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
 }
 
 .file-list-header {
@@ -319,7 +744,7 @@
 .file-count-badge {
     background: rgba(255, 255, 255, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     padding: 4px 12px;
     font-size: 0.8125rem;
     font-weight: 600;
@@ -353,7 +778,7 @@
     width: 48px;
     height: 48px;
     background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -370,7 +795,7 @@
     min-width: 0;
 }
 
-.file-name {
+.file-details .file-name {
     font-weight: 500;
     color: var(--text-primary);
     font-size: 0.875rem;
@@ -389,10 +814,25 @@
     color: var(--text-muted);
 }
 
+.file-meta .file-path {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--nordic-blue);
+    font-style: normal;
+    margin-left: 8px;
+    transition: all 0.2s ease;
+}
+
+.file-meta .file-path i {
+    font-size: 0.75rem;
+    color: var(--nordic-blue-light);
+}
+
 .btn-remove-file {
     width: 36px;
     height: 36px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-light);
     background: transparent;
     color: var(--text-muted);
@@ -414,7 +854,7 @@
 
 /* SFTP 設定樣式 */
 .config-switch {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-lg);
 }
 
 .switch-label {
@@ -437,7 +877,7 @@
     height: 28px;
     background: var(--bg-tertiary);
     border: 2px solid var(--border-color);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     margin-right: 12px;
     transition: all 0.3s ease;
 }
@@ -462,10 +902,6 @@ input:checked + .switch-slider {
 
 input:checked + .switch-slider::before {
     transform: translateX(24px);
-}
-
-.switch-text {
-    color: var(--text-primary);
 }
 
 .sftp-form {
@@ -508,7 +944,7 @@ input:checked + .switch-slider::before {
 .form-input {
     padding: 10px 14px;
     border: 1.5px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     font-size: 0.9375rem;
     background: var(--bg-input);
     color: var(--text-primary);
@@ -539,7 +975,7 @@ input:checked + .switch-slider::before {
     gap: 20px;
     padding: 24px;
     background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     position: relative;
     overflow: hidden;
@@ -561,7 +997,7 @@ input:checked + .switch-slider::before {
 .option-card:hover {
     transform: translateX(4px);
     border-color: var(--nordic-blue-light);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
     background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--nordic-sky) 100%);
 }
 
@@ -573,7 +1009,7 @@ input:checked + .switch-slider::before {
     width: 60px;
     height: 60px;
     background: var(--bg-primary);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -605,7 +1041,7 @@ input:checked + .switch-slider::before {
     flex-shrink: 0;
 }
 
-/* 執行按鈕容器 */
+/* 執行按鈕 */
 .action-container {
     text-align: center;
     margin-top: 20px;
@@ -618,7 +1054,7 @@ input:checked + .switch-slider::before {
     gap: 10px;
     padding: 12px 28px;
     border: none;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     font-size: 0.9375rem;
     font-weight: 500;
     cursor: pointer;
@@ -670,7 +1106,7 @@ input:checked + .switch-slider::before {
     padding: 18px 48px;
     font-weight: 600;
     background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     box-shadow: 0 4px 16px rgba(33, 150, 243, 0.2);
     position: relative;
     overflow: hidden;
@@ -719,7 +1155,7 @@ input:checked + .switch-slider::before {
     padding: 20px;
     background: #FAFBFC;
     border: 2px solid transparent;
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     position: relative;
     overflow: hidden;
@@ -762,7 +1198,7 @@ input:checked + .switch-slider::before {
     width: 52px;
     height: 52px;
     background: var(--bg-tertiary);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -798,9 +1234,9 @@ input:checked + .switch-slider::before {
 /* 進度條樣式 */
 .progress-bar-wrapper {
     background: var(--bg-primary);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     padding: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-light);
     margin-bottom: 28px;
 }
@@ -827,7 +1263,7 @@ input:checked + .switch-slider::before {
 .progress-bar {
     height: 10px;
     background: var(--bg-tertiary);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     overflow: hidden;
     border: 1px solid var(--border-light);
 }
@@ -835,7 +1271,7 @@ input:checked + .switch-slider::before {
 .progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #2196F3 0%, #64B5F6 100%);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     transition: width 0.4s ease;
     position: relative;
 }
@@ -854,9 +1290,9 @@ input:checked + .switch-slider::before {
 /* 日誌容器樣式 */
 .log-container {
     background: var(--bg-primary);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-color);
 }
 
@@ -998,11 +1434,11 @@ input:checked + .switch-slider::before {
 
 .result-card {
     background: var(--bg-primary);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     padding: 3.5rem;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
     border: 1px solid var(--border-light);
     margin-bottom: 2.5rem;
 }
@@ -1023,7 +1459,7 @@ input:checked + .switch-slider::before {
     gap: 2rem;
     padding: 2rem;
     background: #2196F3;
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     margin-bottom: 2rem;
     color: white;
 }
@@ -1074,7 +1510,7 @@ input:checked + .switch-slider::before {
     padding: 1.5rem;
     background: #FAFBFC;
     border: 2px solid transparent;
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
@@ -1095,7 +1531,7 @@ input:checked + .switch-slider::before {
 
 .summary-item:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
     border-color: var(--nordic-blue-light);
 }
 
@@ -1108,11 +1544,11 @@ input:checked + .switch-slider::before {
     width: 60px;
     height: 60px;
     background: var(--bg-primary);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--shadow-sm);
 }
 
 .text-success {
@@ -1152,6 +1588,107 @@ input:checked + .switch-slider::before {
     margin-top: 2rem;
 }
 
+/* 空狀態訊息 */
+.empty-message {
+    text-align: center;
+    padding: 60px;
+    color: var(--text-muted);
+}
+
+.empty-message i {
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-message p {
+    font-size: 1rem;
+}
+
+/* 載入中狀態 */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.loading i {
+    font-size: 3rem;
+    color: var(--nordic-blue-light);
+    margin-bottom: 20px;
+}
+
+/* 錯誤訊息 */
+.error-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    padding: 48px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px dashed #F87171;
+    border-radius: var(--radius-xl);
+    position: relative;
+}
+
+.error-message::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(254, 226, 226, 0.3);
+    border-radius: var(--radius-xl);
+    pointer-events: none;
+}
+
+.error-message i {
+    font-size: 3rem;
+    color: var(--danger);
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+}
+
+.error-message p {
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--danger);
+    position: relative;
+    z-index: 1;
+}
+
+.error-message .text-muted {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    position: relative;
+    z-index: 1;
+}
+
+.error-container {
+    text-align: center;
+    padding: var(--spacing-2xl);
+}
+
+.error-container i {
+    font-size: 4rem;
+    color: var(--danger);
+    margin-bottom: var(--spacing-lg);
+}
+
+.error-container h2 {
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+}
+
+.error-container p {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xl);
+}
+
 /* 動畫效果 */
 @keyframes fadeIn {
     from {
@@ -1185,6 +1722,31 @@ input:checked + .switch-slider::before {
     100% { transform: translateX(100%); }
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 滾動條樣式 */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--nordic-blue-light);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--nordic-blue);
+}
+
 /* 工具類 */
 .hidden {
     display: none;
@@ -1196,14 +1758,34 @@ input:checked + .switch-slider::before {
     pointer-events: none;
 }
 
+.mt-4 {
+    margin-top: 2rem;
+}
+
 .mb-4 {
     margin-bottom: 2rem;
+}
+
+.text-muted {
+    color: var(--text-muted);
 }
 
 /* 響應式設計 */
 @media (max-width: 768px) {
     .page-title {
         font-size: 2rem;
+    }
+    
+    .process-steps {
+        flex-direction: column;
+        gap: var(--spacing-xl);
+    }
+    
+    .step-connector {
+        width: 4px;
+        height: 100%;
+        top: 50%;
+        left: 40px;
     }
     
     .form-row {
@@ -1236,5 +1818,9 @@ input:checked + .switch-slider::before {
     
     .section-body {
         padding: 24px 20px;
+    }
+    
+    .file-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
 }

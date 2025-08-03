@@ -6,7 +6,7 @@ let asyncDownloadUrl = null;
 
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
-    loadDirectories();
+    loadDownloadedDirectories();
     loadRecentComparisons();
     initializeEventListeners();
     initializeFolderDrop();
@@ -24,14 +24,21 @@ function switchSourceTab(tab) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
-    document.getElementById(`${tab}-source-tab`).classList.add('active');
+    document.getElementById(`${tab}-tab`).classList.add('active');
 }
 
-// 載入可用目錄
-async function loadDirectories() {
+// 選擇本地目錄
+function selectLocalDirectory() {
+    // 因為瀏覽器限制，無法直接選擇資料夾
+    // 這裡模擬選擇資料夾的行為
+    utils.showNotification('請使用拖放功能或選擇已下載的目錄', 'info');
+}
+
+// 載入已下載的目錄
+async function loadDownloadedDirectories() {
     try {
         const directories = await utils.apiRequest('/api/list-directories');
-        const select = document.getElementById('sourceDirectory');
+        const select = document.getElementById('downloadedDirectories');
         
         // 清空選項
         select.innerHTML = '<option value="">請選擇目錄...</option>';
@@ -45,6 +52,13 @@ async function loadDirectories() {
             select.appendChild(option);
         });
         
+        // 監聽選擇變化
+        select.addEventListener('change', (e) => {
+            if (e.target.value) {
+                setSourceDirectory(e.target.value, 'local');
+            }
+        });
+        
     } catch (error) {
         console.error('Load directories error:', error);
     }
@@ -52,7 +66,7 @@ async function loadDirectories() {
 
 // 初始化資料夾拖曳
 function initializeFolderDrop() {
-    const dropArea = document.getElementById('folderDropArea');
+    const dropArea = document.getElementById('localDirectoryArea');
     
     // 阻止瀏覽器預設行為
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -79,11 +93,11 @@ function preventDefaults(e) {
 }
 
 function highlight(e) {
-    document.getElementById('folderDropArea').classList.add('dragging');
+    document.getElementById('localDirectoryArea').classList.add('dragging');
 }
 
 function unhighlight(e) {
-    document.getElementById('folderDropArea').classList.remove('dragging');
+    document.getElementById('localDirectoryArea').classList.remove('dragging');
 }
 
 // 處理資料夾拖放
@@ -122,39 +136,83 @@ function useServerPath() {
     setSourceDirectory(path, 'server');
 }
 
+// 重新整理伺服器路徑
+function refreshServerPath() {
+    const path = document.getElementById('serverPathInput').value.trim();
+    if (path) {
+        utils.showNotification('正在驗證路徑...', 'info');
+        // 這裡可以加入驗證路徑是否存在的邏輯
+        setSourceDirectory(path, 'server');
+    }
+}
+
 // 設定來源目錄
 function setSourceDirectory(path, type = 'local') {
     sourceDirectory = path;
     
     // 更新 UI
-    document.getElementById('directoryInfo').classList.remove('hidden');
-    document.getElementById('selectedPath').textContent = path;
-    document.getElementById('directoryDate').textContent = new Date().toLocaleDateString('zh-TW');
-    document.getElementById('compareBtn').disabled = false;
+    const infoContainer = type === 'server' ? 
+        document.getElementById('serverSelectedDirectory') : 
+        document.getElementById('selectedDirectoryInfo');
+        
+    infoContainer.classList.remove('hidden');
     
-    // 更新選擇器
-    if (type === 'local') {
-        document.getElementById('sourceDirectory').value = path;
-    } else {
-        document.getElementById('sourceDirectory').value = '';
-    }
+    // 生成目錄資訊卡片
+    infoContainer.innerHTML = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h3 class="file-list-title">
+                    <i class="fas fa-folder"></i> 已選擇的目錄
+                </h3>
+                <span class="file-count-badge">${type === 'server' ? '伺服器' : '本地'}</span>
+            </div>
+            <div class="file-items">
+                <div class="file-item-card">
+                    <div class="file-icon-wrapper">
+                        <i class="fas fa-folder"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">${path.split('/').pop() || path}</div>
+                        <div class="file-meta">
+                            <span>目錄路徑</span>
+                            <span class="file-path">
+                                <i class="fas fa-folder-tree"></i> ${path}
+                            </span>
+                        </div>
+                    </div>
+                    <button class="btn-remove-file" onclick="removeDirectory('${type}')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 啟用比對按鈕
+    document.getElementById('compareBtn').disabled = false;
     
     utils.showNotification(`已選擇${type === 'server' ? '伺服器' : ''}目錄: ${path}`, 'success');
 }
 
+// 移除目錄
+function removeDirectory(type) {
+    sourceDirectory = null;
+    
+    const infoContainer = type === 'server' ? 
+        document.getElementById('serverSelectedDirectory') : 
+        document.getElementById('selectedDirectoryInfo');
+        
+    infoContainer.classList.add('hidden');
+    document.getElementById('compareBtn').disabled = true;
+    
+    // 重置選擇器
+    if (type === 'local') {
+        document.getElementById('downloadedDirectories').value = '';
+    }
+}
+
 // 初始化事件監聽器
 function initializeEventListeners() {
-    // 目錄選擇
-    document.getElementById('sourceDirectory').addEventListener('change', (e) => {
-        if (e.target.value) {
-            setSourceDirectory(e.target.value, 'local');
-        } else {
-            sourceDirectory = null;
-            document.getElementById('directoryInfo').classList.add('hidden');
-            document.getElementById('compareBtn').disabled = true;
-        }
-    });
-    
     // 輸入路徑時按 Enter
     document.getElementById('serverPathInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -569,7 +627,10 @@ function formatTimeAgo(date) {
 
 // 匯出函數
 window.switchSourceTab = switchSourceTab;
+window.selectLocalDirectory = selectLocalDirectory;
 window.useServerPath = useServerPath;
+window.refreshServerPath = refreshServerPath;
+window.removeDirectory = removeDirectory;
 window.executeCompare = executeCompare;
 window.viewDetailedResults = viewDetailedResults;
 window.exportResults = exportResults;

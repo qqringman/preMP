@@ -15,58 +15,133 @@
         <p class="page-subtitle">自動執行下載、比對、打包全流程</p>
     </div>
 
+    <!-- 改進的步驟指示器 -->
+    <div class="process-steps-container">
+        <div class="process-steps">
+            <div class="step" id="step-upload">
+                <div class="step-icon">
+                    <i class="fas fa-file-excel"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">上傳 Excel</div>
+                    <div class="step-desc">選擇 FTP 路徑檔案</div>
+                </div>
+                <div class="step-connector"></div>
+            </div>
+            
+            <div class="step" id="step-config">
+                <div class="step-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">設定 SFTP</div>
+                    <div class="step-desc">配置連線資訊</div>
+                </div>
+                <div class="step-connector"></div>
+            </div>
+            
+            <div class="step" id="step-process">
+                <div class="step-icon">
+                    <i class="fas fa-cogs"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">執行處理</div>
+                    <div class="step-desc">下載→比對→打包</div>
+                </div>
+                <div class="step-connector"></div>
+            </div>
+            
+            <div class="step" id="step-complete">
+                <div class="step-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <div class="step-title">完成</div>
+                    <div class="step-desc">下載結果</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 主要表單區 -->
     <div class="one-step-form" id="mainForm">
-        <!-- 步驟 1：上傳 Excel -->
+        <!-- 步驟 1：選擇檔案來源 -->
         <div class="step-section">
             <div class="step-header">
                 <div class="step-number">1</div>
                 <div class="step-content">
-                    <h2 class="step-title">上傳 Excel 檔案</h2>
-                    <p class="step-subtitle">選擇包含 FTP 路徑的 Excel 檔案</p>
+                    <h2 class="step-title">選擇檔案來源</h2>
+                    <p class="step-subtitle">選擇 Excel 檔案或從伺服器瀏覽</p>
                 </div>
             </div>
             
             <div class="section-body">
-                <div class="upload-container" id="uploadArea">
-                    <input type="file" id="fileInput" accept=".xlsx" style="display: none;">
-                    <div class="upload-icon-wrapper">
-                        <i class="fas fa-file-excel fa-4x"></i>
-                    </div>
-                    <div class="upload-text">拖曳 Excel 檔案到這裡</div>
-                    <div class="upload-hint">或點擊選擇檔案</div>
-                    <div class="hint-card">
-                        <i class="fas fa-info-circle"></i>
-                        <span>支援 .xlsx 格式，最大 16MB</span>
-                    </div>
-                    <p></p>
-                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                        <i class="fas fa-folder-open"></i> 選擇檔案
+                <div class="source-tabs">
+                    <button class="tab-btn active" onclick="switchTab('local')">
+                        <i class="fas fa-upload"></i> 載入 Excel 檔案
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('server')">
+                        <i class="fas fa-server"></i> 選擇伺服器檔案
                     </button>
                 </div>
-                
-                <div class="file-list-container hidden" id="fileInfo">
-                    <div class="file-list-header">
-                        <h3 class="file-list-title">
-                            <i class="fas fa-file-excel"></i> 已選擇的檔案
-                        </h3>
-                        <span class="file-count-badge">1 個檔案</span>
-                    </div>
-                    <div class="file-items">
-                        <div class="file-item-card">
-                            <div class="file-icon-wrapper">
-                                <i class="fas fa-file-excel"></i>
+
+                <!-- 檔案選擇區域 -->
+                <div class="tab-container">
+                    <!-- 本地上傳 -->
+                    <div class="tab-content active" id="local-tab">
+                        <div class="upload-container" id="localUploadArea">
+                            <input type="file" id="localFileInput" accept=".xlsx" style="display: none;">
+                            <div class="upload-icon-wrapper">
+                                <i class="fas fa-file-excel fa-4x"></i>
                             </div>
-                            <div class="file-details">
-                                <div class="file-name" id="fileName"></div>
-                                <div class="file-meta">
-                                    <span>Excel 檔案</span>
-                                    <span class="file-size" id="fileSize"></span>
+                            <div class="upload-text">拖曳 Excel 檔案到這裡</div>
+                            <div class="upload-hint">或點擊選擇檔案</div>
+                            <div class="hint-card">
+                                <i class="fas fa-info-circle"></i>
+                                <span>支援 .xlsx 格式，最大 16MB</span>
+                            </div>
+                            <p></p>                            
+                            <button class="btn btn-primary" onclick="document.getElementById('localFileInput').click()">
+                                <i class="fas fa-folder-open"></i> 選擇檔案
+                            </button>
+                        </div>
+                        
+                        <div class="file-list mt-4 hidden" id="localFileList">
+                            <!-- 顯示已選擇的檔案 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 伺服器瀏覽 -->
+                    <div class="tab-content" id="server-tab">
+                        <div class="server-browser">
+                            <div class="browser-header">
+                                <div class="path-input-container">
+                                    <input type="text" 
+                                           class="path-input" 
+                                           id="serverPathInput" 
+                                           placeholder="輸入或貼上路徑..."
+                                           value="/home/vince_lin/ai/preMP">
+                                    <div class="path-suggestions" id="pathSuggestions">
+                                        <!-- 動態生成路徑建議 -->
+                                    </div>
+                                </div>
+                                <button class="btn-go" onclick="goToPath()">
+                                    <i class="fas fa-arrow-right"></i> 前往
+                                </button>
+                                <button class="btn-refresh" onclick="refreshServerFiles()">
+                                    <i class="fas fa-sync"></i>
+                                </button>
+                            </div>
+                            <div class="browser-content" id="serverBrowser">
+                                <div class="empty-message">
+                                    <i class="fas fa-folder-open fa-3x"></i>
+                                    <p>切換到此標籤時將載入檔案列表</p>
                                 </div>
                             </div>
-                            <button class="btn-remove-file" onclick="removeFile()">
-                                <i class="fas fa-times"></i>
-                            </button>
+                        </div>
+                        
+                        <div class="selected-server-files hidden" id="serverSelectedFiles">
+                            <!-- 顯示已選擇的伺服器檔案 -->
                         </div>
                     </div>
                 </div>

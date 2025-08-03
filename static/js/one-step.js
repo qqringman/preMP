@@ -1,19 +1,41 @@
-// 一步到位頁面 JavaScript
+// 一步到位頁面 JavaScript - 與下載頁面共用相同的檔案選擇邏輯
 
 let selectedFile = null;
 let currentTaskId = null;
+let selectedServerFiles = [];
 
 // 初始化頁面
 document.addEventListener('DOMContentLoaded', () => {
     initializeUpload();
     initializeSftpConfig();
     initializeEventListeners();
+    updateStepIndicator('upload', 'active');    
 });
+
+// 切換檔案來源標籤
+function switchTab(tab) {
+    // 更新標籤按鈕狀態
+    document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // 切換內容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tab}-tab`).classList.add('active');
+    
+    // 如果切換到伺服器標籤，載入檔案列表
+    if (tab === 'server') {
+        loadServerFiles();
+    }
+}
 
 // 初始化上傳功能
 function initializeUpload() {
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
+    const uploadArea = document.getElementById('localUploadArea');
+    const fileInput = document.getElementById('localFileInput');
     
     // 拖放事件
     uploadArea.addEventListener('dragover', (e) => {
@@ -62,31 +84,224 @@ async function handleFileSelect(file) {
         return;
     }
     
-    // 顯示檔案資訊
-    document.getElementById('uploadArea').classList.add('hidden');
-    document.getElementById('fileInfo').classList.remove('hidden');
-    document.getElementById('fileName').textContent = `${file.name} (${utils.formatFileSize(file.size)})`;
+    // 顯示檔案列表
+    displayLocalFile(file);
     
     // 上傳檔案
     try {
         const result = await utils.uploadFile(file);
         selectedFile = result.filepath;
-        updateStepStatus('upload', 'completed');
         checkExecuteButton();
     } catch (error) {
         console.error('Upload error:', error);
-        removeFile();
+        removeLocalFile();
     }
 }
 
-// 移除檔案
-function removeFile() {
+// 顯示本地檔案
+function displayLocalFile(file) {
+    const fileList = document.getElementById('localFileList');
+    fileList.classList.remove('hidden');
+    
+    fileList.innerHTML = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h3 class="file-list-title">
+                    <i class="fas fa-file-excel"></i> 已選擇的檔案
+                </h3>
+                <span class="file-count-badge">1 個檔案</span>
+            </div>
+            <div class="file-items">
+                <div class="file-item-card">
+                    <div class="file-icon-wrapper">
+                        <i class="fas fa-file-excel"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-meta">
+                            <span>Excel 檔案</span>
+                            <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                        </div>
+                    </div>
+                    <button class="btn-remove-file" onclick="removeLocalFile()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 移除本地檔案
+function removeLocalFile() {
     selectedFile = null;
-    document.getElementById('fileInfo').classList.add('hidden');
-    document.getElementById('uploadArea').classList.remove('hidden');
-    document.getElementById('fileInput').value = '';
-    updateStepStatus('upload', 'pending');
+    document.getElementById('localFileList').classList.add('hidden');
+    document.getElementById('localFileInput').value = '';
     checkExecuteButton();
+}
+
+// 載入伺服器檔案
+async function loadServerFiles() {
+    const path = document.getElementById('serverPathInput').value || '/home/vince_lin/ai/preMP';
+    const browserContent = document.getElementById('serverBrowser');
+    
+    browserContent.innerHTML = `
+        <div class="loading">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p>載入中...</p>
+        </div>
+    `;
+    
+    try {
+        const result = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
+        displayServerFiles(result);
+    } catch (error) {
+        browserContent.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-triangle fa-3x"></i>
+                <p>無法載入檔案列表</p>
+                <p class="text-muted">${error.message}</p>
+                <button class="btn btn-primary" onclick="loadServerFiles()">重試</button>
+            </div>
+        `;
+    }
+}
+
+// 顯示伺服器檔案
+function displayServerFiles(result) {
+    const browserContent = document.getElementById('serverBrowser');
+    
+    if (!result.folders && !result.files) {
+        browserContent.innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-folder-open fa-3x"></i>
+                <p>此目錄是空的</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="file-grid">';
+    
+    // 顯示資料夾
+    if (result.folders) {
+        result.folders.forEach(folder => {
+            html += `
+                <div class="file-item folder" ondblclick="navigateToFolder('${folder.path}')">
+                    <i class="fas fa-folder"></i>
+                    <div class="file-name">${folder.name}</div>
+                </div>
+            `;
+        });
+    }
+    
+    // 顯示檔案（只顯示 Excel 檔案）
+    if (result.files) {
+        result.files.forEach(file => {
+            const isSelected = selectedServerFiles.some(f => f.path === file.path);
+            html += `
+                <div class="file-item file ${isSelected ? 'selected' : ''}" 
+                     onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
+                    ${isSelected ? '<div class="check-icon"><i class="fas fa-check"></i></div>' : ''}
+                    <i class="fas fa-file-excel"></i>
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${utils.formatFileSize(file.size)}</div>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div>';
+    browserContent.innerHTML = html;
+}
+
+// 切換伺服器檔案選擇
+function toggleServerFile(path, name, size) {
+    const index = selectedServerFiles.findIndex(f => f.path === path);
+    
+    // 一步到位只能選擇一個檔案
+    if (index === -1) {
+        selectedServerFiles = [{path, name, size}];
+    } else {
+        selectedServerFiles = [];
+    }
+    
+    updateServerFileSelection();
+    checkExecuteButton();
+}
+
+// 更新伺服器檔案選擇顯示
+function updateServerFileSelection() {
+    const container = document.getElementById('serverSelectedFiles');
+    
+    if (selectedServerFiles.length === 0) {
+        container.classList.add('hidden');
+        selectedFile = null;
+        return;
+    }
+    
+    container.classList.remove('hidden');
+    selectedFile = selectedServerFiles[0].path; // 使用第一個選擇的檔案
+    
+    let html = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h3 class="file-list-title">
+                    <i class="fas fa-server"></i> 已選擇的伺服器檔案
+                </h3>
+                <span class="file-count-badge">1 個檔案</span>
+            </div>
+            <div class="file-items">
+    `;
+    
+    const file = selectedServerFiles[0];
+    html += `
+        <div class="file-item-card">
+            <div class="file-icon-wrapper">
+                <i class="fas fa-file-excel"></i>
+            </div>
+            <div class="file-details">
+                <div class="file-name">${file.name}</div>
+                <div class="file-meta">
+                    <span class="file-path">
+                        <i class="fas fa-folder"></i> ${file.path}
+                    </span>
+                    <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                </div>
+            </div>
+            <button class="btn-remove-file" onclick="removeServerFile('${file.path}')">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    html += '</div></div>';
+    container.innerHTML = html;
+    
+    // 重新載入檔案列表以更新選中狀態
+    loadServerFiles();
+}
+
+// 移除伺服器檔案
+function removeServerFile(path) {
+    selectedServerFiles = [];
+    updateServerFileSelection();
+}
+
+// 導航到資料夾
+function navigateToFolder(path) {
+    document.getElementById('serverPathInput').value = path;
+    loadServerFiles();
+}
+
+// 前往指定路徑
+function goToPath() {
+    loadServerFiles();
+}
+
+// 重新整理伺服器檔案
+function refreshServerFiles() {
+    loadServerFiles();
 }
 
 // 初始化 SFTP 設定
@@ -100,11 +315,7 @@ function initializeSftpConfig() {
         } else {
             customConfig.classList.remove('disabled');
         }
-        updateStepStatus('config', 'completed');
     });
-    
-    // 預設完成設定步驟
-    updateStepStatus('config', 'completed');
 }
 
 // 初始化事件監聽器
@@ -118,8 +329,23 @@ function initializeEventListeners() {
     });
 }
 
-// 更新步驟狀態
-function updateStepStatus(step, status) {
+// 檢查執行按鈕狀態
+function checkExecuteButton() {
+    const executeBtn = document.getElementById('executeBtn');
+    executeBtn.disabled = !selectedFile;
+    
+    // 更新步驟狀態
+    if (selectedFile) {
+        updateStepIndicator('upload', 'completed');
+        updateStepIndicator('config', 'active');
+    } else {
+        updateStepIndicator('upload', 'active');
+        updateStepIndicator('config', 'pending');
+    }
+}
+
+// 加入步驟指示器更新函數
+function updateStepIndicator(step, status) {
     const stepElement = document.getElementById(`step-${step}`);
     if (!stepElement) return;
     
@@ -134,19 +360,18 @@ function updateStepStatus(step, status) {
     }
 }
 
-// 檢查執行按鈕狀態
-function checkExecuteButton() {
-    const executeBtn = document.getElementById('executeBtn');
-    executeBtn.disabled = !selectedFile;
-}
-
 // 執行一步到位處理
 async function executeOneStep() {
     if (!selectedFile) {
-        utils.showNotification('請先上傳 Excel 檔案', 'error');
+        utils.showNotification('請先選擇 Excel 檔案', 'error');
         return;
     }
-    
+
+    // 更新步驟狀態
+    updateStepIndicator('upload', 'completed');
+    updateStepIndicator('config', 'completed');
+    updateStepIndicator('process', 'active');
+
     // 取得 SFTP 設定
     const sftpConfig = {};
     if (!document.getElementById('useDefaultConfig').checked) {
@@ -165,9 +390,6 @@ async function executeOneStep() {
     // 隱藏表單，顯示進度
     document.getElementById('mainForm').classList.add('hidden');
     document.getElementById('progressContainer').classList.remove('hidden');
-    
-    // 更新步驟狀態
-    updateStepStatus('process', 'active');
     
     // 發送請求
     try {
@@ -254,6 +476,7 @@ function addLogEntry(message) {
     const time = new Date().toLocaleTimeString('zh-TW');
     entry.innerHTML = `
         <span class="log-time">${time}</span>
+        <span class="log-icon"><i class="fas fa-info-circle"></i></span>
         <span class="log-message">${message}</span>
     `;
     
@@ -263,8 +486,11 @@ function addLogEntry(message) {
 
 // 處理完成
 function handleComplete(results) {
-    updateStepStatus('complete', 'completed');
-    
+
+    // 更新步驟狀態
+    updateStepIndicator('process', 'completed');
+    updateStepIndicator('complete', 'completed');
+        
     // 顯示結果
     document.getElementById('progressContainer').classList.add('hidden');
     document.getElementById('resultContainer').classList.remove('hidden');
@@ -399,7 +625,8 @@ function startNew() {
     resetToForm();
     currentTaskId = null;
     selectedFile = null;
-    removeFile();
+    selectedServerFiles = [];
+    removeLocalFile();
 }
 
 // 重置到表單
@@ -408,19 +635,18 @@ function resetToForm() {
     document.getElementById('progressContainer').classList.add('hidden');
     document.getElementById('resultContainer').classList.add('hidden');
     
-    // 重置步驟狀態
-    updateStepStatus('upload', selectedFile ? 'completed' : 'pending');
-    updateStepStatus('config', 'completed');
-    updateStepStatus('process', 'pending');
-    updateStepStatus('complete', 'pending');
-    
     // 清空日誌
     document.getElementById('logContent').innerHTML = `
         <div class="log-entry">
             <span class="log-time">--:--:--</span>
+            <span class="log-icon"><i class="fas fa-info-circle"></i></span>
             <span class="log-message">等待開始...</span>
         </div>
     `;
+    
+    // 重置進度
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressText').textContent = '0%';
 }
 
 // 輪詢任務狀態（備用方案）
@@ -444,7 +670,13 @@ async function pollTaskStatus() {
 }
 
 // 匯出到全域
-window.removeFile = removeFile;
+window.switchTab = switchTab;
+window.removeLocalFile = removeLocalFile;
+window.toggleServerFile = toggleServerFile;
+window.removeServerFile = removeServerFile;
+window.navigateToFolder = navigateToFolder;
+window.goToPath = goToPath;
+window.refreshServerFiles = refreshServerFiles;
 window.executeOneStep = executeOneStep;
 window.viewResults = viewResults;
 window.downloadAll = downloadAll;
