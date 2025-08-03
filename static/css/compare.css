@@ -1765,46 +1765,6 @@ body {
     box-shadow: none;
 }
 
-/* 路徑麵包屑列 - 放在文件較前面的位置 */
-.path-breadcrumb-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    background: #2196F3;
-    color: white;
-    font-weight: 500;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 0;
-}
-
-.path-breadcrumb-bar i {
-    font-size: 1.125rem;
-    color: white !important;
-}
-
-.breadcrumb-path {
-    font-family: "SF Mono", Monaco, monospace;
-    font-size: 0.9375rem;
-    color: white !important;
-}
-
-/* 調整瀏覽器內容區域 */
-.browser-content {
-    background: var(--bg-secondary);
-    min-height: 350px;
-    padding: 0;
-    overflow: hidden;
-}
-
-/* 調整資料夾網格樣式 */
-.folder-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 20px; /* 四邊都有 padding */
-}
-
 /* 路徑麵包屑列 - 修正位置 */
 .path-breadcrumb-bar {
     display: flex;

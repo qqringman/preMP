@@ -82,7 +82,11 @@
                                         id="serverPathInput" 
                                         placeholder="輸入或貼上路徑..."
                                         value="/home/vince_lin/ai/preMP"
-                                        autocomplete="off">  <!-- 添加這個屬性防止自動完成 -->
+                                        autocomplete="off">
+                                    <!-- 新增：路徑建議下拉框 -->
+                                    <div class="path-suggestions" id="pathSuggestions">
+                                        <!-- 動態生成路徑建議 -->
+                                    </div>
                                 </div>
                                 <button class="btn-go" onclick="goToPath()">
                                     <i class="fas fa-arrow-right"></i> 前往
@@ -276,7 +280,12 @@
                         <i class="fas fa-file-archive"></i> 下載 ZIP
                     </button>
                 </div>
-                
+                <!-- 新增：再比一次的引導按鈕 -->
+                <div class="result-actions mt-4" style="border-top: 1px solid var(--border-light); padding-top: 2rem;">
+                    <button class="btn btn-primary btn-large" onclick="compareNewData()">
+                        <i class="fas fa-redo"></i> 再比一筆
+                    </button>
+                </div>                
                 <!-- 圖表區域 -->
                 <div class="charts-container mt-4">
                     <div class="chart-card">
