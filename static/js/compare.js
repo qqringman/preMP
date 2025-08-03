@@ -526,7 +526,6 @@ function showCompareResults(results) {
 function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
     let html = '<div class="result-summary">';
-    
     // 遍歷所有比對結果
     for (const [scenario, data] of Object.entries(compareResults)) {
         const scenarioInfo = getScenarioInfo(scenario);

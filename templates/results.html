@@ -3,127 +3,188 @@
 {% block title %}結果報表 - SFTP 下載與比較系統{% endblock %}
 
 {% block extra_head %}
-<!-- PivotTable.js CSS -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/results.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
 <div class="container">
+    <!-- 頁面標題 -->
     <div class="page-header">
         <h1 class="page-title">
             <i class="fas fa-chart-line"></i> 結果報表
         </h1>
-        <p class="page-subtitle">任務 ID: {{ task_id }}</p>
+        <p class="page-subtitle">查看詳細的比對結果和統計分析</p>
     </div>
 
-    <!-- 報表控制列 -->
-    <div class="report-controls">
-        <div class="control-group">
-            <label class="control-label">選擇資料表</label>
-            <select class="form-input" id="sheetSelector">
-                <option value="">載入中...</option>
-            </select>
-        </div>
-        
-        <div class="control-actions">
-            <button class="btn btn-primary" onclick="exportCurrentView('excel')">
-                <i class="fas fa-file-excel"></i> 匯出 Excel
-            </button>
-            <button class="btn btn-info" onclick="exportCurrentView('html')">
-                <i class="fas fa-file-code"></i> 匯出 HTML
-            </button>
-            <button class="btn btn-success" onclick="downloadFullReport()">
-                <i class="fas fa-download"></i> 下載完整報表
-            </button>
-            <button class="btn btn-outline" onclick="togglePivotMode()">
-                <i class="fas fa-table"></i> <span id="pivotToggleText">切換樞紐分析</span>
-            </button>
-        </div>
-    </div>
-
-    <!-- 資料檢視區 -->
-    <div class="data-view-container">
-        <!-- 一般表格檢視 -->
-        <div id="tableView" class="table-view">
-            <div class="table-container">
-                <table id="dataTable" class="data-table">
-                    <thead id="tableHead"></thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
+    <!-- 報表控制區 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">
+                <i class="fas fa-sliders-h"></i>
+            </div>
+            <div class="step-content">
+                <h2 class="step-title">報表控制</h2>
+                <p class="step-subtitle">選擇資料表和匯出格式</p>
             </div>
         </div>
         
-        <!-- 樞紐分析檢視 -->
-        <div id="pivotView" class="pivot-view hidden">
-            <div class="pivot-instructions">
-                <i class="fas fa-info-circle"></i>
-                <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
-                <ul>
-                    <li>拖曳欄位到列或欄區域來分組資料</li>
-                    <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                    <li>使用篩選器來過濾資料</li>
-                    <li>點擊表格標題來排序</li>
-                </ul>
+        <div class="section-body">
+            <div class="report-controls">
+                <div class="control-group">
+                    <label class="control-label">選擇資料表</label>
+                    <select class="form-input" id="sheetSelector">
+                        <option value="">載入中...</option>
+                    </select>
+                </div>
+                
+                <div class="control-actions">
+                    <button class="btn btn-primary" onclick="exportSheet('excel')">
+                        <i class="fas fa-file-excel"></i> 匯出 Excel
+                    </button>
+                    <button class="btn btn-info" onclick="exportPageAsHTML()">
+                        <i class="fas fa-file-code"></i> 匯出 HTML
+                    </button>
+                    <button class="btn btn-success" onclick="showFilters()">
+                        <i class="fas fa-filter"></i> 篩選器
+                    </button>
+                </div>
             </div>
-            <div id="pivotContainer"></div>
         </div>
     </div>
 
     <!-- 資料統計 -->
-    <div class="data-statistics">
-        <div class="statistics-content">
-            <h2 class="section-title">
-                <i class="fas fa-chart-pie"></i> 資料統計
-            </h2>
-            
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">
+                <i class="fas fa-chart-pie"></i>
+            </div>
+            <div class="step-content">
+                <h2 class="step-title">資料統計</h2>
+                <p class="step-subtitle">快速瞭解比對結果概況</p>
+            </div>
+        </div>
+        
+        <div class="section-body">
             <div class="stats-grid" id="statsGrid">
-                <!-- 動態填充統計資料 -->
+                <!-- 動態載入統計卡片 -->
             </div>
             
             <!-- 圖表區域 -->
             <div class="charts-section">
                 <div class="chart-container">
-                    <h3 class="chart-title">資料分布圖</h3>
-                    <canvas id="distributionChart"></canvas>
-                </div>
-                <div class="chart-container">
                     <h3 class="chart-title">趨勢分析圖</h3>
                     <canvas id="trendChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">分佈圖</h3>
+                    <canvas id="distributionChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 篩選器面板 -->
-    <div class="filter-panel" id="filterPanel">
-        <div class="filter-header">
-            <h3>資料篩選器</h3>
-            <button class="btn-icon" onclick="toggleFilterPanel()">
-                <i class="fas fa-times"></i>
-            </button>
+    <!-- 資料檢視 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">
+                <i class="fas fa-table"></i>
+            </div>
+            <div class="step-content">
+                <h2 class="step-title">資料檢視</h2>
+                <p class="step-subtitle">詳細查看和分析資料</p>
+            </div>
         </div>
-        <div class="filter-content" id="filterContent">
-            <!-- 動態生成篩選器 -->
-        </div>
-        <div class="filter-actions">
-            <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
-            <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
+        
+        <div class="section-body">
+            <div class="view-tabs">
+                <button class="tab-btn active" onclick="switchView('table')">
+                    <i class="fas fa-table"></i> 表格檢視
+                </button>
+                <button class="tab-btn" onclick="switchView('pivot')">
+                    <i class="fas fa-th"></i> 樞紐分析
+                </button>
+            </div>
+            
+            <!-- 表格檢視 -->
+            <div class="view-content active" id="tableView">
+                <div class="table-container">
+                    <div class="table-wrapper" id="tableWrapper">
+                        <!-- 動態載入表格 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 樞紐分析檢視 -->
+            <div class="view-content" id="pivotView">
+                <div class="pivot-container">
+                    <div class="pivot-instructions">
+                        <i class="fas fa-info-circle"></i>
+                        <span>拖曳欄位到不同區域來建立樞紐分析表</span>
+                    </div>
+                    <div id="pivotTable">
+                        <!-- 動態載入樞紐分析表 -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- 浮動按鈕 -->
-    <button class="fab" onclick="toggleFilterPanel()">
-        <i class="fas fa-filter"></i>
-    </button>
+    <!-- 載入動畫 -->
+    <div class="loading hidden" id="loading">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>載入中...</p>
+    </div>
+
+    <!-- 無資料提示 -->
+    <div class="no-data-message hidden" id="noData">
+        <i class="fas fa-inbox"></i>
+        <h3>暫無資料</h3>
+        <p>此任務尚未產生結果資料</p>
+        <button class="btn btn-primary" onclick="window.history.back()">
+            <i class="fas fa-arrow-left"></i> 返回
+        </button>
+    </div>
+
+    <!-- 錯誤提示 -->
+    <div class="error-message hidden" id="errorMessage">
+        <i class="fas fa-exclamation-triangle"></i>
+        <h3>載入失敗</h3>
+        <p id="errorText">無法載入資料，請稍後再試</p>
+        <button class="btn btn-primary" onclick="location.reload()">
+            <i class="fas fa-redo"></i> 重試
+        </button>
+    </div>
 </div>
+
+<!-- 篩選器面板 -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>資料篩選器</h3>
+        <button class="btn-icon" onclick="hideFilters()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="filter-content">
+        <!-- 動態載入篩選選項 -->
+    </div>
+    <div class="filter-actions">
+        <button class="btn btn-primary" onclick="applyFilters()">套用</button>
+        <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+    </div>
+</div>
+
+<!-- 浮動按鈕 -->
+<button class="fab" onclick="scrollToTop()">
+    <i class="fas fa-arrow-up"></i>
+</button>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- PivotTable.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.min.js"></script>
+<script>
+    // 在載入 results.js 之前宣告 taskId
+    const taskId = '{{ task_id }}';
+    console.log('Task ID from template:', taskId);
+</script>
 <script src="{{ url_for('static', filename='js/results.js') }}"></script>
 {% endblock %}

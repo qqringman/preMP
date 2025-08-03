@@ -805,3 +805,274 @@
 .hidden {
   display: none !important;
 }
+
+/* 結果報表頁面專屬樣式 - 採用 download.css 設計風格 */
+
+/* 頁面標題樣式 */
+.page-header {
+    text-align: center;
+    margin-bottom: 48px;
+    padding: 48px 0;
+    position: relative;
+}
+
+.page-header::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(33, 150, 243, 0.03) 0%, transparent 70%);
+    z-index: -1;
+}
+
+.page-title {
+    font-size: 2.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 4px rgba(0, 33, 71, 0.05);
+}
+
+/* 表格容器美化 */
+.table-container {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: relative;
+}
+
+/* 固定表頭，避免捲軸出現在標題旁 */
+.table-wrapper {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 600px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    margin-top: 1px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    background: var(--bg-primary);
+    position: relative;
+}
+
+.data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-table th {
+    background: #2196F3;
+    color: white;
+    padding: 14px 20px;
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    border-bottom: 2px solid #1976D2;
+    position: relative;
+}
+
+/* 排序和篩選圖標 */
+.data-table th .sort-filter-icons {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+}
+
+.data-table th .sort-icon,
+.data-table th .filter-icon {
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.data-table th:hover .sort-icon,
+.data-table th:hover .filter-icon {
+    opacity: 1;
+}
+
+.data-table th.sorted .sort-icon {
+    opacity: 1;
+    color: #FFD54F;
+}
+
+.data-table th.filtered .filter-icon {
+    opacity: 1;
+    color: #FFD54F;
+}
+
+/* 美化捲軸 */
+.table-wrapper::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: var(--nordic-blue-light);
+    border-radius: 5px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--nordic-blue);
+}
+
+.table-wrapper::-webkit-scrollbar-corner {
+    background: var(--bg-tertiary);
+}
+
+/* 樞紐分析表美化 */
+.pivot-container {
+    background: var(--bg-primary);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: relative;
+}
+
+.pivot-container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--nordic-gradient);
+}
+
+.pivot-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pivot-table th {
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+    color: white;
+    padding: 16px;
+    font-weight: 600;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.pivot-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-light);
+    transition: background-color 0.2s ease;
+}
+
+.pivot-table tr:hover td {
+    background: var(--bg-hover);
+}
+
+/* 數值欄位右對齊 */
+.pivot-table td.numeric {
+    text-align: right;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* 分組標題 */
+.pivot-table tr.group-header td {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 結果卡片美化 */
+.result-card {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid var(--border-light);
+}
+
+.result-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.result-stats {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.stat-item {
+    text-align: center;
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* 改善統計顯示 */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.summary-item {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    text-align: center;
+    border: 1px solid var(--border-light);
+}
+
+.summary-item h4 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.summary-item .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--nordic-blue);
+}
+
+.summary-item.error .value {
+    color: var(--danger);
+}

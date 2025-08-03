@@ -17,6 +17,7 @@ from sftp_downloader import SFTPDownloader
 from file_comparator import FileComparator
 from zip_packager import ZipPackager
 import utils
+from flask import make_response
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -101,13 +102,22 @@ class WebProcessor:
             
             self.update_progress(20, 'downloading', '正在下載檔案...')
             download_dir = os.path.join('downloads', self.task_id)
+            
+            # 確保下載目錄存在
+            if not os.path.exists(download_dir):
+                os.makedirs(download_dir)
+                
             report_path = self.downloader.download_from_excel(excel_file, download_dir)
             
-            # 模擬下載統計
+            # 獲取下載統計
+            files_in_dir = []
+            for root, dirs, files in os.walk(download_dir):
+                files_in_dir.extend(files)
+                
             stats = {
-                'total': 15,
-                'downloaded': 12,
-                'skipped': 3,
+                'total': len(files_in_dir),
+                'downloaded': len(files_in_dir),
+                'skipped': 0,
                 'failed': 0
             }
             
@@ -118,6 +128,11 @@ class WebProcessor:
             # 步驟 2：比較
             self.update_progress(50, 'comparing', '正在執行所有比對...')
             compare_dir = os.path.join('compare_results', self.task_id)
+            
+            # 確保比對目錄存在
+            if not os.path.exists(compare_dir):
+                os.makedirs(compare_dir)
+                
             all_results = self.comparator.compare_all_scenarios(download_dir, compare_dir)
             
             self.results['compare_results'] = all_results
@@ -156,12 +171,13 @@ class WebProcessor:
             self.update_progress(100, 'completed', '所有處理完成！')
             
             # 記錄活動
-            add_activity('完成一步到位處理', 'success', '15 個模組，3 個比對情境')
+            add_activity('完成一步到位處理', 'success', f'{stats["downloaded"]} 個檔案，3 個比對情境')
             
             # 儲存結果供樞紐分析使用
             save_task_results(self.task_id, all_results)
             
         except Exception as e:
+            self.logger.error(f"One-step processing error: {str(e)}")
             self.update_progress(0, 'error', f'處理失敗：{str(e)}')
             add_activity('一步到位處理失敗', 'error', str(e))
             raise
@@ -363,7 +379,34 @@ class WebProcessor:
                 # 執行所有比對情境
                 self.update_progress(30, 'comparing', '正在執行所有比對情境...')
                 all_results = self.comparator.compare_all_scenarios(source_dir, compare_dir)
-                self.results['compare_results'] = all_results
+                
+                # 確保資料結構正確
+                self.results['compare_results'] = {
+                    'master_vs_premp': all_results.get('master_vs_premp', {
+                        'success': 0,
+                        'failed': 0,
+                        'modules': [],
+                        'failed_modules': [],
+                        'reports': []
+                    }),
+                    'premp_vs_wave': all_results.get('premp_vs_wave', {
+                        'success': 0,
+                        'failed': 0,
+                        'modules': [],
+                        'failed_modules': [],
+                        'reports': []
+                    }),
+                    'wave_vs_backup': all_results.get('wave_vs_backup', {
+                        'success': 0,
+                        'failed': 0,
+                        'modules': [],
+                        'failed_modules': [],
+                        'reports': []
+                    }),
+                    'failed': all_results.get('failed', 0),
+                    'failed_modules': all_results.get('failed_modules', []),
+                    'summary_report': all_results.get('summary_report', '')
+                }
             else:
                 # 執行單一比對情境
                 self.update_progress(30, 'comparing', f'正在執行 {scenarios} 比對...')
@@ -976,67 +1019,55 @@ def export_excel(task_id):
 def export_zip(task_id):
     """匯出 ZIP 檔案 API - 包含所有結果"""
     try:
-        # 查找 ZIP 檔案
-        zip_path = None
+        import tempfile
+        import shutil
+        from zip_packager import ZipPackager
         
-        # 1. 從處理狀態中查找
-        if task_id in processing_status:
-            task_data = processing_status[task_id]
-            results = task_data.get('results', {})
-            zip_path = results.get('zip_file')
-        
-        # 2. 從 zip_output 目錄中查找
-        if not zip_path:
-            zip_dir = os.path.join('zip_output', task_id)
-            if os.path.exists(zip_dir):
-                for file in os.listdir(zip_dir):
-                    if file.endswith('.zip'):
-                        zip_path = os.path.join(zip_dir, file)
-                        break
-        
-        # 3. 如果還是沒有，動態創建
-        if not zip_path:
-            # 創建 ZIP 檔案
-            from zip_packager import ZipPackager
+        # 創建臨時目錄
+        with tempfile.TemporaryDirectory() as temp_dir:
+            files_added = False
+            
+            # 複製下載的檔案
+            download_dir = os.path.join('downloads', task_id)
+            if os.path.exists(download_dir):
+                dest_downloads = os.path.join(temp_dir, 'downloads')
+                shutil.copytree(download_dir, dest_downloads)
+                files_added = True
+            
+            # 複製比對結果
+            compare_dir = os.path.join('compare_results', task_id)
+            if os.path.exists(compare_dir):
+                dest_compare = os.path.join(temp_dir, 'compare_results')
+                shutil.copytree(compare_dir, dest_compare)
+                files_added = True
+            
+            # 確保有檔案要打包
+            if not files_added:
+                # 至少創建一個 readme 文件
+                readme_path = os.path.join(temp_dir, 'README.txt')
+                with open(readme_path, 'w', encoding='utf-8') as f:
+                    f.write(f'任務 ID: {task_id}\n')
+                    f.write(f'創建時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
+                    f.write('暫無比對結果\n')
+            
+            # 創建 ZIP
             packager = ZipPackager()
+            timestamp = utils.get_timestamp()
             
-            # 收集所有相關檔案
-            import tempfile
-            import shutil
+            # 創建臨時 ZIP 檔案
+            temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+            temp_zip.close()
             
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # 複製下載的檔案
-                download_dir = os.path.join('downloads', task_id)
-                if os.path.exists(download_dir):
-                    dest_downloads = os.path.join(temp_dir, 'downloads')
-                    shutil.copytree(download_dir, dest_downloads)
-                
-                # 複製比對結果
-                compare_dir = os.path.join('compare_results', task_id)
-                if os.path.exists(compare_dir):
-                    dest_compare = os.path.join(temp_dir, 'compare_results')
-                    shutil.copytree(compare_dir, dest_compare)
-                
-                # 創建 ZIP
-                timestamp = utils.get_timestamp()
-                zip_name = f"all_results_{task_id}_{timestamp}.zip"
-                zip_output_dir = os.path.join('zip_output', task_id)
-                
-                if not os.path.exists(zip_output_dir):
-                    os.makedirs(zip_output_dir)
-                
-                zip_path = os.path.join(zip_output_dir, zip_name)
-                zip_path = packager.create_zip(temp_dir, zip_path)
-        
-        # 返回 ZIP 檔案
-        if zip_path and os.path.exists(zip_path):
+            # 打包
+            zip_path = packager.create_zip(temp_dir, temp_zip.name)
+            
+            # 返回檔案
             return send_file(
                 zip_path,
                 as_attachment=True,
-                download_name=f'results_{task_id}.zip'
+                download_name=f'results_{task_id}.zip',
+                mimetype='application/zip'
             )
-        
-        return jsonify({'error': '找不到結果檔案'}), 404
         
     except Exception as e:
         app.logger.error(f'Export ZIP error: {e}')
@@ -1406,6 +1437,742 @@ def get_task_data(task_id):
     except Exception as e:
         app.logger.error(f'Get task data error: {e}')
         return None
+
+
+@app.route('/api/export-html/<task_id>')
+def export_html(task_id):
+    """匯出 HTML 報告 API"""
+    try:
+        # 獲取任務資料
+        data = get_task_data(task_id)
+        if not data:
+            return jsonify({'error': '找不到任務資料'}), 404
+        
+        # 生成 HTML 報告
+        html_content = generate_html_report(task_id, data)
+        
+        # 返回 HTML 檔案
+        response = make_response(html_content)
+        response.headers['Content-Type'] = 'text/html; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename=report_{task_id}.html'
+        
+        return response
+        
+    except Exception as e:
+        app.logger.error(f'Export HTML error: {e}')
+        return jsonify({'error': str(e)}), 500
+
+def generate_html_report(task_id, data):
+    """生成 HTML 報告內容"""
+    # 獲取內嵌的 CSS 樣式
+    css_content = get_embedded_report_styles()
+    
+    # 生成資料表格 HTML
+    tables_html = ""
+    ordered_sheets = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對']
+    
+    for sheet_name in ordered_sheets:
+        if sheet_name in data:
+            sheet_data = data[sheet_name]
+            tables_html += f"""
+            <div class="sheet-section">
+                <h2 class="sheet-title">
+                    <i class="fas fa-table"></i> {sheet_name}
+                </h2>
+                <div class="table-container">
+                    <div class="table-wrapper">
+                        {generate_table_html(sheet_data)}
+                    </div>
+                </div>
+            </div>
+            """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>比對報告 - {task_id}</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>{css_content}</style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-chart-line"></i> 比對結果報告
+                </h1>
+                <p class="page-subtitle">任務 ID: {task_id}</p>
+                <p class="page-subtitle">生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </div>
+            
+            <div class="report-content">
+                {tables_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+def generate_html_report(task_id, data):
+    """生成 HTML 報告內容"""
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>比對報告 - {task_id}</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+            {get_export_styles()}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-chart-line"></i> 比對結果報告
+                </h1>
+                <p class="page-subtitle">任務 ID: {task_id}</p>
+            </div>
+            
+            <div class="report-content">
+                {generate_data_tables(data)}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+def get_export_styles():
+    """獲取匯出 HTML 的樣式（與 get_embedded_report_styles 不同，這是更簡潔的版本）"""
+    return """
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #FAFBFD;
+        color: #1A237E;
+        line-height: 1.6;
+    }
+    
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    /* 頁面標題 - 與 download.css 風格一致 */
+    .page-header {
+        text-align: center;
+        margin-bottom: 48px;
+        padding: 48px 0;
+        position: relative;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    }
+    
+    .page-header::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120%;
+        height: 100%;
+        background: radial-gradient(ellipse at center, rgba(33, 150, 243, 0.03) 0%, transparent 70%);
+        z-index: -1;
+    }
+    
+    .page-title {
+        font-size: 2.75rem;
+        font-weight: 600;
+        color: #1A237E;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        letter-spacing: -0.02em;
+        text-shadow: 0 2px 4px rgba(0, 33, 71, 0.05);
+    }
+    
+    .page-title i {
+        font-size: 2.5rem;
+        color: #2196F3;
+        filter: drop-shadow(0 2px 4px rgba(33, 150, 243, 0.15));
+    }
+    
+    .page-subtitle {
+        font-size: 1.125rem;
+        color: #5C6BC0;
+        font-weight: 400;
+    }
+    
+    /* 報表內容區塊 */
+    .report-content {
+        margin-top: 32px;
+    }
+    
+    .sheet-section {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        margin-bottom: 32px;
+        overflow: hidden;
+        border: 1px solid #EDF2FC;
+        transition: all 0.3s ease;
+    }
+    
+    .sheet-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    }
+    
+    .sheet-title {
+        background: #2196F3;
+        color: white;
+        padding: 24px 32px;
+        margin: 0;
+        font-size: 1.375rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .sheet-title::before {
+        content: "";
+        position: absolute;
+        top: -100%;
+        right: -25%;
+        width: 70%;
+        height: 300%;
+        background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+        transform: rotate(35deg);
+        opacity: 0.5;
+    }
+    
+    .sheet-title i {
+        font-size: 1.25rem;
+    }
+    
+    /* 表格容器 */
+    .table-container {
+        overflow-x: auto;
+        background: #FAFBFD;
+    }
+    
+    .table-wrapper {
+        min-width: 100%;
+        overflow-x: auto;
+    }
+    
+    /* 表格樣式 */
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        background: white;
+    }
+    
+    .data-table th {
+        background: #E3F2FD;
+        color: #1976D2;
+        padding: 14px 20px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #BBDEFB;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .data-table td {
+        padding: 12px 20px;
+        border-bottom: 1px solid #EDF2FC;
+        color: #424242;
+    }
+    
+    .data-table tr:hover td {
+        background: #F5F9FF;
+    }
+    
+    .data-table tr:nth-child(even) td {
+        background: #FAFBFD;
+    }
+    
+    .data-table tr:nth-child(even):hover td {
+        background: #F0F7FF;
+    }
+    
+    /* 特殊欄位樣式 */
+    .highlight-red {
+        color: #F44336 !important;
+        font-weight: 600;
+    }
+    
+    .highlight-blue {
+        color: #2196F3 !important;
+    }
+    
+    /* 徽章樣式 */
+    .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+    
+    .badge-success {
+        background: #E8F5E9;
+        color: #4CAF50;
+        border: 1px solid #4CAF50;
+    }
+    
+    .badge-danger {
+        background: #FFEBEE;
+        color: #F44336;
+        border: 1px solid #F44336;
+    }
+    
+    .badge-warning {
+        background: #FFF3E0;
+        color: #FF9800;
+        border: 1px solid #FF9800;
+    }
+    
+    .badge-info {
+        background: #E3F2FD;
+        color: #2196F3;
+        border: 1px solid #2196F3;
+    }
+    
+    /* 連結樣式 */
+    .link {
+        color: #2196F3;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .link:hover {
+        color: #1976D2;
+        text-decoration: underline;
+    }
+    
+    .link i {
+        margin-left: 4px;
+        font-size: 0.875em;
+    }
+    
+    /* 空資料提示 */
+    .no-data {
+        text-align: center;
+        padding: 60px;
+        color: #9FA8DA;
+        font-size: 1.125rem;
+    }
+    
+    .no-data i {
+        font-size: 3rem;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+    
+    /* 列印樣式 */
+    @media print {
+        body {
+            background: white;
+        }
+        
+        .page-header {
+            box-shadow: none;
+            border: 1px solid #E0E0E0;
+            page-break-after: avoid;
+        }
+        
+        .sheet-section {
+            box-shadow: none;
+            border: 1px solid #E0E0E0;
+            page-break-inside: avoid;
+            margin-bottom: 20px;
+        }
+        
+        .sheet-section:hover {
+            transform: none;
+        }
+        
+        .table-container {
+            overflow: visible;
+        }
+        
+        .data-table {
+            font-size: 0.8rem;
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 8px 12px;
+        }
+    }
+    
+    /* 響應式設計 */
+    @media (max-width: 768px) {
+        .container {
+            padding: 10px;
+        }
+        
+        .page-header {
+            padding: 24px 16px;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+        }
+        
+        .sheet-title {
+            padding: 16px 20px;
+            font-size: 1.125rem;
+        }
+        
+        .data-table {
+            font-size: 0.8rem;
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 8px 12px;
+        }
+    }
+    """
+
+def generate_data_tables(data):
+    """生成所有資料表的 HTML"""
+    if not data:
+        return '<div class="no-data"><i class="fas fa-inbox"></i><p>無資料</p></div>'
+    
+    tables_html = ""
+    
+    # 按照固定順序處理資料表
+    sheet_order = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對']
+    
+    # 先處理已定義順序的資料表
+    for sheet_name in sheet_order:
+        if sheet_name in data:
+            sheet_data = data[sheet_name]
+            icon = get_sheet_icon(sheet_name)
+            tables_html += f"""
+            <div class="sheet-section">
+                <h2 class="sheet-title">
+                    <i class="fas {icon}"></i> {format_sheet_name(sheet_name)}
+                </h2>
+                <div class="table-container">
+                    <div class="table-wrapper">
+                        {generate_single_table_html(sheet_name, sheet_data)}
+                    </div>
+                </div>
+            </div>
+            """
+    
+    # 再處理其他未定義的資料表
+    for sheet_name, sheet_data in data.items():
+        if sheet_name not in sheet_order:
+            icon = 'fa-table'
+            tables_html += f"""
+            <div class="sheet-section">
+                <h2 class="sheet-title">
+                    <i class="fas {icon}"></i> {format_sheet_name(sheet_name)}
+                </h2>
+                <div class="table-container">
+                    <div class="table-wrapper">
+                        {generate_single_table_html(sheet_name, sheet_data)}
+                    </div>
+                </div>
+            </div>
+            """
+    
+    return tables_html
+
+def generate_single_table_html(sheet_name, sheet_data):
+    """生成單一表格的 HTML"""
+    if not sheet_data or 'data' not in sheet_data:
+        return '<div class="no-data"><i class="fas fa-inbox"></i><p>此資料表無內容</p></div>'
+    
+    columns = sheet_data.get('columns', [])
+    data = sheet_data.get('data', [])
+    
+    if not columns or not data:
+        return '<div class="no-data"><i class="fas fa-inbox"></i><p>此資料表無內容</p></div>'
+    
+    # 開始建立表格
+    html = '<table class="data-table">'
+    
+    # 表頭
+    html += '<thead><tr>'
+    for col in columns:
+        # 特殊處理某些欄位的標題樣式
+        header_class = ''
+        if col in ['problem', '問題', 'base_short', 'compare_short', 'base_revision', 'compare_revision']:
+            header_class = 'highlight-header'
+        html += f'<th class="{header_class}">{col}</th>'
+    html += '</tr></thead>'
+    
+    # 表身
+    html += '<tbody>'
+    for row_idx, row in enumerate(data):
+        html += '<tr>'
+        for col in columns:
+            value = row.get(col, '')
+            cell_class = ''
+            formatted_value = str(value) if value is not None else ''
+            
+            # 特殊處理某些欄位
+            if col in ['problem', '問題'] and formatted_value:
+                cell_class = 'highlight-red'
+            elif col == '狀態':
+                if formatted_value == '新增':
+                    formatted_value = f'<span class="badge badge-success">{formatted_value}</span>'
+                elif formatted_value == '刪除':
+                    formatted_value = f'<span class="badge badge-danger">{formatted_value}</span>'
+            elif col == 'has_wave':
+                if formatted_value == 'Y':
+                    formatted_value = f'<span class="badge badge-info">Y</span>'
+                elif formatted_value == 'N':
+                    formatted_value = f'<span class="badge badge-warning">N</span>'
+            elif col in ['base_link', 'compare_link', 'link'] and formatted_value:
+                # 處理連結
+                if formatted_value.startswith('http'):
+                    short_url = formatted_value.split('/')[-1][:30] + '...' if len(formatted_value) > 50 else formatted_value
+                    formatted_value = f'<a href="{formatted_value}" target="_blank" class="link" title="{formatted_value}">{short_url} <i class="fas fa-external-link-alt"></i></a>'
+            elif col in ['base_short', 'compare_short', 'base_revision', 'compare_revision']:
+                # Hash 值用等寬字體
+                formatted_value = f'<code>{formatted_value}</code>'
+            
+            html += f'<td class="{cell_class}">{formatted_value}</td>'
+        html += '</tr>'
+    html += '</tbody>'
+    
+    html += '</table>'
+    return html
+
+def get_sheet_icon(sheet_name):
+    """根據資料表名稱返回對應的圖標"""
+    icon_map = {
+        'revision_diff': 'fa-code-branch',
+        'branch_error': 'fa-exclamation-triangle',
+        'lost_project': 'fa-folder-minus',
+        'version_diff': 'fa-file-alt',
+        '無法比對': 'fa-times-circle'
+    }
+    return icon_map.get(sheet_name, 'fa-table')
+
+def format_sheet_name(sheet_name):
+    """格式化資料表名稱為更友好的顯示名稱"""
+    name_map = {
+        'revision_diff': 'Revision 差異',
+        'branch_error': '分支錯誤',
+        'lost_project': '新增/刪除專案',
+        'version_diff': '版本檔案差異',
+        '無法比對': '無法比對的模組'
+    }
+    return name_map.get(sheet_name, sheet_name)
+
+def get_embedded_report_styles():
+    """獲取內嵌的報告樣式"""
+    return """
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #F5F7FA;
+        margin: 0;
+        padding: 0;
+        color: #1A237E;
+    }
+    
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    .page-header {
+        text-align: center;
+        margin-bottom: 48px;
+        padding: 48px 0;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    }
+    
+    .page-title {
+        font-size: 2.75rem;
+        font-weight: 600;
+        color: #1A237E;
+        margin-bottom: 8px;
+    }
+    
+    .page-subtitle {
+        font-size: 1.125rem;
+        color: #5C6BC0;
+        margin: 0;
+    }
+    
+    .sheet-section {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        margin-bottom: 24px;
+        overflow: hidden;
+    }
+    
+    .sheet-title {
+        background: #2196F3;
+        color: white;
+        padding: 20px 32px;
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    .table-container {
+        padding: 0;
+        overflow-x: auto;
+    }
+    
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    
+    .data-table th {
+        background: #E3F2FD;
+        color: #1976D2;
+        padding: 14px 20px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #BBDEFB;
+        position: sticky;
+        top: 0;
+    }
+    
+    .data-table td {
+        padding: 12px 20px;
+        border-bottom: 1px solid #E8EAF6;
+    }
+    
+    .data-table tr:hover td {
+        background: #F5F7FA;
+    }
+    
+    .data-table td.highlight-red {
+        color: #F44336;
+        font-weight: 600;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+    
+    .badge-success {
+        background: #E8F5E9;
+        color: #4CAF50;
+    }
+    
+    .badge-danger {
+        background: #FFEBEE;
+        color: #F44336;
+    }
+    
+    .link {
+        color: #2196F3;
+        text-decoration: none;
+    }
+    
+    .link:hover {
+        text-decoration: underline;
+    }
+    
+    @media print {
+        .page-header {
+            box-shadow: none;
+            border: 1px solid #E0E0E0;
+        }
+        
+        .sheet-section {
+            page-break-inside: avoid;
+            box-shadow: none;
+            border: 1px solid #E0E0E0;
+        }
+    }
+    """
+
+def generate_table_html(sheet_data):
+    """生成表格 HTML"""
+    if not sheet_data or 'data' not in sheet_data:
+        return '<p>無資料</p>'
+    
+    columns = sheet_data.get('columns', [])
+    data = sheet_data.get('data', [])
+    
+    if not columns or not data:
+        return '<p>無資料</p>'
+    
+    # 開始建立表格
+    html = '<table class="data-table">'
+    
+    # 表頭
+    html += '<thead><tr>'
+    for col in columns:
+        html += f'<th>{col}</th>'
+    html += '</tr></thead>'
+    
+    # 表身
+    html += '<tbody>'
+    for row in data:
+        html += '<tr>'
+        for col in columns:
+            value = row.get(col, '')
+            cell_class = ''
+            
+            # 特殊處理某些欄位
+            if col in ['problem', '問題'] and value:
+                cell_class = 'highlight-red'
+            elif col == '狀態':
+                if value == '新增':
+                    value = f'<span class="badge badge-success">{value}</span>'
+                elif value == '刪除':
+                    value = f'<span class="badge badge-danger">{value}</span>'
+            elif col in ['base_link', 'compare_link', 'link'] and value:
+                # 處理連結
+                if value.startswith('http'):
+                    value = f'<a href="{value}" target="_blank" class="link">{value} <i class="fas fa-external-link-alt"></i></a>'
+            
+            html += f'<td class="{cell_class}">{value}</td>'
+        html += '</tr>'
+    html += '</tbody>'
+    
+    html += '</table>'
+    return html
                     
 if __name__ == '__main__':
     # 開發模式執行

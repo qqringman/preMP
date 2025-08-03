@@ -931,22 +931,52 @@ function startNew() {
 
 // 重置到表單
 function resetToForm() {
-    document.getElementById('mainForm').classList.remove('hidden');
-    document.getElementById('progressContainer').classList.add('hidden');
-    document.getElementById('resultContainer').classList.add('hidden');
+    // 確保元素存在再設定
+    const elements = {
+        uploadArea: document.getElementById('uploadArea'),
+        configForm: document.getElementById('configForm'),
+        processingSteps: document.getElementById('processingSteps'),
+        completedResults: document.getElementById('completedResults'),
+        recentActivities: document.getElementById('recentActivities')
+    };
     
-    // 清空日誌
-    document.getElementById('logContent').innerHTML = `
-        <div class="log-entry">
-            <span class="log-time">--:--:--</span>
-            <span class="log-icon"><i class="fas fa-info-circle"></i></span>
-            <span class="log-message">等待開始...</span>
-        </div>
-    `;
+    // 顯示上傳區域和配置表單
+    if (elements.uploadArea) {
+        elements.uploadArea.classList.remove('hidden');
+    }
+    if (elements.configForm) {
+        elements.configForm.classList.remove('hidden');
+    }
     
-    // 重置進度
-    document.getElementById('progressFill').style.width = '0%';
-    document.getElementById('progressText').textContent = '0%';
+    // 隱藏處理步驟和結果
+    if (elements.processingSteps) {
+        elements.processingSteps.classList.add('hidden');
+    }
+    if (elements.completedResults) {
+        elements.completedResults.classList.add('hidden');
+    }
+    
+    // 重置最近活動
+    if (elements.recentActivities) {
+        elements.recentActivities.innerHTML = '<p class="text-muted">暫無活動記錄</p>';
+    }
+    
+    // 重置變數
+    currentTaskId = null;
+    uploadedFile = null;
+    currentStep = null;
+    
+    // 重置文件資訊
+    const fileInfo = document.getElementById('fileInfo');
+    if (fileInfo) {
+        fileInfo.classList.add('hidden');
+    }
+    
+    // 重置處理按鈕
+    const processBtn = document.getElementById('processBtn');
+    if (processBtn) {
+        processBtn.disabled = true;
+    }
 }
 
 // 輪詢任務狀態（備用方案）
