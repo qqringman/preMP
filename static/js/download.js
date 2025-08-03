@@ -1250,44 +1250,37 @@ function showDownloadResults(results) {
     
     // 生成摘要 - 使用北歐藍配色並添加點擊功能
     const stats = results.stats || {};
+    // 在 showDownloadResults 函數中
     const summary = `
         <div class="summary-grid">
-            <div class="summary-item clickable" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
-                <i class="fas fa-check-circle text-success"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.downloaded || 0}</div>
-                    <div class="summary-label">成功下載</div>
-                </div>
-            </div>
-            <div class="summary-item clickable" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
-                <i class="fas fa-forward text-info"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.skipped || 0}</div>
-                    <div class="summary-label">跳過檔案</div>
-                </div>
-            </div>
-            ${stats.failed > 0 ? `
-                <div class="summary-item clickable" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
-                    <i class="fas fa-times-circle text-danger"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${stats.failed}</div>
-                        <div class="summary-label">下載失敗</div>
-                    </div>
-                </div>
-            ` : ''}
             <div class="summary-item clickable" onclick="showFilesList('total')" title="點擊查看所有檔案">
-                <i class="fas fa-folder-tree text-info"></i>
+                <i class="fas fa-folder-tree"></i>
                 <div class="summary-content">
                     <div class="summary-value">${stats.total || 0}</div>
                     <div class="summary-label">總檔案數</div>
                 </div>
             </div>
-        </div>
-        
-        <!-- 添加提示文字 -->
-        <div class="summary-hint">
-            <i class="fas fa-info-circle"></i>
-            <span>提示：點擊上方統計數字可查看詳細的檔案列表</span>
+            <div class="summary-item clickable" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
+                <i class="fas fa-check-circle"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.downloaded || 0}</div>
+                    <div class="summary-label">已下載</div>
+                </div>
+            </div>
+            <div class="summary-item clickable" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
+                <i class="fas fa-forward"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.skipped || 0}</div>
+                    <div class="summary-label">已跳過</div>
+                </div>
+            </div>
+            <div class="summary-item clickable" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
+                <i class="fas fa-times-circle"></i>
+                <div class="summary-content">
+                    <div class="summary-value">${stats.failed || 0}</div>
+                    <div class="summary-label">失敗</div>
+                </div>
+            </div>
         </div>
     `;
     
@@ -1313,18 +1306,34 @@ function generateFolderTree(structure) {
 }
 
 // 建立樹狀結構 HTML - 改善顏色
+// 建立樹狀結構 HTML - 使用不同圖標
 function buildTreeHTML(node, name, parentPath) {
     let html = '';
     
-    // 如果是字串，表示是檔案（包含完整路徑）
     if (typeof node === 'string') {
         const fileName = name;
-        const filePath = node; // node 就是完整路徑
+        const filePath = node;
+        
+        // 根據檔案名稱決定圖標
+        let fileIcon = 'fa-file';
+        const lowerFileName = fileName.toLowerCase();
+        
+        if (lowerFileName === 'manifest.xml') {
+            fileIcon = 'fa-file-code';
+        } else if (lowerFileName === 'version.txt') {
+            fileIcon = 'fa-file-lines';
+        } else if (lowerFileName === 'f_version.txt') {
+            fileIcon = 'fa-file-signature';
+        } else if (lowerFileName.endsWith('.xml')) {
+            fileIcon = 'fa-file-code';
+        } else if (lowerFileName.endsWith('.txt')) {
+            fileIcon = 'fa-file-alt';
+        }
         
         html = `
             <div class="tree-node">
                 <div class="tree-node-content file" data-path="${filePath}" ondblclick="previewFile('${filePath}')">
-                    <i class="tree-icon tree-file fas fa-file"></i>
+                    <i class="tree-icon tree-file fas ${fileIcon}"></i>
                     <span class="tree-name">${fileName}</span>
                     <div class="tree-actions">
                         <button class="tree-action preview" onclick="event.stopPropagation(); previewFile('${filePath}')" title="預覽">
@@ -1338,7 +1347,6 @@ function buildTreeHTML(node, name, parentPath) {
             </div>
         `;
     } else if (typeof node === 'object') {
-        // 資料夾
         if (name) {
             html = `
                 <div class="tree-node">
@@ -1350,7 +1358,6 @@ function buildTreeHTML(node, name, parentPath) {
             `;
         }
         
-        // 遞迴處理子項目
         for (const [key, value] of Object.entries(node)) {
             const currentPath = parentPath ? `${parentPath}/${name}` : name;
             html += buildTreeHTML(value, key, currentPath);
@@ -1370,14 +1377,16 @@ function toggleFolder(element) {
     const children = node.querySelector('.tree-children');
     const icon = element.querySelector('.tree-folder');
     
-    if (children.style.display === 'none') {
-        children.style.display = 'block';
-        icon.classList.remove('fa-folder');
-        icon.classList.add('fa-folder-open');
-    } else {
-        children.style.display = 'none';
-        icon.classList.remove('fa-folder-open');
-        icon.classList.add('fa-folder');
+    if (children) {
+        if (children.style.display === 'none') {
+            children.style.display = 'block';
+            icon.classList.remove('fa-folder');
+            icon.classList.add('fa-folder-open');
+        } else {
+            children.style.display = 'none';
+            icon.classList.remove('fa-folder-open');
+            icon.classList.add('fa-folder');
+        }
     }
 }
 
@@ -1401,21 +1410,27 @@ async function previewFile(path) {
         filenameText.textContent = fileName;
     }
     
-    // 設定檔案類型類別和圖標
+    // 在 previewFile 函數中，設定預覽視窗的檔案圖標
     if (filenameElement) {
         filenameElement.className = `preview-filename ${fileExt}`;
         const icon = filenameElement.querySelector('i');
         if (icon) {
-            switch(fileExt) {
-                case 'xml':
-                    icon.className = 'fas fa-code';
-                    break;
-                case 'txt':
-                case 'log':
-                    icon.className = 'fas fa-file-alt';
-                    break;
-                default:
-                    icon.className = 'fas fa-file';
+            const lowerFileName = fileName.toLowerCase();
+            
+            if (lowerFileName === 'manifest.xml') {
+                icon.className = 'fas fa-code';
+            } else if (lowerFileName === 'version.txt') {
+                icon.className = 'fas fa-file-alt';
+            } else if (lowerFileName === 'f_version.txt') {
+                icon.className = 'fas fa-file-medical';
+            } else if (fileExt === 'xml') {
+                icon.className = 'fas fa-code';
+            } else if (fileExt === 'txt') {
+                icon.className = 'fas fa-file-alt';
+            } else if (fileExt === 'log') {
+                icon.className = 'fas fa-file-alt';
+            } else {
+                icon.className = 'fas fa-file';
             }
         }
     }
@@ -1440,17 +1455,23 @@ async function previewFile(path) {
             content.className = 'preview-content xml';
             
         } else if (fileName.toLowerCase().includes('version') || fileExt === 'txt') {
-            // Version.txt 高亮 - 統一風格
             let highlightedContent = response.content
-                .replace(/(GIT Project:|Local Path :|commit |Branch:|Tag Info:|P_[A-Z_]+:)/gi, 
+                // GIT Project 標籤
+                .replace(/(GIT Project\s*:|Local Path\s*:|commit\s*:|Branch\s*:|Tag info\s*:)/gi, 
                     '<span class="git-label">$1</span>')
-                .replace(/(\/[^\s]+)/g, '<span class="git-path">$1</span>')
+                // 路徑
+                .replace(/(\/[a-zA-Z0-9_\-\/]+)/g, '<span class="git-path">$1</span>')
+                // Commit hash (40字元的16進位)
                 .replace(/\b([a-f0-9]{40})\b/g, '<span class="git-commit">$1</span>')
-                .replace(/(rtk\/realtek\/[^\s]+)/g, '<span class="git-branch">$1</span>');
+                // Branch 名稱
+                .replace(/(rtk\/[^\s]+)/g, '<span class="git-branch">$1</span>')
+                // HEAD 標記
+                .replace(/\(HEAD\)/g, '<span class="git-head">(HEAD)</span>')
+                // Tag submissions
+                .replace(/(submissions\/\d+)/g, '<span class="git-tag">$1</span>');
             
             content.innerHTML = highlightedContent;
             content.className = 'preview-content plain-text';
-            
         } else {
             content.textContent = response.content;
             content.className = 'preview-content';
@@ -1466,39 +1487,81 @@ async function previewFile(path) {
     }
 }
 
-// 複製預覽內容
+// 複製預覽內容 - 加強錯誤處理
 function copyPreviewContent() {
     const content = document.getElementById('previewContent');
     const copyBtn = document.querySelector('.btn-copy');
     
     if (!content) {
-        utils.showNotification('找不到預覽內容', 'error');
+        console.error('找不到預覽內容元素');
         return;
     }
     
-    const text = content.textContent || content.innerText;
+    // 獲取純文字內容
+    const text = content.textContent || content.innerText || '';
     
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-            utils.showNotification('內容已複製到剪貼簿', 'success');
-            
-            // 按鈕動畫反饋
+    if (!text) {
+        console.error('預覽內容為空');
+        return;
+    }
+    
+    // 創建臨時 textarea
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.cssText = 'position: fixed; left: -9999px; top: -9999px;';
+    document.body.appendChild(textarea);
+    
+    try {
+        // 選取文字
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        
+        // 執行複製
+        const successful = document.execCommand('copy');
+        
+        if (successful) {
+            // 成功提示
             if (copyBtn) {
                 const originalHTML = copyBtn.innerHTML;
                 copyBtn.innerHTML = '<i class="fas fa-check"></i> 已複製';
-                copyBtn.style.background = 'rgba(76, 175, 80, 0.3)';
+                copyBtn.style.cssText = 'background: rgba(76, 175, 80, 0.2); border-color: #4CAF50;';
                 
                 setTimeout(() => {
                     copyBtn.innerHTML = originalHTML;
-                    copyBtn.style.background = '';
+                    copyBtn.style.cssText = '';
                 }, 2000);
             }
-        }).catch(err => {
-            console.error('複製失敗:', err);
-            fallbackCopyToClipboard(text);
-        });
-    } else {
-        fallbackCopyToClipboard(text);
+            
+            // 顯示通知
+            if (typeof window.utils !== 'undefined' && window.utils.showNotification) {
+                window.utils.showNotification('內容已複製到剪貼簿', 'success');
+            } else {
+                console.log('內容已複製到剪貼簿');
+            }
+        } else {
+            throw new Error('複製命令執行失敗');
+        }
+        
+    } catch (err) {
+        console.error('複製失敗:', err);
+        
+        // 嘗試使用 Clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    if (typeof window.utils !== 'undefined' && window.utils.showNotification) {
+                        window.utils.showNotification('內容已複製到剪貼簿', 'success');
+                    }
+                })
+                .catch(err => {
+                    console.error('Clipboard API 複製失敗:', err);
+                    alert('複製失敗，請手動選取文字後按 Ctrl+C 複製');
+                });
+        } else {
+            alert('複製失敗，請手動選取文字後按 Ctrl+C 複製');
+        }
+    } finally {
+        document.body.removeChild(textarea);
     }
 }
 
