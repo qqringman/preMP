@@ -5,6 +5,7 @@ let sourceDirectory = null;
 let asyncDownloadUrl = null;
 let currentServerPath = '/home/vince_lin/ai/preMP/downloads';
 let selectedServerDirectory = null;
+let currentFoldersList = [];
 
 // 更新 DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
@@ -65,17 +66,20 @@ function debounce(func, wait) {
 
 // 載入伺服器資料夾
 async function loadServerFolders(path) {
-    const folderList = document.getElementById('folderList');
-    const currentPathDisplay = document.getElementById('currentPathDisplay');
+    const browserContent = document.getElementById('serverBrowser');
     
-    // 更新當前路徑顯示
-    currentPathDisplay.textContent = path;
+    // 更新路徑輸入框
+    const pathInput = document.getElementById('serverPathInput');
+    if (pathInput) {
+        pathInput.value = path;
+    }
+    
     currentServerPath = path;
     
     // 顯示載入中
-    folderList.innerHTML = `
-        <div class="folder-loading">
-            <i class="fas fa-spinner fa-spin"></i>
+    browserContent.innerHTML = `
+        <div class="loading">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
             <p>載入中...</p>
         </div>
     `;
@@ -85,22 +89,28 @@ async function loadServerFolders(path) {
         const response = await utils.apiRequest(`/api/list-folders?path=${encodeURIComponent(path)}`);
         
         if (response.folders && response.folders.length > 0) {
+            currentFoldersList = response.folders; // 儲存資料夾列表
             displayFolders(response.folders);
         } else {
-            folderList.innerHTML = `
-                <div class="folder-empty">
+            currentFoldersList = [];
+            browserContent.innerHTML = `
+                <div class="path-breadcrumb-bar">
                     <i class="fas fa-folder-open"></i>
+                    <span class="breadcrumb-path">${currentServerPath}</span>
+                </div>
+                <div class="empty-message">
+                    <i class="fas fa-folder-open fa-3x"></i>
                     <p>此目錄下沒有子資料夾</p>
                 </div>
             `;
         }
     } catch (error) {
         console.error('Load folders error:', error);
-        folderList.innerHTML = `
-            <div class="folder-empty">
-                <i class="fas fa-exclamation-triangle"></i>
+        browserContent.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-triangle fa-3x"></i>
                 <p>無法載入資料夾列表</p>
-                <small>${error.message}</small>
+                <p class="text-muted">${error.message}</p>
             </div>
         `;
     }
@@ -108,31 +118,76 @@ async function loadServerFolders(path) {
 
 // 顯示資料夾列表
 function displayFolders(folders) {
-    const folderList = document.getElementById('folderList');
+    const browserContent = document.getElementById('serverBrowser');
     
-    let html = '';
-    folders.forEach(folder => {
+    // 添加路徑麵包屑和資料夾列表結構
+    let html = `
+        <div class="path-breadcrumb-bar">
+            <i class="fas fa-folder-open"></i>
+            <span class="breadcrumb-path">${currentServerPath}</span>
+        </div>
+        <div class="folder-grid">
+    `;
+    
+    // 添加返回上層按鈕（如果不是根目錄）
+    if (currentServerPath !== '/' && currentServerPath !== '') {
+        const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
         html += `
-            <div class="folder-item" onclick="selectFolder('${folder.path}')">
+            <div class="folder-item parent-folder" onclick="navigateToParent()">
+                <i class="fas fa-level-up-alt"></i>
+                <div class="folder-name">..</div>
+            </div>
+        `;
+    }
+    
+    // 顯示資料夾
+    folders.forEach(folder => {
+        const isSelected = selectedServerDirectory === folder.path;
+        html += `
+            <div class="folder-item ${isSelected ? 'selected' : ''}" 
+                 onclick="selectFolder('${folder.path}')"
+                 ondblclick="navigateToFolder('${folder.path}')">
                 <i class="fas fa-folder"></i>
-                <span class="folder-name">${folder.name}</span>
+                <div class="folder-name">${folder.name}</div>
             </div>
         `;
     });
     
-    folderList.innerHTML = html;
+    html += '</div>';
+    browserContent.innerHTML = html;
+}
+
+// 新增導航到上層目錄函數
+function navigateToParent() {
+    const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
+    loadServerFolders(parentPath);
+}
+
+// 新增導航到子資料夾函數
+function navigateToFolder(folderPath) {
+    loadServerFolders(folderPath);
 }
 
 // 選擇資料夾
 function selectFolder(folderPath) {
+    // 設定選中的資料夾
+    selectedServerDirectory = folderPath;
+    
     // 更新輸入框
     document.getElementById('serverPathInput').value = folderPath;
     
-    // 載入該資料夾的子資料夾
-    loadServerFolders(folderPath);
+    // 設定為來源目錄
+    setSourceDirectory(folderPath, 'server');
     
-    // 可選：直接使用此路徑
-    // useServerPath();
+    // 重新顯示當前資料夾列表以更新選中狀態
+    displayFoldersFromCache();
+}
+
+// 新增從快取重新顯示資料夾的函數
+function displayFoldersFromCache() {
+    if (currentFoldersList.length > 0) {
+        displayFolders(currentFoldersList);
+    }
 }
 
 // 切換標籤時載入伺服器內容
@@ -475,7 +530,7 @@ function goToPath() {
         return;
     }
     
-    loadServerDirectory(path);
+    loadServerFolders(path);
 }
 
 // 執行比對
@@ -1002,3 +1057,6 @@ window.executeCompare = executeCompare;
 window.viewDetailedResults = viewDetailedResults;
 window.exportResults = exportResults;
 window.downloadAsyncFile = downloadAsyncFile;
+window.navigateToParent = navigateToParent;
+window.navigateToFolder = navigateToFolder;
+window.selectFolder = selectFolder;
