@@ -73,17 +73,17 @@ function showFilesList(type) {
         case 'downloaded':
             files = downloadedFilesList;
             title = '已下載的檔案';
-            modalClass = 'success';
+            modalClass = 'success';  // 綠色
             break;
         case 'skipped':
             files = skippedFilesList;
             title = '已跳過的檔案';
-            modalClass = 'info';
+            modalClass = 'info';     // 橘色
             break;
         case 'failed':
             files = failedFilesList;
             title = '下載失敗的檔案';
-            modalClass = 'danger';
+            modalClass = 'danger';   // 紅色
             break;
         case 'total':
             // 合併所有檔案
@@ -93,7 +93,6 @@ function showFilesList(type) {
                 ...failedFilesList.map(f => ({...f, status: 'failed'}))
             ];
             title = '所有檔案';
-            modalClass = 'info';
             break;
     }
     
@@ -1248,39 +1247,55 @@ function showDownloadResults(results) {
         failedFilesList = results.files.failed || [];
     }
     
-    // 生成摘要 - 使用北歐藍配色並添加點擊功能
+    // 生成摘要 - 使用與進度統計相同的結構
     const stats = results.stats || {};
-    // 在 showDownloadResults 函數中
     const summary = `
-        <div class="summary-grid">
-            <div class="summary-item clickable" onclick="showFilesList('total')" title="點擊查看所有檔案">
-                <i class="fas fa-folder-tree"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.total || 0}</div>
-                    <div class="summary-label">總檔案數</div>
+        <div class="progress-stats">
+            <div class="stat-card blue" onclick="showFilesList('total')" title="點擊查看所有檔案">
+                <div class="stat-icon">
+                    <i class="fas fa-file"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">${stats.total || 0}</div>
+                    <div class="stat-label">總檔案數</div>
                 </div>
             </div>
-            <div class="summary-item clickable" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
-                <i class="fas fa-check-circle"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.downloaded || 0}</div>
-                    <div class="summary-label">已下載</div>
+            
+            <div class="stat-card success" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
+                <div class="stat-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">${stats.downloaded || 0}</div>
+                    <div class="stat-label">已下載</div>
                 </div>
             </div>
-            <div class="summary-item clickable" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
-                <i class="fas fa-forward"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.skipped || 0}</div>
-                    <div class="summary-label">已跳過</div>
+            
+            <div class="stat-card warning" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
+                <div class="stat-icon">
+                    <i class="fas fa-forward"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">${stats.skipped || 0}</div>
+                    <div class="stat-label">已跳過</div>
                 </div>
             </div>
-            <div class="summary-item clickable" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
-                <i class="fas fa-times-circle"></i>
-                <div class="summary-content">
-                    <div class="summary-value">${stats.failed || 0}</div>
-                    <div class="summary-label">失敗</div>
+            
+            <div class="stat-card danger" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
+                <div class="stat-icon">
+                    <i class="fas fa-times-circle"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">${stats.failed || 0}</div>
+                    <div class="stat-label">失敗</div>
                 </div>
             </div>
+        </div>
+        
+        <!-- 提示文字也保持一致 -->
+        <div class="stats-hint">
+            <i class="fas fa-info-circle"></i>
+            <span>提示：點擊上方統計卡片可查看詳細的檔案列表</span>
         </div>
     `;
     

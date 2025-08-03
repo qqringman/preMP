@@ -50,6 +50,17 @@
   --radius-xl: 20px;
   --radius-2xl: 28px;
   --radius-full: 9999px;
+  /* 橘色系 */
+  --orange-50: #FFF3E0;
+  --orange-100: #FFE0B2;
+  --orange-200: #FFCC80;
+  --orange-300: #FFB74D;
+  --orange-400: #FFA726;
+  --orange-500: #FF9800;
+  --orange-600: #FB8C00;
+  --orange-700: #F57C00;
+  --orange-800: #EF6C00;
+  --orange-900: #E65100;  
 }
 
 body {
@@ -1113,9 +1124,7 @@ input:checked + .switch-slider::before {
 
 .action-container {
   text-align: center;
-  margin-top: 56px;
-  padding: 48px;
-  background: linear-gradient(135deg, var(--nordic-ice) 0%, var(--bg-hover) 100%);
+  margin-top: 20px;
   border-radius: var(--radius-2xl);
   position: relative;
   overflow: hidden;
@@ -1128,7 +1137,7 @@ input:checked + .switch-slider::before {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, rgba(0, 102, 204, 0.05) 0%, transparent 70%);
+  border-radius: var(--radius-2xl);
   animation: rotate 20s linear infinite;
 }
 
@@ -1232,17 +1241,26 @@ input:checked + .switch-slider::before {
 }
 
 .stat-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
+  background: #FFFFFF !important; /* 強制淺白灰色底色 */
+  border: 2px solid transparent;
   border-radius: var(--radius-lg);
   padding: 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* 移除右上角的藍色樣式 */
+.stat-card::after {
+  display: none !important;
+}
+
+.stat-card[onclick]::after {
+  display: none !important;
 }
 
 .stat-card::before {
@@ -1250,9 +1268,11 @@ input:checked + .switch-slider::before {
   position: absolute;
   left: 0;
   top: 0;
-  width: 3px;
+  width: 4px;
   height: 100%;
-  background: var(--nordic-blue);
+  transition: all 0.3s ease;
+  transform: scaleX(0);
+  transform-origin: left;
 }
 
 .stat-card.success::before {
@@ -1269,9 +1289,12 @@ input:checked + .switch-slider::before {
 
 .stat-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  border-color: #1976D2;
-  background: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+
+.stat-card:hover::before {
+  transform: scaleX(1);
 }
 
 .stat-icon {
@@ -3162,3 +3185,389 @@ button:hover,
   color: #C586C0;
 }
 
+/* 藍色 - 總檔案數 */
+.stat-card.blue {
+  border-color: var(--nordic-blue-200);
+}
+
+.stat-card.blue::before {
+  background: var(--nordic-blue);
+}
+
+.stat-card.blue:hover {
+  background: rgba(33, 150, 243, 0.05);
+  border-color: var(--nordic-blue);
+}
+
+.stat-card.blue .stat-icon {
+  background: var(--nordic-blue-100);
+  color: var(--nordic-blue);
+}
+
+/* 綠色 - 已下載 */
+.stat-card.success {
+  border-color: #C8E6C9;
+}
+
+.stat-card.success::before {
+  background: var(--success);
+}
+
+.stat-card.success:hover {
+  background: rgba(76, 175, 80, 0.05);
+  border-color: var(--success);
+}
+
+.stat-card.success .stat-icon {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+/* 橘色 - 已跳過 */
+.stat-card.warning {
+  border-color: var(--orange-200);
+}
+
+.stat-card.warning::before {
+  background: var(--orange-500);
+}
+
+.stat-card.warning:hover {
+  background: rgba(255, 152, 0, 0.05);
+  border-color: var(--orange-500);
+}
+
+.stat-card.warning .stat-icon {
+  background: var(--orange-50);
+  color: var(--orange-500);
+}
+
+/* 紅色 - 失敗 */
+.stat-card.danger {
+  border-color: #FFCDD2;
+}
+
+.stat-card.danger::before {
+  background: var(--danger);
+}
+
+.stat-card.danger:hover {
+  background: rgba(244, 67, 54, 0.05);
+  border-color: var(--danger);
+}
+
+.stat-card.danger .stat-icon {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+/* 動畫效果 */
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.stat-card {
+  animation: slideInLeft 0.5s ease-out;
+}
+
+.stat-card:nth-child(1) { animation-delay: 0.1s; }
+.stat-card:nth-child(2) { animation-delay: 0.2s; }
+.stat-card:nth-child(3) { animation-delay: 0.3s; }
+.stat-card:nth-child(4) { animation-delay: 0.4s; }
+
+/* 綠色 - 已下載（確保有淺白灰底） */
+.stat-card.success {
+  background: #FAFBFC !important; /* 淺白灰底色 */
+  border-color: #C8E6C9;
+}
+
+.stat-card.success::before {
+  background: #4CAF50;
+}
+
+.stat-card.success:hover {
+  background: rgba(76, 175, 80, 0.05) !important;
+  border-color: #4CAF50;
+}
+
+.stat-card.success .stat-icon {
+  background: #E8F5E9;
+  color: #4CAF50;
+}
+
+/* 紅色 - 失敗（確保有淺白灰底） */
+.stat-card.danger {
+  background: #FAFBFC !important; /* 淺白灰底色 */
+  border-color: #FFCDD2;
+}
+
+.stat-card.danger::before {
+  background: #F44336;
+}
+
+.stat-card.danger:hover {
+  background: rgba(244, 67, 54, 0.05) !important;
+  border-color: #F44336;
+}
+
+.stat-card.danger .stat-icon {
+  background: #FFEBEE;
+  color: #F44336;
+}
+
+/* 下載結果的摘要項目 - 確保淺白灰底色 */
+.summary-item {
+  background: #FAFBFC !important;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 移除右上角的藍色樣式 */
+.summary-item::after,
+.summary-item.clickable::after {
+  display: none !important;
+}
+
+/* 左邊邊條 */
+.summary-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  transition: all 0.3s ease;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.summary-item.clickable:hover::before {
+  transform: scaleX(1);
+}
+
+/* 模態框標題欄 - 基礎樣式 */
+.modal-header {
+  background: #2196F3; /* 預設藍色 */
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  color: white;
+  position: relative;
+  overflow: hidden;
+  gap: 16px;
+}
+
+/* 成功類型 - 綠色（已下載） */
+.modal.success .modal-header {
+  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+}
+
+/* 資訊類型 - 橘色（已跳過） */
+.modal.info .modal-header {
+  background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
+}
+
+/* 危險類型 - 紅色（失敗） */
+.modal.danger .modal-header {
+  background: linear-gradient(135deg, #F44336 0%, #EF5350 100%);
+}
+
+/* 確保文字和圖標在所有背景色下都清晰可見 */
+.modal-header .modal-title,
+.modal-header .modal-close {
+  color: white !important;
+}
+
+.modal-header .modal-title i {
+  color: white !important;
+}
+
+/* 模態框關閉按鈕樣式 */
+.modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+  font-size: 1.25rem;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+/* 通知提示樣式 */
+.notification {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    min-width: 300px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card-hover);
+    padding: var(--spacing-md);
+    z-index: 9999;
+    transform: translateX(400px);
+    transition: transform var(--transition-normal);
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+/* 成功類型通知 - 白底綠框 */
+.notification.success {
+    background: #FFFFFF;  /* 白底 */
+    border: 2px solid var(--success);
+    box-shadow: 0 4px 20px rgba(76, 175, 80, 0.15);
+}
+
+.notification.error {
+    background: var(--danger-light);
+    border: 1px solid var(--danger);
+}
+
+.notification.info {
+    background: var(--info-light);
+    border: 1px solid var(--info);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.notification-icon {
+    font-size: 1.25rem;
+}
+
+.notification.success .notification-icon {
+    color: var(--success);
+}
+
+.notification.success .notification-message {
+    color: #333;  /* 深色文字以便在白底上清晰可見 */
+    font-weight: 500;
+}
+
+.upload-container {
+    background: #FAFBFD;
+    border: 2px dashed #C5CAE9;
+    border-radius: var(--radius-xl);
+    padding: 80px 60px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+/* 修改 hover 效果為淺灰 */
+.upload-container:hover {
+    border-color: #9E9E9E;  /* 灰色邊框 */
+    background: #F5F5F5;    /* 淺灰背景 */
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+/* 拖曳中的狀態也改為淺灰 */
+.upload-container.dragging {
+    background: #EEEEEE;    /* 更深一點的灰色 */
+    border-color: #757575;  /* 深灰邊框 */
+    border-style: solid;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* hover 時圖標顏色保持不變或稍微變暗 */
+.upload-container:hover .upload-icon-wrapper i {
+    color: var(--success);
+    transform: scale(1.05);
+    filter: brightness(0.95);  /* 稍微變暗 */
+}
+
+.upload-container::before {
+    content: "";
+    position: absolute;
+    top: -120px;
+    right: -120px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(158, 158, 158, 0.03) 0%, transparent 70%);  /* 改為灰色漸層 */
+}
+
+.upload-container::after {
+    content: "";
+    position: absolute;
+    bottom: -100px;
+    left: -100px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(117, 117, 117, 0.02) 0%, transparent 70%);  /* 改為灰色漸層 */
+}
+
+/* 進度統計 - 確保兩個區域都使用相同樣式 */
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+@media (max-width: 768px) {
+    .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* 統計提示文字 */
+.stats-hint {
+    text-align: center;
+    margin-top: 16px;
+    margin-bottom: 24px;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.stats-hint i {
+    color: var(--nordic-blue);
+}
+
+/* 確保動畫在兩個區域都能運作 */
+#downloadResults .stat-card {
+    animation: slideInLeft 0.5s ease-out;
+}
+
+#downloadResults .stat-card:nth-child(1) { animation-delay: 0.1s; }
+#downloadResults .stat-card:nth-child(2) { animation-delay: 0.2s; }
+#downloadResults .stat-card:nth-child(3) { animation-delay: 0.3s; }
+#downloadResults .stat-card:nth-child(4) { animation-delay: 0.4s; }
