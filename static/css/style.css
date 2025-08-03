@@ -437,7 +437,7 @@ body {
     top: 0;
     bottom: 0;
     width: 2px;
-    background: var(--nordic-gray-300);
+    background: var(--nordic-blue-200);
 }
 
 .timeline-item {

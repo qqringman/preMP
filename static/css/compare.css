@@ -19,6 +19,7 @@
     --nordic-blue-dark: #1976D2;
     --nordic-blue-light: #64B5F6;
     --nordic-blue-lighter: #90CAF9;
+    --nordic-blue-200: #BBDEFB;
     --nordic-gradient: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
     --nordic-gradient-soft: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
     --nordic-ice: #F5F9FF;
@@ -26,7 +27,7 @@
     --success: #4CAF50;
     --success-light: #E8F5E9;
     --text-primary: #1A237E;
-    --text-secondary: #5C6BC0;
+    --text-secondary: #5C6BC0;    
     --text-light: #C5CAE9;
     --text-muted: #9FA8DA;
     --warning: #FF9800;
