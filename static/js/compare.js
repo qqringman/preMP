@@ -1,11 +1,12 @@
-// 比較頁面 JavaScript - 更新以配合新的 UI
+// 比較頁面 JavaScript - 更新伺服器瀏覽功能
 
 let currentTaskId = null;
 let sourceDirectory = null;
 let asyncDownloadUrl = null;
 let currentServerPath = '/home/vince_lin/ai/preMP/downloads';
 let selectedServerDirectory = null;
-let currentFoldersList = [];
+let serverFilesLoaded = false;
+let pathInputTimer = null;
 
 // 更新 DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,65 +14,262 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRecentComparisons();
     initializeEventListeners();
     initializeFolderDrop();
-    
+    initializePathInput();
+
     // 監聽標籤切換事件
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = e.currentTarget.textContent.includes('伺服器') ? 'server' : 'local';
             if (tabName === 'server') {
-                // 切換到伺服器標籤時初始化路徑瀏覽器
+                // 切換到伺服器標籤時載入資料夾
                 setTimeout(() => {
-                    initializeServerPathBrowser();
+                    if (!serverFilesLoaded) {
+                        loadServerFolders(currentServerPath);
+                        serverFilesLoaded = true;
+                    }
                 }, 100);
             }
         });
     });
+        
 });
 
-// 初始化伺服器路徑瀏覽器
-function initializeServerPathBrowser() {
+// 切換來源標籤
+function switchSourceTab(tab) {
+    // 更新標籤按鈕狀態
+    document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // 切換內容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tab}-tab`).classList.add('active');
+    
+    // 如果切換到伺服器標籤，載入當前路徑內容
+    if (tab === 'server' && !serverFilesLoaded) {
+        loadServerFolders(currentServerPath);
+        serverFilesLoaded = true;
+    }
+}
+
+// 初始化路徑輸入功能 (與 download.js 一致)
+function initializePathInput() {
     const pathInput = document.getElementById('serverPathInput');
+    if (!pathInput) return;
     
-    // 監聽路徑輸入變化
-    pathInput.addEventListener('input', debounce(async (e) => {
-        const path = e.target.value.trim();
-        if (path && path.startsWith('/')) {
-            await loadServerFolders(path);
+    // 設定預設值
+    pathInput.value = currentServerPath;
+    
+    // 監聽輸入事件
+    pathInput.addEventListener('input', (e) => {
+        clearTimeout(pathInputTimer);
+        pathInputTimer = setTimeout(() => {
+            showPathSuggestions(e.target.value);
+        }, 300);
+    });
+    
+    // 監聽按鍵事件
+    pathInput.addEventListener('keydown', (e) => {
+        const suggestions = document.getElementById('pathSuggestions');
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        const selected = suggestions.querySelector('.suggestion-item.selected');
+        let selectedIndex = -1;
+        
+        if (selected) {
+            selectedIndex = Array.from(items).indexOf(selected);
         }
-    }, 500));
-    
-    // 監聽 Enter 鍵
-    pathInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            useServerPath();
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedIndex < items.length - 1) {
+                selectedIndex++;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selected) {
+                selectSuggestion(selected.dataset.path);
+            } else {
+                goToPath();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
         }
     });
     
-    // 初始載入預設路徑的資料夾
+    // 點擊外部時隱藏建議
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.path-input-container')) {
+            hideSuggestions();
+        }
+    });
+}
+
+// 顯示路徑建議 (與 download.js 一致)
+async function showPathSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (!suggestions) return;
+    
+    // 清空現有建議
+    suggestions.innerHTML = '';
+    
+    if (!inputValue) {
+        hideSuggestions();
+        return;
+    }
+    
+    try {
+        // 從後端獲取建議
+        const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(inputValue)}`);
+        const { directories, files } = response;
+        
+        if (directories.length === 0) {
+            suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+        } else {
+            // 只顯示目錄（比對頁面只需要選擇目錄）
+            directories.forEach(dir => {
+                const item = createSuggestionItem(dir.path, dir.name, 'folder');
+                suggestions.appendChild(item);
+            });
+        }
+        
+        suggestions.classList.add('show');
+        
+    } catch (error) {
+        // 如果後端沒有實現，使用靜態建議
+        showStaticSuggestions(inputValue);
+    }
+}
+
+// 顯示靜態建議
+function showStaticSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    
+    // 從 config.py 定義的常用路徑
+    const commonPaths = [
+        '/home/vince_lin/ai/preMP/downloads',
+        '/home/vince_lin/ai/R306_ShareFolder',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log/Demo_stress_Test_log',
+        '/home/vince_lin/ai/DailyBuild',
+        '/home/vince_lin/ai/DailyBuild/Merlin7',
+        '/home/vince_lin/ai/PrebuildFW'
+    ];
+    
+    // 過濾匹配的路徑
+    const matches = commonPaths.filter(path => 
+        path.toLowerCase().includes(inputValue.toLowerCase())
+    );
+    
+    if (matches.length === 0) {
+        suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+    } else {
+        matches.forEach(path => {
+            const name = path.split('/').pop() || path;
+            const item = createSuggestionItem(path, name, 'folder');
+            suggestions.appendChild(item);
+        });
+    }
+    
+    suggestions.classList.add('show');
+}
+
+// 建立建議項目
+function createSuggestionItem(path, name, type) {
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.dataset.path = path;
+    div.onclick = () => selectSuggestion(path);
+    
+    const icon = type === 'folder' ? 'fa-folder' : 'fa-file';
+    const typeText = type === 'folder' ? '資料夾' : '檔案';
+    
+    div.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <span>${path}</span>
+        <span class="suggestion-type">${typeText}</span>
+    `;
+    
+    return div;
+}
+
+// 更新選中的建議
+function updateSelectedSuggestion(items, index) {
+    items.forEach((item, i) => {
+        if (i === index) {
+            item.classList.add('selected');
+            // 確保選中項目在視野內
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// 選擇建議
+function selectSuggestion(path) {
+    const pathInput = document.getElementById('serverPathInput');
+    pathInput.value = path;
+    hideSuggestions();
+    
+    // 導航到該路徑
+    goToPath();
+}
+
+// 隱藏建議
+function hideSuggestions() {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (suggestions) {
+        suggestions.classList.remove('show');
+    }
+}
+
+// 前往指定路徑
+function goToPath() {
+    const path = document.getElementById('serverPathInput').value.trim();
+    if (!path) {
+        utils.showNotification('請輸入路徑', 'error');
+        return;
+    }
+    
+    if (!path.startsWith('/')) {
+        utils.showNotification('路徑必須以 / 開頭', 'error');
+        return;
+    }
+    
+    serverFilesLoaded = false;  // 重置載入狀態
+    loadServerFolders(path);
+}
+
+// 重新整理伺服器路徑
+function refreshServerPath() {
+    serverFilesLoaded = false;
     loadServerFolders(currentServerPath);
 }
 
-// 防抖動函數
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// 載入伺服器資料夾
+// 載入伺服器資料夾（與 download.js 風格一致）
 async function loadServerFolders(path) {
     const browserContent = document.getElementById('serverBrowser');
+    const pathDisplay = document.getElementById('currentPathDisplay');
     
     // 更新路徑輸入框
     const pathInput = document.getElementById('serverPathInput');
     if (pathInput) {
         pathInput.value = path;
+    }
+    
+    // 更新路徑顯示
+    if (pathDisplay) {
+        pathDisplay.textContent = path;
     }
     
     currentServerPath = path;
@@ -89,15 +287,11 @@ async function loadServerFolders(path) {
         const response = await utils.apiRequest(`/api/list-folders?path=${encodeURIComponent(path)}`);
         
         if (response.folders && response.folders.length > 0) {
-            currentFoldersList = response.folders; // 儲存資料夾列表
+            currentFoldersList = response.folders;
             displayFolders(response.folders);
         } else {
             currentFoldersList = [];
             browserContent.innerHTML = `
-                <div class="path-breadcrumb-bar">
-                    <i class="fas fa-folder-open"></i>
-                    <span class="breadcrumb-path">${currentServerPath}</span>
-                </div>
                 <div class="empty-message">
                     <i class="fas fa-folder-open fa-3x"></i>
                     <p>此目錄下沒有子資料夾</p>
@@ -116,26 +310,21 @@ async function loadServerFolders(path) {
     }
 }
 
-// 顯示資料夾列表
-function displayFolders(folders) {
-    const browserContent = document.getElementById('serverBrowser');
+// 顯示伺服器資料夾（與 download.js 風格一致）
+function displayServerFolders(data) {
+    const browser = document.getElementById('serverBrowser');
+    if (!browser) return;
     
-    // 添加路徑麵包屑和資料夾列表結構
-    let html = `
-        <div class="path-breadcrumb-bar">
-            <i class="fas fa-folder-open"></i>
-            <span class="breadcrumb-path">${currentServerPath}</span>
-        </div>
-        <div class="folder-grid">
-    `;
+    const { folders = [] } = data;
     
-    // 添加返回上層按鈕（如果不是根目錄）
+    let html = '<div class="file-grid">';
+    
+    // 添加返回上層目錄項（如果不是根目錄）
     if (currentServerPath !== '/' && currentServerPath !== '') {
-        const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
         html += `
-            <div class="folder-item parent-folder" onclick="navigateToParent()">
+            <div class="file-item folder" onclick="navigateToParent()">
                 <i class="fas fa-level-up-alt"></i>
-                <div class="folder-name">..</div>
+                <span class="file-name">..</span>
             </div>
         `;
     }
@@ -144,70 +333,78 @@ function displayFolders(folders) {
     folders.forEach(folder => {
         const isSelected = selectedServerDirectory === folder.path;
         html += `
-            <div class="folder-item ${isSelected ? 'selected' : ''}" 
-                 onclick="selectFolder('${folder.path}')"
-                 ondblclick="navigateToFolder('${folder.path}')">
+            <div class="file-item folder ${isSelected ? 'selected' : ''}" 
+                 onclick="selectServerFolder('${folder.path}', '${folder.name}')">
                 <i class="fas fa-folder"></i>
-                <div class="folder-name">${folder.name}</div>
+                <span class="file-name">${folder.name}</span>
+                ${isSelected ? '<div class="check-icon"><i class="fas fa-check"></i></div>' : ''}
             </div>
         `;
     });
     
+    if (folders.length === 0 && currentServerPath !== '/') {
+        html += `
+            <div class="empty-message">
+                <i class="fas fa-folder-open"></i>
+                <p>此目錄下沒有子資料夾</p>
+            </div>
+        `;
+    }
+    
     html += '</div>';
-    browserContent.innerHTML = html;
+    browser.innerHTML = html;
 }
 
-// 新增導航到上層目錄函數
-function navigateToParent() {
-    const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
-    loadServerFolders(parentPath);
-}
-
-// 新增導航到子資料夾函數
+// 導航到子資料夾
 function navigateToFolder(folderPath) {
+    serverFilesLoaded = false;  // 重置載入狀態
     loadServerFolders(folderPath);
 }
 
-// 選擇資料夾
-function selectFolder(folderPath) {
-    // 設定選中的資料夾
-    selectedServerDirectory = folderPath;
-    
-    // 更新輸入框
-    document.getElementById('serverPathInput').value = folderPath;
+// 導航到上層目錄
+function navigateToParent() {
+    const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
+    serverFilesLoaded = false;  // 重置載入狀態
+    loadServerFolders(parentPath);
+}
+
+// 選擇伺服器資料夾
+function selectServerFolder(path, name) {
+    selectedServerDirectory = path;
     
     // 設定為來源目錄
-    setSourceDirectory(folderPath, 'server');
+    setSourceDirectory(path, 'server');
     
-    // 重新顯示當前資料夾列表以更新選中狀態
-    displayFoldersFromCache();
+    // 重新載入以更新視覺狀態
+    displayServerFolders({ folders: getCurrentFoldersList() });
 }
 
-// 新增從快取重新顯示資料夾的函數
-function displayFoldersFromCache() {
-    if (currentFoldersList.length > 0) {
-        displayFolders(currentFoldersList);
-    }
-}
-
-// 切換標籤時載入伺服器內容
-function switchSourceTab(tab) {
-    // 更新標籤按鈕狀態
-    document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
+// 獲取當前資料夾列表（用於重新渲染）
+function getCurrentFoldersList() {
+    const browser = document.getElementById('serverBrowser');
+    const folders = [];
     
-    // 切換內容
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.getElementById(`${tab}-tab`).classList.add('active');
-    
-    // 如果切換到伺服器標籤，載入當前路徑內容
-    if (tab === 'server') {
-        loadServerDirectory(currentServerPath);
+    if (browser) {
+        const folderElements = browser.querySelectorAll('.file-item.folder');
+        folderElements.forEach(elem => {
+            const nameElem = elem.querySelector('.file-name');
+            if (nameElem && nameElem.textContent !== '..') {
+                // 從 onclick 屬性中提取路徑
+                const onclick = elem.getAttribute('onclick');
+                if (onclick && onclick.includes('selectServerFolder')) {
+                    const match = onclick.match(/selectServerFolder\('([^']+)',/);
+                    if (match) {
+                        folders.push({
+                            path: match[1],
+                            name: nameElem.textContent
+                        });
+                    }
+                }
+            }
+        });
     }
+    
+    return folders;
 }
 
 // 選擇本地目錄
@@ -302,129 +499,6 @@ function handleFolderDrop(e) {
     }
 }
 
-// 使用伺服器路徑
-function useServerPath() {
-    const path = document.getElementById('serverPathInput').value.trim();
-    if (!path) {
-        utils.showNotification('請輸入伺服器路徑', 'error');
-        return;
-    }
-    
-    // 驗證路徑格式
-    if (!path.startsWith('/')) {
-        utils.showNotification('路徑必須以 / 開頭', 'error');
-        return;
-    }
-    
-    setSourceDirectory(path, 'server');
-}
-
-// 重新整理伺服器路徑
-function refreshServerPath() {
-    loadServerDirectory(currentServerPath);
-}
-
-// 載入伺服器目錄內容
-async function loadServerDirectory(path) {
-    const browserContent = document.getElementById('serverBrowser');
-    
-    // 顯示載入中
-    browserContent.innerHTML = `
-        <div class="loading">
-            <i class="fas fa-spinner fa-spin fa-3x"></i>
-            <p>載入中...</p>
-        </div>
-    `;
-    
-    try {
-        // 更新當前路徑
-        currentServerPath = path;
-        document.getElementById('serverPathInput').value = path;
-        
-        // 呼叫 API 獲取目錄內容
-        const result = await utils.apiRequest(`/api/browse-directory?path=${encodeURIComponent(path)}`);
-        
-        if (result.error) {
-            throw new Error(result.error);
-        }
-        
-        displayServerDirectory(result);
-        
-    } catch (error) {
-        browserContent.innerHTML = `
-            <div class="empty-message">
-                <i class="fas fa-exclamation-triangle fa-3x"></i>
-                <p>無法載入目錄內容</p>
-                <p class="text-muted">${error.message}</p>
-            </div>
-        `;
-    }
-}
-
-// 顯示伺服器目錄內容
-function displayServerDirectory(result) {
-    const browserContent = document.getElementById('serverBrowser');
-    
-    // 檢查是否有內容
-    if (!result.folders || result.folders.length === 0) {
-        browserContent.innerHTML = `
-            <div class="empty-message">
-                <i class="fas fa-folder-open fa-3x"></i>
-                <p>此目錄是空的</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = '<div class="folder-grid">';
-    
-    // 添加上一層按鈕（如果不是根目錄）
-    if (currentServerPath !== '/') {
-        const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
-        html += `
-            <div class="folder-item parent-folder" onclick="navigateToFolder('${parentPath}')">
-                <i class="fas fa-level-up-alt"></i>
-                <div class="folder-name">..</div>
-            </div>
-        `;
-    }
-    
-    // 顯示資料夾
-    result.folders.forEach(folder => {
-        const isSelected = selectedServerDirectory === folder.path;
-        html += `
-            <div class="folder-item ${isSelected ? 'selected' : ''}" 
-                 onclick="selectServerFolder('${folder.path}', '${folder.name}')"
-                 ondblclick="navigateToFolder('${folder.path}')">
-                <i class="fas fa-folder"></i>
-                <div class="folder-name">${folder.name}</div>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    browserContent.innerHTML = html;
-}
-
-// 選擇伺服器資料夾
-function selectServerFolder(path, name) {
-    selectedServerDirectory = path;
-    
-    // 更新視覺狀態
-    document.querySelectorAll('.folder-item').forEach(item => {
-        item.classList.remove('selected');
-    });
-    event.currentTarget.classList.add('selected');
-    
-    // 設定為來源目錄
-    setSourceDirectory(path, 'server');
-}
-
-// 導航到資料夾
-function navigateToFolder(path) {
-    loadServerDirectory(path);
-}
-
 // 設定來源目錄
 function setSourceDirectory(path, type = 'local') {
     sourceDirectory = path;
@@ -487,27 +561,15 @@ function removeDirectory(type) {
     // 重置選擇器
     if (type === 'local') {
         document.getElementById('downloadedDirectories').value = '';
+    } else {
+        selectedServerDirectory = null;
+        // 重新載入資料夾列表以清除選中狀態
+        loadServerFolders(currentServerPath);
     }
 }
 
 // 初始化事件監聽器
 function initializeEventListeners() {
-
-    // 監聽路徑輸入的 Enter 鍵
-    document.getElementById('serverPathInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            goToPath();
-        }
-    });
-    
-    // 監聽路徑輸入變化
-    document.getElementById('serverPathInput').addEventListener('input', debounce((e) => {
-        const path = e.target.value.trim();
-        if (path && path.startsWith('/')) {
-            currentServerPath = path;
-        }
-    }, 300));
-    
     // 監聽任務進度
     document.addEventListener('task-progress', (e) => {
         const data = e.detail;
@@ -515,22 +577,6 @@ function initializeEventListeners() {
             updateCompareProgress(data);
         }
     });
-}
-
-// 前往指定路徑
-function goToPath() {
-    const path = document.getElementById('serverPathInput').value.trim();
-    if (!path) {
-        utils.showNotification('請輸入路徑', 'error');
-        return;
-    }
-    
-    if (!path.startsWith('/')) {
-        utils.showNotification('路徑必須以 / 開頭', 'error');
-        return;
-    }
-    
-    loadServerFolders(path);
 }
 
 // 執行比對
@@ -929,128 +975,10 @@ function formatTimeAgo(date) {
     return new Date(date).toLocaleDateString('zh-TW');
 }
 
-// 初始化路徑輸入自動補全
-function initializePathAutocomplete() {
-    const pathInput = document.getElementById('serverPathInput');
-    const suggestions = document.getElementById('pathSuggestions');
-    let currentSuggestions = [];
-    let selectedIndex = -1;
-    
-    // 監聽輸入事件
-    pathInput.addEventListener('input', async (e) => {
-        const value = e.target.value;
-        if (value.length < 2) {
-            hideSuggestions();
-            return;
-        }
-        
-        try {
-            // 獲取路徑建議
-            const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(value)}`);
-            if (response.suggestions && response.suggestions.length > 0) {
-                showSuggestions(response.suggestions);
-            } else {
-                hideSuggestions();
-            }
-        } catch (error) {
-            console.error('Get path suggestions error:', error);
-            hideSuggestions();
-        }
-    });
-    
-    // 顯示建議
-    function showSuggestions(items) {
-        currentSuggestions = items;
-        selectedIndex = -1;
-        
-        let html = '';
-        items.forEach((item, index) => {
-            html += `
-                <div class="suggestion-item" data-index="${index}" data-path="${item.path}">
-                    <i class="fas ${item.type === 'directory' ? 'fa-folder' : 'fa-file'}"></i>
-                    <span class="path-text">${item.path}</span>
-                    <span class="suggestion-type">${item.type === 'directory' ? '目錄' : '檔案'}</span>
-                </div>
-            `;
-        });
-        
-        suggestions.innerHTML = html;
-        suggestions.classList.add('show');
-        
-        // 綁定點擊事件
-        suggestions.querySelectorAll('.suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
-                selectSuggestion(item.dataset.path);
-            });
-        });
-    }
-    
-    // 選擇建議
-    function selectSuggestion(path) {
-        pathInput.value = path;
-        hideSuggestions();
-        // 如果是目錄，可以觸發刷新
-        refreshServerPath();
-    }
-    
-    // 隱藏建議
-    function hideSuggestions() {
-        suggestions.classList.remove('show');
-        currentSuggestions = [];
-        selectedIndex = -1;
-    }
-    
-    // 鍵盤導航
-    pathInput.addEventListener('keydown', (e) => {
-        if (!suggestions.classList.contains('show')) return;
-        
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                selectedIndex = Math.min(selectedIndex + 1, currentSuggestions.length - 1);
-                updateSelection();
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                selectedIndex = Math.max(selectedIndex - 1, 0);
-                updateSelection();
-                break;
-            case 'Enter':
-                e.preventDefault();
-                if (selectedIndex >= 0) {
-                    selectSuggestion(currentSuggestions[selectedIndex].path);
-                }
-                break;
-            case 'Escape':
-                hideSuggestions();
-                break;
-        }
-    });
-    
-    // 更新選中狀態
-    function updateSelection() {
-        const items = suggestions.querySelectorAll('.suggestion-item');
-        items.forEach((item, index) => {
-            if (index === selectedIndex) {
-                item.classList.add('selected');
-            } else {
-                item.classList.remove('selected');
-            }
-        });
-    }
-    
-    // 點擊外部關閉建議
-    document.addEventListener('click', (e) => {
-        if (!pathInput.contains(e.target) && !suggestions.contains(e.target)) {
-            hideSuggestions();
-        }
-    });
-}
-
 // 匯出函數
 window.switchSourceTab = switchSourceTab;
 window.selectLocalDirectory = selectLocalDirectory;
-window.useServerPath = useServerPath;
+window.goToPath = goToPath;
 window.refreshServerPath = refreshServerPath;
 window.removeDirectory = removeDirectory;
 window.executeCompare = executeCompare;
@@ -1058,5 +986,6 @@ window.viewDetailedResults = viewDetailedResults;
 window.exportResults = exportResults;
 window.downloadAsyncFile = downloadAsyncFile;
 window.navigateToParent = navigateToParent;
-window.navigateToFolder = navigateToFolder;
-window.selectFolder = selectFolder;
+window.selectServerFolder = selectServerFolder;
+window.hideSuggestions = hideSuggestions;
+window.selectSuggestion = selectSuggestion;

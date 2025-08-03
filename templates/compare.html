@@ -81,7 +81,8 @@
                                         class="path-input" 
                                         id="serverPathInput" 
                                         placeholder="輸入或貼上路徑..."
-                                        value="/home/vince_lin/ai/preMP">
+                                        value="/home/vince_lin/ai/preMP"
+                                        autocomplete="off">  <!-- 添加這個屬性防止自動完成 -->
                                 </div>
                                 <button class="btn-go" onclick="goToPath()">
                                     <i class="fas fa-arrow-right"></i> 前往
@@ -90,18 +91,18 @@
                                     <i class="fas fa-sync"></i>
                                 </button>
                             </div>
+                            
+                            <!-- 路徑麵包屑列 - 只保留這一個路徑顯示 -->
+                            <div class="path-breadcrumb-bar">
+                                <i class="fas fa-folder-open"></i>
+                                <span class="breadcrumb-path" id="currentPathDisplay">/home/vince_lin/ai/preMP</span>
+                            </div>
+                            
+                            <!-- 資料夾瀏覽區域 -->
                             <div class="browser-content" id="serverBrowser">
-                                <!-- 新增當前路徑顯示和資料夾列表 -->
-                                <div class="path-browser">
-                                    <div class="browser-header">
-                                        <div class="current-path">
-                                            <i class="fas fa-folder-open"></i>
-                                            <span id="currentPathDisplay">/home/vince_lin/ai/preMP</span>
-                                        </div>
-                                    </div>
-                                    <div class="browser-folders" id="folderList">
-                                        <!-- 動態載入資料夾內容 -->
-                                    </div>
+                                <div class="empty-message">
+                                    <i class="fas fa-folder-open fa-3x"></i>
+                                    <p>載入中...</p>
                                 </div>
                             </div>
                         </div>

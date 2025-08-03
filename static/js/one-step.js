@@ -1,14 +1,18 @@
-// 一步到位頁面 JavaScript - 與下載頁面共用相同的檔案選擇邏輯
+// 一步到位頁面 JavaScript - 更新伺服器瀏覽功能
 
 let selectedFile = null;
 let currentTaskId = null;
 let selectedServerFiles = [];
+let currentServerPath = '/home/vince_lin/ai/preMP';
+let serverFilesLoaded = false;
+let pathInputTimer = null;
 
 // 初始化頁面
 document.addEventListener('DOMContentLoaded', () => {
     initializeUpload();
     initializeSftpConfig();
     initializeEventListeners();
+    initializePathInput();
     updateStepIndicator('upload', 'active');    
 });
 
@@ -27,9 +31,210 @@ function switchTab(tab) {
     document.getElementById(`${tab}-tab`).classList.add('active');
     
     // 如果切換到伺服器標籤，載入檔案列表
-    if (tab === 'server') {
-        loadServerFiles();
+    if (tab === 'server' && !serverFilesLoaded) {
+        loadServerFiles(currentServerPath);
+        serverFilesLoaded = true;
     }
+}
+
+// 初始化路徑輸入功能 (與 download.js 一致)
+function initializePathInput() {
+    const pathInput = document.getElementById('serverPathInput');
+    if (!pathInput) return;
+    
+    // 設定預設值
+    pathInput.value = currentServerPath;
+    
+    // 監聽輸入事件
+    pathInput.addEventListener('input', (e) => {
+        clearTimeout(pathInputTimer);
+        pathInputTimer = setTimeout(() => {
+            showPathSuggestions(e.target.value);
+        }, 300);
+    });
+    
+    // 監聽按鍵事件
+    pathInput.addEventListener('keydown', (e) => {
+        const suggestions = document.getElementById('pathSuggestions');
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        const selected = suggestions.querySelector('.suggestion-item.selected');
+        let selectedIndex = -1;
+        
+        if (selected) {
+            selectedIndex = Array.from(items).indexOf(selected);
+        }
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedIndex < items.length - 1) {
+                selectedIndex++;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selected) {
+                selectSuggestion(selected.dataset.path);
+            } else {
+                goToPath();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+    
+    // 點擊外部時隱藏建議
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.path-input-container')) {
+            hideSuggestions();
+        }
+    });
+}
+
+// 顯示路徑建議 (與 download.js 一致)
+async function showPathSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (!suggestions) return;
+    
+    // 清空現有建議
+    suggestions.innerHTML = '';
+    
+    if (!inputValue) {
+        hideSuggestions();
+        return;
+    }
+    
+    try {
+        // 從後端獲取建議
+        const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(inputValue)}`);
+        const { directories, files } = response;
+        
+        if (directories.length === 0 && files.length === 0) {
+            suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+        } else {
+            // 顯示目錄
+            directories.forEach(dir => {
+                const item = createSuggestionItem(dir.path, dir.name, 'folder');
+                suggestions.appendChild(item);
+            });
+            
+            // 顯示 Excel 檔案
+            files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+                const item = createSuggestionItem(file.path, file.name, 'file');
+                suggestions.appendChild(item);
+            });
+        }
+        
+        suggestions.classList.add('show');
+        
+    } catch (error) {
+        // 如果後端沒有實現，使用靜態建議
+        showStaticSuggestions(inputValue);
+    }
+}
+
+// 顯示靜態建議
+function showStaticSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    
+    // 從 config.py 定義的常用路徑
+    const commonPaths = [
+        '/home/vince_lin/ai/preMP',
+        '/home/vince_lin/ai/R306_ShareFolder',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log/Demo_stress_Test_log',
+        '/home/vince_lin/ai/DailyBuild',
+        '/home/vince_lin/ai/DailyBuild/Merlin7',
+        '/home/vince_lin/ai/PrebuildFW'
+    ];
+    
+    // 過濾匹配的路徑
+    const matches = commonPaths.filter(path => 
+        path.toLowerCase().includes(inputValue.toLowerCase())
+    );
+    
+    if (matches.length === 0) {
+        suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+    } else {
+        matches.forEach(path => {
+            const name = path.split('/').pop() || path;
+            const item = createSuggestionItem(path, name, 'folder');
+            suggestions.appendChild(item);
+        });
+    }
+    
+    suggestions.classList.add('show');
+}
+
+// 建立建議項目
+function createSuggestionItem(path, name, type) {
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.dataset.path = path;
+    div.onclick = () => selectSuggestion(path);
+    
+    const icon = type === 'folder' ? 'fa-folder' : 'fa-file-excel';
+    const typeText = type === 'folder' ? '資料夾' : 'Excel 檔案';
+    
+    div.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <span>${path}</span>
+        <span class="suggestion-type">${typeText}</span>
+    `;
+    
+    return div;
+}
+
+// 更新選中的建議
+function updateSelectedSuggestion(items, index) {
+    items.forEach((item, i) => {
+        if (i === index) {
+            item.classList.add('selected');
+            // 確保選中項目在視野內
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// 選擇建議
+function selectSuggestion(path) {
+    const pathInput = document.getElementById('serverPathInput');
+    pathInput.value = path;
+    hideSuggestions();
+    
+    // 如果是資料夾，導航到該路徑
+    goToPath();
+}
+
+// 隱藏建議
+function hideSuggestions() {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (suggestions) {
+        suggestions.classList.remove('show');
+    }
+}
+
+// 前往指定路徑
+function goToPath() {
+    const pathInput = document.getElementById('serverPathInput');
+    const path = pathInput.value.trim();
+    
+    if (path) {
+        currentServerPath = path;
+        loadServerFiles(path);
+    }
+}
+
+// 重新整理伺服器檔案
+function refreshServerFiles() {
+    loadServerFiles(currentServerPath);
 }
 
 // 初始化上傳功能
@@ -140,79 +345,93 @@ function removeLocalFile() {
     checkExecuteButton();
 }
 
-// 載入伺服器檔案
-async function loadServerFiles() {
-    const path = document.getElementById('serverPathInput').value || '/home/vince_lin/ai/preMP';
-    const browserContent = document.getElementById('serverBrowser');
+// 載入伺服器檔案 (與 download.js 風格一致)
+async function loadServerFiles(path) {
+    const browser = document.getElementById('serverBrowser');
+    if (!browser) return;
     
-    browserContent.innerHTML = `
-        <div class="loading">
-            <i class="fas fa-spinner fa-spin fa-3x"></i>
-            <p>載入中...</p>
-        </div>
-    `;
+    browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span> 載入中...</span></div>';
     
     try {
-        const result = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
-        displayServerFiles(result);
+        const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
+        currentServerPath = path;
+        displayServerFiles(response);
+        
+        // 更新路徑輸入框
+        const pathInput = document.getElementById('serverPathInput');
+        if (pathInput) {
+            pathInput.value = path;
+        }
     } catch (error) {
-        browserContent.innerHTML = `
+        browser.innerHTML = `
             <div class="error-message">
-                <i class="fas fa-exclamation-triangle fa-3x"></i>
+                <i class="fas fa-exclamation-triangle"></i>
                 <p>無法載入檔案列表</p>
                 <p class="text-muted">${error.message}</p>
-                <button class="btn btn-primary" onclick="loadServerFiles()">重試</button>
+                <button class="btn-retry" onclick="loadServerFiles('${path}')">
+                    <i class="fas fa-redo"></i> 重試
+                </button>
             </div>
         `;
     }
 }
 
-// 顯示伺服器檔案
-function displayServerFiles(result) {
-    const browserContent = document.getElementById('serverBrowser');
+// 顯示伺服器檔案 (與 download.js 風格一致)
+function displayServerFiles(data) {
+    const browser = document.getElementById('serverBrowser');
+    if (!browser) return;
     
-    if (!result.folders && !result.files) {
-        browserContent.innerHTML = `
-            <div class="empty-message">
-                <i class="fas fa-folder-open fa-3x"></i>
-                <p>此目錄是空的</p>
-            </div>
-        `;
-        return;
-    }
+    const { files = [], folders = [] } = data;
     
     let html = '<div class="file-grid">';
     
-    // 顯示資料夾
-    if (result.folders) {
-        result.folders.forEach(folder => {
-            html += `
-                <div class="file-item folder" ondblclick="navigateToFolder('${folder.path}')">
-                    <i class="fas fa-folder"></i>
-                    <div class="file-name">${folder.name}</div>
-                </div>
-            `;
-        });
+    // 添加返回上層目錄項（如果不是根目錄）
+    if (currentServerPath !== '/' && currentServerPath !== '') {
+        html += `
+            <div class="file-item folder" onclick="navigateToParent()">
+                <i class="fas fa-level-up-alt"></i>
+                <span class="file-name">..</span>
+            </div>
+        `;
     }
     
-    // 顯示檔案（只顯示 Excel 檔案）
-    if (result.files) {
-        result.files.forEach(file => {
-            const isSelected = selectedServerFiles.some(f => f.path === file.path);
-            html += `
-                <div class="file-item file ${isSelected ? 'selected' : ''}" 
-                     onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
-                    ${isSelected ? '<div class="check-icon"><i></i></div>' : ''}
-                    <i class="fas fa-file-excel"></i>
-                    <div class="file-name">${file.name}</div>
-                    <div class="file-size">${utils.formatFileSize(file.size)}</div>
-                </div>
-            `;
-        });
-    }
+    // 顯示資料夾
+    folders.forEach(folder => {
+        html += `
+            <div class="file-item folder" onclick="navigateToFolder('${folder.path}')">
+                <i class="fas fa-folder"></i>
+                <span class="file-name">${folder.name}</span>
+            </div>
+        `;
+    });
+    
+    // 顯示 Excel 檔案
+    files.filter(f => f.name.endsWith('.xlsx')).forEach(file => {
+        const isSelected = selectedServerFiles.some(f => f.path === file.path);
+        html += `
+            <div class="file-item file ${isSelected ? 'selected' : ''}" 
+                 onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
+                <i class="fas fa-file-excel"></i>
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${utils.formatFileSize(file.size)}</span>
+                ${isSelected ? '<div class="check-icon"><i></i></div>' : ''}
+            </div>
+        `;
+    });
     
     html += '</div>';
-    browserContent.innerHTML = html;
+    browser.innerHTML = html;
+}
+
+// 導航到上層目錄
+function navigateToParent() {
+    const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
+    loadServerFiles(parentPath);
+}
+
+// 導航到資料夾
+function navigateToFolder(path) {
+    loadServerFiles(path);
 }
 
 // 切換伺服器檔案選擇
@@ -279,29 +498,13 @@ function updateServerFileSelection() {
     container.innerHTML = html;
     
     // 重新載入檔案列表以更新選中狀態
-    loadServerFiles();
+    loadServerFiles(currentServerPath);
 }
 
 // 移除伺服器檔案
 function removeServerFile(path) {
     selectedServerFiles = [];
     updateServerFileSelection();
-}
-
-// 導航到資料夾
-function navigateToFolder(path) {
-    document.getElementById('serverPathInput').value = path;
-    loadServerFiles();
-}
-
-// 前往指定路徑
-function goToPath() {
-    loadServerFiles();
-}
-
-// 重新整理伺服器檔案
-function refreshServerFiles() {
-    loadServerFiles();
 }
 
 // 初始化 SFTP 設定
@@ -675,6 +878,7 @@ window.removeLocalFile = removeLocalFile;
 window.toggleServerFile = toggleServerFile;
 window.removeServerFile = removeServerFile;
 window.navigateToFolder = navigateToFolder;
+window.navigateToParent = navigateToParent;
 window.goToPath = goToPath;
 window.refreshServerFiles = refreshServerFiles;
 window.executeOneStep = executeOneStep;
@@ -682,3 +886,5 @@ window.viewResults = viewResults;
 window.downloadAll = downloadAll;
 window.startNew = startNew;
 window.resetToForm = resetToForm;
+window.hideSuggestions = hideSuggestions;
+window.selectSuggestion = selectSuggestion;
