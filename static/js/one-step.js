@@ -456,7 +456,7 @@ function displayServerFiles(data) {
                 <i class="fas ${fileIcon}"></i>
                 <span class="file-name">${file.name}</span>
                 <span class="file-size">${utils.formatFileSize(file.size)}</span>
-                ${isSelected ? '<div class="check-icon"><i></i></div>' : ''}
+                ${isSelected ? '<div class="check-icon"></div>' : ''}
             </div>
         `;
     });
@@ -476,22 +476,27 @@ function navigateToFolder(path) {
     loadServerFiles(path);
 }
 
-// 切換伺服器檔案選擇
+// 切換伺服器檔案選擇 - 修正為與 download.js 一致的多選邏輯
 function toggleServerFile(path, name, size) {
     const index = selectedServerFiles.findIndex(f => f.path === path);
     
-    // 一步到位只能選擇一個檔案
     if (index === -1) {
-        selectedServerFiles = [{path, name, size}];
+        // 如果檔案未選擇，添加到選擇列表
+        selectedServerFiles.push({ path, name, size, type: 'server' });
     } else {
-        selectedServerFiles = [];
+        // 如果檔案已選擇，從列表中移除
+        selectedServerFiles.splice(index, 1);
     }
     
+    // 更新顯示
     updateServerFileSelection();
     checkExecuteButton();
+    
+    // 重新載入檔案列表以更新選中狀態
+    loadServerFiles(currentServerPath);
 }
 
-// 更新伺服器檔案選擇顯示
+// 更新伺服器檔案選擇顯示 - 修正為支援多選
 function updateServerFileSelection() {
     const container = document.getElementById('serverSelectedFiles');
     
@@ -502,60 +507,74 @@ function updateServerFileSelection() {
     }
     
     container.classList.remove('hidden');
-    selectedFile = selectedServerFiles[0].path; // 使用第一個選擇的檔案
     
-    // 根據檔案類型決定圖標和顯示的類型文字
-    const file = selectedServerFiles[0];
-    let fileIcon = 'fa-file-excel';
-    let fileType = 'Excel 檔案';
+    // 使用第一個選擇的檔案作為主要檔案（保持向後相容）
+    selectedFile = selectedServerFiles[0].path;
     
-    if (file.name.endsWith('.csv')) {
-        fileIcon = 'fa-file-csv';
-        fileType = 'CSV 檔案';
-    } else if (file.name.endsWith('.xls')) {
-        fileType = 'Excel 97-2003';
-    }
-    
+    // 使用與 download.js 相同的顯示格式
     let html = `
         <div class="file-list-container">
             <div class="file-list-header">
                 <h3 class="file-list-title">
-                    <i class="fas fa-server"></i> 已選擇的伺服器檔案
+                    <i class="fas fa-check-circle"></i> 已選擇的檔案
                 </h3>
-                <span class="file-count-badge">1 個檔案</span>
+                <span class="file-count-badge">${selectedServerFiles.length} 個檔案</span>
             </div>
             <div class="file-items">
-                <div class="file-item-card">
-                    <div class="file-icon-wrapper">
-                        <i class="fas ${fileIcon}"></i>
-                    </div>
-                    <div class="file-details">
-                        <div class="file-name">${file.name}</div>
-                        <div class="file-meta">
-                            <span class="file-path">
-                                <i class="fas fa-folder"></i> ${file.path}
-                            </span>
-                            <span class="file-type">${fileType}</span>
-                            <span class="file-size">${utils.formatFileSize(file.size)}</span>
-                        </div>
-                    </div>
-                    <button class="btn-remove-file" onclick="removeServerFile('${file.path}')">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
     `;
+    
+    selectedServerFiles.forEach((file, index) => {
+        const fileSize = utils.formatFileSize(file.size);
+        // 從路徑中提取資料夾名稱
+        const folderPath = file.path.substring(0, file.path.lastIndexOf('/'));
+        const folderName = folderPath.split('/').pop() || folderPath;
+        
+        // 根據檔案類型決定圖標和顯示的類型文字
+        let fileIcon = 'fa-file-excel';
+        let fileType = 'Excel 檔案';
+        
+        if (file.name.endsWith('.csv')) {
+            fileIcon = 'fa-file-csv';
+            fileType = 'CSV 檔案';
+        } else if (file.name.endsWith('.xls')) {
+            fileType = 'Excel 97-2003';
+        }
+        
+        html += `
+            <div class="file-item-card">
+                <div class="file-icon-wrapper">
+                    <i class="fas ${fileIcon}"></i>
+                </div>
+                <div class="file-details">
+                    <div class="file-name" title="${file.name}">${file.name}</div>
+                    <div class="file-meta">
+                        <span class="file-size">${fileSize}</span>
+                        <span class="file-type">${fileType}</span>
+                        <span class="file-path" title="${folderPath}">
+                            <i class="fas fa-folder-open"></i> ${folderName}
+                        </span>
+                    </div>
+                </div>
+                <button class="btn-remove-file" onclick="removeServerFile(${index})" title="移除檔案">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    });
+    
+    html += '</div></div>';
+    
     container.innerHTML = html;
+}
+
+// 移除伺服器檔案 - 修正為支援索引參數
+function removeServerFile(index) {
+    selectedServerFiles.splice(index, 1);
+    updateServerFileSelection();
+    checkExecuteButton();
     
     // 重新載入檔案列表以更新選中狀態
     loadServerFiles(currentServerPath);
-}
-
-// 移除伺服器檔案
-function removeServerFile(path) {
-    selectedServerFiles = [];
-    updateServerFileSelection();
 }
 
 // 初始化 SFTP 設定
@@ -583,13 +602,14 @@ function initializeEventListeners() {
     });
 }
 
-// 檢查執行按鈕狀態
+// 檢查執行按鈕狀態 - 修正為支援多選
 function checkExecuteButton() {
     const executeBtn = document.getElementById('executeBtn');
-    executeBtn.disabled = !selectedFile;
+    // 檢查是否有選擇本地檔案或伺服器檔案
+    executeBtn.disabled = !selectedFile && selectedServerFiles.length === 0;
     
     // 更新步驟狀態
-    if (selectedFile) {
+    if (selectedFile || selectedServerFiles.length > 0) {
         updateStepIndicator('upload', 'completed');
         updateStepIndicator('config', 'active');
     } else {
@@ -616,7 +636,8 @@ function updateStepIndicator(step, status) {
 
 // 執行一步到位處理
 async function executeOneStep() {
-    if (!selectedFile) {
+    // 確保有選擇檔案
+    if (!selectedFile && selectedServerFiles.length === 0) {
         utils.showNotification('請先選擇 Excel 檔案', 'error');
         return;
     }
