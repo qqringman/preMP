@@ -1,960 +1,623 @@
-// 全域變數
-let pivotData = {};
-let currentSheet = '';
-let charts = {
-    trend: null,
-    distribution: null
-};
-let currentFilters = {};
-let sortState = {};
+// 結果報表頁面 JavaScript
+
+const taskId = window.location.pathname.split('/').pop();
+let currentData = null;
+let currentSheet = null;
+let pivotMode = false;
+let filters = {};
 
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
-    // 確認 taskId 存在
-    if (typeof taskId === 'undefined') {
-        console.error('Task ID not defined');
-        showError('無法取得任務 ID');
-        return;
-    }
-    
-    console.log('Loading data for task:', taskId);
     loadPivotData();
-    initializeEventListeners();
 });
-
-// 初始化事件監聽器
-function initializeEventListeners() {
-    // Sheet 選擇器
-    const sheetSelector = document.getElementById('sheetSelector');
-    if (sheetSelector) {
-        sheetSelector.addEventListener('change', (e) => {
-            const selectedSheet = e.target.value;
-            if (selectedSheet) {
-                displaySheet(selectedSheet);
-                updateStatistics(selectedSheet);
-                drawCharts(selectedSheet);
-            }
-        });
-    }
-    
-    // 處理可能的擴充功能錯誤
-    window.addEventListener('error', (e) => {
-        if (e.message && e.message.includes('message port closed')) {
-            e.preventDefault();
-            return true;
-        }
-    });
-}
 
 // 載入樞紐分析資料
 async function loadPivotData() {
-    showLoading();
-    
     try {
-        console.log('Fetching pivot data for task:', taskId);
+        utils.showLoading('載入資料中...');
         
-        const response = await utils.apiRequest(`/api/pivot-data/${taskId}`);
-        console.log('Pivot data response:', response);
+        const data = await utils.apiRequest(`/api/pivot-data/${taskId}`);
         
-        if (response && Object.keys(response).length > 0) {
-            pivotData = response;
-            
-            // 按照 Excel 頁籤順序排序
-            const orderedSheets = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對'];
-            const sheets = [];
-            
-            // 先加入已定義順序的頁籤
-            orderedSheets.forEach(sheet => {
-                if (sheet in pivotData) {
-                    sheets.push(sheet);
-                }
-            });
-            
-            // 再加入其他頁籤
-            Object.keys(pivotData).forEach(sheet => {
-                if (!sheets.includes(sheet)) {
-                    sheets.push(sheet);
-                }
-            });
-            
-            console.log('Available sheets:', sheets);
-            
-            updateSheetSelector(sheets);
-            
-            // 顯示第一個頁籤
-            if (sheets.length > 0) {
-                displaySheet(sheets[0]);
-                updateStatistics(sheets[0]);
-                drawCharts(sheets[0]);
-            }
-            
-            hideLoading();
-        } else {
-            console.log('No data found for task:', taskId);
-            showNoData();
+        if (!data || Object.keys(data).length === 0) {
+            // 如果沒有資料，顯示提示訊息
+            showNoDataMessage();
+            utils.hideLoading();
+            return;
         }
+        
+        currentData = data;
+        
+        // 填充資料表選項
+        const selector = document.getElementById('sheetSelector');
+        selector.innerHTML = '';
+        
+        Object.keys(data).forEach(sheetName => {
+            const option = document.createElement('option');
+            option.value = sheetName;
+            option.textContent = getSheetDisplayName(sheetName);
+            selector.appendChild(option);
+        });
+        
+        // 載入第一個資料表
+        if (Object.keys(data).length > 0) {
+            loadSheet(Object.keys(data)[0]);
+        }
+        
+        utils.hideLoading();
+        
     } catch (error) {
-        console.error('Load pivot data error:', error);
-        showError('載入資料失敗：' + error.message);
+        console.error('Load data error:', error);
+        utils.hideLoading();
+        showErrorMessage();
     }
 }
 
-// 更新資料表選擇器
-function updateSheetSelector(sheets) {
-    const selector = document.getElementById('sheetSelector');
-    if (!selector) return;
-    
-    selector.innerHTML = '';
-    
-    sheets.forEach(sheet => {
-        const option = document.createElement('option');
-        option.value = sheet;
-        option.textContent = formatSheetName(sheet);
-        selector.appendChild(option);
-    });
+// 顯示無資料訊息
+function showNoDataMessage() {
+    const container = document.querySelector('.data-view-container');
+    container.innerHTML = `
+        <div class="no-data-message">
+            <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+            <h3>暫無資料可顯示</h3>
+            <p class="text-muted">此任務可能還在處理中，或尚未產生報表。</p>
+            <button class="btn btn-primary mt-3" onclick="location.reload()">
+                <i class="fas fa-sync"></i> 重新載入
+            </button>
+        </div>
+    `;
 }
 
-// 格式化資料表名稱
-function formatSheetName(sheetName) {
-    const nameMap = {
+// 顯示錯誤訊息
+function showErrorMessage() {
+    const container = document.querySelector('.data-view-container');
+    container.innerHTML = `
+        <div class="error-message">
+            <i class="fas fa-exclamation-triangle fa-4x text-danger mb-3"></i>
+            <h3>載入資料失敗</h3>
+            <p class="text-muted">無法載入報表資料，請稍後再試。</p>
+            <div class="mt-3">
+                <button class="btn btn-primary" onclick="location.reload()">
+                    <i class="fas fa-sync"></i> 重試
+                </button>
+                <button class="btn btn-outline ml-2" onclick="window.history.back()">
+                    <i class="fas fa-arrow-left"></i> 返回
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// 取得資料表顯示名稱
+function getSheetDisplayName(sheetName) {
+    const displayNames = {
         'revision_diff': 'Revision 差異',
         'branch_error': '分支錯誤',
         'lost_project': '新增/刪除專案',
         'version_diff': '版本檔案差異',
-        '無法比對': '無法比對的模組'
+        '無法比對': '無法比對的模組',
+        '摘要': '比對摘要',
+        'all_scenarios': '所有情境摘要',
+        'master_vs_premp': 'Master vs PreMP',
+        'premp_vs_wave': 'PreMP vs Wave',
+        'wave_vs_backup': 'Wave vs Backup'
     };
-    return nameMap[sheetName] || sheetName;
+    return displayNames[sheetName] || sheetName;
 }
 
-// 顯示資料表
-function displaySheet(sheetName) {
+// 載入資料表
+function loadSheet(sheetName) {
     currentSheet = sheetName;
-    const data = pivotData[sheetName];
+    const sheetData = currentData[sheetName];
     
-    if (!data || !data.data) {
-        document.getElementById('tableWrapper').innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i><p>無資料</p></div>';
+    if (!sheetData) {
+        console.error('Sheet data not found:', sheetName);
         return;
     }
     
-    // 生成表格
-    const tableHtml = generateTable(data);
-    document.getElementById('tableWrapper').innerHTML = tableHtml;
+    // 更新選擇器
+    document.getElementById('sheetSelector').value = sheetName;
     
-    // 添加排序和篩選功能
-    addSortingToTable();
-}
-
-// 生成表格 HTML
-function generateTable(data) {
-    const columns = data.columns || [];
-    const rows = data.data || [];
+    // 更新統計資料
+    updateStatistics(sheetData);
     
-    if (columns.length === 0 || rows.length === 0) {
-        return '<div class="no-data"><i class="fas fa-inbox"></i><p>無資料</p></div>';
+    // 生成篩選器
+    generateFilters(sheetData);
+    
+    if (pivotMode) {
+        // 樞紐分析模式
+        renderPivotTable(sheetData);
+    } else {
+        // 一般表格模式
+        renderDataTable(sheetData);
     }
     
-    let html = '<table class="data-table" id="dataTable">';
-    
-    // 表頭
-    html += '<thead><tr>';
-    columns.forEach(col => {
-        html += `<th>${col}</th>`;
-    });
-    html += '</tr></thead>';
-    
-    // 表身
-    html += '<tbody>';
-    rows.forEach(row => {
-        html += '<tr>';
-        columns.forEach(col => {
-            let value = row[col] || '';
-            let cellClass = '';
-            
-            // 特殊處理
-            if (col === 'problem' && value) {
-                cellClass = 'highlight-red';
-            } else if (col === '狀態') {
-                if (value === '新增') {
-                    value = '<span class="badge badge-success">新增</span>';
-                } else if (value === '刪除') {
-                    value = '<span class="badge badge-danger">刪除</span>';
-                }
-            } else if (col === 'has_wave') {
-                if (value === 'Y') {
-                    value = '<span class="badge badge-info">Y</span>';
-                } else if (value === 'N') {
-                    value = '<span class="badge badge-warning">N</span>';
-                }
-            } else if ((col.includes('link') || col.includes('Link')) && value && value.startsWith('http')) {
-                value = `<a href="${value}" target="_blank" class="link">${value} <i class="fas fa-external-link-alt"></i></a>`;
-            }
-            
-            html += `<td class="${cellClass}">${value}</td>`;
-        });
-        html += '</tr>';
-    });
-    html += '</tbody>';
-    
-    html += '</table>';
-    return html;
+    // 繪製圖表
+    drawDataCharts(sheetData);
 }
 
-// 添加排序功能
-function addSortingToTable() {
-    const headers = document.querySelectorAll('.data-table th');
+// 渲染資料表格
+function renderDataTable(sheetData) {
+    const table = document.getElementById('dataTable');
+    const thead = document.getElementById('tableHead');
+    const tbody = document.getElementById('tableBody');
     
-    headers.forEach((header, index) => {
-        // 添加排序和篩選圖標
-        const icons = document.createElement('span');
-        icons.className = 'sort-filter-icons';
-        icons.innerHTML = `
-            <i class="fas fa-sort sort-icon"></i>
-            <i class="fas fa-filter filter-icon"></i>
+    // 清空表格
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    
+    if (!sheetData.data || sheetData.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">此資料表沒有資料</td></tr>';
+        return;
+    }
+    
+    // 取得欄位（從資料或定義中）
+    const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+    
+    // 建立表頭
+    const headerRow = document.createElement('tr');
+    columns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        th.onclick = () => sortTable(col);
+        th.style.cursor = 'pointer';
+        
+        // 標記重要欄位
+        if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'problem', '狀態', 'is_different'].includes(col)) {
+            th.classList.add('highlight-header');
+        }
+        
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    
+    // 建立表格內容
+    const filteredData = applyDataFilters(sheetData.data);
+    filteredData.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        columns.forEach(col => {
+            const td = document.createElement('td');
+            const value = row[col];
+            
+            // 特殊格式處理
+            if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
+                td.innerHTML = `<a href="${value}" target="_blank" class="link">
+                    <i class="fas fa-external-link-alt"></i> 查看
+                </a>`;
+            } else if (col === 'has_wave' || col === 'is_different') {
+                const badgeClass = value === 'Y' ? 'badge-success' : 'badge-default';
+                td.innerHTML = `<span class="badge ${badgeClass}">${value || 'N'}</span>`;
+            } else if (col === '狀態') {
+                const badgeClass = value === '新增' ? 'badge-success' : 'badge-warning';
+                td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
+            } else if (col === 'problem' && value) {
+                td.innerHTML = `<span class="text-danger font-weight-bold">${value}</span>`;
+            } else {
+                td.textContent = value !== null && value !== undefined ? value : '';
+            }
+            
+            // 標記重要欄位內容
+            if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
+                td.classList.add('highlight-red');
+            }
+            
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    
+    // 如果沒有資料顯示
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合篩選條件的資料</td></tr>';
+    }
+}
+
+// 渲染樞紐分析表
+function renderPivotTable(sheetData) {
+    const container = document.getElementById('pivotContainer');
+    container.innerHTML = '';
+    
+    if (!sheetData.data || sheetData.data.length === 0) {
+        container.innerHTML = '<div class="empty-message">沒有資料可供分析</div>';
+        return;
+    }
+    
+    // 使用 PivotTable.js
+    try {
+        $(container).pivotUI(sheetData.data, {
+            rows: [],
+            cols: [],
+            aggregatorName: "計數",
+            rendererName: "表格",
+            unusedAttrsVertical: true,
+            renderers: $.extend(
+                $.pivotUtilities.renderers,
+                $.pivotUtilities.c3_renderers,
+                $.pivotUtilities.d3_renderers
+            ),
+            localeStrings: {
+                renderError: "渲染錯誤",
+                computeError: "計算錯誤",
+                uiRenderError: "UI 渲染錯誤",
+                selectAll: "全選",
+                selectNone: "全不選",
+                tooMany: "(太多值無法顯示)",
+                filterResults: "篩選結果",
+                totals: "總計",
+                vs: "vs",
+                by: "by"
+            }
+        });
+    } catch (error) {
+        console.error('Pivot table error:', error);
+        container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
+    }
+}
+
+// 切換樞紐分析模式
+function togglePivotMode() {
+    pivotMode = !pivotMode;
+    
+    document.getElementById('tableView').classList.toggle('hidden', pivotMode);
+    document.getElementById('pivotView').classList.toggle('hidden', !pivotMode);
+    document.getElementById('pivotToggleText').textContent = pivotMode ? '切換表格檢視' : '切換樞紐分析';
+    
+    if (currentSheet) {
+        loadSheet(currentSheet);
+    }
+}
+
+// 更新統計資料
+function updateStatistics(sheetData) {
+    const statsGrid = document.getElementById('statsGrid');
+    statsGrid.innerHTML = '';
+    
+    if (!sheetData.data || sheetData.data.length === 0) return;
+    
+    // 計算基本統計
+    const stats = [
+        {
+            label: '總筆數',
+            value: sheetData.data.length,
+            icon: 'fa-list',
+            color: 'blue'
+        },
+        {
+            label: '欄位數',
+            value: sheetData.columns ? sheetData.columns.length : Object.keys(sheetData.data[0] || {}).length,
+            icon: 'fa-columns',
+            color: 'blue'
+        }
+    ];
+    
+    // 特定資料表的統計
+    if (currentSheet === 'revision_diff') {
+        const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
+        const hasWaveCount = sheetData.data.filter(row => row.has_wave === 'Y').length;
+        stats.push({
+            label: '模組數',
+            value: uniqueModules.size,
+            icon: 'fa-cube',
+            color: 'purple'
+        });
+        stats.push({
+            label: '包含 Wave',
+            value: hasWaveCount,
+            icon: 'fa-water',
+            color: 'info'
+        });
+    }
+    
+    if (currentSheet === 'branch_error') {
+        const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
+        if (hasWaveN > 0) {
+            stats.push({
+                label: '需修正',
+                value: hasWaveN,
+                icon: 'fa-exclamation-triangle',
+                color: 'warning'
+            });
+        }
+    }
+    
+    if (currentSheet === 'lost_project') {
+        const added = sheetData.data.filter(row => row['狀態'] === '新增').length;
+        const deleted = sheetData.data.filter(row => row['狀態'] === '刪除').length;
+        if (added > 0) {
+            stats.push({
+                label: '新增專案',
+                value: added,
+                icon: 'fa-plus-circle',
+                color: 'success'
+            });
+        }
+        if (deleted > 0) {
+            stats.push({
+                label: '刪除專案',
+                value: deleted,
+                icon: 'fa-minus-circle',
+                color: 'danger'
+            });
+        }
+    }
+    
+    // 渲染統計卡片
+    stats.forEach(stat => {
+        const card = document.createElement('div');
+        card.className = `stat-card ${stat.color || ''}`;
+        card.innerHTML = `
+            <div class="stat-icon ${stat.color ? `bg-${stat.color}` : ''}">
+                <i class="fas ${stat.icon}"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">${stat.value}</div>
+                <div class="stat-label">${stat.label}</div>
+            </div>
         `;
-        header.appendChild(icons);
+        statsGrid.appendChild(card);
+    });
+}
+
+// 生成篩選器
+function generateFilters(sheetData) {
+    const filterContent = document.getElementById('filterContent');
+    filterContent.innerHTML = '';
+    
+    const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+    
+    // 為每個欄位生成篩選器
+    columns.forEach(col => {
+        // 跳過某些欄位
+        if (col.includes('link') || col.includes('content') || col.includes('revision')) return;
         
-        // 排序事件
-        header.querySelector('.sort-icon').addEventListener('click', (e) => {
-            e.stopPropagation();
-            sortTable(index, header);
-        });
+        // 取得唯一值
+        const uniqueValues = [...new Set(sheetData.data.map(row => row[col]))].filter(v => v !== null && v !== undefined);
         
-        // 篩選事件
-        header.querySelector('.filter-icon').addEventListener('click', (e) => {
-            e.stopPropagation();
-            showFilterDialog(index, header);
-        });
+        if (uniqueValues.length > 0 && uniqueValues.length < 50) {
+            const filterGroup = document.createElement('div');
+            filterGroup.className = 'filter-group';
+            filterGroup.innerHTML = `
+                <label class="filter-label">${col}</label>
+                <select class="filter-select" multiple data-column="${col}">
+                    ${uniqueValues.map(val => `
+                        <option value="${val}">${val}</option>
+                    `).join('')}
+                </select>
+            `;
+            filterContent.appendChild(filterGroup);
+        }
+    });
+    
+    // 如果沒有可篩選的欄位
+    if (filterContent.children.length === 0) {
+        filterContent.innerHTML = '<p class="text-muted text-center">沒有可篩選的欄位</p>';
+    }
+}
+
+// 套用篩選器
+function applyFilters() {
+    // 收集篩選條件
+    filters = {};
+    document.querySelectorAll('.filter-select').forEach(select => {
+        const column = select.dataset.column;
+        const selectedValues = Array.from(select.selectedOptions).map(opt => opt.value);
+        if (selectedValues.length > 0) {
+            filters[column] = selectedValues;
+        }
+    });
+    
+    // 重新載入資料
+    if (currentSheet) {
+        loadSheet(currentSheet);
+    }
+    
+    utils.showNotification('已套用篩選', 'success');
+    
+    // 關閉篩選面板
+    document.getElementById('filterPanel').classList.remove('show');
+}
+
+// 清除篩選器
+function clearFilters() {
+    filters = {};
+    document.querySelectorAll('.filter-select').forEach(select => {
+        select.selectedIndex = -1;
+    });
+    
+    if (currentSheet) {
+        loadSheet(currentSheet);
+    }
+    
+    utils.showNotification('已清除篩選', 'info');
+}
+
+// 套用資料篩選
+function applyDataFilters(data) {
+    if (Object.keys(filters).length === 0) return data;
+    
+    return data.filter(row => {
+        for (const [column, values] of Object.entries(filters)) {
+            const rowValue = row[column];
+            if (!values.includes(String(rowValue))) {
+                return false;
+            }
+        }
+        return true;
     });
 }
 
 // 表格排序
-function sortTable(columnIndex, headerElement) {
-    const table = document.querySelector('.data-table');
-    const tbody = table.querySelector('tbody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
+let sortOrder = {};
+function sortTable(column) {
+    const order = sortOrder[column] === 'asc' ? 'desc' : 'asc';
+    sortOrder[column] = order;
     
-    // 確定排序方向
-    const isAscending = headerElement.classList.contains('sort-asc');
+    const sheetData = currentData[currentSheet];
+    if (!sheetData || !sheetData.data) return;
     
-    // 移除所有排序類別
-    document.querySelectorAll('.data-table th').forEach(th => {
-        th.classList.remove('sort-asc', 'sort-desc', 'sorted');
-    });
-    
-    // 排序
-    rows.sort((a, b) => {
-        const aText = a.cells[columnIndex].textContent.trim();
-        const bText = b.cells[columnIndex].textContent.trim();
+    sheetData.data.sort((a, b) => {
+        const aVal = a[column];
+        const bVal = b[column];
         
-        // 嘗試數字排序
-        const aNum = parseFloat(aText);
-        const bNum = parseFloat(bText);
+        // 處理 null 和 undefined
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
         
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-            return isAscending ? bNum - aNum : aNum - bNum;
+        // 數字排序
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+            return order === 'asc' ? aVal - bVal : bVal - aVal;
         }
         
-        // 文字排序
-        return isAscending ? 
-            bText.localeCompare(aText, 'zh-TW') : 
-            aText.localeCompare(bText, 'zh-TW');
-    });
-    
-    // 更新排序類別
-    headerElement.classList.add('sorted', isAscending ? 'sort-desc' : 'sort-asc');
-    
-    // 更新圖標
-    const sortIcon = headerElement.querySelector('.sort-icon');
-    sortIcon.className = isAscending ? 'fas fa-sort-down sort-icon' : 'fas fa-sort-up sort-icon';
-    
-    // 更新表格
-    rows.forEach(row => tbody.appendChild(row));
-}
-
-// 顯示篩選對話框
-function showFilterDialog(columnIndex, headerElement) {
-    // 獲取該欄位的所有值
-    const table = document.querySelector('.data-table');
-    const rows = table.querySelectorAll('tbody tr');
-    const values = new Set();
-    
-    rows.forEach(row => {
-        const cell = row.cells[columnIndex];
-        if (cell) {
-            values.add(cell.textContent.trim());
+        // 字串排序
+        const aStr = String(aVal);
+        const bStr = String(bVal);
+        
+        if (order === 'asc') {
+            return aStr.localeCompare(bStr);
+        } else {
+            return bStr.localeCompare(aStr);
         }
     });
     
-    // 創建篩選面板內容
-    const filterContent = document.querySelector('.filter-content');
-    filterContent.innerHTML = `
-        <div class="filter-group">
-            <label class="filter-label">${headerElement.textContent.replace(/[\s\n]+/g, ' ').trim()}</label>
-            <select class="filter-select" multiple size="10" id="filterSelect">
-                ${Array.from(values).sort().map(value => 
-                    `<option value="${value}" selected>${value}</option>`
-                ).join('')}
-            </select>
-        </div>
-    `;
-    
-    // 顯示篩選面板
-    document.getElementById('filterPanel').classList.add('show');
-    
-    // 儲存當前篩選的欄位索引
-    currentFilters.columnIndex = columnIndex;
+    renderDataTable(sheetData);
 }
 
-// 應用篩選
-function applyFilters() {
-    const filterSelect = document.getElementById('filterSelect');
-    const selectedValues = Array.from(filterSelect.selectedOptions).map(opt => opt.value);
-    const columnIndex = currentFilters.columnIndex;
+// 繪製資料圖表
+function drawDataCharts(sheetData) {
+    if (!sheetData.data || sheetData.data.length === 0) return;
     
-    if (columnIndex === undefined) return;
-    
-    const table = document.querySelector('.data-table');
-    const rows = table.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        const cell = row.cells[columnIndex];
-        if (cell) {
-            const value = cell.textContent.trim();
-            row.style.display = selectedValues.includes(value) ? '' : 'none';
+    // 清除舊圖表
+    const charts = ['distributionChart', 'trendChart'];
+    charts.forEach(chartId => {
+        const canvas = document.getElementById(chartId);
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
     });
     
-    // 標記已篩選的欄位
-    const headers = table.querySelectorAll('th');
-    headers[columnIndex].classList.add('filtered');
-    
-    hideFilters();
-}
-
-// 重置篩選
-function resetFilters() {
-    const table = document.querySelector('.data-table');
-    const rows = table.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        row.style.display = '';
-    });
-    
-    // 移除篩選標記
-    table.querySelectorAll('th').forEach(th => {
-        th.classList.remove('filtered');
-    });
-    
-    hideFilters();
-}
-
-// 隱藏篩選面板
-function hideFilters() {
-    document.getElementById('filterPanel').classList.remove('show');
-}
-
-// 顯示篩選器
-function showFilters() {
-    document.getElementById('filterPanel').classList.add('show');
-}
-
-// 更新統計資訊
-function updateStatistics(sheetName) {
-    const data = pivotData[sheetName];
-    if (!data || !data.data) return;
-    
-    const statsGrid = document.getElementById('statsGrid');
-    statsGrid.innerHTML = '';
-    
-    // 基本統計
-    const totalRecords = data.data.length;
-    
-    // 根據不同的資料表顯示不同的統計
-    if (sheetName === 'revision_diff') {
-        // 統計模組數
-        const modules = new Set(data.data.map(row => row.module)).size;
+    // 分布圖
+    const distCanvas = document.getElementById('distributionChart');
+    if (distCanvas) {
+        const distCtx = distCanvas.getContext('2d');
         
-        // 統計 has_wave
-        let hasWaveY = 0;
-        let hasWaveN = 0;
-        data.data.forEach(row => {
-            if (row.has_wave === 'Y') hasWaveY++;
-            else if (row.has_wave === 'N') hasWaveN++;
-        });
+        // 根據資料表類型決定圖表內容
+        let chartData = {};
         
-        statsGrid.innerHTML = `
-            <div class="stat-card blue">
-                <div class="stat-icon">
-                    <i class="fas fa-list"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${totalRecords}</div>
-                    <div class="stat-label">總記錄數</div>
-                </div>
-            </div>
-            <div class="stat-card purple">
-                <div class="stat-icon">
-                    <i class="fas fa-cubes"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${modules}</div>
-                    <div class="stat-label">模組數</div>
-                </div>
-            </div>
-            <div class="stat-card success">
-                <div class="stat-icon">
-                    <i class="fas fa-check"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${hasWaveY}</div>
-                    <div class="stat-label">Has Wave - Y</div>
-                </div>
-            </div>
-            <div class="stat-card danger">
-                <div class="stat-icon">
-                    <i class="fas fa-times"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${hasWaveN}</div>
-                    <div class="stat-label">Has Wave - N</div>
-                </div>
-            </div>
-        `;
-    } else if (sheetName === 'branch_error') {
-        // 統計問題類型
-        const problems = {};
-        let hasWaveN = 0;
-        
-        data.data.forEach(row => {
-            if (row.problem) {
-                problems[row.problem] = (problems[row.problem] || 0) + 1;
-            }
-            if (row.has_wave === 'N') hasWaveN++;
-        });
-        
-        statsGrid.innerHTML = `
-            <div class="stat-card blue">
-                <div class="stat-icon">
-                    <i class="fas fa-list"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${totalRecords}</div>
-                    <div class="stat-label">總錯誤數</div>
-                </div>
-            </div>
-            <div class="stat-card danger">
-                <div class="stat-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${Object.keys(problems).length}</div>
-                    <div class="stat-label">問題類型</div>
-                </div>
-            </div>
-            <div class="stat-card warning">
-                <div class="stat-icon">
-                    <i class="fas fa-times"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${hasWaveN}</div>
-                    <div class="stat-label">Has Wave - N</div>
-                </div>
-            </div>
-        `;
-    } else if (sheetName === 'lost_project') {
-        // 統計新增和刪除
-        let added = 0;
-        let deleted = 0;
-        data.data.forEach(row => {
-            if (row['狀態'] === '新增') added++;
-            else if (row['狀態'] === '刪除') deleted++;
-        });
-        
-        statsGrid.innerHTML = `
-            <div class="stat-card blue">
-                <div class="stat-icon">
-                    <i class="fas fa-list"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${totalRecords}</div>
-                    <div class="stat-label">總變更數</div>
-                </div>
-            </div>
-            <div class="stat-card success">
-                <div class="stat-icon">
-                    <i class="fas fa-plus"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${added}</div>
-                    <div class="stat-label">新增專案</div>
-                </div>
-            </div>
-            <div class="stat-card danger">
-                <div class="stat-icon">
-                    <i class="fas fa-minus"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${deleted}</div>
-                    <div class="stat-label">刪除專案</div>
-                </div>
-            </div>
-        `;
-    } else {
-        // 通用統計
-        statsGrid.innerHTML = `
-            <div class="stat-card blue">
-                <div class="stat-icon">
-                    <i class="fas fa-database"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${totalRecords}</div>
-                    <div class="stat-label">總記錄數</div>
-                </div>
-            </div>
-            <div class="stat-card purple">
-                <div class="stat-icon">
-                    <i class="fas fa-columns"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-value">${data.columns ? data.columns.length : 0}</div>
-                    <div class="stat-label">欄位數</div>
-                </div>
-            </div>
-        `;
-    }
-}
-
-// 繪製圖表
-function drawCharts(sheetName) {
-    const data = pivotData[sheetName];
-    if (!data || !data.data || data.data.length === 0) {
-        clearCharts();
-        return;
-    }
-    
-    // 銷毀舊圖表
-    if (charts.trend) {
-        charts.trend.destroy();
-        charts.trend = null;
-    }
-    if (charts.distribution) {
-        charts.distribution.destroy();
-        charts.distribution = null;
-    }
-    
-    // 根據不同的資料表類型繪製不同的圖表
-    if (sheetName === 'revision_diff') {
-        drawRevisionTrendChart(data);
-        drawRevisionDistributionChart(data);
-    } else if (sheetName === 'branch_error') {
-        drawBranchErrorChart(data);
-    } else if (sheetName === 'lost_project') {
-        drawLostProjectChart(data);
-    } else {
-        // 通用圖表
-        drawGenericCharts(data);
-    }
-}
-
-// 清空圖表
-function clearCharts() {
-    if (charts.trend) {
-        charts.trend.destroy();
-        charts.trend = null;
-    }
-    if (charts.distribution) {
-        charts.distribution.destroy();
-        charts.distribution = null;
-    }
-    
-    // 顯示無數據提示
-    const ctx1 = document.getElementById('trendChart');
-    const ctx2 = document.getElementById('distributionChart');
-    
-    if (ctx1) {
-        const context = ctx1.getContext('2d');
-        context.clearRect(0, 0, ctx1.width, ctx1.height);
-        context.font = '16px Arial';
-        context.textAlign = 'center';
-        context.fillStyle = '#999';
-        context.fillText('暫無趨勢數據', ctx1.width / 2, ctx1.height / 2);
-    }
-    
-    if (ctx2) {
-        const context = ctx2.getContext('2d');
-        context.clearRect(0, 0, ctx2.width, ctx2.height);
-        context.font = '16px Arial';
-        context.textAlign = 'center';
-        context.fillStyle = '#999';
-        context.fillText('暫無分佈數據', ctx2.width / 2, ctx2.height / 2);
-    }
-}
-
-// 繪製 revision 趨勢圖
-function drawRevisionTrendChart(data) {
-    const ctx = document.getElementById('trendChart').getContext('2d');
-    
-    // 按模組分組統計
-    const moduleStats = {};
-    data.data.forEach(row => {
-        const module = row.module || 'Unknown';
-        if (!moduleStats[module]) {
-            moduleStats[module] = 0;
-        }
-        moduleStats[module]++;
-    });
-    
-    charts.trend = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: Object.keys(moduleStats),
-            datasets: [{
-                label: 'Revision 差異數量',
-                data: Object.values(moduleStats),
-                borderColor: '#2196F3',
-                backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '各模組 Revision 差異趨勢'
+        if (currentSheet === 'revision_diff' || currentSheet === 'branch_error') {
+            // 按模組統計
+            sheetData.data.forEach(row => {
+                const module = row.module;
+                if (module) {
+                    chartData[module] = (chartData[module] || 0) + 1;
                 }
-            }
-        }
-    });
-}
-
-// 繪製分佈圖
-function drawRevisionDistributionChart(data) {
-    const ctx = document.getElementById('distributionChart').getContext('2d');
-    
-    // 統計 has_wave 的分佈
-    let hasWaveY = 0;
-    let hasWaveN = 0;
-    
-    data.data.forEach(row => {
-        if (row.has_wave === 'Y') {
-            hasWaveY++;
-        } else if (row.has_wave === 'N') {
-            hasWaveN++;
-        }
-    });
-    
-    charts.distribution = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Has Wave - Y', 'Has Wave - N'],
-            datasets: [{
-                data: [hasWaveY, hasWaveN],
-                backgroundColor: ['#4CAF50', '#F44336']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Wave 分佈統計'
+            });
+        } else if (currentSheet === 'lost_project') {
+            // 按狀態統計
+            sheetData.data.forEach(row => {
+                const status = row['狀態'];
+                if (status) {
+                    chartData[status] = (chartData[status] || 0) + 1;
                 }
+            });
+        } else {
+            // 預設按第一個非數字欄位統計
+            const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+            const firstStringCol = columns.find(col => {
+                const firstValue = sheetData.data[0][col];
+                return typeof firstValue === 'string';
+            });
+            
+            if (firstStringCol) {
+                sheetData.data.forEach(row => {
+                    const value = row[firstStringCol];
+                    if (value) {
+                        chartData[value] = (chartData[value] || 0) + 1;
+                    }
+                });
             }
         }
-    });
-}
-
-// 繪製分支錯誤圖表
-function drawBranchErrorChart(data) {
-    // 趨勢圖
-    const trendCtx = document.getElementById('trendChart').getContext('2d');
-    const moduleProblems = {};
-    
-    data.data.forEach(row => {
-        const module = row.module || 'Unknown';
-        if (!moduleProblems[module]) {
-            moduleProblems[module] = {
-                total: 0,
-                hasWaveN: 0
-            };
-        }
-        moduleProblems[module].total++;
-        if (row.has_wave === 'N') {
-            moduleProblems[module].hasWaveN++;
-        }
-    });
-    
-    const modules = Object.keys(moduleProblems);
-    
-    charts.trend = new Chart(trendCtx, {
-        type: 'bar',
-        data: {
-            labels: modules,
-            datasets: [{
-                label: '總錯誤數',
-                data: modules.map(m => moduleProblems[m].total),
-                backgroundColor: 'rgba(33, 150, 243, 0.5)'
-            }, {
-                label: 'Has Wave = N',
-                data: modules.map(m => moduleProblems[m].hasWaveN),
-                backgroundColor: 'rgba(244, 67, 54, 0.5)'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '各模組分支錯誤統計'
-                }
-            }
-        }
-    });
-    
-    // 分佈圖
-    const ctx = document.getElementById('distributionChart').getContext('2d');
-    
-    // 統計問題類型
-    const problemTypes = {};
-    data.data.forEach(row => {
-        const problem = row.problem || '無問題';
-        if (!problemTypes[problem]) {
-            problemTypes[problem] = 0;
-        }
-        problemTypes[problem]++;
-    });
-    
-    const labels = Object.keys(problemTypes);
-    const values = Object.values(problemTypes);
-    const colors = labels.map((label, index) => {
-        const colorPalette = ['#F44336', '#FF9800', '#FFC107', '#4CAF50', '#2196F3', '#9C27B0'];
-        return colorPalette[index % colorPalette.length];
-    });
-    
-    charts.distribution = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: values,
-                backgroundColor: colors
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '分支錯誤類型分佈'
+        
+        if (Object.keys(chartData).length > 0) {
+            new Chart(distCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(chartData),
+                    datasets: [{
+                        data: Object.values(chartData),
+                        backgroundColor: [
+                            '#2196F3', '#4CAF50', '#FF9800', '#F44336',
+                            '#9C27B0', '#00BCD4', '#FFEB3B', '#795548',
+                            '#607D8B', '#E91E63', '#3F51B5', '#009688'
+                        ]
+                    }]
                 },
-                legend: {
-                    position: 'bottom'
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
                 }
-            }
+            });
         }
-    });
-}
-
-// 繪製缺失專案圖表
-function drawLostProjectChart(data) {
-    // 趨勢圖
-    const trendCtx = document.getElementById('trendChart').getContext('2d');
-    const baseFolderStats = {};
-    
-    data.data.forEach(row => {
-        const baseFolder = row['Base folder'] || 'Unknown';
-        if (!baseFolderStats[baseFolder]) {
-            baseFolderStats[baseFolder] = {
-                added: 0,
-                deleted: 0
-            };
-        }
-        if (row['狀態'] === '新增') {
-            baseFolderStats[baseFolder].added++;
-        } else if (row['狀態'] === '刪除') {
-            baseFolderStats[baseFolder].deleted++;
-        }
-    });
-    
-    const folders = Object.keys(baseFolderStats);
-    
-    charts.trend = new Chart(trendCtx, {
-        type: 'bar',
-        data: {
-            labels: folders,
-            datasets: [{
-                label: '新增',
-                data: folders.map(f => baseFolderStats[f].added),
-                backgroundColor: 'rgba(76, 175, 80, 0.5)'
-            }, {
-                label: '刪除',
-                data: folders.map(f => baseFolderStats[f].deleted),
-                backgroundColor: 'rgba(244, 67, 54, 0.5)'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    stacked: true
-                },
-                y: {
-                    stacked: true
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: '各 Base Folder 專案變更統計'
-                }
-            }
-        }
-    });
-    
-    // 分佈圖
-    const ctx = document.getElementById('distributionChart').getContext('2d');
-    
-    // 統計新增和刪除
-    let added = 0;
-    let deleted = 0;
-    
-    data.data.forEach(row => {
-        if (row['狀態'] === '新增') {
-            added++;
-        } else if (row['狀態'] === '刪除') {
-            deleted++;
-        }
-    });
-    
-    charts.distribution = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['新增', '刪除'],
-            datasets: [{
-                data: [added, deleted],
-                backgroundColor: ['#4CAF50', '#F44336']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '專案變更統計'
-                },
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-}
-
-// 繪製通用圖表
-function drawGenericCharts(data) {
-    // 如果沒有數據，清空圖表
-    if (!data.data || data.data.length === 0) {
-        clearCharts();
-        return;
     }
     
-    // 嘗試找出可以用來做圖表的欄位
-    const columns = data.columns || [];
-    const numericColumns = [];
-    const categoricalColumns = [];
-    
-    // 分析欄位類型
-    columns.forEach(col => {
-        if (col === 'SN') return; // 跳過序號
+    // 趨勢圖（如果有時間序列資料）
+    const trendCanvas = document.getElementById('trendChart');
+    if (trendCanvas && currentSheet === 'revision_diff') {
+        const trendCtx = trendCanvas.getContext('2d');
         
-        // 檢查是否為數值欄位
-        let isNumeric = true;
-        let hasCategories = new Set();
-        
-        data.data.forEach(row => {
-            const value = row[col];
-            if (value !== null && value !== undefined && value !== '') {
-                if (isNaN(value)) {
-                    isNumeric = false;
+        // 按模組分組計算差異數量
+        const moduleData = {};
+        sheetData.data.forEach(row => {
+            const module = row.module;
+            if (module) {
+                if (!moduleData[module]) {
+                    moduleData[module] = 0;
                 }
-                hasCategories.add(value);
+                moduleData[module]++;
             }
         });
         
-        if (isNumeric && hasCategories.size > 0) {
-            numericColumns.push(col);
-        } else if (hasCategories.size > 1 && hasCategories.size < 20) {
-            categoricalColumns.push(col);
-        }
-    });
-    
-    // 如果有分類欄位，繪製分佈圖
-    if (categoricalColumns.length > 0) {
-        const col = categoricalColumns[0];
-        const distribution = {};
-        
-        data.data.forEach(row => {
-            const value = row[col] || 'Unknown';
-            distribution[value] = (distribution[value] || 0) + 1;
-        });
-        
-        const ctx = document.getElementById('distributionChart').getContext('2d');
-        
-        charts.distribution = new Chart(ctx, {
-            type: 'pie',
+        new Chart(trendCtx, {
+            type: 'bar',
             data: {
-                labels: Object.keys(distribution),
+                labels: Object.keys(moduleData),
                 datasets: [{
-                    data: Object.values(distribution),
-                    backgroundColor: [
-                        '#2196F3', '#4CAF50', '#FF9800', '#F44336', 
-                        '#9C27B0', '#00BCD4', '#8BC34A', '#FFC107'
-                    ]
+                    label: '差異數量',
+                    data: Object.values(moduleData),
+                    backgroundColor: '#2196F3',
+                    borderColor: '#1976D2',
+                    borderWidth: 1
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: `${col} 分佈`
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
                     }
-                }
-            }
-        });
-    }
-    
-    // 如果有數值欄位，繪製趨勢圖
-    if (numericColumns.length > 0) {
-        const ctx = document.getElementById('trendChart').getContext('2d');
-        const labels = data.data.map((_, index) => `#${index + 1}`);
-        
-        charts.trend = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: numericColumns.map((col, index) => ({
-                    label: col,
-                    data: data.data.map(row => row[col]),
-                    borderColor: ['#2196F3', '#4CAF50', '#FF9800'][index % 3],
-                    fill: false
-                }))
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                },
                 plugins: {
-                    title: {
-                        display: true,
-                        text: '數值趨勢'
+                    legend: {
+                        display: false
                     }
                 }
             }
@@ -962,162 +625,76 @@ function drawGenericCharts(data) {
     }
 }
 
-// 切換檢視
-function switchView(view) {
-    // 更新按鈕狀態
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
-    
-    // 切換內容
-    document.querySelectorAll('.view-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    
-    if (view === 'table') {
-        document.getElementById('tableView').classList.add('active');
-    } else if (view === 'pivot') {
-        document.getElementById('pivotView').classList.add('active');
-        // TODO: 實現樞紐分析功能
-        document.getElementById('pivotTable').innerHTML = '<div class="no-data"><i class="fas fa-wrench"></i><p>樞紐分析功能開發中...</p></div>';
+// 切換篩選器面板
+function toggleFilterPanel() {
+    document.getElementById('filterPanel').classList.toggle('show');
+}
+
+// 匯出當前檢視
+function exportCurrentView(format) {
+    if (format === 'excel') {
+        window.location.href = `/api/export-excel/${taskId}`;
+    } else if (format === 'html') {
+        // 生成當前檢視的 HTML
+        const currentView = pivotMode ? 
+            document.getElementById('pivotContainer').innerHTML : 
+            document.getElementById('dataTable').outerHTML;
+            
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>報表匯出 - ${taskId}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    table { border-collapse: collapse; width: 100%; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    th { background-color: #f2f2f2; font-weight: bold; }
+                    tr:nth-child(even) { background-color: #f9f9f9; }
+                    .highlight-red { color: #F44336; font-weight: bold; }
+                    .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+                    .badge-success { background: #4CAF50; color: white; }
+                    .badge-warning { background: #FF9800; color: white; }
+                    .badge-default { background: #9E9E9E; color: white; }
+                </style>
+            </head>
+            <body>
+                <h1>報表: ${getSheetDisplayName(currentSheet)}</h1>
+                <p>匯出時間: ${new Date().toLocaleString('zh-TW')}</p>
+                ${currentView}
+            </body>
+            </html>
+        `;
+        
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${taskId}_${currentSheet}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 
-// 匯出 Excel
-async function exportSheet(format) {
-    if (!currentSheet) {
-        utils.showNotification('請先選擇資料表', 'warning');
-        return;
+// 下載完整報表
+function downloadFullReport() {
+    window.location.href = `/api/export-zip/${taskId}`;
+}
+
+// 監聽資料表選擇
+document.getElementById('sheetSelector').addEventListener('change', (e) => {
+    if (e.target.value) {
+        loadSheet(e.target.value);
     }
-    
-    try {
-        if (format === 'excel') {
-            const url = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
-            window.location.href = url;
-        } else if (format === 'pdf') {
-            utils.showNotification('PDF 匯出功能開發中', 'info');
-        }
-    } catch (error) {
-        console.error('Export error:', error);
-        utils.showNotification('匯出失敗', 'error');
-    }
-}
-
-// 匯出整個頁面為 HTML
-async function exportPageAsHTML() {
-    try {
-        utils.showNotification('正在準備匯出 HTML...', 'info');
-        
-        // 創建一個隱藏的 iframe 來載入完整頁面
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-        
-        // 複製當前頁面到 iframe
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        iframeDoc.open();
-        iframeDoc.write(document.documentElement.outerHTML);
-        iframeDoc.close();
-        
-        // 等待內容載入
-        setTimeout(() => {
-            // 移除不需要的元素
-            const elementsToRemove = iframeDoc.querySelectorAll('.control-actions, .filter-panel, .fab, script');
-            elementsToRemove.forEach(el => el.remove());
-            
-            // 獲取所有樣式
-            const styles = Array.from(document.styleSheets)
-                .map(sheet => {
-                    try {
-                        return Array.from(sheet.cssRules)
-                            .map(rule => rule.cssText)
-                            .join('\n');
-                    } catch (e) {
-                        return '';
-                    }
-                })
-                .join('\n');
-            
-            // 內嵌樣式
-            const styleElement = iframeDoc.createElement('style');
-            styleElement.textContent = styles;
-            iframeDoc.head.appendChild(styleElement);
-            
-            // 生成最終 HTML
-            const finalHtml = '<!DOCTYPE html>\n' + iframeDoc.documentElement.outerHTML;
-            
-            // 下載
-            const blob = new Blob([finalHtml], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `report_${taskId}_${new Date().getTime()}.html`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            // 清理
-            document.body.removeChild(iframe);
-            
-            utils.showNotification('HTML 頁面已匯出', 'success');
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Export HTML error:', error);
-        utils.showNotification('匯出失敗', 'error');
-    }
-}
-
-// 顯示載入中
-function showLoading() {
-    const loading = document.getElementById('loading');
-    const noData = document.getElementById('noData');
-    const errorMessage = document.getElementById('errorMessage');
-    
-    if (loading) loading.classList.remove('hidden');
-    if (noData) noData.classList.add('hidden');
-    if (errorMessage) errorMessage.classList.add('hidden');
-}
-
-// 隱藏載入中
-function hideLoading() {
-    const loading = document.getElementById('loading');
-    if (loading) loading.classList.add('hidden');
-}
-
-// 顯示無資料
-function showNoData() {
-    hideLoading();
-    const noData = document.getElementById('noData');
-    if (noData) noData.classList.remove('hidden');
-}
-
-// 顯示錯誤
-function showError(message) {
-    hideLoading();
-    const errorMessage = document.getElementById('errorMessage');
-    const errorText = document.getElementById('errorText');
-    
-    if (errorText) errorText.textContent = message;
-    if (errorMessage) errorMessage.classList.remove('hidden');
-}
-
-// 回到頂部
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
-}
+});
 
 // 匯出函數
-window.switchView = switchView;
-window.exportSheet = exportSheet;
-window.showFilters = showFilters;
-window.hideFilters = hideFilters;
+window.togglePivotMode = togglePivotMode;
 window.applyFilters = applyFilters;
-window.resetFilters = resetFilters;
-window.scrollToTop = scrollToTop;
-window.exportPageAsHTML = exportPageAsHTML;
+window.clearFilters = clearFilters;
+window.toggleFilterPanel = toggleFilterPanel;
+window.exportCurrentView = exportCurrentView;
+window.downloadFullReport = downloadFullReport;
