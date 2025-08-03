@@ -202,7 +202,7 @@ function displayServerFiles(result) {
             html += `
                 <div class="file-item file ${isSelected ? 'selected' : ''}" 
                      onclick="toggleServerFile('${file.path}', '${file.name}', ${file.size})">
-                    ${isSelected ? '<div class="check-icon"><i class="fas fa-check"></i></div>' : ''}
+                    ${isSelected ? '<div class="check-icon"><i></i></div>' : ''}
                     <i class="fas fa-file-excel"></i>
                     <div class="file-name">${file.name}</div>
                     <div class="file-size">${utils.formatFileSize(file.size)}</div>

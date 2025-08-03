@@ -306,14 +306,14 @@ body {
 
 .upload-icon-wrapper i {
     font-size: 4.5rem;
-    color: var(--success);
+    color: var(--warning);
     filter: drop-shadow(0 2px 8px rgba(33, 150, 243, 0.15));
     transition: all 0.3s ease;
 }
 
 .upload-container:hover .upload-icon-wrapper i {
     transform: scale(1.05);
-    color: var(--success);
+    color: var(--warning);
     filter: brightness(0.95);
 }
 
@@ -533,12 +533,6 @@ body {
     color: white;
     transform: rotate(180deg);
     box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
-}
-
-.browser-content {
-    background: var(--bg-secondary);
-    min-height: 350px;
-    padding: 28px;
 }
 
 /* 檔案列表容器 - 與 download.css 一致 */
@@ -1635,20 +1629,6 @@ body {
     box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
 }
 
-.browser-content {
-    background: var(--bg-secondary);
-    min-height: 350px;
-    padding: 28px;
-}
-
-/* 資料夾網格 - 類似 download.html 的 file-grid */
-.folder-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 20px;
-}
-
 .folder-item {
     display: flex;
     flex-direction: column;
@@ -1766,50 +1746,6 @@ body {
     animation: spin 1s linear infinite;
 }
 
-/* 路徑麵包屑列 */
-.path-breadcrumb-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    background: #2196F3;
-    color: white;
-    font-weight: 500;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 20px;
-}
-
-.path-breadcrumb-bar i {
-    font-size: 1.125rem;
-    color: white;
-}
-
-.breadcrumb-path {
-    font-family: "SF Mono", Monaco, monospace;
-    font-size: 0.9375rem;
-    color: white;
-}
-
-/* 調整資料夾網格樣式 */
-.folder-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 0 20px 20px 20px; /* 調整上方 padding */
-}
-
-/* 調整瀏覽器內容區域 */
-.browser-content {
-    background: var(--bg-secondary);
-    min-height: 350px;
-    padding: 0; /* 移除 padding，因為路徑列有自己的 padding */
-}
-
-/* 確保空訊息也有路徑列 */
-.browser-content .empty-message {
-    padding: 40px 20px;
-}
-
 /* 調整父資料夾樣式 */
 .folder-item.parent-folder {
     background: var(--bg-tertiary);
@@ -1829,3 +1765,42 @@ body {
     box-shadow: none;
 }
 
+/* 路徑麵包屑列 - 放在文件較前面的位置 */
+.path-breadcrumb-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #2196F3 !important; /* 加上 !important 確保不被覆蓋 */
+    color: white !important;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0; /* 改為 0，因為 folder-grid 有自己的 padding */
+}
+
+.path-breadcrumb-bar i {
+    font-size: 1.125rem;
+    color: white !important;
+}
+
+.breadcrumb-path {
+    font-family: "SF Mono", Monaco, monospace;
+    font-size: 0.9375rem;
+    color: white !important;
+}
+
+/* 調整瀏覽器內容區域 */
+.browser-content {
+    background: var(--bg-secondary);
+    min-height: 350px;
+    padding: 0; /* 移除 padding */
+    overflow: hidden; /* 防止內容溢出 */
+}
+
+/* 調整資料夾網格樣式 */
+.folder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    padding: 20px; /* 四邊都有 padding */
+}
