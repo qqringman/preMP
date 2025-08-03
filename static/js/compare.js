@@ -1,4 +1,4 @@
-// 比較頁面 JavaScript
+// 比較頁面 JavaScript - 更新以配合新的 UI
 
 let currentTaskId = null;
 let sourceDirectory = null;
@@ -11,6 +11,21 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     initializeFolderDrop();
 });
+
+// 切換來源標籤
+function switchSourceTab(tab) {
+    // 更新標籤按鈕狀態
+    document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // 切換內容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tab}-source-tab`).classList.add('active');
+}
 
 // 載入可用目錄
 async function loadDirectories() {
@@ -92,7 +107,7 @@ function handleFolderDrop(e) {
 
 // 使用伺服器路徑
 function useServerPath() {
-    const path = document.getElementById('folderPath').value.trim();
+    const path = document.getElementById('serverPathInput').value.trim();
     if (!path) {
         utils.showNotification('請輸入伺服器路徑', 'error');
         return;
@@ -141,7 +156,7 @@ function initializeEventListeners() {
     });
     
     // 輸入路徑時按 Enter
-    document.getElementById('folderPath').addEventListener('keypress', (e) => {
+    document.getElementById('serverPathInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             useServerPath();
         }
@@ -166,9 +181,9 @@ async function executeCompare() {
     const scenario = document.querySelector('input[name="scenario"]:checked').value;
     
     // 顯示進度
+    document.getElementById('compareForm').classList.add('hidden');
     document.getElementById('compareProgress').classList.remove('hidden');
     document.getElementById('compareResults').classList.add('hidden');
-    document.getElementById('compareBtn').disabled = true;
     
     try {
         const response = await utils.apiRequest('/api/compare', {
@@ -233,7 +248,7 @@ function showCompareResults(results) {
 // 生成比對結果摘要
 function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
-    let html = '<div class="summary-grid">';
+    let html = '<div class="result-summary">';
     
     if (compareResults.master_vs_premp) {
         html += createSummaryCard('Master vs PreMP', compareResults.master_vs_premp, 'fa-code-branch');
@@ -379,7 +394,7 @@ function viewDetailedResults() {
     }
 }
 
-// 匯出結果 - 非同步處理
+// 匯出結果
 async function exportResults(format) {
     if (!currentTaskId) return;
     
@@ -457,8 +472,8 @@ function downloadAsyncFile() {
 
 // 重置比對 UI
 function resetCompareUI() {
+    document.getElementById('compareForm').classList.remove('hidden');
     document.getElementById('compareProgress').classList.add('hidden');
-    document.getElementById('compareBtn').disabled = false;
     document.getElementById('compareProgressFill').style.width = '0%';
     document.getElementById('compareProgressText').textContent = '0%';
 }
@@ -482,19 +497,17 @@ async function pollCompareStatus() {
     }
 }
 
-// 載入最近比對記錄 - 時間軸形式
+// 載入最近比對記錄
 async function loadRecentComparisons() {
     try {
-        // 從 API 載入真實數據
         const comparisons = await utils.apiRequest('/api/recent-comparisons');
-        
         const container = document.getElementById('comparisonTimeline');
         
         if (!comparisons || comparisons.length === 0) {
             container.innerHTML = `
-                <div class="timeline-placeholder text-center p-4">
-                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">暫無比對記錄</p>
+                <div class="timeline-empty">
+                    <i class="fas fa-inbox fa-3x"></i>
+                    <p>暫無比對記錄</p>
                 </div>
             `;
             return;
@@ -520,7 +533,7 @@ async function loadRecentComparisons() {
                         <div class="timeline-desc">
                             ${comp.modules} 個模組 · ${comp.duration || '< 1 分鐘'}
                         </div>
-                        <button class="btn btn-sm btn-outline mt-2" 
+                        <button class="btn btn-small btn-primary mt-2" 
                                 onclick="window.location.href='/results/${comp.id}'">
                             查看結果
                         </button>
@@ -533,60 +546,7 @@ async function loadRecentComparisons() {
         
     } catch (error) {
         console.error('Load recent comparisons error:', error);
-        // 使用預設資料
-        loadDefaultComparisons();
     }
-}
-
-// 載入預設比對記錄
-function loadDefaultComparisons() {
-    const comparisons = [
-        {
-            id: 'task_20240115_143022',
-            timestamp: new Date(Date.now() - 10 * 60 * 1000),
-            scenario: '所有比對',
-            status: 'completed',
-            modules: 15,
-            duration: '2 分鐘'
-        },
-        {
-            id: 'task_20240115_141512',
-            timestamp: new Date(Date.now() - 60 * 60 * 1000),
-            scenario: 'Master vs PreMP',
-            status: 'completed',
-            modules: 8,
-            duration: '1 分鐘'
-        }
-    ];
-    
-    const container = document.getElementById('comparisonTimeline');
-    let html = '';
-    
-    comparisons.forEach(comp => {
-        html += `
-            <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div class="timeline-content">
-                    <div class="timeline-time">${formatTimeAgo(comp.timestamp)}</div>
-                    <div class="timeline-title">
-                        ${comp.scenario}
-                        <span class="text-success ml-2">
-                            <i class="fas fa-check-circle"></i>
-                        </span>
-                    </div>
-                    <div class="timeline-desc">
-                        ${comp.modules} 個模組 · ${comp.duration}
-                    </div>
-                    <button class="btn btn-sm btn-outline mt-2" 
-                            onclick="window.location.href='/results/${comp.id}'">
-                        查看結果
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
 }
 
 // 格式化時間
@@ -608,6 +568,7 @@ function formatTimeAgo(date) {
 }
 
 // 匯出函數
+window.switchSourceTab = switchSourceTab;
 window.useServerPath = useServerPath;
 window.executeCompare = executeCompare;
 window.viewDetailedResults = viewDetailedResults;
