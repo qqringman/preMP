@@ -1,4 +1,4 @@
-// 結果報表頁面 JavaScript
+// 結果報表頁面 JavaScript - 使用真實資料
 
 const taskId = window.location.pathname.split('/').pop();
 let currentData = null;
@@ -19,7 +19,6 @@ async function loadPivotData() {
         const data = await utils.apiRequest(`/api/pivot-data/${taskId}`);
         
         if (!data || Object.keys(data).length === 0) {
-            // 如果沒有資料，顯示提示訊息
             showNoDataMessage();
             utils.hideLoading();
             return;
@@ -57,10 +56,10 @@ function showNoDataMessage() {
     const container = document.querySelector('.data-view-container');
     container.innerHTML = `
         <div class="no-data-message">
-            <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+            <i class="fas fa-inbox"></i>
             <h3>暫無資料可顯示</h3>
-            <p class="text-muted">此任務可能還在處理中，或尚未產生報表。</p>
-            <button class="btn btn-primary mt-3" onclick="location.reload()">
+            <p>此任務可能還在處理中，或尚未產生報表。</p>
+            <button class="btn btn-primary" onclick="location.reload()">
                 <i class="fas fa-sync"></i> 重新載入
             </button>
         </div>
@@ -72,14 +71,14 @@ function showErrorMessage() {
     const container = document.querySelector('.data-view-container');
     container.innerHTML = `
         <div class="error-message">
-            <i class="fas fa-exclamation-triangle fa-4x text-danger mb-3"></i>
+            <i class="fas fa-exclamation-triangle"></i>
             <h3>載入資料失敗</h3>
-            <p class="text-muted">無法載入報表資料，請稍後再試。</p>
-            <div class="mt-3">
+            <p>無法載入報表資料，請稍後再試。</p>
+            <div style="margin-top: 24px;">
                 <button class="btn btn-primary" onclick="location.reload()">
                     <i class="fas fa-sync"></i> 重試
                 </button>
-                <button class="btn btn-outline ml-2" onclick="window.history.back()">
+                <button class="btn btn-outline" onclick="window.history.back()" style="margin-left: 12px;">
                     <i class="fas fa-arrow-left"></i> 返回
                 </button>
             </div>
@@ -124,10 +123,8 @@ function loadSheet(sheetName) {
     generateFilters(sheetData);
     
     if (pivotMode) {
-        // 樞紐分析模式
         renderPivotTable(sheetData);
     } else {
-        // 一般表格模式
         renderDataTable(sheetData);
     }
     
@@ -141,7 +138,6 @@ function renderDataTable(sheetData) {
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
-    // 清空表格
     thead.innerHTML = '';
     tbody.innerHTML = '';
     
@@ -150,7 +146,7 @@ function renderDataTable(sheetData) {
         return;
     }
     
-    // 取得欄位（從資料或定義中）
+    // 取得欄位
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     
     // 建立表頭
@@ -172,7 +168,7 @@ function renderDataTable(sheetData) {
     
     // 建立表格內容
     const filteredData = applyDataFilters(sheetData.data);
-    filteredData.forEach((row, index) => {
+    filteredData.forEach(row => {
         const tr = document.createElement('tr');
         columns.forEach(col => {
             const td = document.createElement('td');
@@ -181,16 +177,17 @@ function renderDataTable(sheetData) {
             // 特殊格式處理
             if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
                 td.innerHTML = `<a href="${value}" target="_blank" class="link">
-                    <i class="fas fa-external-link-alt"></i> 查看
+                    查看 <i class="fas fa-external-link-alt"></i>
                 </a>`;
             } else if (col === 'has_wave' || col === 'is_different') {
                 const badgeClass = value === 'Y' ? 'badge-success' : 'badge-default';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || 'N'}</span>`;
             } else if (col === '狀態') {
-                const badgeClass = value === '新增' ? 'badge-success' : 'badge-warning';
+                const badgeClass = value === '新增' ? 'badge-success' : 
+                                 value === '刪除' ? 'badge-danger' : 'badge-warning';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
             } else if (col === 'problem' && value) {
-                td.innerHTML = `<span class="text-danger font-weight-bold">${value}</span>`;
+                td.innerHTML = `<span style="color: var(--danger); font-weight: 600;">${value}</span>`;
             } else {
                 td.textContent = value !== null && value !== undefined ? value : '';
             }
@@ -205,7 +202,6 @@ function renderDataTable(sheetData) {
         tbody.appendChild(tr);
     });
     
-    // 如果沒有資料顯示
     if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合篩選條件的資料</td></tr>';
     }
@@ -293,6 +289,8 @@ function updateStatistics(sheetData) {
     if (currentSheet === 'revision_diff') {
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
         const hasWaveCount = sheetData.data.filter(row => row.has_wave === 'Y').length;
+        const noWaveCount = sheetData.data.filter(row => row.has_wave === 'N').length;
+        
         stats.push({
             label: '模組數',
             value: uniqueModules.size,
@@ -303,8 +301,16 @@ function updateStatistics(sheetData) {
             label: '包含 Wave',
             value: hasWaveCount,
             icon: 'fa-water',
-            color: 'info'
+            color: 'success'
         });
+        if (noWaveCount > 0) {
+            stats.push({
+                label: '缺少 Wave',
+                value: noWaveCount,
+                icon: 'fa-exclamation-triangle',
+                color: 'warning'
+            });
+        }
     }
     
     if (currentSheet === 'branch_error') {
@@ -345,7 +351,7 @@ function updateStatistics(sheetData) {
         const card = document.createElement('div');
         card.className = `stat-card ${stat.color || ''}`;
         card.innerHTML = `
-            <div class="stat-icon ${stat.color ? `bg-${stat.color}` : ''}">
+            <div class="stat-icon">
                 <i class="fas ${stat.icon}"></i>
             </div>
             <div class="stat-content">
@@ -364,7 +370,6 @@ function generateFilters(sheetData) {
     
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     
-    // 為每個欄位生成篩選器
     columns.forEach(col => {
         // 跳過某些欄位
         if (col.includes('link') || col.includes('content') || col.includes('revision')) return;
@@ -387,15 +392,13 @@ function generateFilters(sheetData) {
         }
     });
     
-    // 如果沒有可篩選的欄位
     if (filterContent.children.length === 0) {
-        filterContent.innerHTML = '<p class="text-muted text-center">沒有可篩選的欄位</p>';
+        filterContent.innerHTML = '<p class="empty-message">沒有可篩選的欄位</p>';
     }
 }
 
 // 套用篩選器
 function applyFilters() {
-    // 收集篩選條件
     filters = {};
     document.querySelectorAll('.filter-select').forEach(select => {
         const column = select.dataset.column;
@@ -405,14 +408,11 @@ function applyFilters() {
         }
     });
     
-    // 重新載入資料
     if (currentSheet) {
         loadSheet(currentSheet);
     }
     
     utils.showNotification('已套用篩選', 'success');
-    
-    // 關閉篩選面板
     document.getElementById('filterPanel').classList.remove('show');
 }
 
@@ -458,16 +458,13 @@ function sortTable(column) {
         const aVal = a[column];
         const bVal = b[column];
         
-        // 處理 null 和 undefined
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
         
-        // 數字排序
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return order === 'asc' ? aVal - bVal : bVal - aVal;
         }
         
-        // 字串排序
         const aStr = String(aVal);
         const bStr = String(bVal);
         
@@ -500,11 +497,9 @@ function drawDataCharts(sheetData) {
     if (distCanvas) {
         const distCtx = distCanvas.getContext('2d');
         
-        // 根據資料表類型決定圖表內容
         let chartData = {};
         
         if (currentSheet === 'revision_diff' || currentSheet === 'branch_error') {
-            // 按模組統計
             sheetData.data.forEach(row => {
                 const module = row.module;
                 if (module) {
@@ -512,7 +507,6 @@ function drawDataCharts(sheetData) {
                 }
             });
         } else if (currentSheet === 'lost_project') {
-            // 按狀態統計
             sheetData.data.forEach(row => {
                 const status = row['狀態'];
                 if (status) {
@@ -520,7 +514,6 @@ function drawDataCharts(sheetData) {
                 }
             });
         } else {
-            // 預設按第一個非數字欄位統計
             const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
             const firstStringCol = columns.find(col => {
                 const firstValue = sheetData.data[0][col];
@@ -575,12 +568,11 @@ function drawDataCharts(sheetData) {
         }
     }
     
-    // 趨勢圖（如果有時間序列資料）
+    // 趨勢圖
     const trendCanvas = document.getElementById('trendChart');
     if (trendCanvas && currentSheet === 'revision_diff') {
         const trendCtx = trendCanvas.getContext('2d');
         
-        // 按模組分組計算差異數量
         const moduleData = {};
         sheetData.data.forEach(row => {
             const module = row.module;
@@ -635,7 +627,6 @@ function exportCurrentView(format) {
     if (format === 'excel') {
         window.location.href = `/api/export-excel/${taskId}`;
     } else if (format === 'html') {
-        // 生成當前檢視的 HTML
         const currentView = pivotMode ? 
             document.getElementById('pivotContainer').innerHTML : 
             document.getElementById('dataTable').outerHTML;
@@ -650,12 +641,13 @@ function exportCurrentView(format) {
                     body { font-family: Arial, sans-serif; margin: 20px; }
                     table { border-collapse: collapse; width: 100%; }
                     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                    th { background-color: #f2f2f2; font-weight: bold; }
+                    th { background-color: #2196F3; color: white; font-weight: bold; }
                     tr:nth-child(even) { background-color: #f9f9f9; }
                     .highlight-red { color: #F44336; font-weight: bold; }
                     .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
                     .badge-success { background: #4CAF50; color: white; }
                     .badge-warning { background: #FF9800; color: white; }
+                    .badge-danger { background: #F44336; color: white; }
                     .badge-default { background: #9E9E9E; color: white; }
                 </style>
             </head>

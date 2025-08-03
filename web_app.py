@@ -635,20 +635,59 @@ def get_statistics():
 
 @app.route('/api/pivot-data/<task_id>')
 def get_pivot_data(task_id):
-    """取得樞紐分析資料 API"""
-    # 檢查是否有儲存的結果
-    if task_id in task_results:
-        result_info = task_results[task_id]
-        summary_report = result_info.get('summary_report')
+    """取得樞紐分析資料 API - 使用真實資料"""
+    try:
+        # 查找任務結果
+        result_found = False
+        summary_report_path = None
         
-        if summary_report and os.path.exists(summary_report):
+        # 1. 從處理狀態中查找
+        if task_id in processing_status:
+            task_data = processing_status[task_id]
+            results = task_data.get('results', {})
+            
+            # 查找比對結果報告
+            if 'summary_report' in results:
+                summary_report_path = results['summary_report']
+                result_found = True
+            elif 'compare_results' in results:
+                # 如果有多個比對結果，找到 all_compare.xlsx
+                compare_results = results['compare_results']
+                for scenario, files in compare_results.items():
+                    if 'summary' in files:
+                        summary_report_path = files['summary']
+                        result_found = True
+                        break
+        
+        # 2. 從儲存的任務結果中查找
+        if not result_found and task_id in task_results:
+            result_info = task_results[task_id]
+            summary_report_path = result_info.get('summary_report')
+            result_found = True
+        
+        # 3. 從比對結果目錄中查找
+        if not result_found:
+            compare_dir = os.path.join('compare_results', task_id)
+            if os.path.exists(compare_dir):
+                # 查找 all_compare.xlsx
+                for file in os.listdir(compare_dir):
+                    if file == 'all_compare.xlsx' or file.endswith('_summary.xlsx'):
+                        summary_report_path = os.path.join(compare_dir, file)
+                        result_found = True
+                        break
+        
+        # 4. 讀取並返回資料
+        if result_found and summary_report_path and os.path.exists(summary_report_path):
             try:
                 # 讀取 Excel 檔案
-                excel_data = pd.read_excel(summary_report, sheet_name=None)
+                excel_data = pd.read_excel(summary_report_path, sheet_name=None)
                 
                 # 轉換為 JSON 格式
                 pivot_data = {}
                 for sheet_name, df in excel_data.items():
+                    # 處理 NaN 值
+                    df = df.fillna('')
+                    
                     # 將 DataFrame 轉換為記錄格式
                     pivot_data[sheet_name] = {
                         'columns': df.columns.tolist(),
@@ -656,11 +695,17 @@ def get_pivot_data(task_id):
                     }
                 
                 return jsonify(pivot_data)
+                
             except Exception as e:
+                app.logger.error(f'Error reading Excel file: {e}')
                 return jsonify({'error': f'讀取資料失敗：{str(e)}'}), 500
-    
-    # 如果沒有真實資料，返回模擬資料
-    return jsonify(get_mock_pivot_data())
+        
+        # 如果沒有找到資料
+        return jsonify({})
+        
+    except Exception as e:
+        app.logger.error(f'Get pivot data error: {e}')
+        return jsonify({'error': str(e)}), 500
 
 def get_mock_pivot_data():
     """取得模擬的樞紐分析資料"""
@@ -870,21 +915,113 @@ def download_ready(task_id):
 
 @app.route('/api/export-excel/<task_id>')
 def export_excel(task_id):
-    """匯出 Excel API"""
-    # 檢查是否有儲存的結果
-    if task_id in task_results:
-        result_info = task_results[task_id]
-        summary_report = result_info.get('summary_report')
+    """匯出 Excel API - 使用真實檔案"""
+    try:
+        # 查找比對結果檔案
+        summary_report_path = None
         
-        if summary_report and os.path.exists(summary_report):
-            return send_file(summary_report, as_attachment=True, 
-                           download_name=f'compare_results_{task_id}.xlsx')
-    
-    # 如果沒有真實檔案，創建一個模擬檔案
-    mock_file = create_mock_excel(task_id)
-    return send_file(mock_file, as_attachment=True, 
-                   download_name=f'compare_results_{task_id}.xlsx')
+        # 1. 從處理狀態中查找
+        if task_id in processing_status:
+            task_data = processing_status[task_id]
+            results = task_data.get('results', {})
+            
+            if 'summary_report' in results:
+                summary_report_path = results['summary_report']
+        
+        # 2. 從比對結果目錄中查找
+        if not summary_report_path:
+            compare_dir = os.path.join('compare_results', task_id)
+            if os.path.exists(compare_dir):
+                for file in os.listdir(compare_dir):
+                    if file == 'all_compare.xlsx' or file.endswith('_summary.xlsx'):
+                        summary_report_path = os.path.join(compare_dir, file)
+                        break
+        
+        # 3. 返回檔案
+        if summary_report_path and os.path.exists(summary_report_path):
+            return send_file(
+                summary_report_path, 
+                as_attachment=True,
+                download_name=f'compare_results_{task_id}.xlsx'
+            )
+        
+        # 如果沒有找到檔案
+        return jsonify({'error': '找不到報表檔案'}), 404
+        
+    except Exception as e:
+        app.logger.error(f'Export Excel error: {e}')
+        return jsonify({'error': str(e)}), 500
 
+@app.route('/api/export-zip/<task_id>')
+def export_zip(task_id):
+    """匯出 ZIP 檔案 API - 包含所有結果"""
+    try:
+        # 查找 ZIP 檔案
+        zip_path = None
+        
+        # 1. 從處理狀態中查找
+        if task_id in processing_status:
+            task_data = processing_status[task_id]
+            results = task_data.get('results', {})
+            zip_path = results.get('zip_file')
+        
+        # 2. 從 zip_output 目錄中查找
+        if not zip_path:
+            zip_dir = os.path.join('zip_output', task_id)
+            if os.path.exists(zip_dir):
+                for file in os.listdir(zip_dir):
+                    if file.endswith('.zip'):
+                        zip_path = os.path.join(zip_dir, file)
+                        break
+        
+        # 3. 如果還是沒有，動態創建
+        if not zip_path:
+            # 創建 ZIP 檔案
+            from zip_packager import ZipPackager
+            packager = ZipPackager()
+            
+            # 收集所有相關檔案
+            import tempfile
+            import shutil
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # 複製下載的檔案
+                download_dir = os.path.join('downloads', task_id)
+                if os.path.exists(download_dir):
+                    dest_downloads = os.path.join(temp_dir, 'downloads')
+                    shutil.copytree(download_dir, dest_downloads)
+                
+                # 複製比對結果
+                compare_dir = os.path.join('compare_results', task_id)
+                if os.path.exists(compare_dir):
+                    dest_compare = os.path.join(temp_dir, 'compare_results')
+                    shutil.copytree(compare_dir, dest_compare)
+                
+                # 創建 ZIP
+                timestamp = utils.get_timestamp()
+                zip_name = f"all_results_{task_id}_{timestamp}.zip"
+                zip_output_dir = os.path.join('zip_output', task_id)
+                
+                if not os.path.exists(zip_output_dir):
+                    os.makedirs(zip_output_dir)
+                
+                zip_path = os.path.join(zip_output_dir, zip_name)
+                zip_path = packager.create_zip(temp_dir, zip_path)
+        
+        # 返回 ZIP 檔案
+        if zip_path and os.path.exists(zip_path):
+            return send_file(
+                zip_path,
+                as_attachment=True,
+                download_name=f'results_{task_id}.zip'
+            )
+        
+        return jsonify({'error': '找不到結果檔案'}), 404
+        
+    except Exception as e:
+        app.logger.error(f'Export ZIP error: {e}')
+        return jsonify({'error': str(e)}), 500
+    
 def create_mock_excel(task_id):
     """創建模擬的 Excel 檔案"""
     import tempfile
@@ -1113,7 +1250,143 @@ async def browse_directory():
         return jsonify({'error': '沒有權限訪問此目錄'})
     except Exception as e:
         return jsonify({'error': str(e)})
+
+@app.route('/api/list-export-tasks')
+def list_export_tasks():
+    """列出可匯出的任務 API"""
+    try:
+        tasks = []
+        
+        # 從比對結果目錄獲取任務
+        if os.path.exists('compare_results'):
+            for task_dir in os.listdir('compare_results'):
+                task_path = os.path.join('compare_results', task_dir)
+                if os.path.isdir(task_path):
+                    # 檢查是否有報告檔案
+                    has_report = False
+                    for file in os.listdir(task_path):
+                        if file.endswith('.xlsx'):
+                            has_report = True
+                            break
+                    
+                    if has_report:
+                        # 獲取修改時間
+                        timestamp = os.path.getmtime(task_path)
+                        tasks.append({
+                            'id': task_dir,
+                            'name': f'比對任務 {task_dir}',
+                            'timestamp': timestamp * 1000,  # 轉換為毫秒
+                            'type': 'compare'
+                        })
+        
+        # 從處理狀態獲取任務
+        for task_id, status in processing_status.items():
+            if status.get('status') == 'completed':
+                tasks.append({
+                    'id': task_id,
+                    'name': f'處理任務 {task_id}',
+                    'timestamp': time.time() * 1000,
+                    'type': 'process'
+                })
+        
+        # 按時間排序（最新的在前）
+        tasks.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return jsonify({'tasks': tasks})
+        
+    except Exception as e:
+        app.logger.error(f'List export tasks error: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/export-sheet/<task_id>/<sheet_name>')
+def export_sheet(task_id, sheet_name):
+    """匯出單一資料表 API"""
+    try:
+        format_type = request.args.get('format', 'excel')
+        
+        # 獲取資料
+        data = get_task_data(task_id)
+        if not data or sheet_name not in data:
+            return jsonify({'error': '找不到資料表'}), 404
+        
+        sheet_data = data[sheet_name]
+        
+        if format_type == 'excel':
+            # 創建 Excel 檔案
+            import tempfile
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
             
+            df = pd.DataFrame(sheet_data['data'])
+            with pd.ExcelWriter(temp_file.name, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            
+            return send_file(
+                temp_file.name,
+                as_attachment=True,
+                download_name=f'{sheet_name}_{task_id}.xlsx'
+            )
+        
+        return jsonify({'error': '不支援的格式'}), 400
+        
+    except Exception as e:
+        app.logger.error(f'Export sheet error: {e}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/export-pdf/<task_id>')
+def export_pdf(task_id):
+    """匯出 PDF 報告 API"""
+    try:
+        # 這裡可以整合 PDF 生成功能
+        # 目前先返回錯誤訊息
+        return jsonify({'error': 'PDF 匯出功能開發中'}), 501
+        
+    except Exception as e:
+        app.logger.error(f'Export PDF error: {e}')
+        return jsonify({'error': str(e)}), 500
+
+def get_task_data(task_id):
+    """獲取任務資料的輔助函數"""
+    try:
+        # 1. 從處理狀態中查找
+        if task_id in processing_status:
+            task_data = processing_status[task_id]
+            results = task_data.get('results', {})
+            
+            if 'summary_report' in results:
+                summary_report_path = results['summary_report']
+                if os.path.exists(summary_report_path):
+                    excel_data = pd.read_excel(summary_report_path, sheet_name=None)
+                    data = {}
+                    for sheet_name, df in excel_data.items():
+                        df = df.fillna('')
+                        data[sheet_name] = {
+                            'columns': df.columns.tolist(),
+                            'data': df.to_dict('records')
+                        }
+                    return data
+        
+        # 2. 從比對結果目錄中查找
+        compare_dir = os.path.join('compare_results', task_id)
+        if os.path.exists(compare_dir):
+            for file in os.listdir(compare_dir):
+                if file == 'all_compare.xlsx' or file.endswith('_summary.xlsx'):
+                    file_path = os.path.join(compare_dir, file)
+                    excel_data = pd.read_excel(file_path, sheet_name=None)
+                    data = {}
+                    for sheet_name, df in excel_data.items():
+                        df = df.fillna('')
+                        data[sheet_name] = {
+                            'columns': df.columns.tolist(),
+                            'data': df.to_dict('records')
+                        }
+                    return data
+        
+        return None
+        
+    except Exception as e:
+        app.logger.error(f'Get task data error: {e}')
+        return None
+                    
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)

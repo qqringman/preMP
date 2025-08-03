@@ -83,19 +83,33 @@ def find_file_case_insensitive(directory: str, filename: str) -> Optional[str]:
 def validate_excel_columns(df, required_columns: list) -> bool:
     """
     驗證 Excel DataFrame 是否包含必要的欄位
+    支援多個可能的欄位名稱（以列表形式提供）
     
     Args:
         df: pandas DataFrame
-        required_columns: 必要的欄位列表
+        required_columns: 必要的欄位列表，每個元素可以是字串或字串列表
         
     Returns:
         是否包含所有必要欄位
     """
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    if missing_columns:
-        logger = setup_logger(__name__)
-        logger.error(f"Excel 缺少必要欄位: {missing_columns}")
-        return False
+    logger = setup_logger(__name__)
+    
+    for required in required_columns:
+        # 如果是列表，檢查是否至少有一個存在
+        if isinstance(required, list):
+            found = False
+            for col in required:
+                if col in df.columns:
+                    found = True
+                    break
+            if not found:
+                logger.error(f"Excel 缺少必要欄位，需要以下其中一個: {required}")
+                return False
+        # 如果是字串，直接檢查
+        else:
+            if required not in df.columns:
+                logger.error(f"Excel 缺少必要欄位: {required}")
+                return False
     return True
 
 def clean_filename(filename: str) -> str:

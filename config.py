@@ -1,7 +1,3 @@
-"""
-系統設定檔 - 更新版
-"""
-
 # SFTP 連線設定
 SFTP_HOST = 'mmsftpx.realtek.com'
 SFTP_PORT = 22
@@ -22,6 +18,13 @@ DEFAULT_ZIP_DIR = './zip_output'
 
 # Excel 設定
 FTP_PATH_COLUMN = 'ftp path'  # Excel 中 FTP 路徑的欄位名稱
+FTP_PATH_COLUMN_ALTERNATIVE = 'SftpURL'  # Excel 中 FTP 路徑的備用欄位名稱
+FTP_PATH_COLUMNS = ['ftp path', 'SftpURL']  # 可能的 FTP 路徑欄位名稱列表
+
+# 路徑替換規則
+PATH_REPLACEMENTS = {
+    '/mnt/cq488': '/DailyBuild'  # 將 /mnt/cq488 替換成 /DailyBuild
+}
 
 # 伺服器瀏覽預設路徑
 DEFAULT_SERVER_PATH = '/home/vince_lin/ai/preMP'  # 預設的伺服器瀏覽路徑

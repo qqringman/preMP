@@ -270,9 +270,16 @@ class SFTPDownloader:
             # 讀取 Excel
             df = self.excel_handler.read_excel(excel_path)
             
-            # 驗證必要欄位
-            if not utils.validate_excel_columns(df, [config.FTP_PATH_COLUMN]):
-                raise ValueError(f"Excel 必須包含 '{config.FTP_PATH_COLUMN}' 欄位")
+            # 尋找可用的 FTP 路徑欄位
+            ftp_column = None
+            for column in config.FTP_PATH_COLUMNS:
+                if column in df.columns:
+                    ftp_column = column
+                    self.logger.info(f"使用 FTP 路徑欄位: {column}")
+                    break
+            
+            if not ftp_column:
+                raise ValueError(f"Excel 必須包含以下其中一個欄位: {', '.join(config.FTP_PATH_COLUMNS)}")
                 
             # 建立連線
             self.connect()
@@ -294,11 +301,40 @@ class SFTPDownloader:
             # 處理每一筆資料
             report_data = []
             for idx, row in df.iterrows():
-                ftp_path = row[config.FTP_PATH_COLUMN]
+                ftp_path = row[ftp_column]
                 
-                if pd.isna(ftp_path):
-                    self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空")
+                # 檢查空值或 NotFound
+                if pd.isna(ftp_path) or str(ftp_path).strip() == '' or str(ftp_path).strip().lower() == 'notfound':
+                    self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空或 NotFound")
+                    
+                    # 如果是 WebDownloader，更新統計
+                    if hasattr(self, 'stats'):
+                        for file in config.TARGET_FILES:
+                            self.stats['failed'] += 1
+                            if hasattr(self, 'failed_files_list'):
+                                self.failed_files_list.append({
+                                    'name': file,
+                                    'path': '',
+                                    'reason': 'FTP 路徑為空或 NotFound',
+                                    'ftp_path': str(ftp_path) if not pd.isna(ftp_path) else '空值'
+                                })
+                    
+                    # 加入報表資料
+                    report_data.append({
+                        'SN': idx + 1,
+                        '模組': '未知',
+                        ftp_column: str(ftp_path) if not pd.isna(ftp_path) else '空值',
+                        '本地資料夾': 'N/A',
+                        '版本資訊檔案': 'FTP 路徑為空或 NotFound'
+                    })
                     continue
+                
+                # 進行路徑替換
+                original_path = str(ftp_path)
+                for old_path, new_path in config.PATH_REPLACEMENTS.items():
+                    if old_path in ftp_path:
+                        ftp_path = ftp_path.replace(old_path, new_path)
+                        self.logger.info(f"路徑替換: {old_path} -> {new_path}")
                     
                 # 解析模組和 JIRA ID
                 module, jira_id = utils.parse_module_and_jira(ftp_path)
@@ -380,7 +416,7 @@ class SFTPDownloader:
                     report_data.append({
                         'SN': idx + 1,
                         '模組': module.split('/')[0] if '/' in module else module,  # 對於 Merlin7/DB2302，只顯示 Merlin7
-                        'sftp 路徑': ftp_path,
+                        ftp_column: original_path,  # 顯示原始路徑
                         '本地資料夾': local_folder_display,
                         '版本資訊檔案': ', '.join(file_info) if file_info else '無'
                     })
@@ -389,7 +425,7 @@ class SFTPDownloader:
                     report_data.append({
                         'SN': idx + 1,
                         '模組': '未知',
-                        'sftp 路徑': ftp_path,
+                        ftp_column: original_path,  # 顯示原始路徑
                         '本地資料夾': '解析失敗',
                         '版本資訊檔案': '解析失敗'
                     })

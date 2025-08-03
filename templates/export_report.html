@@ -1,748 +1,150 @@
 {% extends "base.html" %}
 
-{% block title %}結果報表 - SFTP 下載與比較系統{% endblock %}
+{% block title %}匯出報表 - SFTP 下載與比較系統{% endblock %}
 
 {% block extra_head %}
-<!-- PivotTable.js CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/export_report.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="page-header">
         <h1 class="page-title">
-            <i class="fas fa-chart-line"></i> 結果報表
+            <i class="fas fa-file-export"></i> 匯出報表
         </h1>
-        <p class="page-subtitle">任務 ID: {{ task_id }}</p>
+        <p class="page-subtitle">選擇任務並匯出為各種格式</p>
     </div>
 
-    <!-- 報表控制列 -->
-    <div class="report-controls">
-        <div class="control-group">
-            <label class="control-label">選擇資料表</label>
-            <select class="form-input" id="sheetSelector">
-                <option value="">載入中...</option>
-            </select>
+    <!-- 報表選擇區塊 -->
+    <div class="report-selector-section">
+        <div class="section-header">
+            <h2 class="step-title">選擇報表</h2>
         </div>
         
-        <div class="control-actions">
-            <button class="btn btn-primary" onclick="exportCurrentView('excel')">
-                <i class="fas fa-file-excel"></i> 匯出 Excel
-            </button>
-            <button class="btn btn-info" onclick="exportCurrentView('html')">
-                <i class="fas fa-file-code"></i> 匯出 HTML
-            </button>
-            <button class="btn btn-success" onclick="downloadFullReport()">
-                <i class="fas fa-download"></i> 下載完整報表
-            </button>
-            <button class="btn btn-outline" onclick="togglePivotMode()">
-                <i class="fas fa-table"></i> <span id="pivotToggleText">切換樞紐分析</span>
-            </button>
-        </div>
-    </div>
-
-    <!-- 資料檢視區 -->
-    <div class="data-view-container">
-        <!-- 一般表格檢視 -->
-        <div id="tableView" class="table-view">
-            <div class="table-container">
-                <table id="dataTable" class="data-table">
-                    <thead id="tableHead"></thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
+        <div class="section-content">
+            <div class="selector-grid">
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-tasks"></i> 選擇任務
+                    </label>
+                    <select class="form-select" id="taskSelector">
+                        <option value="">載入中...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-table"></i> 選擇資料表
+                    </label>
+                    <select class="form-select" id="sheetSelector" disabled>
+                        <option value="">請先選擇任務...</option>
+                    </select>
+                </div>
             </div>
-        </div>
-        
-        <!-- 樞紐分析檢視 -->
-        <div id="pivotView" class="pivot-view hidden">
-            <div class="pivot-instructions">
-                <i class="fas fa-info-circle"></i>
-                <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
-                <ul>
-                    <li>拖曳欄位到列或欄區域來分組資料</li>
-                    <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                    <li>使用篩選器來過濾資料</li>
-                    <li>點擊表格標題來排序</li>
-                </ul>
-            </div>
-            <div id="pivotContainer"></div>
-        </div>
-    </div>
-
-    <!-- 資料統計 -->
-    <div class="data-statistics">
-        <h2 class="section-title">
-            <i class="fas fa-chart-pie"></i> 資料統計
-        </h2>
-        
-        <div class="stats-grid" id="statsGrid">
-            <!-- 動態填充統計資料 -->
-        </div>
-        
-        <!-- 圖表區域 -->
-        <div class="charts-section">
-            <div class="chart-container">
-                <h3 class="chart-title">資料分布圖</h3>
-                <canvas id="distributionChart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3 class="chart-title">趨勢分析圖</h3>
-                <canvas id="trendChart"></canvas>
+            
+            <!-- 任務摘要 -->
+            <div id="taskSummary" style="margin-top: 24px;">
+                <!-- 動態顯示任務統計 -->
             </div>
         </div>
     </div>
 
-    <!-- 篩選器面板 -->
-    <div class="filter-panel" id="filterPanel">
-        <div class="filter-header">
-            <h3>資料篩選器</h3>
-            <button class="btn-icon" onclick="toggleFilterPanel()">
-                <i class="fas fa-times"></i>
-            </button>
+    <!-- 快速操作 -->
+    <div class="quick-actions">
+        <button class="btn-quick" onclick="quickExport('all-excel')">
+            <i class="fas fa-file-excel"></i>
+            <span>匯出所有 Excel</span>
+        </button>
+        <button class="btn-quick" onclick="quickExport('pdf')">
+            <i class="fas fa-file-pdf"></i>
+            <span>匯出 PDF 報告</span>
+        </button>
+        <button class="btn-quick" onclick="quickExport('html')">
+            <i class="fas fa-file-code"></i>
+            <span>匯出 HTML</span>
+        </button>
+        <button class="btn-quick" onclick="quickExport('zip')">
+            <i class="fas fa-file-archive"></i>
+            <span>下載完整包</span>
+        </button>
+    </div>
+
+    <!-- 報表預覽區塊 -->
+    <div class="report-preview-section">
+        <div class="section-header">
+            <h2 class="step-title">資料預覽</h2>
         </div>
-        <div class="filter-content" id="filterContent">
-            <!-- 動態生成篩選器 -->
-        </div>
-        <div class="filter-actions">
-            <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
-            <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
+        
+        <div class="section-content">
+            <!-- 資料表統計 -->
+            <div id="sheetStatistics">
+                <!-- 動態顯示統計 -->
+            </div>
+            
+            <!-- 預覽容器 -->
+            <div class="preview-container" id="previewContainer">
+                <!-- 動態載入資料預覽 -->
+            </div>
         </div>
     </div>
 
-    <!-- 浮動按鈕 -->
-    <button class="fab" onclick="toggleFilterPanel()">
-        <i class="fas fa-filter"></i>
-    </button>
+    <!-- 匯出選項區塊 -->
+    <div class="export-options-section">
+        <div class="section-header">
+            <h2 class="step-title">匯出選項</h2>
+        </div>
+        
+        <div class="export-formats">
+            <div class="format-card excel" onclick="exportData('current-excel')">
+                <div class="format-icon">
+                    <i class="fas fa-file-excel"></i>
+                </div>
+                <div class="format-title">Excel (當前表)</div>
+                <div class="format-desc">匯出當前選擇的資料表為 Excel 檔案</div>
+            </div>
+            
+            <div class="format-card excel" onclick="exportData('all-excel')">
+                <div class="format-icon">
+                    <i class="fas fa-table"></i>
+                </div>
+                <div class="format-title">Excel (所有表)</div>
+                <div class="format-desc">匯出所有資料表為單一 Excel 檔案</div>
+            </div>
+            
+            <div class="format-card pdf" onclick="exportData('pdf')">
+                <div class="format-icon">
+                    <i class="fas fa-file-pdf"></i>
+                </div>
+                <div class="format-title">PDF 報告</div>
+                <div class="format-desc">產生格式化的 PDF 報告文件</div>
+            </div>
+            
+            <div class="format-card html" onclick="exportData('html')">
+                <div class="format-icon">
+                    <i class="fas fa-file-code"></i>
+                </div>
+                <div class="format-title">HTML 網頁</div>
+                <div class="format-desc">產生可在瀏覽器檢視的 HTML 檔案</div>
+            </div>
+            
+            <div class="format-card zip" onclick="downloadFullReport()">
+                <div class="format-icon">
+                    <i class="fas fa-file-archive"></i>
+                </div>
+                <div class="format-title">完整壓縮包</div>
+                <div class="format-desc">下載包含所有檔案的 ZIP 壓縮包</div>
+            </div>
+        </div>
+        
+        <div class="export-hint">
+            <i class="fas fa-lightbulb"></i>
+            <span>提示：您可以先預覽資料，確認內容正確後再進行匯出。所有匯出格式都會保留原始資料的完整性。</span>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- PivotTable.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.min.js"></script>
-
-<script>
-const taskId = '{{ task_id }}';
-let currentData = null;
-let currentSheet = null;
-let pivotMode = false;
-let filters = {};
-
-// 頁面載入時初始化
-document.addEventListener('DOMContentLoaded', () => {
-    loadPivotData();
-});
-
-// 載入樞紐分析資料
-async function loadPivotData() {
-    try {
-        utils.showLoading('載入資料中...');
-        
-        const data = await utils.apiRequest(`/api/pivot-data/${taskId}`);
-        currentData = data;
-        
-        // 填充資料表選項
-        const selector = document.getElementById('sheetSelector');
-        selector.innerHTML = '';
-        
-        Object.keys(data).forEach(sheetName => {
-            const option = document.createElement('option');
-            option.value = sheetName;
-            option.textContent = getSheetDisplayName(sheetName);
-            selector.appendChild(option);
-        });
-        
-        // 載入第一個資料表
-        if (Object.keys(data).length > 0) {
-            loadSheet(Object.keys(data)[0]);
-        }
-        
-        utils.hideLoading();
-        
-    } catch (error) {
-        console.error('Load data error:', error);
-        utils.hideLoading();
-        utils.showNotification('載入資料失敗', 'error');
-    }
-}
-
-// 取得資料表顯示名稱
-function getSheetDisplayName(sheetName) {
-    const displayNames = {
-        'revision_diff': 'Revision 差異',
-        'branch_error': '分支錯誤',
-        'lost_project': '新增/刪除專案',
-        'version_diff': '版本檔案差異',
-        '無法比對': '無法比對的模組',
-        '摘要': '比對摘要'
-    };
-    return displayNames[sheetName] || sheetName;
-}
-
-// 載入資料表
-function loadSheet(sheetName) {
-    currentSheet = sheetName;
-    const sheetData = currentData[sheetName];
-    
-    if (!sheetData) return;
-    
-    // 更新選擇器
-    document.getElementById('sheetSelector').value = sheetName;
-    
-    // 更新統計資料
-    updateStatistics(sheetData);
-    
-    // 生成篩選器
-    generateFilters(sheetData);
-    
-    if (pivotMode) {
-        // 樞紐分析模式
-        renderPivotTable(sheetData);
-    } else {
-        // 一般表格模式
-        renderDataTable(sheetData);
-    }
-    
-    // 繪製圖表
-    drawDataCharts(sheetData);
-}
-
-// 渲染資料表格
-function renderDataTable(sheetData) {
-    const table = document.getElementById('dataTable');
-    const thead = document.getElementById('tableHead');
-    const tbody = document.getElementById('tableBody');
-    
-    // 清空表格
-    thead.innerHTML = '';
-    tbody.innerHTML = '';
-    
-    if (!sheetData.data || sheetData.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有資料</td></tr>';
-        return;
-    }
-    
-    // 建立表頭
-    const headerRow = document.createElement('tr');
-    sheetData.columns.forEach(col => {
-        const th = document.createElement('th');
-        th.textContent = col;
-        th.onclick = () => sortTable(col);
-        th.style.cursor = 'pointer';
-        headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    
-    // 建立表格內容
-    const filteredData = applyDataFilters(sheetData.data);
-    filteredData.forEach(row => {
-        const tr = document.createElement('tr');
-        sheetData.columns.forEach(col => {
-            const td = document.createElement('td');
-            const value = row[col];
-            
-            // 特殊格式處理
-            if (col.includes('link') && value && value.startsWith('http')) {
-                td.innerHTML = `<a href="${value}" target="_blank" class="link">查看</a>`;
-            } else if (col === 'has_wave' || col === 'is_different') {
-                td.innerHTML = `<span class="badge ${value === 'Y' ? 'success' : 'default'}">${value}</span>`;
-            } else if (col === '狀態') {
-                td.innerHTML = `<span class="badge ${value === '新增' ? 'success' : 'warning'}">${value}</span>`;
-            } else {
-                td.textContent = value || '';
-            }
-            
-            // 標記重要欄位
-            if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
-                td.classList.add('highlight-red');
-            }
-            
-            tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-    });
-}
-
-// 渲染樞紐分析表
-function renderPivotTable(sheetData) {
-    const container = document.getElementById('pivotContainer');
-    container.innerHTML = '';
-    
-    if (!sheetData.data || sheetData.data.length === 0) {
-        container.innerHTML = '<div class="empty-message">沒有資料可供分析</div>';
-        return;
-    }
-    
-    // 使用 PivotTable.js
-    $(container).pivotUI(sheetData.data, {
-        rows: [],
-        cols: [],
-        aggregatorName: "計數",
-        rendererName: "表格",
-        unusedAttrsVertical: true,
-        renderers: $.extend(
-            $.pivotUtilities.renderers,
-            $.pivotUtilities.c3_renderers,
-            $.pivotUtilities.d3_renderers
-        ),
-        localeStrings: $.pivotUtilities.locales.zh
-    });
-}
-
-// 切換樞紐分析模式
-function togglePivotMode() {
-    pivotMode = !pivotMode;
-    
-    document.getElementById('tableView').classList.toggle('hidden', pivotMode);
-    document.getElementById('pivotView').classList.toggle('hidden', !pivotMode);
-    document.getElementById('pivotToggleText').textContent = pivotMode ? '切換表格檢視' : '切換樞紐分析';
-    
-    if (currentSheet) {
-        loadSheet(currentSheet);
-    }
-}
-
-// 更新統計資料
-function updateStatistics(sheetData) {
-    const statsGrid = document.getElementById('statsGrid');
-    statsGrid.innerHTML = '';
-    
-    if (!sheetData.data || sheetData.data.length === 0) return;
-    
-    // 計算基本統計
-    const stats = [
-        {
-            label: '總筆數',
-            value: sheetData.data.length,
-            icon: 'fa-list'
-        },
-        {
-            label: '欄位數',
-            value: sheetData.columns.length,
-            icon: 'fa-columns'
-        }
-    ];
-    
-    // 特定資料表的統計
-    if (currentSheet === 'revision_diff') {
-        const uniqueModules = new Set(sheetData.data.map(row => row.module));
-        stats.push({
-            label: '模組數',
-            value: uniqueModules.size,
-            icon: 'fa-cube'
-        });
-    }
-    
-    if (currentSheet === 'branch_error') {
-        const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
-        stats.push({
-            label: '需修正',
-            value: hasWaveN,
-            icon: 'fa-exclamation-triangle',
-            type: 'warning'
-        });
-    }
-    
-    // 渲染統計卡片
-    stats.forEach(stat => {
-        const card = document.createElement('div');
-        card.className = `stat-card ${stat.type || ''}`;
-        card.innerHTML = `
-            <div class="stat-icon">
-                <i class="fas ${stat.icon}"></i>
-            </div>
-            <div class="stat-content">
-                <div class="stat-value">${stat.value}</div>
-                <div class="stat-label">${stat.label}</div>
-            </div>
-        `;
-        statsGrid.appendChild(card);
-    });
-}
-
-// 生成篩選器
-function generateFilters(sheetData) {
-    const filterContent = document.getElementById('filterContent');
-    filterContent.innerHTML = '';
-    
-    if (!sheetData.columns) return;
-    
-    // 為每個欄位生成篩選器
-    sheetData.columns.forEach(col => {
-        // 跳過某些欄位
-        if (col.includes('link') || col.includes('content')) return;
-        
-        // 取得唯一值
-        const uniqueValues = [...new Set(sheetData.data.map(row => row[col]))].filter(v => v);
-        
-        if (uniqueValues.length > 0 && uniqueValues.length < 50) {
-            const filterGroup = document.createElement('div');
-            filterGroup.className = 'filter-group';
-            filterGroup.innerHTML = `
-                <label class="filter-label">${col}</label>
-                <select class="filter-select" multiple data-column="${col}">
-                    ${uniqueValues.map(val => `<option value="${val}">${val}</option>`).join('')}
-                </select>
-            `;
-            filterContent.appendChild(filterGroup);
-        }
-    });
-}
-
-// 套用篩選器
-function applyFilters() {
-    // 收集篩選條件
-    filters = {};
-    document.querySelectorAll('.filter-select').forEach(select => {
-        const column = select.dataset.column;
-        const selectedValues = Array.from(select.selectedOptions).map(opt => opt.value);
-        if (selectedValues.length > 0) {
-            filters[column] = selectedValues;
-        }
-    });
-    
-    // 重新載入資料
-    if (currentSheet) {
-        loadSheet(currentSheet);
-    }
-    
-    utils.showNotification('已套用篩選', 'success');
-}
-
-// 清除篩選器
-function clearFilters() {
-    filters = {};
-    document.querySelectorAll('.filter-select').forEach(select => {
-        select.selectedIndex = -1;
-    });
-    
-    if (currentSheet) {
-        loadSheet(currentSheet);
-    }
-    
-    utils.showNotification('已清除篩選', 'info');
-}
-
-// 套用資料篩選
-function applyDataFilters(data) {
-    if (Object.keys(filters).length === 0) return data;
-    
-    return data.filter(row => {
-        for (const [column, values] of Object.entries(filters)) {
-            if (!values.includes(String(row[column]))) {
-                return false;
-            }
-        }
-        return true;
-    });
-}
-
-// 表格排序
-let sortOrder = {};
-function sortTable(column) {
-    const order = sortOrder[column] === 'asc' ? 'desc' : 'asc';
-    sortOrder[column] = order;
-    
-    const sheetData = currentData[currentSheet];
-    sheetData.data.sort((a, b) => {
-        const aVal = a[column] || '';
-        const bVal = b[column] || '';
-        
-        if (order === 'asc') {
-            return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        } else {
-            return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
-        }
-    });
-    
-    renderDataTable(sheetData);
-}
-
-// 繪製資料圖表
-function drawDataCharts(sheetData) {
-    if (!sheetData.data || sheetData.data.length === 0) return;
-    
-    // 分布圖
-    const distCtx = document.getElementById('distributionChart').getContext('2d');
-    
-    // 根據資料表類型決定圖表內容
-    let chartData = {};
-    
-    if (currentSheet === 'revision_diff' || currentSheet === 'branch_error') {
-        // 按模組統計
-        sheetData.data.forEach(row => {
-            const module = row.module;
-            chartData[module] = (chartData[module] || 0) + 1;
-        });
-    } else if (currentSheet === 'lost_project') {
-        // 按狀態統計
-        sheetData.data.forEach(row => {
-            const status = row['狀態'];
-            chartData[status] = (chartData[status] || 0) + 1;
-        });
-    }
-    
-    new Chart(distCtx, {
-        type: 'pie',
-        data: {
-            labels: Object.keys(chartData),
-            datasets: [{
-                data: Object.values(chartData),
-                backgroundColor: [
-                    '#2196F3', '#4CAF50', '#FF9800', '#F44336',
-                    '#9C27B0', '#00BCD4', '#FFEB3B', '#795548'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'right'
-                }
-            }
-        }
-    });
-}
-
-// 切換篩選器面板
-function toggleFilterPanel() {
-    document.getElementById('filterPanel').classList.toggle('show');
-}
-
-// 匯出當前檢視
-function exportCurrentView(format) {
-    if (format === 'excel') {
-        window.location.href = `/api/export-excel/${taskId}`;
-    } else if (format === 'html') {
-        window.location.href = `/api/export-html/${taskId}`;
-    }
-}
-
-// 下載完整報表
-function downloadFullReport() {
-    window.location.href = `/api/export-zip/${taskId}`;
-}
-
-// 監聽資料表選擇
-document.getElementById('sheetSelector').addEventListener('change', (e) => {
-    if (e.target.value) {
-        loadSheet(e.target.value);
-    }
-});
-
-// 匯出函數
-window.togglePivotMode = togglePivotMode;
-window.applyFilters = applyFilters;
-window.clearFilters = clearFilters;
-window.toggleFilterPanel = toggleFilterPanel;
-window.exportCurrentView = exportCurrentView;
-window.downloadFullReport = downloadFullReport;
-</script>
-
-<style>
-/* 樞紐分析表樣式 */
-.pivot-view {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-xl);
-    box-shadow: var(--shadow-md);
-}
-
-.pivot-instructions {
-    background: var(--nordic-blue-50);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-lg);
-    margin-bottom: var(--spacing-xl);
-    color: var(--nordic-blue-800);
-}
-
-.pivot-instructions ul {
-    margin-top: var(--spacing-sm);
-    margin-left: var(--spacing-lg);
-}
-
-/* 資料表格樣式 */
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-}
-
-.data-table th {
-    background: var(--nordic-blue-600);
-    color: white;
-    padding: var(--spacing-sm) var(--spacing-md);
-    text-align: left;
-    position: sticky;
-    top: 0;
-    cursor: pointer;
-    user-select: none;
-}
-
-.data-table th:hover {
-    background: var(--nordic-blue-700);
-}
-
-.data-table td {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-bottom: 1px solid var(--nordic-gray-200);
-}
-
-.data-table tr:hover {
-    background: var(--nordic-blue-50);
-}
-
-.highlight-red {
-    color: var(--nordic-red);
-    font-weight: 600;
-}
-
-/* 統計卡片 */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-xl);
-}
-
-.stat-card {
-    background: white;
-    border-radius: var(--radius-md);
-    padding: var(--spacing-lg);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-}
-
-.stat-card.warning {
-    border-left: 4px solid var(--nordic-yellow);
-}
-
-.stat-icon {
-    width: 50px;
-    height: 50px;
-    background: var(--nordic-blue-100);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--nordic-blue-700);
-    font-size: 1.5rem;
-}
-
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--nordic-gray-900);
-}
-
-.stat-label {
-    color: var(--nordic-gray-600);
-}
-
-/* 篩選器面板 */
-.filter-panel {
-    position: fixed;
-    right: -400px;
-    top: 0;
-    bottom: 0;
-    width: 400px;
-    background: white;
-    box-shadow: var(--shadow-xl);
-    transition: right var(--transition-normal);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-}
-
-.filter-panel.show {
-    right: 0;
-}
-
-.filter-header {
-    padding: var(--spacing-lg);
-    border-bottom: 1px solid var(--nordic-gray-200);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.filter-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--spacing-lg);
-}
-
-.filter-group {
-    margin-bottom: var(--spacing-lg);
-}
-
-.filter-label {
-    display: block;
-    font-weight: 500;
-    margin-bottom: var(--spacing-xs);
-    color: var(--nordic-gray-700);
-}
-
-.filter-select {
-    width: 100%;
-    min-height: 100px;
-    border: 2px solid var(--nordic-gray-300);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-xs);
-}
-
-.filter-actions {
-    padding: var(--spacing-lg);
-    border-top: 1px solid var(--nordic-gray-200);
-    display: flex;
-    gap: var(--spacing-sm);
-}
-
-/* 浮動按鈕 */
-.fab {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--nordic-blue-600);
-    color: white;
-    border: none;
-    box-shadow: var(--shadow-lg);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    font-size: 1.25rem;
-}
-
-.fab:hover {
-    background: var(--nordic-blue-700);
-    transform: scale(1.1);
-}
-
-/* 圖表容器 */
-.charts-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: var(--spacing-xl);
-    margin-top: var(--spacing-xl);
-}
-
-.chart-container {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    box-shadow: var(--shadow-md);
-}
-
-.chart-container canvas {
-    max-height: 300px;
-}
-</style>
+<script src="{{ url_for('static', filename='js/export_report.js') }}"></script>
 {% endblock %}
