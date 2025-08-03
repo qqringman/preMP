@@ -7,6 +7,7 @@ let currentServerPath = '/home/vince_lin/ai/preMP/downloads';
 let selectedServerDirectory = null;
 let currentFoldersList = [];
 let serverFilesLoaded = false; // 新增變數追蹤伺服器檔案是否已載入
+let pathInputTimer = null;
 
 // 新增：儲存圖表實例
 let chartInstances = {
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRecentComparisons();
     initializeEventListeners();
     initializeFolderDrop();
+    initializePathInput()
     
     // 監聽標籤切換事件
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1000,6 +1002,189 @@ function compareNewData() {
     // 通知用戶
     utils.showNotification('已重置，請選擇新的資料進行比對', 'info');
 }
+
+// 顯示路徑建議
+async function showPathSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (!suggestions) {
+        console.error('pathSuggestions element not found!');  // 除錯用
+        return;
+    }
+    
+    // 清空現有建議
+    suggestions.innerHTML = '';
+    
+    if (!inputValue) {
+        hideSuggestions();
+        return;
+    }
+    
+    try {
+        // 從後端獲取建議
+        const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(inputValue)}`);
+        const { directories, files } = response;
+        
+        if (directories.length === 0) {
+            suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+        } else {
+            // 只顯示目錄（比對頁面只需要選擇目錄）
+            directories.forEach(dir => {
+                const item = createSuggestionItem(dir.path, dir.name, 'folder');
+                suggestions.appendChild(item);
+            });
+        }
+        
+        suggestions.classList.add('show');
+        
+    } catch (error) {
+        console.error('Path suggestions error:', error);  // 除錯用
+        // 如果後端沒有實現，使用靜態建議
+        showStaticSuggestions(inputValue);
+    }
+}
+
+// 建立建議項目 - 新增
+function createSuggestionItem(path, name, type) {
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.dataset.path = path;
+    div.onclick = () => selectSuggestion(path);
+    
+    const icon = type === 'folder' ? 'fa-folder' : 'fa-file-excel';
+    const typeText = type === 'folder' ? '資料夾' : 'Excel 檔案';
+    
+    div.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <span>${path}</span>
+        <span class="suggestion-type">${typeText}</span>
+    `;
+    
+    return div;
+}
+
+// 顯示靜態建議 - 新增
+function showStaticSuggestions(inputValue) {
+    const suggestions = document.getElementById('pathSuggestions');
+    
+    // 從 config.py 定義的常用路徑
+    const commonPaths = [
+        '/home/vince_lin/ai/preMP',
+        '/home/vince_lin/ai/R306_ShareFolder',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log',
+        '/home/vince_lin/ai/R306_ShareFolder/nightrun_log/Demo_stress_Test_log',
+        '/home/vince_lin/ai/DailyBuild',
+        '/home/vince_lin/ai/DailyBuild/Merlin7',
+        '/home/vince_lin/ai/PrebuildFW'
+    ];
+    
+    // 過濾匹配的路徑
+    const matches = commonPaths.filter(path => 
+        path.toLowerCase().includes(inputValue.toLowerCase())
+    );
+    
+    if (matches.length === 0) {
+        suggestions.innerHTML = '<div class="suggestion-item disabled">沒有找到匹配的路徑</div>';
+    } else {
+        matches.forEach(path => {
+            const name = path.split('/').pop() || path;
+            const item = createSuggestionItem(path, name, 'folder');
+            suggestions.appendChild(item);
+        });
+    }
+    
+    suggestions.classList.add('show');
+}
+
+// 初始化路徑輸入功能 - 新增
+function initializePathInput() {
+    const pathInput = document.getElementById('serverPathInput');
+    if (!pathInput) return;
+    
+    // 設定預設值
+    pathInput.value = currentServerPath;
+    
+    // 監聽輸入事件
+    pathInput.addEventListener('input', (e) => {
+        clearTimeout(pathInputTimer);
+        pathInputTimer = setTimeout(() => {
+            showPathSuggestions(e.target.value);
+        }, 300);
+    });
+    
+    // 監聽按鍵事件
+    pathInput.addEventListener('keydown', (e) => {
+        const suggestions = document.getElementById('pathSuggestions');
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        const selected = suggestions.querySelector('.suggestion-item.selected');
+        let selectedIndex = -1;
+        
+        if (selected) {
+            selectedIndex = Array.from(items).indexOf(selected);
+        }
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedIndex < items.length - 1) {
+                selectedIndex++;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                updateSelectedSuggestion(items, selectedIndex);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selected) {
+                selectSuggestion(selected.dataset.path);
+            } else {
+                goToPath();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+    
+    // 點擊外部時隱藏建議
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.path-input-container')) {
+            hideSuggestions();
+        }
+    });
+}
+
+// 隱藏建議 - 新增
+function hideSuggestions() {
+    const suggestions = document.getElementById('pathSuggestions');
+    if (suggestions) {
+        suggestions.classList.remove('show');
+    }
+}
+
+// 更新選中的建議 - 新增
+function updateSelectedSuggestion(items, index) {
+    items.forEach((item, i) => {
+        if (i === index) {
+            item.classList.add('selected');
+            // 確保選中項目在視野內
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// 選擇建議 - 新增
+function selectSuggestion(path) {
+    const pathInput = document.getElementById('serverPathInput');
+    pathInput.value = path;
+    hideSuggestions();
+    
+    // 如果是資料夾，導航到該路徑
+    goToPath();
+}
+
 
 // 匯出函數
 window.switchSourceTab = switchSourceTab;
