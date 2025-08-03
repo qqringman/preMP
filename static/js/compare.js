@@ -3,16 +3,139 @@
 let currentTaskId = null;
 let sourceDirectory = null;
 let asyncDownloadUrl = null;
+let currentServerPath = '/home/vince_lin/ai/preMP/downloads';
+let selectedServerDirectory = null;
 
-// 頁面載入時初始化
+// 更新 DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
     loadDownloadedDirectories();
     loadRecentComparisons();
     initializeEventListeners();
     initializeFolderDrop();
+    
+    // 監聽標籤切換事件
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tabName = e.currentTarget.textContent.includes('伺服器') ? 'server' : 'local';
+            if (tabName === 'server') {
+                // 切換到伺服器標籤時初始化路徑瀏覽器
+                setTimeout(() => {
+                    initializeServerPathBrowser();
+                }, 100);
+            }
+        });
+    });
 });
 
-// 切換來源標籤
+// 初始化伺服器路徑瀏覽器
+function initializeServerPathBrowser() {
+    const pathInput = document.getElementById('serverPathInput');
+    
+    // 監聽路徑輸入變化
+    pathInput.addEventListener('input', debounce(async (e) => {
+        const path = e.target.value.trim();
+        if (path && path.startsWith('/')) {
+            await loadServerFolders(path);
+        }
+    }, 500));
+    
+    // 監聽 Enter 鍵
+    pathInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            useServerPath();
+        }
+    });
+    
+    // 初始載入預設路徑的資料夾
+    loadServerFolders(currentServerPath);
+}
+
+// 防抖動函數
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 載入伺服器資料夾
+async function loadServerFolders(path) {
+    const folderList = document.getElementById('folderList');
+    const currentPathDisplay = document.getElementById('currentPathDisplay');
+    
+    // 更新當前路徑顯示
+    currentPathDisplay.textContent = path;
+    currentServerPath = path;
+    
+    // 顯示載入中
+    folderList.innerHTML = `
+        <div class="folder-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>載入中...</p>
+        </div>
+    `;
+    
+    try {
+        // 呼叫 API 獲取資料夾列表
+        const response = await utils.apiRequest(`/api/list-folders?path=${encodeURIComponent(path)}`);
+        
+        if (response.folders && response.folders.length > 0) {
+            displayFolders(response.folders);
+        } else {
+            folderList.innerHTML = `
+                <div class="folder-empty">
+                    <i class="fas fa-folder-open"></i>
+                    <p>此目錄下沒有子資料夾</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Load folders error:', error);
+        folderList.innerHTML = `
+            <div class="folder-empty">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>無法載入資料夾列表</p>
+                <small>${error.message}</small>
+            </div>
+        `;
+    }
+}
+
+// 顯示資料夾列表
+function displayFolders(folders) {
+    const folderList = document.getElementById('folderList');
+    
+    let html = '';
+    folders.forEach(folder => {
+        html += `
+            <div class="folder-item" onclick="selectFolder('${folder.path}')">
+                <i class="fas fa-folder"></i>
+                <span class="folder-name">${folder.name}</span>
+            </div>
+        `;
+    });
+    
+    folderList.innerHTML = html;
+}
+
+// 選擇資料夾
+function selectFolder(folderPath) {
+    // 更新輸入框
+    document.getElementById('serverPathInput').value = folderPath;
+    
+    // 載入該資料夾的子資料夾
+    loadServerFolders(folderPath);
+    
+    // 可選：直接使用此路徑
+    // useServerPath();
+}
+
+// 切換標籤時載入伺服器內容
 function switchSourceTab(tab) {
     // 更新標籤按鈕狀態
     document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
@@ -25,6 +148,11 @@ function switchSourceTab(tab) {
         content.classList.remove('active');
     });
     document.getElementById(`${tab}-tab`).classList.add('active');
+    
+    // 如果切換到伺服器標籤，載入當前路徑內容
+    if (tab === 'server') {
+        loadServerDirectory(currentServerPath);
+    }
 }
 
 // 選擇本地目錄
@@ -138,12 +266,108 @@ function useServerPath() {
 
 // 重新整理伺服器路徑
 function refreshServerPath() {
-    const path = document.getElementById('serverPathInput').value.trim();
-    if (path) {
-        utils.showNotification('正在驗證路徑...', 'info');
-        // 這裡可以加入驗證路徑是否存在的邏輯
-        setSourceDirectory(path, 'server');
+    loadServerDirectory(currentServerPath);
+}
+
+// 載入伺服器目錄內容
+async function loadServerDirectory(path) {
+    const browserContent = document.getElementById('serverBrowser');
+    
+    // 顯示載入中
+    browserContent.innerHTML = `
+        <div class="loading">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p>載入中...</p>
+        </div>
+    `;
+    
+    try {
+        // 更新當前路徑
+        currentServerPath = path;
+        document.getElementById('serverPathInput').value = path;
+        
+        // 呼叫 API 獲取目錄內容
+        const result = await utils.apiRequest(`/api/browse-directory?path=${encodeURIComponent(path)}`);
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        displayServerDirectory(result);
+        
+    } catch (error) {
+        browserContent.innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-exclamation-triangle fa-3x"></i>
+                <p>無法載入目錄內容</p>
+                <p class="text-muted">${error.message}</p>
+            </div>
+        `;
     }
+}
+
+// 顯示伺服器目錄內容
+function displayServerDirectory(result) {
+    const browserContent = document.getElementById('serverBrowser');
+    
+    // 檢查是否有內容
+    if (!result.folders || result.folders.length === 0) {
+        browserContent.innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-folder-open fa-3x"></i>
+                <p>此目錄是空的</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="folder-grid">';
+    
+    // 添加上一層按鈕（如果不是根目錄）
+    if (currentServerPath !== '/') {
+        const parentPath = currentServerPath.substring(0, currentServerPath.lastIndexOf('/')) || '/';
+        html += `
+            <div class="folder-item parent-folder" onclick="navigateToFolder('${parentPath}')">
+                <i class="fas fa-level-up-alt"></i>
+                <div class="folder-name">..</div>
+            </div>
+        `;
+    }
+    
+    // 顯示資料夾
+    result.folders.forEach(folder => {
+        const isSelected = selectedServerDirectory === folder.path;
+        html += `
+            <div class="folder-item ${isSelected ? 'selected' : ''}" 
+                 onclick="selectServerFolder('${folder.path}', '${folder.name}')"
+                 ondblclick="navigateToFolder('${folder.path}')">
+                <i class="fas fa-folder"></i>
+                <div class="folder-name">${folder.name}</div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    browserContent.innerHTML = html;
+}
+
+// 選擇伺服器資料夾
+function selectServerFolder(path, name) {
+    selectedServerDirectory = path;
+    
+    // 更新視覺狀態
+    document.querySelectorAll('.folder-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+    
+    // 設定為來源目錄
+    setSourceDirectory(path, 'server');
+}
+
+// 導航到資料夾
+function navigateToFolder(path) {
+    loadServerDirectory(path);
 }
 
 // 設定來源目錄
@@ -213,12 +437,21 @@ function removeDirectory(type) {
 
 // 初始化事件監聽器
 function initializeEventListeners() {
-    // 輸入路徑時按 Enter
+
+    // 監聽路徑輸入的 Enter 鍵
     document.getElementById('serverPathInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            useServerPath();
+            goToPath();
         }
     });
+    
+    // 監聽路徑輸入變化
+    document.getElementById('serverPathInput').addEventListener('input', debounce((e) => {
+        const path = e.target.value.trim();
+        if (path && path.startsWith('/')) {
+            currentServerPath = path;
+        }
+    }, 300));
     
     // 監聽任務進度
     document.addEventListener('task-progress', (e) => {
@@ -227,6 +460,22 @@ function initializeEventListeners() {
             updateCompareProgress(data);
         }
     });
+}
+
+// 前往指定路徑
+function goToPath() {
+    const path = document.getElementById('serverPathInput').value.trim();
+    if (!path) {
+        utils.showNotification('請輸入路徑', 'error');
+        return;
+    }
+    
+    if (!path.startsWith('/')) {
+        utils.showNotification('路徑必須以 / 開頭', 'error');
+        return;
+    }
+    
+    loadServerDirectory(path);
 }
 
 // 執行比對
@@ -623,6 +872,124 @@ function formatTimeAgo(date) {
     if (days < 7) return `${days} 天前`;
     
     return new Date(date).toLocaleDateString('zh-TW');
+}
+
+// 初始化路徑輸入自動補全
+function initializePathAutocomplete() {
+    const pathInput = document.getElementById('serverPathInput');
+    const suggestions = document.getElementById('pathSuggestions');
+    let currentSuggestions = [];
+    let selectedIndex = -1;
+    
+    // 監聽輸入事件
+    pathInput.addEventListener('input', async (e) => {
+        const value = e.target.value;
+        if (value.length < 2) {
+            hideSuggestions();
+            return;
+        }
+        
+        try {
+            // 獲取路徑建議
+            const response = await utils.apiRequest(`/api/path-suggestions?path=${encodeURIComponent(value)}`);
+            if (response.suggestions && response.suggestions.length > 0) {
+                showSuggestions(response.suggestions);
+            } else {
+                hideSuggestions();
+            }
+        } catch (error) {
+            console.error('Get path suggestions error:', error);
+            hideSuggestions();
+        }
+    });
+    
+    // 顯示建議
+    function showSuggestions(items) {
+        currentSuggestions = items;
+        selectedIndex = -1;
+        
+        let html = '';
+        items.forEach((item, index) => {
+            html += `
+                <div class="suggestion-item" data-index="${index}" data-path="${item.path}">
+                    <i class="fas ${item.type === 'directory' ? 'fa-folder' : 'fa-file'}"></i>
+                    <span class="path-text">${item.path}</span>
+                    <span class="suggestion-type">${item.type === 'directory' ? '目錄' : '檔案'}</span>
+                </div>
+            `;
+        });
+        
+        suggestions.innerHTML = html;
+        suggestions.classList.add('show');
+        
+        // 綁定點擊事件
+        suggestions.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', () => {
+                selectSuggestion(item.dataset.path);
+            });
+        });
+    }
+    
+    // 選擇建議
+    function selectSuggestion(path) {
+        pathInput.value = path;
+        hideSuggestions();
+        // 如果是目錄，可以觸發刷新
+        refreshServerPath();
+    }
+    
+    // 隱藏建議
+    function hideSuggestions() {
+        suggestions.classList.remove('show');
+        currentSuggestions = [];
+        selectedIndex = -1;
+    }
+    
+    // 鍵盤導航
+    pathInput.addEventListener('keydown', (e) => {
+        if (!suggestions.classList.contains('show')) return;
+        
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                selectedIndex = Math.min(selectedIndex + 1, currentSuggestions.length - 1);
+                updateSelection();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                selectedIndex = Math.max(selectedIndex - 1, 0);
+                updateSelection();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0) {
+                    selectSuggestion(currentSuggestions[selectedIndex].path);
+                }
+                break;
+            case 'Escape':
+                hideSuggestions();
+                break;
+        }
+    });
+    
+    // 更新選中狀態
+    function updateSelection() {
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        items.forEach((item, index) => {
+            if (index === selectedIndex) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    // 點擊外部關閉建議
+    document.addEventListener('click', (e) => {
+        if (!pathInput.contains(e.target) && !suggestions.contains(e.target)) {
+            hideSuggestions();
+        }
+    });
 }
 
 // 匯出函數

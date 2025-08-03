@@ -78,26 +78,20 @@
                             <div class="browser-header">
                                 <div class="path-input-container">
                                     <input type="text" 
-                                           class="path-input" 
-                                           id="serverPathInput" 
-                                           placeholder="輸入或貼上路徑..."
-                                           value="/home/vince_lin/ai/preMP">
-                                    <div class="path-suggestions" id="pathSuggestions">
-                                        <!-- 動態生成路徑建議 -->
-                                    </div>
+                                        class="path-input" 
+                                        id="serverPathInput" 
+                                        placeholder="輸入或貼上路徑..."
+                                        value="/home/vince_lin/ai/preMP">
                                 </div>
-                                <button class="btn-go" onclick="useServerPath()">
-                                    <i class="fas fa-arrow-right"></i> 使用此路徑
+                                <button class="btn-go" onclick="goToPath()">
+                                    <i class="fas fa-arrow-right"></i> 前往
                                 </button>
                                 <button class="btn-refresh" onclick="refreshServerPath()">
                                     <i class="fas fa-sync"></i>
                                 </button>
                             </div>
                             <div class="browser-content" id="serverBrowser">
-                                <div class="empty-message">
-                                    <i class="fas fa-folder-open fa-3x"></i>
-                                    <p>輸入伺服器路徑或選擇預設路徑</p>
-                                </div>
+                                <!-- 動態載入資料夾內容 -->
                             </div>
                         </div>
                         

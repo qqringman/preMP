@@ -1060,6 +1060,60 @@ def internal_error(error):
     """500 錯誤處理"""
     return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/api/list-folders')
+async def list_folders():
+    path = request.args.get('path', '/home/vince_lin/ai/preMP/downloads')
+    
+    try:
+        folders = []
+        
+        # 使用 SFTP 或本地檔案系統列出資料夾
+        if os.path.exists(path) and os.path.isdir(path):
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
+                if os.path.isdir(item_path):
+                    folders.append({
+                        'name': item,
+                        'path': item_path
+                    })
+        
+        # 按名稱排序
+        folders.sort(key=lambda x: x['name'])
+        
+        return jsonify({'folders': folders})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/browse-directory')
+async def browse_directory():
+    path = request.args.get('path', '/home/vince_lin/ai/preMP')
+    
+    try:
+        folders = []
+        
+        # 檢查路徑是否存在
+        if not os.path.exists(path) or not os.path.isdir(path):
+            return jsonify({'error': '路徑不存在或不是目錄'})
+        
+        # 列出所有子目錄
+        for item in sorted(os.listdir(path)):
+            item_path = os.path.join(path, item)
+            if os.path.isdir(item_path):
+                folders.append({
+                    'name': item,
+                    'path': item_path
+                })
+        
+        return jsonify({
+            'path': path,
+            'folders': folders
+        })
+        
+    except PermissionError:
+        return jsonify({'error': '沒有權限訪問此目錄'})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+            
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
