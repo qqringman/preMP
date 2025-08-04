@@ -1806,17 +1806,40 @@ function exportPageAsHTML() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>比對結果報表 - ${taskId} (離線版)</title>
     
-    <!-- 外部資源 -->
+    <!-- 外部資源 - 確保順序正確 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- jQuery 必須在 PivotTable 之前 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    
+    <!-- PivotTable.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.js"></script>
+    
+    <!-- Chart.js 和其他庫 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
     <style>
         ${allCSS}
     </style>
+    
+    <!-- 立即載入必要的函數定義 -->
+    <script>
+        // 內嵌資料
+        const exportedData = ${JSON.stringify(currentData)};
+        const exportedTaskId = '${taskId}';
+        const exportedSheet = '${currentSheet}';
+        
+        // 立即載入所有函數
+        ${getAllRequiredFunctions()}
+        
+        // 設定全域變數
+        currentData = exportedData;
+        taskId = exportedTaskId;
+    </script>
 </head>
 <body>
     <div class="container">
@@ -1890,6 +1913,39 @@ function exportPageAsHTML() {
                     </div>
                     
                     <div id="pivotView" class="pivot-view hidden">
+                        <div class="pivot-controls">
+                            <div class="pivot-controls-left">
+                                <h3 class="pivot-title">
+                                    <i class="fas fa-chart-pie"></i> 樞紐分析表
+                                </h3>
+                            </div>
+                            <div class="pivot-controls-right">
+                                <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
+                                    <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> <span id="toggleAreasText">隱藏拖曳區</span>
+                                </button>
+                                <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
+                                    <i class="fas fa-expand" id="fullscreenIcon"></i> <span id="fullscreenText">全螢幕</span>
+                                </button>
+                                <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
+                                    <i class="fas fa-undo"></i> 重置
+                                </button>
+                                <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
+                                    <i class="fas fa-file-excel"></i> 匯出
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="pivot-instructions">
+                            <i class="fas fa-info-circle"></i>
+                            <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
+                            <ul>
+                                <li>拖曳欄位到列或欄區域來分組資料</li>
+                                <li>選擇不同的彙總函數（總和、平均、計數等）</li>
+                                <li>使用篩選器來過濾資料</li>
+                                <li>點擊表格標題來排序</li>
+                            </ul>
+                        </div>
+                        
                         <div id="pivotContainer"></div>
                     </div>
                 </div>
@@ -1913,18 +1969,22 @@ function exportPageAsHTML() {
     </div>
 
     <script>
-        // 內嵌資料
-        const exportedData = ${JSON.stringify(currentData)};
-        const exportedTaskId = '${taskId}';
-        const exportedSheet = '${currentSheet}';
-        
-        // 內嵌必要的函數
-        ${getAllRequiredFunctions()}
-        
-        // 初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            currentData = exportedData;
-            taskId = exportedTaskId;
+        // 等待 DOM 載入完成後初始化
+        $(document).ready(function() {
+            console.log('DOM ready, 開始初始化...');
+            
+            // 確認函數已載入
+            if (typeof togglePivotMode === 'undefined') {
+                console.error('togglePivotMode 函數未定義');
+            } else {
+                console.log('togglePivotMode 函數已載入');
+            }
+            
+            // 確認 PivotTable.js 已載入
+            if (typeof $.pivotUtilities === 'undefined') {
+                console.error('PivotTable.js 未載入');
+                alert('樞紐分析表功能無法使用，請確保網路連線正常');
+            }
             
             // 填充資料表選項
             const selector = document.getElementById('sheetSelector');
@@ -2005,10 +2065,21 @@ function getAllRequiredFunctions() {
         'debounce',
         'enableTableFeatures',
         'drawDataCharts',
-        'updateClearButton'
+        'updateClearButton',
+        'resetPivotTable',
+        'exportPivotTable',
+        'exportPivotToExcel',
+        'exportPivotToCSV',
+        'exportPivotToHTML',
+        'showToast',
+        'showConfirmDialog',
+        'showAlertDialog',
+        'togglePivotFullscreen',
+        'togglePivotAreas'
     ];
     
     let code = `
+        // 全域變數
         let currentData = null;
         let currentSheet = null;
         let pivotMode = false;
@@ -2016,6 +2087,16 @@ function getAllRequiredFunctions() {
         let sortOrder = {};
         let searchTerm = '';
         let taskId = '';
+        let pivotData = null;
+        let pivotConfig = null;
+        let pivotInitialData = null;
+        let pivotInitialConfig = null;
+        let areasVisible = true;
+        
+        // 確保 jQuery 和 PivotTable 已載入
+        if (typeof $ === 'undefined' || typeof $.pivotUtilities === 'undefined') {
+            console.error('jQuery 或 PivotTable.js 未正確載入');
+        }
         
     `;
     
@@ -2025,6 +2106,48 @@ function getAllRequiredFunctions() {
             code += window[funcName].toString() + '\n\n';
         }
     });
+    
+    // 在最後添加綁定到 window 的程式碼
+    code += `
+        // 綁定所有函數到 window 物件，讓 onclick 事件能找到
+        window.getSheetDisplayName = getSheetDisplayName;
+        window.loadSheet = loadSheet;
+        window.renderDataTable = renderDataTable;
+        window.renderPivotTable = renderPivotTable;
+        window.updateStatistics = updateStatistics;
+        window.updateTableStats = updateTableStats;
+        window.generateFilters = generateFilters;
+        window.applyFilters = applyFilters;
+        window.clearFilters = clearFilters;
+        window.applyDataFilters = applyDataFilters;
+        window.togglePivotMode = togglePivotMode;
+        window.toggleFilterPanel = toggleFilterPanel;
+        window.initializeSearch = initializeSearch;
+        window.highlightText = highlightText;
+        window.rowMatchesSearch = rowMatchesSearch;
+        window.formatFVersionContent = formatFVersionContent;
+        window.formatFHashContent = formatFHashContent;
+        window.formatColonContent = formatColonContent;
+        window.sortTable = sortTable;
+        window.getColumnWidth = getColumnWidth;
+        window.debounce = debounce;
+        window.enableTableFeatures = enableTableFeatures;
+        window.drawDataCharts = drawDataCharts;
+        window.updateClearButton = updateClearButton;
+        window.resetPivotTable = resetPivotTable;
+        window.exportPivotTable = exportPivotTable;
+        window.exportPivotToExcel = exportPivotToExcel;
+        window.exportPivotToCSV = exportPivotToCSV;
+        window.exportPivotToHTML = exportPivotToHTML;
+        window.showToast = showToast;
+        window.showConfirmDialog = showConfirmDialog;
+        window.showAlertDialog = showAlertDialog;
+        window.togglePivotFullscreen = togglePivotFullscreen;
+        window.togglePivotAreas = togglePivotAreas;
+        
+        // 確保初始化完成
+        console.log('所有函數已載入並綁定到 window');
+    `;
     
     return code;
 }
