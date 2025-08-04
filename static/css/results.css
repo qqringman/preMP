@@ -232,7 +232,7 @@ body {
   padding: 8px 16px;
 }
 
-.btn-sm i {
+.btn-sm i, .search-count.large-count {
   font-size: 0.75rem;
 }
 
@@ -461,7 +461,8 @@ body {
   position: relative;
 }
 
-.table-scroll-wrapper::-webkit-scrollbar {
+.table-scroll-wrapper::-webkit-scrollbar, /* 自定義捲軸樣式 */
+#pivotContainer::-webkit-scrollbar {
   height: 12px;
   width: 12px;
 }
@@ -484,7 +485,7 @@ body {
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.table-scroll-wrapper::-webkit-scrollbar-corner {
+#pivotContainer::-webkit-scrollbar-track, .table-scroll-wrapper::-webkit-scrollbar-corner {
   background: #F0F7FF;
   border-radius: 6px;
 }
@@ -543,22 +544,13 @@ body {
 }
 
 .data-table th.base-content-header,
-.data-table th.compare-content-header {
+.data-table th.compare-content-header, .data-table th.danger-header {
   background: #F44336;
   color: white;
 }
 
 .data-table th.base-content-header:hover,
-.data-table th.compare-content-header:hover {
-  background: #D32F2F;
-}
-
-.data-table th.danger-header {
-  background: #F44336;
-  color: white;
-}
-
-.data-table th.danger-header:hover {
+.data-table th.compare-content-header:hover, .data-table th.danger-header:hover {
   background: #D32F2F;
 }
 
@@ -586,7 +578,7 @@ body {
   transition: all 0.2s ease;
 }
 
-.sort-icon:hover,
+.custom-dialog-overlay.show, .sort-icon:hover,
 .filter-icon:hover {
   opacity: 1;
 }
@@ -609,7 +601,8 @@ body {
   white-space: nowrap;
 }
 
-.data-table tr:hover td {
+.data-table tr:hover td, .data-table tr:hover td.base-content,
+.data-table tr:hover td.compare-content {
   background: var(--bg-hover);
 }
 
@@ -625,23 +618,15 @@ body {
 }
 
 .data-table th:nth-child(3),
-.data-table td:nth-child(3) {
+.data-table td:nth-child(3), .data-table th:nth-child(6),
+.data-table td:nth-child(6) {
   min-width: 200px;
 }
 
 .data-table th:nth-child(4),
-.data-table td:nth-child(4) {
-  min-width: 150px;
-}
-
-.data-table th:nth-child(5),
+.data-table td:nth-child(4), .data-table th:nth-child(5),
 .data-table td:nth-child(5) {
   min-width: 150px;
-}
-
-.data-table th:nth-child(6),
-.data-table td:nth-child(6) {
-  min-width: 200px;
 }
 
 .data-table th:nth-child(7),
@@ -683,12 +668,7 @@ body {
   color: inherit;
 }
 
-.data-table tr:hover td.base-content,
-.data-table tr:hover td.compare-content {
-  background: var(--bg-hover);
-}
-
-.data-table td.highlight-red {
+.data-table td.highlight-red, .highlight-red {
   color: #D32F2F;
   font-weight: 600;
 }
@@ -710,7 +690,7 @@ body {
   text-decoration: none;
 }
 
-.data-table td a:hover {
+.data-table td a:hover, .link:hover {
   color: var(--nordic-blue-dark);
   text-decoration: underline;
 }
@@ -883,12 +863,14 @@ body {
   padding: 6px 10px;
 }
 
-.pvtUi select:focus,
+.filter-search-input:focus, .pvtUi select:focus,
 .pvtUi input[type="text"]:focus {
   border-color: var(--nordic-blue);
   outline: none;
 }
 
+.pvtTable, /* 樞紐分析表格基礎樣式 */
+.pvtTable, /* 樞紐分析表格配色優化 */
 .pvtTable {
   background: white;
   border: 1px solid #E3E7F3;
@@ -909,6 +891,7 @@ body {
   padding: 12px 16px;
 }
 
+.pvtTable th, /* 表頭樣式 */
 .pvtTable th {
   background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
   border: 1px solid #1976D2;
@@ -920,6 +903,8 @@ body {
   text-align: left;
 }
 
+.pvtTable tbody tr:hover td, /* 樞紐分析表格 hover 效果 - 改為更柔和的藍色 */
+.pvtTable tbody tr:hover td, /* 樞紐表格 hover 效果 - 使用北歐藍色系 */
 .pvtTable tbody tr:hover td {
   background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
   transition: background 0.2s ease;
@@ -1236,11 +1221,6 @@ body {
   transition: all 0.2s ease;
 }
 
-.link:hover {
-  color: var(--nordic-blue-dark);
-  text-decoration: underline;
-}
-
 .link i {
   font-size: 0.875em;
   margin-left: 4px;
@@ -1298,10 +1278,6 @@ body {
   white-space: nowrap;
 }
 
-.search-count.large-count {
-  font-size: 0.75rem;
-}
-
 .highlight {
   background-color: #FFE082;
   border-radius: 3px;
@@ -1325,11 +1301,6 @@ body {
   width: 100%;
 }
 
-.filter-search-input:focus {
-  border-color: var(--nordic-blue);
-  outline: none;
-}
-
 .filter-search i {
   color: var(--text-muted);
   font-size: 0.75rem;
@@ -1339,11 +1310,13 @@ body {
   transform: translateY(-50%);
 }
 
-.hidden {
+.hidden, .table-wrapper,
+.table-body-wrapper, /* 全螢幕下隱藏說明區域 */
+.pivot-view.fullscreen.hide-instructions .pivot-instructions {
   display: none;
 }
 
-.text-danger {
+.text-danger, .toast-error i {
   color: var(--danger);
 }
 
@@ -1355,11 +1328,6 @@ body {
   display: flex;
   gap: var(--spacing-sm);
   justify-content: center;
-}
-
-.table-wrapper,
-.table-body-wrapper {
-  display: none;
 }
 
 .truncated-content {
@@ -1393,11 +1361,6 @@ body {
   text-align: center;
   vertical-align: middle;
   width: 100%;
-}
-
-.highlight-red {
-  color: #D32F2F;
-  font-weight: 600;
 }
 
 .data-table td.highlight-red span {
@@ -1821,12 +1784,6 @@ body {
   padding-top: 16px !important;
 }
 
-/* 樞紐表格 hover 效果 - 使用北歐藍色系 */
-.pvtTable tbody tr:hover td {
-  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
-  transition: background 0.2s ease;
-}
-
 /* 修正原有的黃綠色hover */
 .pvtTable tbody tr:hover td {
   background: #E8F4FD !important;
@@ -1969,21 +1926,6 @@ body {
   color: var(--info);
 }
 
-.toast-error i {
-  color: var(--danger);
-}
-
-/* 自定義捲軸樣式 */
-#pivotContainer::-webkit-scrollbar {
-  height: 12px;
-  width: 12px;
-}
-
-#pivotContainer::-webkit-scrollbar-track {
-  background: #F0F7FF;
-  border-radius: 6px;
-}
-
 #pivotContainer::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
   border: 2px solid #F0F7FF;
@@ -2028,10 +1970,6 @@ body {
   z-index: 10001;
 }
 
-.custom-dialog-overlay.show {
-  opacity: 1;
-}
-
 .custom-dialog {
   background: white;
   border: 1px solid var(--border-light);
@@ -2057,7 +1995,7 @@ body {
   padding: 24px 32px;
 }
 
-.dialog-header i {
+.dialog-header i, .export-option i {
   color: var(--nordic-blue);
   font-size: 2rem;
 }
@@ -2120,11 +2058,6 @@ body {
   transform: translateY(-2px);
 }
 
-.export-option i {
-  color: var(--nordic-blue);
-  font-size: 2rem;
-}
-
 /* 全螢幕樣式 */
 .pivot-view.fullscreen {
   background: white !important;
@@ -2167,11 +2100,7 @@ body {
   padding-top: 40px;
 }
 
-#pivotContainer.areas-hidden .pvtRendererArea {
-  margin-top: 0;
-}
-
-#pivotContainer.areas-hidden .pvtTable {
+#pivotContainer.areas-hidden .pvtRendererArea, #pivotContainer.areas-hidden .pvtTable {
   margin-top: 0;
 }
 
@@ -2203,12 +2132,6 @@ body {
   top: 0;
   transition: opacity 0.3s ease;
   z-index: 100000;
-}
-
-/* 樞紐分析表格 hover 效果 - 改為更柔和的藍色 */
-.pvtTable tbody tr:hover td {
-  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
-  transition: background 0.2s ease;
 }
 
 /* 總計欄位樣式 - 使用更協調的藍色系 */
@@ -2245,7 +2168,7 @@ body {
 
 /* 最終總計 hover 效果 */
 .pvtTable tbody tr:hover td.pvtGrandTotal {
-  background: #1565C0 !important;
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -2260,8 +2183,10 @@ body {
 }
 
 /* 偶數行背景 */
+.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel), /* 偶數行背景 */
+.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(:first-child):not(:last-child), /* 偶數行背景 - 非常淡的灰色 */
 .pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #FAFBFD;
+  background: #FAFBFC;
 }
 
 /* 偶數行 hover */
@@ -2344,7 +2269,8 @@ body {
 
 /* 小計 hover 效果 */
 .pvtTable tbody tr:hover td.pvtTotal {
-  background: #EEF2F7 !important;
+  background: #E1E8EE !important;
+  border-color: #B0BEC5 !important;
 }
 
 /* 行/列總計標籤 - 稍深的灰藍色 */
@@ -2374,12 +2300,15 @@ body {
 }
 
 /* 屬性值欄位 hover */
-.pvtTable tbody tr:hover td:first-child {
+.pvtTable tbody tr:hover td:first-child, /* 屬性值欄位 hover */
+.pvtTable tbody tr:hover td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
   background: #BBDEFB !important;
 }
 
 /* 值欄位樣式（數字）*/
+.pvtVal, /* 數值單元格對齊 */
 .pvtVal {
+  color: #37474F;
   font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
   font-weight: 500;
   text-align: right;
@@ -2388,7 +2317,7 @@ body {
 /* 空單元格 */
 .pvtTable tbody td.pvtEmpty {
   background: #FAFAFA;
-  color: #B0BEC5;
+  color: #E0E0E0;
 }
 
 /* 全螢幕模式下的特殊調整 */
@@ -2411,37 +2340,19 @@ body {
   z-index: 100;
 }
 
-/* 全螢幕下隱藏說明區域 */
-.pivot-view.fullscreen.hide-instructions .pivot-instructions {
-  display: none;
-}
-
 .pivot-view.fullscreen.hide-instructions #pivotContainer {
   height: calc(100vh - 120px);
   margin-top: 80px;
   max-height: calc(100vh - 120px);
 }
 
-/* 樞紐分析表格基礎樣式 */
-.pvtTable {
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  border-spacing: 0;
-  background: white;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  margin-top: 24px;
-  width: 100%;
-  border: 1px solid #E3E7F3;
-}
-
+.pvtTable tbody td, /* 一般單元格 */
 .pvtTable tbody td {
-  padding: 12px 16px;
-  border: 1px solid #EDF2FC;
   background: white;
-  font-size: 0.9375rem;
+  border: 1px solid #EDF2FC;
   color: #424242;
+  font-size: 0.9375rem;
+  padding: 12px 16px;
   transition: all 0.2s ease;
 }
 
@@ -2450,109 +2361,564 @@ body {
   background: #FFFEF7 !important;
 }
 
-/* 偶數行背景 - 非常淡的灰色 */
-.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #FAFBFC;
-}
-
 /* 小計樣式 - 淡綠色 */
 .pvtTotal {
   background: #F1F8F4 !important;
-  font-weight: 600;
+  border: 1px solid #C8E6C9 !important;
   color: #2E7D32;
   font-size: 0.9375rem;
-  border: 1px solid #C8E6C9 !important;
-}
-
-/* 小計 hover 效果 */
-.pvtTable tbody tr:hover td.pvtTotal {
-  background: #E8F5E9 !important;
-  border-color: #A5D6A7 !important;
+  font-weight: 600;
 }
 
 /* 行總計標籤 - 淡橙色 */
 .pvtRowTotalLabel {
   background: #FFF3E0 !important;
+  border: 1px solid #FFE0B2 !important;
   color: #E65100;
   font-weight: 600;
-  border: 1px solid #FFE0B2 !important;
   text-align: right;
 }
 
 /* 列總計標籤 - 淡紫色 */
 .pvtColTotalLabel {
   background: #F3E5F5 !important;
+  border: 1px solid #E1BEE7 !important;
   color: #6A1B9A;
   font-weight: 600;
-  border: 1px solid #E1BEE7 !important;
   text-align: center;
 }
 
 /* 行/列總計標籤 hover */
 .pvtTable tbody tr:hover td.pvtRowTotalLabel {
-  background: #FFE0B2 !important;
+  background: #C5E7EE !important;
 }
 
 .pvtTable tbody tr:hover td.pvtColTotalLabel {
-  background: #E1BEE7 !important;
+  background: #DDD0E9 !important;
 }
 
 /* 最終總計（Grand Total）- 深紅色 */
 .pvtGrandTotal {
   background: #D32F2F !important;
-  color: white !important;
-  font-weight: 700;
-  font-size: 1.0625rem;
   border: 2px solid #C62828 !important;
+  color: white !important;
+  font-size: 1.0625rem;
+  font-weight: 700;
   position: relative;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* 最終總計 hover 效果 */
-.pvtTable tbody tr:hover td.pvtGrandTotal {
-  background: #C62828 !important;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* 屬性值欄位（第一列）- 淡藍色背景 */
 .pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
   background: #E8F4FD;
-  font-weight: 500;
-  color: #1565C0;
   border-right: 2px solid #BBDEFB;
-}
-
-/* 屬性值欄位 hover */
-.pvtTable tbody tr:hover td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
-  background: #BBDEFB !important;
-}
-
-/* 值欄位樣式（數字）*/
-.pvtVal {
-  text-align: right;
-  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  color: #1565C0;
   font-weight: 500;
-}
-
-/* 空單元格 */
-.pvtTable tbody td.pvtEmpty {
-  background: #F5F5F5;
-  color: #BDBDBD;
 }
 
 /* 確保對話框總是在最上層，即使在全螢幕模式下 */
 .custom-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2147483647; /* 最大 z-index 值 */
+  /* 最大 z-index 值 */
   opacity: 0;
-  transition: opacity 0.3s ease;
+  align-items: center;
   backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  transition: opacity 0.3s ease;
+  z-index: 2147483647;
+}
+
+/* 一般行 hover 效果 */
+.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel), /* 一般行 hover 效果 - 非常淡的藍色 */
+.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #F8FBFF !important;
+}
+
+/* 小計樣式 - 中等深度的灰藍色，深色文字 */
+.pvtTotal {
+  /* 深灰色文字 */
+  font-size: 0.9375rem;
+  background: #E1E8F0 !important;
+  border: 1px solid #CFD8DC !important;
+  color: #37474F !important;
+  font-weight: 600;
+}
+
+/* 行總計標籤 - 中等深度的青色，深色文字 */
+.pvtRowTotalLabel {
+  /* 深青色文字 */
+  font-weight: 600;
+  background: #D7EDF4 !important;
+  border: 1px solid #B2DFDB !important;
+  color: #00695C !important;
+  text-align: right;
+}
+
+/* 列總計標籤 - 中等深度的紫色，深色文字 */
+.pvtColTotalLabel {
+  /* 深紫色文字 */
+  font-weight: 600;
+  background: #E8DDF2 !important;
+  border: 1px solid #CE93D8 !important;
+  color: #5E35B1 !important;
+  text-align: center;
+}
+
+/* 最終總計（Grand Total）- 深藍色背景，白色文字 */
+.pvtGrandTotal {
+  background: #1E88E5 !important;
+  border: 2px solid #1976D2 !important;
+  color: white !important;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 屬性值欄位（第一列）- 淡藍色背景，深色文字 */
+.pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
+  /* 深藍色文字 */
+  border-right: 2px solid #BBDEFB;
+  background: #E8F4FD;
+  color: #0D47A1 !important;
+  font-weight: 500;
+}
+
+/* 表頭總計標籤特殊處理 */
+.pvtTable thead th.pvtTotalLabel,
+.pvtTable thead th.pvtColTotalLabel {
+  background: #455A64 !important;
+  border: 1px solid #37474F !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+/* 確保所有總計相關的儲存格都有適當的文字顏色 */
+.pvtTotal,
+.pvtRowTotalLabel,
+.pvtColTotalLabel {
+  color: #263238 !important;
+}
+
+/* 調整選擇器和聚合器的樣式以配合新配色 */
+.pvtRenderer,
+.pvtAggregator {
+  background: white;
+  border: 1.5px solid #CFD8DC;
+  border-radius: 6px;
+  color: #455A64;
+  font-size: 0.9375rem;
+  padding: 6px 12px;
+}
+
+.pvtRenderer:hover,
+.pvtAggregator:hover {
+  background: #F5F5F5;
+  border-color: #90A4AE;
+}
+
+/* 小計樣式 - 使用淡藍灰色 */
+.pvtTotal {
+  background: #F0F4F8 !important;
+  border: 1px solid #CFD8DC !important;
+  color: #455A64 !important;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* 確保行總計標籤有正確的邊框 */
+.pvtRowTotalLabel, /* 行總計標籤 - 稍深的藍灰色 */
+.pvtRowTotalLabel {
+  background: #ECEFF1 !important;
+  border: 1px solid #B0BEC5 !important;
+  color: #37474F !important;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* 列總計標籤 - 稍深的藍灰色 */
+.pvtColTotalLabel {
+  background: #ECEFF1 !important;
+  border: 1px solid #B0BEC5 !important;
+  color: #37474F !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 最終總計儲存格確保邊框完整 */
+.pvtGrandTotal, /* 最終總計（Grand Total）- 使用漸層藍色，更有層次感 */
+.pvtGrandTotal {
+  background: linear-gradient(135deg, #42A5F5 0%, #2196F3 100%) !important;
+  border: 2px solid #1E88E5 !important;
+  color: white !important;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Totals 行的特殊樣式 - 淡紫色背景 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal) {
+  background: #F5F3FF !important;
+  border-top: 2px solid #B39DDB;
+  color: #4527A0 !important;
+  font-weight: 600;
+}
+
+/* Totals 行 hover */
+.pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal) {
+  background: #EDE7F6 !important;
+}
+
+/* 屬性值欄位（第一列）*/
+.pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
+  background: #E8F4FD;
+  border-right: 2px solid #BBDEFB;
+  color: #0D47A1 !important;
+  font-weight: 500;
+}
+
+/* 修正 Totals 行的邊框問題 */
+.pvtTable tbody tr:last-child td {
+  border: 1px solid #CFD8DC !important;
+}
+
+/* Totals 標籤儲存格的特殊樣式 */
+.pvtTable tbody tr:last-child td:first-child {
+  /* 右邊加粗 */
+  text-align: right;
+  /* 確保有完整邊框 */
+  border-right: 2px solid #B39DDB !important;
+  background: #F5F3FF !important;
+  border: 1px solid #B39DDB !important;
+  color: #4527A0 !important;
+  font-weight: 600;
+  padding-right: 20px;
+}
+
+/* 修正可能的邊框重疊問題 */
+.pvtTable {
+  /* 改為 separate 以確保邊框正確顯示 */
+  border-spacing: 0;
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-collapse: separate;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  font-size: 0.9375rem;
+  margin-top: 24px;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* 確保所有單元格都有邊框 */
+.pvtTable td,
+.pvtTable th {
+  border: 1px solid #E3E7F3 !important;
+}
+
+/* 總計行的所有單元格 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal) {
+  background: #F5F3FF !important;
+  border: 1px solid #B39DDB !important;
+  border-top: 2px solid #B39DDB !important;
+  color: #4527A0 !important;
+  font-weight: 600;
+}
+
+/* 強制所有樞紐分析表的單元格都有邊框 */
+.pvtTable * {
+  box-sizing: border-box;
+}
+
+.pvtTable tbody td,
+.pvtTable thead th {
+  border: 1px solid #E3E7F3 !important;
+  border-collapse: collapse;
+}
+
+/* 特別確保 Totals 行的第一個單元格有左邊框 */
+.pvtTable tbody tr:last-child td:nth-child(1) {
+  border-left: 1px solid #B39DDB !important;
+}
+
+/* 統一所有總計的配色 - 使用深灰色系（如圖片）*/
+
+/* Totals 標籤（深灰背景白字）*/
+.pvtRowTotalLabel,
+.pvtColTotalLabel {
+  background: #4A5568 !important;
+  border: 1px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 一般總計值儲存格 */
+.pvtTotal {
+  background: #F7FAFC !important;
+  border: 1px solid #CBD5E0 !important;
+  color: #2D3748 !important;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* Totals 整行（最後一行）- 紫色樣式 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
+  background: #FAF5FF !important;
+  border: 1px solid #9F7AEA !important;
+  border-top: 0px solid #7C3AED !important;
+  color: #6B46C1 !important;
+  font-weight: 700;
+  position: relative;
+}
+
+/* Totals 整列（最右側）- 紫色樣式 */
+.pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
+  background: #FAF5FF !important;
+  border: 1px solid #9F7AEA !important;
+  border-left: 0px solid #7C3AED !important;
+  color: #6B46C1 !important;
+  font-weight: 700;
+  position: relative;
+}
+
+/* Totals 標籤儲存格（左上角的 "Totals" 文字）*/
+.pvtTable tbody tr:last-child td:first-child {
+  background: #4A5568 !important;
+  border: 2px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 700;
+  padding-right: 20px;
+  text-align: right;
+}
+
+/* 最終總計（Grand Total）- 使用藍色突出 */
+.pvtGrandTotal {
+  background: #2196F3 !important;
+  border: 2px solid #1976D2 !important;
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+  color: white !important;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 為紫色總計添加邊條效果 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child)::before {
+  background: linear-gradient(90deg, #7C3AED 0%, #9F7AEA 100%);
+  content: '';
+  height: 3px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.pvtTable tbody tr td:last-child:not(.pvtGrandTotal)::before {
+  background: linear-gradient(180deg, #7C3AED 0%, #9F7AEA 100%);
+  bottom: 0;
+  content: '';
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 3px;
+}
+
+/* hover 效果 */
+.pvtTable tbody tr:hover td.pvtTotal {
+  background: #EDF2F7 !important;
+}
+
+.pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal):not(:first-child),
+.pvtTable tbody tr:hover td:last-child:not(.pvtGrandTotal) {
+  background: #EDE9FE !important;
+  border-color: #7C3AED !important;
+}
+
+.pvtTable tbody tr:hover td.pvtGrandTotal {
+  background: #1976D2 !important;
+}
+
+/* 表頭中的總計標籤 */
+.pvtTable thead th.pvtTotalLabel,
+.pvtTable thead th.pvtColTotalLabel,
+.pvtTable thead th.pvtRowTotalLabel {
+  background: #4A5568 !important;
+  border: 2px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+/* 確保邊框完整 */
+.pvtTable {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* 加強總計區域的視覺區隔 */
+.pvtTable tbody tr:last-child {
+  box-shadow: 0 -2px 6px rgba(124, 58, 237, 0.15);
+}
+
+.pvtTable tbody tr td:last-child {
+  box-shadow: -2px 0 6px rgba(124, 58, 237, 0.15);
+}
+
+/* 調整一般單元格的邊框 */
+.pvtTable tbody td:not(.pvtTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(.pvtGrandTotal) {
+  border: 1px solid #E2E8F0;
+}
+
+/* 特別處理行列交叉點的樣式 */
+.pvtTable tbody tr:last-child td:last-child:not(.pvtGrandTotal) {
+  border-color: #7C3AED !important;
+  border-width: 1px !important;
+}
+
+/* 統一所有總計的配色 - 使用北歐藍色系 */
+
+/* Totals 標籤（深灰背景白字）- 保持不變 */
+.pvtRowTotalLabel,
+.pvtColTotalLabel {
+  background: #4A5568 !important;
+  border: 1px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 一般總計值儲存格 */
+.pvtTotal {
+  background: #F7FAFC !important;
+  border: 1px solid #CBD5E0 !important;
+  color: #2D3748 !important;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* Totals 整行（最後一行）- 北歐藍色樣式 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
+  background: var(--nordic-sky) !important;  /* #E3F2FD */
+  border: 2px solid var(--nordic-blue-light) !important;  /* #64B5F6 */
+  border-top: 3px solid var(--nordic-blue) !important;  /* #2196F3 */
+  color: var(--nordic-blue-dark) !important;  /* #1976D2 */
+  font-weight: 700;
+  position: relative;
+}
+
+/* Totals 整列（最右側）- 北歐藍色樣式 */
+.pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
+  background: var(--nordic-sky) !important;  /* #E3F2FD */
+  border: 2px solid var(--nordic-blue-light) !important;  /* #64B5F6 */
+  border-left: 3px solid var(--nordic-blue) !important;  /* #2196F3 */
+  color: var(--nordic-blue-dark) !important;  /* #1976D2 */
+  font-weight: 700;
+  position: relative;
+}
+
+/* Totals 標籤儲存格（左上角的 "Totals" 文字）*/
+.pvtTable tbody tr:last-child td:first-child {
+  background: #4A5568 !important;
+  border: 2px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 700;
+  padding-right: 20px;
+  text-align: right;
+}
+
+/* 最終總計（Grand Total）- 使用深藍色突出 */
+.pvtGrandTotal {
+  background: var(--nordic-blue) !important;  /* #2196F3 */
+  border: 3px solid var(--nordic-blue-dark) !important;  /* #1976D2 */
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+  color: white !important;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 為藍色總計添加邊條效果 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child)::before {
+  background: linear-gradient(90deg, var(--nordic-blue) 0%, var(--nordic-blue-light) 100%);
+  content: '';
+  height: 0px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.pvtTable tbody tr td:last-child:not(.pvtGrandTotal)::before {
+  background: linear-gradient(180deg, var(--nordic-blue) 0%, var(--nordic-blue-light) 100%);
+  bottom: 0;
+  content: '';
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 0px;
+}
+
+/* hover 效果 */
+.pvtTable tbody tr:hover td.pvtTotal {
+  background: #EDF2F7 !important;
+}
+
+.pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal):not(:first-child),
+.pvtTable tbody tr:hover td:last-child:not(.pvtGrandTotal) {
+  background: #BBDEFB !important;  /* 更深的藍色 hover */
+  border-color: var(--nordic-blue) !important;
+}
+
+.pvtTable tbody tr:hover td.pvtGrandTotal {
+  background: var(--nordic-blue-dark) !important;  /* #1976D2 */
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 表頭中的總計標籤 */
+.pvtTable thead th.pvtTotalLabel,
+.pvtTable thead th.pvtColTotalLabel,
+.pvtTable thead th.pvtRowTotalLabel {
+  background: #4A5568 !important;
+  border: 2px solid #2D3748 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+/* 加強總計區域的視覺區隔 - 使用藍色陰影 */
+.pvtTable tbody tr:last-child {
+  box-shadow: 0 -2px 6px rgba(33, 150, 243, 0.15);
+}
+
+.pvtTable tbody tr td:last-child {
+  box-shadow: -2px 0 6px rgba(33, 150, 243, 0.15);
+}
+
+/* 特別處理行列交叉點的樣式 */
+.pvtTable tbody tr:last-child td:last-child:not(.pvtGrandTotal) {
+  border-color: var(--nordic-blue) !important;
+  border-width: 3px !important;
+  background: linear-gradient(135deg, var(--nordic-sky) 0%, #BBDEFB 100%) !important;
+}
+
+/* 確保視覺層次分明 */
+.pvtTable tbody td:not(.pvtTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(.pvtGrandTotal) {
+  border: 1px solid #E2E8F0;
+}
+
+/* 加強邊框的立體感 */
+.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
+  box-shadow: inset 0 2px 4px rgba(33, 150, 243, 0.1);
+}
+
+.pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
+  box-shadow: inset 2px 0 4px rgba(33, 150, 243, 0.1);
 }

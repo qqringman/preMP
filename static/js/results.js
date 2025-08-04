@@ -767,31 +767,56 @@ function renderPivotTable(sheetData) {
 }
 
 function resetPivotTable() {
-    if (!currentSheet || !currentData) {
+    if (!pivotData) {
         showAlertDialog('提示', '沒有資料可重置', 'warning');
         return;
     }
     
     showConfirmDialog(
         '重置樞紐分析表',
-        '確定要重置樞紐分析表嗎？這將清除所有目前的設定，還原到初始狀態。',
+        '確定要重置樞紐分析表嗎？這將清除所有已拖曳的欄位設定。',
         () => {
-            // 記住當前的顯示模式
-            const currentAreasVisible = areasVisible;
-            
-            // 重新載入樞紐分析表
-            pivotMode = true;
-            renderPivotTable(currentData[currentSheet]);
-            
-            // 恢復顯示模式
-            if (!currentAreasVisible) {
-                areasVisible = true; // 先設為 true，讓 togglePivotAreas 能正確切換
-                setTimeout(() => {
-                    togglePivotAreas();
-                }, 100);
+            try {
+                // 獲取當前的樞紐分析表配置
+                const pivotUIOptions = $('#pivotContainer').data("pivotUIOptions");
+                
+                if (pivotUIOptions) {
+                    // 清空行、列、值區域的欄位
+                    pivotUIOptions.rows = [];
+                    pivotUIOptions.cols = [];
+                    pivotUIOptions.vals = [];
+                    
+                    // 重置聚合方式和渲染器為預設值
+                    pivotUIOptions.aggregatorName = "Count";
+                    pivotUIOptions.rendererName = "Table";
+                    
+                    // 保持其他設定不變（如 localeStrings）
+                    const container = document.getElementById('pivotContainer');
+                    $(container).empty();
+                    
+                    // 使用更新後的配置重新渲染
+                    $(container).pivotUI(pivotData, pivotUIOptions);
+                    
+                    // 如果目前是隱藏拖曳區的狀態，重新應用
+                    if (!areasVisible) {
+                        setTimeout(() => {
+                            $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
+                            $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().hide();
+                        }, 100);
+                    }
+                    
+                    showToast('樞紐分析表欄位已清空', 'success');
+                } else {
+                    // 如果無法獲取配置，則重新載入
+                    renderPivotTable(currentData[currentSheet]);
+                    showToast('樞紐分析表已重置', 'success');
+                }
+            } catch (error) {
+                console.error('重置失敗:', error);
+                // 發生錯誤時重新載入
+                renderPivotTable(currentData[currentSheet]);
+                showToast('樞紐分析表已重置', 'success');
             }
-            
-            showToast('樞紐分析表已重置為初始狀態', 'success');
         }
     );
 }
@@ -1087,6 +1112,16 @@ function togglePivotMode() {
     
     document.getElementById('tableView').classList.toggle('hidden', pivotMode);
     document.getElementById('pivotView').classList.toggle('hidden', !pivotMode);
+    
+    // 控制 table-stats-bar 的顯示/隱藏
+    const statsBar = document.querySelector('.table-stats-bar');
+    if (statsBar) {
+        if (pivotMode) {
+            statsBar.style.display = 'none';
+        } else {
+            statsBar.style.display = 'flex';
+        }
+    }
     
     const pivotIcon = document.getElementById('pivotIcon');
     if (pivotMode) {
