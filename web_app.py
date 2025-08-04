@@ -1408,10 +1408,14 @@ def export_sheet(task_id, sheet_name):
             with pd.ExcelWriter(temp_file.name, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
             
+            # 確保檔案關閉
+            temp_file.close()
+            
             return send_file(
                 temp_file.name,
                 as_attachment=True,
-                download_name=f'{sheet_name}_{task_id}.xlsx'
+                download_name=f'{sheet_name}_{task_id}.xlsx',
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
         
         return jsonify({'error': '不支援的格式'}), 400

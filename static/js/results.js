@@ -115,7 +115,7 @@ function showLoading() {
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = `
         <tr>
-            <td colspan="100%" class="empty-message">
+            <td colspan="100%" style="text-align: center; padding: 0;">
                 <div class="loading">
                     <i class="fas fa-spinner fa-spin"></i>
                     <p>載入資料中...</p>
@@ -303,16 +303,22 @@ function renderDataTable(sheetData) {
     
     // 建立表頭
     const headerRow = document.createElement('tr');
-    columns.forEach(col => {
+    columns.forEach((col, index) => {
         const th = document.createElement('th');
         th.style.width = getColumnWidth(col);
         th.style.minWidth = getColumnWidth(col);
         
+        // 設定標頭顏色
         if (col === 'base_content') {
             th.classList.add('base-content-header');
         } else if (col === 'compare_content') {
             th.classList.add('compare-content-header');
-        } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'problem', '狀態', 'is_different'].includes(col)) {
+        } else if (col === 'problem' || col === '問題') {
+            th.classList.add('danger-header');
+        } else if ((currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') && 
+                   (col === 'base_folder' || col === 'Base folder' || col === '狀態')) {
+            th.classList.add('danger-header');
+        } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'is_different'].includes(col)) {
             th.classList.add('highlight-header');
         }
         
@@ -349,6 +355,10 @@ function renderDataTable(sheetData) {
         th.onclick = () => sortTable(col);
         th.style.cursor = 'pointer';
         
+        // 加入拖曳功能屬性
+        th.draggable = true;
+        th.dataset.column = index;
+        
         headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
@@ -376,9 +386,6 @@ function renderDataTable(sheetData) {
             } else if (col === 'base_content' || col === 'compare_content') {
                 td.classList.add('content-cell');
                 
-                // 不再添加紅色背景
-                // td.classList.add('base-content'); // 移除這行
-                
                 if (value) {
                     // 解析內容，只對特定部分標紅
                     let formattedValue = String(value);
@@ -400,9 +407,6 @@ function renderDataTable(sheetData) {
                 } else {
                     td.innerHTML = value || '';
                 }
-            } else if (col === 'compare_content') {
-                td.classList.add('compare-content', 'content-cell');
-                td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
             } else if (col === 'file_type') {
                 td.classList.add('file-type');
                 td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
@@ -447,6 +451,127 @@ function renderDataTable(sheetData) {
         tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合搜尋或篩選條件的資料</td></tr>';
         updateTableStats(sheetData.data.length, 0, 0);
     }
+    
+    // 啟用表格功能
+    setTimeout(() => {
+        enableTableFeatures();
+    }, 100);
+}
+
+// 啟用表格功能（拖曳和調整寬度）
+function enableTableFeatures() {
+    const table = document.getElementById('dataTable');
+    const headers = table.querySelectorAll('th');
+    
+    headers.forEach((header, index) => {
+        // 創建調整寬度的手柄
+        const resizer = document.createElement('div');
+        resizer.className = 'column-resizer';
+        resizer.addEventListener('mousedown', initResize);
+        resizer.dataset.column = index;
+        header.appendChild(resizer);
+        
+        // 啟用拖曳
+        header.addEventListener('dragstart', handleDragStart);
+        header.addEventListener('dragover', handleDragOver);
+        header.addEventListener('drop', handleDrop);
+        header.addEventListener('dragend', handleDragEnd);
+    });
+}
+
+let startX, startWidth, resizingColumn;
+
+function initResize(e) {
+    resizingColumn = e.target.parentElement;
+    startX = e.pageX;
+    startWidth = resizingColumn.offsetWidth;
+    
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+    e.preventDefault();
+}
+
+function doResize(e) {
+    if (resizingColumn) {
+        const width = startWidth + e.pageX - startX;
+        resizingColumn.style.width = width + 'px';
+        resizingColumn.style.minWidth = width + 'px';
+    }
+}
+
+function stopResize() {
+    resizingColumn = null;
+    document.removeEventListener('mousemove', doResize);
+    document.removeEventListener('mouseup', stopResize);
+}
+
+let draggedColumn = null;
+
+function handleDragStart(e) {
+    draggedColumn = this;
+    e.dataTransfer.effectAllowed = 'move';
+    this.classList.add('dragging');
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    
+    const afterElement = getDragAfterElement(e.currentTarget.parentElement, e.clientX);
+    if (afterElement == null) {
+        e.currentTarget.parentElement.appendChild(draggedColumn);
+    } else {
+        e.currentTarget.parentElement.insertBefore(draggedColumn, afterElement);
+    }
+    
+    return false;
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    
+    // 重新排序表格內容
+    reorderTableColumns();
+}
+
+function getDragAfterElement(container, x) {
+    const draggableElements = [...container.querySelectorAll('th:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function reorderTableColumns() {
+    const table = document.getElementById('dataTable');
+    const headerCells = Array.from(table.querySelectorAll('thead th'));
+    const newOrder = headerCells.map((th, index) => parseInt(th.dataset.column));
+    
+    // 重新排序所有行的單元格
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const cells = Array.from(row.cells);
+        const reorderedCells = newOrder.map(oldIndex => cells[oldIndex]);
+        
+        row.innerHTML = '';
+        reorderedCells.forEach(cell => row.appendChild(cell));
+    });
 }
 
 // 更新表格統計資訊 - 改進版
@@ -464,7 +589,7 @@ function updateTableStats(total, displayed, searchMatches) {
         parent.insertBefore(statsBar, tableView);
     }
     
-    // 更新搜尋計數的顯示邏輯
+    // 更新搜尋計數
     const searchCount = document.getElementById('searchCount');
     if (searchCount) {
         if (searchTerm) {
@@ -576,15 +701,57 @@ function updateStatistics(sheetData) {
             value: sheetData.data.length,
             icon: 'fa-list',
             color: 'blue'
-        },
-        {
+        }
+    ];
+    
+    // 根據資料表類型調整統計
+    if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
+        // 計算版本不同的數量
+        const differentCount = sheetData.data.filter(row => 
+            row.is_different === 'Y' || row['是否不同'] === 'Y'
+        ).length;
+        
+        stats.push({
+            label: '版本不同',
+            value: differentCount,
+            icon: 'fa-code-branch',
+            color: 'warning'
+        });
+    } else if (currentSheet === '比對差異' || currentSheet === 'compare_diff' || 
+               currentSheet.includes('vs')) {
+        // 計算成功和失敗模組
+        const successModules = sheetData.data.filter(row => 
+            row.status === 'success' || row['狀態'] === '成功'
+        ).length;
+        
+        const failedModules = sheetData.data.filter(row => 
+            row.status === 'failed' || row['狀態'] === '失敗'
+        ).length;
+        
+        stats.push({
+            label: '成功模組',
+            value: successModules,
+            icon: 'fa-check-circle',
+            color: 'success'
+        });
+        
+        stats.push({
+            label: '失敗模組',
+            value: failedModules,
+            icon: 'fa-times-circle',
+            color: 'danger'
+        });
+    } else {
+        // 其他資料表保留欄位數統計
+        stats.push({
             label: '欄位數',
             value: sheetData.columns ? sheetData.columns.length : Object.keys(sheetData.data[0] || {}).length,
             icon: 'fa-columns',
             color: 'blue'
-        }
-    ];
+        });
+    }
     
+    // 特定資料表的額外統計
     if (currentSheet === 'revision_diff') {
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
         const hasWaveY = sheetData.data.filter(row => row.has_wave === 'Y').length;
@@ -628,7 +795,7 @@ function updateStatistics(sheetData) {
         }
     }
     
-    if (currentSheet === 'lost_project') {
+    if (currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') {
         const added = sheetData.data.filter(row => row['狀態'] === '新增').length;
         const deleted = sheetData.data.filter(row => row['狀態'] === '刪除').length;
         
@@ -682,7 +849,16 @@ function generateFilters(sheetData) {
             const filterGroup = document.createElement('div');
             filterGroup.className = 'filter-group';
             
-            // 加入搜尋框
+            // 加入搜尋框和清除按鈕
+            filterGroup.innerHTML = `
+                <div class="filter-header-row">
+                    <label class="filter-label">${col}</label>
+                    <button class="clear-filter-btn" data-column="${col}" style="display: none;">
+                        <i class="fas fa-times"></i> 清除
+                    </button>
+                </div>
+            `;
+            
             const searchBox = document.createElement('div');
             searchBox.className = 'filter-search';
             searchBox.innerHTML = `
@@ -711,7 +887,6 @@ function generateFilters(sheetData) {
                 select.appendChild(option);
             });
             
-            filterGroup.innerHTML = `<label class="filter-label">${col}</label>`;
             filterGroup.appendChild(searchBox);
             filterGroup.appendChild(select);
             filterContent.appendChild(filterGroup);
@@ -727,11 +902,39 @@ function generateFilters(sheetData) {
                     option.style.display = text.includes(searchTerm) ? '' : 'none';
                 });
             });
+            
+            // 綁定清除按鈕事件
+            const clearBtn = filterGroup.querySelector('.clear-filter-btn');
+            clearBtn.addEventListener('click', function() {
+                select.selectedIndex = -1;
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                updateClearButton(col);
+            });
+            
+            // 監聽選擇變化
+            select.addEventListener('change', function() {
+                updateClearButton(col);
+            });
+            
+            // 初始化清除按鈕狀態
+            updateClearButton(col);
         }
     });
     
     if (filterContent.children.length === 0) {
         filterContent.innerHTML = '<p class="text-muted text-center">沒有可篩選的欄位</p>';
+    }
+}
+
+// 更新清除按鈕狀態
+function updateClearButton(column) {
+    const select = document.querySelector(`select[data-column="${column}"]`);
+    const clearBtn = document.querySelector(`.clear-filter-btn[data-column="${column}"]`);
+    
+    if (select && clearBtn) {
+        const hasSelection = select.selectedOptions.length > 0;
+        clearBtn.style.display = hasSelection ? 'inline-flex' : 'none';
     }
 }
 
@@ -771,6 +974,11 @@ function clearFilters() {
     document.querySelectorAll('.filter-search-input').forEach(input => {
         input.value = '';
         input.dispatchEvent(new Event('input'));
+    });
+    
+    // 更新清除按鈕
+    document.querySelectorAll('.clear-filter-btn').forEach(btn => {
+        btn.style.display = 'none';
     });
     
     if (currentSheet) {
@@ -857,7 +1065,7 @@ function drawDataCharts(sheetData) {
                     chartData[module] = (chartData[module] || 0) + 1;
                 }
             });
-        } else if (currentSheet === 'lost_project') {
+        } else if (currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') {
             sheetData.data.forEach(row => {
                 const status = row['狀態'];
                 if (status) {
@@ -993,10 +1201,62 @@ function downloadFullReport() {
     window.location.href = `/api/export-excel/${taskId}`;
 }
 
-// 匯出整個頁面為 HTML
+// 匯出整個頁面為 HTML（保留 JS/CSS）
 function exportPageAsHTML() {
-    const pageHTML = document.documentElement.outerHTML;
-    const blob = new Blob([pageHTML], { type: 'text/html;charset=utf-8' });
+    // 複製當前頁面 HTML
+    const htmlContent = document.documentElement.cloneNode(true);
+    
+    // 將所有外部 CSS 轉為內嵌
+    const styleSheets = document.styleSheets;
+    const inlineStyles = document.createElement('style');
+    let cssText = '';
+    
+    for (let i = 0; i < styleSheets.length; i++) {
+        try {
+            const rules = styleSheets[i].cssRules || styleSheets[i].rules;
+            for (let j = 0; j < rules.length; j++) {
+                cssText += rules[j].cssText + '\n';
+            }
+        } catch (e) {
+            // 跨域樣式表無法讀取，保留原連結
+        }
+    }
+    
+    inlineStyles.textContent = cssText;
+    htmlContent.querySelector('head').appendChild(inlineStyles);
+    
+    // 內嵌當前資料
+    const dataScript = document.createElement('script');
+    dataScript.textContent = `
+        window.exportedData = ${JSON.stringify(currentData)};
+        window.currentSheet = '${currentSheet}';
+        window.taskId = '${taskId}';
+        // 頁面載入時自動載入資料
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.exportedData) {
+                currentData = window.exportedData;
+                // 重新初始化頁面
+                const selector = document.getElementById('sheetSelector');
+                selector.innerHTML = '';
+                Object.keys(currentData).forEach(sheetName => {
+                    const option = document.createElement('option');
+                    option.value = sheetName;
+                    option.textContent = getSheetDisplayName(sheetName);
+                    selector.appendChild(option);
+                });
+                if (window.currentSheet) {
+                    loadSheet(window.currentSheet);
+                }
+            }
+        });
+    `;
+    htmlContent.querySelector('body').appendChild(dataScript);
+    
+    // 轉換為字串
+    const htmlString = '<!DOCTYPE html>\n' + htmlContent.outerHTML;
+    
+    // 下載
+    const blob = new Blob([htmlString], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
