@@ -1286,3 +1286,164 @@ body {
   gap: var(--spacing-sm);
   justify-content: center;
 }
+
+/* 搜尋框樣式 */
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 20px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  min-width: 250px;
+}
+
+.search-box:focus-within {
+  border-color: var(--nordic-blue);
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+}
+
+.search-box i {
+  color: var(--nordic-blue);
+  font-size: 0.875rem;
+  margin-right: 8px;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 10px 0;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+}
+
+.search-count {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* 搜尋高亮樣式 */
+.highlight {
+  background-color: #FFE082;
+  color: #333;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+/* 表格容器 - 修改為類似執行日誌的設計 */
+.table-container {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--border-light);
+}
+
+/* 表頭固定 */
+.table-container > .data-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.table-container > .data-table thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* 表身容器 */
+.table-body-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 600px;
+  border-top: 2px solid #1976D2;
+}
+
+.body-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.body-table tbody {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* 修改捲軸樣式 */
+.table-body-wrapper::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.table-body-wrapper::-webkit-scrollbar-track {
+  background: #F0F7FF;
+  border-radius: 6px;
+  margin: 4px;
+}
+
+.table-body-wrapper::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
+  border-radius: 6px;
+  border: 2px solid #F0F7FF;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.table-body-wrapper::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+/* 篩選器搜尋框 */
+.filter-search {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.filter-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.filter-search-input:focus {
+  outline: none;
+  border-color: var(--nordic-blue);
+}
+
+.filter-search i {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* 移除原有的 table-wrapper 和 table-scroll-container 樣式衝突 */
+.table-view {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  overflow: visible;
+  position: relative;
+  border: 1px solid var(--border-light);
+}
+
+.table-wrapper {
+  display: none; /* 隱藏舊的包裝器 */
+}
+
+.table-scroll-container {
+  display: none; /* 隱藏舊的捲動容器 */
+}

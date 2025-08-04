@@ -54,6 +54,17 @@
                     <select class="form-input" id="sheetSelector">
                         <option value="">載入中...</option>
                     </select>
+                    
+                    <!-- 新增快速搜尋 -->
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" 
+                               class="search-input" 
+                               id="quickSearchInput" 
+                               placeholder="快速搜尋..." 
+                               autocomplete="off">
+                        <span class="search-count" id="searchCount"></span>
+                    </div>
                 </div>
                 
                 <div class="control-right">
@@ -78,10 +89,12 @@
                 <!-- 一般表格檢視 -->
                 <div id="tableView" class="table-view">
                     <!-- 表格統計資訊會動態插入這裡 -->
-                    <div class="table-wrapper">
-                        <div class="table-scroll-container">
-                            <table id="dataTable" class="data-table">
-                                <thead id="tableHead"></thead>
+                    <div class="table-container">
+                        <table id="dataTable" class="data-table">
+                            <thead id="tableHead"></thead>
+                        </table>
+                        <div class="table-body-wrapper">
+                            <table class="data-table body-table">
                                 <tbody id="tableBody">
                                     <tr>
                                         <td colspan="100%" class="empty-message">
@@ -171,6 +184,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
 <!-- PivotTable.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.js"></script>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/results.js') }}"></script>

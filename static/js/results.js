@@ -6,19 +6,48 @@ let currentSheet = null;
 let pivotMode = false;
 let filters = {};
 let sortOrder = {};
+let searchTerm = '';
 
-console.log('Task ID:', taskId);  // 除錯用
+console.log('Task ID:', taskId);
 
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('頁面載入完成，開始載入資料...');
     loadPivotData();
+    
+    // 初始化搜尋功能
+    initializeSearch();
 });
+
+// 初始化搜尋功能
+function initializeSearch() {
+    const searchInput = document.getElementById('quickSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(function(e) {
+            searchTerm = e.target.value.toLowerCase();
+            if (currentSheet) {
+                renderDataTable(currentData[currentSheet]);
+            }
+        }, 300));
+    }
+}
+
+// 防抖函數
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 // 載入樞紐分析資料
 async function loadPivotData() {
     try {
-        // 顯示載入中狀態
         showLoading();
         
         console.log(`正在載入任務 ${taskId} 的資料...`);
@@ -34,7 +63,6 @@ async function loadPivotData() {
         console.log('收到的資料:', data);
         
         if (!data || Object.keys(data).length === 0) {
-            // 如果沒有資料，顯示提示訊息
             console.log('沒有找到資料');
             showNoDataMessage();
             return;
@@ -51,21 +79,18 @@ async function loadPivotData() {
         const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對', '摘要'];
         const orderedSheets = [];
         
-        // 先加入已定義順序的資料表
         sheetOrder.forEach(sheetName => {
             if (data[sheetName]) {
                 orderedSheets.push(sheetName);
             }
         });
         
-        // 再加入其他資料表
         Object.keys(data).forEach(sheetName => {
             if (!orderedSheets.includes(sheetName)) {
                 orderedSheets.push(sheetName);
             }
         });
         
-        // 填充選擇器
         orderedSheets.forEach(sheetName => {
             const option = document.createElement('option');
             option.value = sheetName;
@@ -118,10 +143,8 @@ function showNoDataMessage() {
         </tr>
     `;
     
-    // 隱藏統計和圖表
     document.getElementById('statsGrid').innerHTML = '';
     
-    // 清除表格統計
     const statsBar = document.querySelector('.table-stats-bar');
     if (statsBar) {
         statsBar.remove();
@@ -183,25 +206,37 @@ function loadSheet(sheetName) {
     
     console.log(`資料表 ${sheetName} 有 ${sheetData.data ? sheetData.data.length : 0} 筆資料`);
     
-    // 更新選擇器
     document.getElementById('sheetSelector').value = sheetName;
     
-    // 更新統計資料
     updateStatistics(sheetData);
-    
-    // 生成篩選器
     generateFilters(sheetData);
     
     if (pivotMode) {
-        // 樞紐分析模式
         renderPivotTable(sheetData);
     } else {
-        // 一般表格模式
         renderDataTable(sheetData);
     }
     
-    // 繪製圖表
     drawDataCharts(sheetData);
+}
+
+// 高亮文字
+function highlightText(text, searchTerm) {
+    if (!searchTerm || !text) return text;
+    
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    return String(text).replace(regex, '<span class="highlight">$1</span>');
+}
+
+// 檢查行是否符合搜尋
+function rowMatchesSearch(row, columns, searchTerm) {
+    if (!searchTerm) return true;
+    
+    return columns.some(col => {
+        const value = row[col];
+        if (value === null || value === undefined) return false;
+        return String(value).toLowerCase().includes(searchTerm);
+    });
 }
 
 // 渲染資料表格
@@ -210,30 +245,38 @@ function renderDataTable(sheetData) {
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
-    // 清空表格
     thead.innerHTML = '';
     tbody.innerHTML = '';
     
     if (!sheetData.data || sheetData.data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">此資料表沒有資料</td></tr>';
-        updateTableStats(0, 0);
+        updateTableStats(0, 0, 0);
         return;
     }
     
-    // 取得欄位（從資料或定義中）
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     console.log('欄位:', columns);
     
-    // 更新表格統計
-    const filteredData = applyDataFilters(sheetData.data);
-    updateTableStats(sheetData.data.length, filteredData.length);
+    // 先篩選再搜尋
+    let filteredData = applyDataFilters(sheetData.data);
+    let searchMatches = 0;
+    
+    // 如果有搜尋詞，進一步過濾
+    if (searchTerm) {
+        filteredData = filteredData.filter(row => {
+            const matches = rowMatchesSearch(row, columns, searchTerm);
+            if (matches) searchMatches++;
+            return matches;
+        });
+    }
+    
+    updateTableStats(sheetData.data.length, filteredData.length, searchMatches);
     
     // 建立表頭
     const headerRow = document.createElement('tr');
     columns.forEach(col => {
         const th = document.createElement('th');
         
-        // 特殊欄位樣式
         if (col === 'base_content') {
             th.classList.add('base-content-header');
         } else if (col === 'compare_content') {
@@ -242,7 +285,6 @@ function renderDataTable(sheetData) {
             th.classList.add('highlight-header');
         }
         
-        // 建立表頭內容
         const thContent = document.createElement('div');
         thContent.className = 'th-content';
         
@@ -253,7 +295,6 @@ function renderDataTable(sheetData) {
         const thIcons = document.createElement('span');
         thIcons.className = 'th-icons';
         
-        // 排序圖示
         const sortIcon = document.createElement('i');
         sortIcon.className = 'fas fa-sort sort-icon';
         if (sortOrder[col]) {
@@ -264,7 +305,6 @@ function renderDataTable(sheetData) {
         
         thIcons.appendChild(sortIcon);
         
-        // 篩選圖示（如果有篩選器）
         if (filters[col]) {
             const filterIcon = document.createElement('i');
             filterIcon.className = 'fas fa-filter filter-icon active';
@@ -282,6 +322,11 @@ function renderDataTable(sheetData) {
     });
     thead.appendChild(headerRow);
     
+    // 同步欄寬
+    setTimeout(() => {
+        syncColumnWidths();
+    }, 0);
+    
     // 建立表格內容
     console.log(`顯示 ${filteredData.length} 筆資料`);
     
@@ -291,7 +336,6 @@ function renderDataTable(sheetData) {
             const td = document.createElement('td');
             const value = row[col];
             
-            // 特殊欄位樣式
             if (col === 'base_content') {
                 td.classList.add('base-content', 'content-cell');
             } else if (col === 'compare_content') {
@@ -317,15 +361,16 @@ function renderDataTable(sheetData) {
                 else if (value === '修改') badgeClass = 'badge-warning';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
             } else if (col === 'problem' && value) {
-                td.innerHTML = `<span class="text-danger font-weight-bold">${value}</span>`;
+                const highlightedValue = searchTerm ? highlightText(value, searchTerm) : value;
+                td.innerHTML = `<span class="text-danger font-weight-bold">${highlightedValue}</span>`;
             } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
                 td.classList.add('highlight-hash');
-                td.textContent = value;
+                td.innerHTML = searchTerm ? highlightText(value, searchTerm) : value;
             } else {
-                td.textContent = value !== null && value !== undefined ? value : '';
+                const textValue = value !== null && value !== undefined ? value : '';
+                td.innerHTML = searchTerm ? highlightText(textValue, searchTerm) : textValue;
             }
             
-            // 標記重要欄位內容
             if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
                 td.classList.add('highlight-red');
             }
@@ -335,24 +380,52 @@ function renderDataTable(sheetData) {
         tbody.appendChild(tr);
     });
     
-    // 如果沒有資料顯示
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合篩選條件的資料</td></tr>';
-        updateTableStats(sheetData.data.length, 0);
+        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合搜尋或篩選條件的資料</td></tr>';
+        updateTableStats(sheetData.data.length, 0, 0);
+    }
+}
+
+// 同步欄寬
+function syncColumnWidths() {
+    const headerCells = document.querySelectorAll('#tableHead th');
+    const bodyTable = document.querySelector('.body-table');
+    
+    if (headerCells.length > 0 && bodyTable) {
+        const firstRow = bodyTable.querySelector('tbody tr');
+        if (firstRow) {
+            const bodyCells = firstRow.querySelectorAll('td');
+            headerCells.forEach((th, index) => {
+                if (bodyCells[index]) {
+                    const width = th.offsetWidth;
+                    bodyCells[index].style.width = `${width}px`;
+                    bodyCells[index].style.minWidth = `${width}px`;
+                }
+            });
+        }
     }
 }
 
 // 更新表格統計資訊
-function updateTableStats(total, displayed) {
-    // 檢查是否已有統計欄，如果沒有則創建
+function updateTableStats(total, displayed, searchMatches) {
     let statsBar = document.querySelector('.table-stats-bar');
     if (!statsBar) {
         statsBar = document.createElement('div');
         statsBar.className = 'table-stats-bar';
         
         const tableView = document.getElementById('tableView');
-        const tableWrapper = tableView.querySelector('.table-wrapper');
-        tableView.insertBefore(statsBar, tableWrapper);
+        const tableContainer = tableView.querySelector('.table-container');
+        tableView.insertBefore(statsBar, tableContainer);
+    }
+    
+    // 更新搜尋計數
+    const searchCount = document.getElementById('searchCount');
+    if (searchCount) {
+        if (searchTerm) {
+            searchCount.textContent = `找到 ${searchMatches} 筆`;
+        } else {
+            searchCount.textContent = '';
+        }
     }
     
     statsBar.innerHTML = `
@@ -385,32 +458,20 @@ function renderPivotTable(sheetData) {
         return;
     }
     
-    // 使用 PivotTable.js
+    // 使用 PivotTable.js - 修復錯誤
     try {
-        $(container).pivotUI(sheetData.data, {
+        const pivotConfig = {
             rows: [],
             cols: [],
-            aggregatorName: "計數",
-            rendererName: "表格",
+            aggregatorName: "Count",
+            rendererName: "Table",
             unusedAttrsVertical: true,
-            renderers: $.extend(
-                $.pivotUtilities.renderers,
-                $.pivotUtilities.c3_renderers,
-                $.pivotUtilities.d3_renderers
-            ),
-            localeStrings: {
-                renderError: "渲染錯誤",
-                computeError: "計算錯誤",
-                uiRenderError: "UI 渲染錯誤",
-                selectAll: "全選",
-                selectNone: "全不選",
-                tooMany: "(太多值無法顯示)",
-                filterResults: "篩選結果",
-                totals: "總計",
-                vs: "vs",
-                by: "by"
-            }
-        });
+            renderers: $.pivotUtilities.renderers,
+            aggregators: $.pivotUtilities.aggregators,
+            localeStrings: $.pivotUtilities.locales.zh
+        };
+        
+        $(container).pivotUI(sheetData.data, pivotConfig);
     } catch (error) {
         console.error('樞紐分析錯誤:', error);
         container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
@@ -424,7 +485,6 @@ function togglePivotMode() {
     document.getElementById('tableView').classList.toggle('hidden', pivotMode);
     document.getElementById('pivotView').classList.toggle('hidden', !pivotMode);
     
-    // 更新圖示狀態
     const pivotIcon = document.getElementById('pivotIcon');
     if (pivotMode) {
         pivotIcon.classList.remove('fa-chart-pie');
@@ -448,7 +508,6 @@ function updateStatistics(sheetData) {
     
     if (!sheetData.data || sheetData.data.length === 0) return;
     
-    // 計算基本統計
     const stats = [
         {
             label: '總筆數',
@@ -464,7 +523,6 @@ function updateStatistics(sheetData) {
         }
     ];
     
-    // 特定資料表的統計
     if (currentSheet === 'revision_diff') {
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
         const hasWaveY = sheetData.data.filter(row => row.has_wave === 'Y').length;
@@ -530,7 +588,6 @@ function updateStatistics(sheetData) {
         }
     }
     
-    // 渲染統計卡片
     stats.forEach(stat => {
         const card = document.createElement('div');
         card.className = `stat-card ${stat.color || ''}`;
@@ -554,31 +611,37 @@ function generateFilters(sheetData) {
     
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     
-    // 為每個欄位生成篩選器
     columns.forEach(col => {
-        // 跳過某些欄位
         if (col.includes('link') || col.includes('content') || col.includes('revision')) return;
         
-        // 取得唯一值
         const uniqueValues = [...new Set(sheetData.data.map(row => row[col]))].filter(v => v !== null && v !== undefined);
         
         if (uniqueValues.length > 0 && uniqueValues.length < 50) {
             const filterGroup = document.createElement('div');
             filterGroup.className = 'filter-group';
             
-            // 建立選擇器
+            // 加入搜尋框
+            const searchBox = document.createElement('div');
+            searchBox.className = 'filter-search';
+            searchBox.innerHTML = `
+                <input type="text" 
+                       class="filter-search-input" 
+                       placeholder="搜尋 ${col}..." 
+                       data-column="${col}">
+                <i class="fas fa-search"></i>
+            `;
+            
             const select = document.createElement('select');
             select.className = 'filter-select';
             select.multiple = true;
             select.dataset.column = col;
             
-            // 加入選項
             uniqueValues.forEach(val => {
                 const option = document.createElement('option');
                 option.value = val;
                 option.textContent = val;
+                option.dataset.searchText = String(val).toLowerCase();
                 
-                // 如果該值已被篩選，則選中
                 if (filters[col] && filters[col].includes(String(val))) {
                     option.selected = true;
                 }
@@ -586,15 +649,25 @@ function generateFilters(sheetData) {
                 select.appendChild(option);
             });
             
-            filterGroup.innerHTML = `
-                <label class="filter-label">${col}</label>
-            `;
+            filterGroup.innerHTML = `<label class="filter-label">${col}</label>`;
+            filterGroup.appendChild(searchBox);
             filterGroup.appendChild(select);
             filterContent.appendChild(filterGroup);
+            
+            // 綁定搜尋事件
+            const searchInput = filterGroup.querySelector('.filter-search-input');
+            searchInput.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                const options = select.querySelectorAll('option');
+                
+                options.forEach(option => {
+                    const text = option.dataset.searchText;
+                    option.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+            });
         }
     });
     
-    // 如果沒有可篩選的欄位
     if (filterContent.children.length === 0) {
         filterContent.innerHTML = '<p class="text-muted text-center">沒有可篩選的欄位</p>';
     }
@@ -602,7 +675,6 @@ function generateFilters(sheetData) {
 
 // 套用篩選器
 function applyFilters() {
-    // 收集篩選條件
     filters = {};
     document.querySelectorAll('.filter-select').forEach(select => {
         const column = select.dataset.column;
@@ -612,12 +684,10 @@ function applyFilters() {
         }
     });
     
-    // 重新載入資料
     if (currentSheet) {
         loadSheet(currentSheet);
     }
     
-    // 提示訊息
     const filterCount = Object.keys(filters).length;
     const message = filterCount > 0 
         ? `已套用 ${filterCount} 個篩選條件` 
@@ -625,7 +695,6 @@ function applyFilters() {
     
     console.log(message);
     
-    // 關閉篩選面板
     document.getElementById('filterPanel').classList.remove('show');
 }
 
@@ -634,6 +703,12 @@ function clearFilters() {
     filters = {};
     document.querySelectorAll('.filter-select').forEach(select => {
         select.selectedIndex = -1;
+    });
+    
+    // 清除搜尋框
+    document.querySelectorAll('.filter-search-input').forEach(input => {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
     });
     
     if (currentSheet) {
@@ -670,16 +745,13 @@ function sortTable(column) {
         const aVal = a[column];
         const bVal = b[column];
         
-        // 處理 null 和 undefined
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
         
-        // 數字排序
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return order === 'asc' ? aVal - bVal : bVal - aVal;
         }
         
-        // 字串排序
         const aStr = String(aVal);
         const bStr = String(bVal);
         
@@ -690,7 +762,6 @@ function sortTable(column) {
         }
     });
     
-    // 重新渲染表格，保留排序狀態
     renderDataTable(sheetData);
 }
 
@@ -698,7 +769,6 @@ function sortTable(column) {
 function drawDataCharts(sheetData) {
     if (!sheetData.data || sheetData.data.length === 0) return;
     
-    // 清除舊圖表
     const charts = ['distributionChart', 'trendChart'];
     charts.forEach(chartId => {
         const canvas = document.getElementById(chartId);
@@ -706,23 +776,19 @@ function drawDataCharts(sheetData) {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 銷毀舊的 Chart 實例
             if (window[chartId + 'Instance']) {
                 window[chartId + 'Instance'].destroy();
             }
         }
     });
     
-    // 分布圖
     const distCanvas = document.getElementById('distributionChart');
     if (distCanvas) {
         const distCtx = distCanvas.getContext('2d');
         
-        // 根據資料表類型決定圖表內容
         let chartData = {};
         
         if (currentSheet === 'revision_diff' || currentSheet === 'branch_error') {
-            // 按模組統計
             sheetData.data.forEach(row => {
                 const module = row.module;
                 if (module) {
@@ -730,7 +796,6 @@ function drawDataCharts(sheetData) {
                 }
             });
         } else if (currentSheet === 'lost_project') {
-            // 按狀態統計
             sheetData.data.forEach(row => {
                 const status = row['狀態'];
                 if (status) {
@@ -738,7 +803,6 @@ function drawDataCharts(sheetData) {
                 }
             });
         } else {
-            // 預設按第一個非數字欄位統計
             const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
             const firstStringCol = columns.find(col => {
                 const firstValue = sheetData.data[0][col];
@@ -793,12 +857,10 @@ function drawDataCharts(sheetData) {
         }
     }
     
-    // 趨勢圖（如果有時間序列資料）
     const trendCanvas = document.getElementById('trendChart');
     if (trendCanvas && currentSheet === 'revision_diff') {
         const trendCtx = trendCanvas.getContext('2d');
         
-        // 按模組分組計算差異數量
         const moduleData = {};
         sheetData.data.forEach(row => {
             const module = row.module;
@@ -810,7 +872,6 @@ function drawDataCharts(sheetData) {
             }
         });
         
-        // 只顯示前 10 個模組
         const sortedModules = Object.entries(moduleData)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10);
@@ -861,7 +922,6 @@ function exportCurrentView(format) {
     }
     
     if (format === 'excel') {
-        // 呼叫 API 匯出當前資料表
         window.location.href = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
     }
 }
@@ -873,13 +933,8 @@ function downloadFullReport() {
 
 // 匯出整個頁面為 HTML
 function exportPageAsHTML() {
-    // 取得當前頁面的完整 HTML
     const pageHTML = document.documentElement.outerHTML;
-    
-    // 建立 Blob
     const blob = new Blob([pageHTML], { type: 'text/html;charset=utf-8' });
-    
-    // 建立下載連結
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -893,11 +948,19 @@ function exportPageAsHTML() {
 // 監聽資料表選擇
 document.getElementById('sheetSelector').addEventListener('change', (e) => {
     if (e.target.value) {
-        // 清除排序狀態
         sortOrder = {};
+        searchTerm = '';
+        document.getElementById('quickSearchInput').value = '';
         loadSheet(e.target.value);
     }
 });
+
+// 監聽視窗大小變化
+window.addEventListener('resize', debounce(() => {
+    if (!pivotMode) {
+        syncColumnWidths();
+    }
+}, 200));
 
 // 匯出函數
 window.togglePivotMode = togglePivotMode;
