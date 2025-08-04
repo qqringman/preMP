@@ -239,9 +239,38 @@ function rowMatchesSearch(row, columns, searchTerm) {
     });
 }
 
-// 渲染資料表格
+// 獲取欄位寬度
+function getColumnWidth(columnName) {
+    const widthMap = {
+        'SN': '60px',
+        'module': '150px',
+        'location': '120px',
+        'location_path': '200px',
+        'base_fold': '100px',
+        'base_folder': '150px',
+        'compare': '100px',
+        'compare_folder': '150px',
+        'name': '200px',
+        'path': '350px',
+        'base_short': '120px',
+        'base_revision': '180px',
+        'compare_short': '120px',
+        'compare_revision': '180px',
+        'base_link': '150px',
+        'compare_link': '150px',
+        'has_wave': '80px',
+        'problem': '200px',
+        '狀態': '80px',
+        'is_different': '100px'
+    };
+    
+    return widthMap[columnName] || '150px';
+}
+
+// 渲染資料表格 - 改進版
 function renderDataTable(sheetData) {
     const tableView = document.getElementById('tableView');
+    const table = document.getElementById('dataTable');
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
@@ -276,6 +305,8 @@ function renderDataTable(sheetData) {
     const headerRow = document.createElement('tr');
     columns.forEach(col => {
         const th = document.createElement('th');
+        th.style.width = getColumnWidth(col);
+        th.style.minWidth = getColumnWidth(col);
         
         if (col === 'base_content') {
             th.classList.add('base-content-header');
@@ -322,11 +353,6 @@ function renderDataTable(sheetData) {
     });
     thead.appendChild(headerRow);
     
-    // 同步欄寬
-    setTimeout(() => {
-        syncColumnWidths();
-    }, 0);
-    
     // 建立表格內容
     console.log(`顯示 ${filteredData.length} 筆資料`);
     
@@ -336,18 +362,55 @@ function renderDataTable(sheetData) {
             const td = document.createElement('td');
             const value = row[col];
             
-            if (col === 'base_content') {
-                td.classList.add('base-content', 'content-cell');
+            // 檢查是否為路徑欄位
+            if (col === 'path' || col.toLowerCase().includes('path')) {
+                td.classList.add('path-cell');
+                
+                // 如果路徑太長，顯示縮略版本
+                if (value && value.length > 50) {
+                    const truncated = value.substring(0, 25) + '...' + value.substring(value.length - 20);
+                    td.innerHTML = `<span class="truncated-content" title="${value}">${searchTerm ? highlightText(truncated, searchTerm) : truncated}</span>`;
+                } else {
+                    td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
+                }
+            } else if (col === 'base_content' || col === 'compare_content') {
+                td.classList.add('content-cell');
+                
+                // 不再添加紅色背景
+                // td.classList.add('base-content'); // 移除這行
+                
+                if (value) {
+                    // 解析內容，只對特定部分標紅
+                    let formattedValue = String(value);
+                    
+                    // 對 P_GIT_ 開頭的行進行高亮
+                    formattedValue = formattedValue.replace(/(P_GIT_\d+:[^;]+;[^;]+;[^;]+;[a-f0-9]+)/g, 
+                        '<span class="highlight-git">$1</span>');
+                    
+                    // 對 F_HASH 行進行高亮
+                    formattedValue = formattedValue.replace(/(F_HASH:\s*[a-f0-9]+)/g, 
+                        '<span class="highlight-hash">$1</span>');
+                    
+                    // 如果有搜尋詞，也要高亮
+                    if (searchTerm) {
+                        formattedValue = highlightText(formattedValue, searchTerm);
+                    }
+                    
+                    td.innerHTML = formattedValue;
+                } else {
+                    td.innerHTML = value || '';
+                }
             } else if (col === 'compare_content') {
                 td.classList.add('compare-content', 'content-cell');
+                td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
             } else if (col === 'file_type') {
                 td.classList.add('file-type');
+                td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
             } else if (col === 'org_folder') {
                 td.classList.add('org-cell');
-            }
-            
-            // 特殊格式處理
-            if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
+                td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
+            } else if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
+                // 特殊格式處理 - 連結
                 td.innerHTML = `<a href="${value}" target="_blank" class="link">
                     <i class="fas fa-external-link-alt"></i> 查看
                 </a>`;
@@ -386,48 +449,47 @@ function renderDataTable(sheetData) {
     }
 }
 
-// 同步欄寬
-function syncColumnWidths() {
-    const headerCells = document.querySelectorAll('#tableHead th');
-    const bodyTable = document.querySelector('.body-table');
-    
-    if (headerCells.length > 0 && bodyTable) {
-        const firstRow = bodyTable.querySelector('tbody tr');
-        if (firstRow) {
-            const bodyCells = firstRow.querySelectorAll('td');
-            headerCells.forEach((th, index) => {
-                if (bodyCells[index]) {
-                    const width = th.offsetWidth;
-                    bodyCells[index].style.width = `${width}px`;
-                    bodyCells[index].style.minWidth = `${width}px`;
-                }
-            });
-        }
-    }
-}
-
-// 更新表格統計資訊
+// 更新表格統計資訊 - 改進版
 function updateTableStats(total, displayed, searchMatches) {
     let statsBar = document.querySelector('.table-stats-bar');
+    
+    // 如果統計條不存在，創建一個
     if (!statsBar) {
         statsBar = document.createElement('div');
         statsBar.className = 'table-stats-bar';
         
+        // 插入到表格容器之前
         const tableView = document.getElementById('tableView');
-        const tableContainer = tableView.querySelector('.table-container');
-        tableView.insertBefore(statsBar, tableContainer);
+        const parent = tableView.parentNode;
+        parent.insertBefore(statsBar, tableView);
     }
     
-    // 更新搜尋計數
+    // 更新搜尋計數的顯示邏輯
     const searchCount = document.getElementById('searchCount');
     if (searchCount) {
         if (searchTerm) {
-            searchCount.textContent = `找到 ${searchMatches} 筆`;
+            // 格式化大數字
+            let formattedCount = searchMatches;
+            if (searchMatches >= 10000) {
+                formattedCount = (searchMatches / 1000).toFixed(1) + 'k';
+                searchCount.classList.add('large-count');
+            } else if (searchMatches >= 1000) {
+                formattedCount = searchMatches.toLocaleString();
+                searchCount.classList.add('large-count');
+            } else {
+                searchCount.classList.remove('large-count');
+            }
+            
+            searchCount.textContent = `${formattedCount} 筆`;
+            searchCount.style.display = 'inline-block';
         } else {
             searchCount.textContent = '';
+            searchCount.style.display = 'none';
+            searchCount.classList.remove('large-count');
         }
     }
     
+    // 更新統計內容
     statsBar.innerHTML = `
         <div class="table-stats">
             <div class="table-stat-item">
@@ -957,9 +1019,7 @@ document.getElementById('sheetSelector').addEventListener('change', (e) => {
 
 // 監聽視窗大小變化
 window.addEventListener('resize', debounce(() => {
-    if (!pivotMode) {
-        syncColumnWidths();
-    }
+    // 不需要同步欄寬，因為表格現在會自動適應
 }, 200));
 
 // 匯出函數

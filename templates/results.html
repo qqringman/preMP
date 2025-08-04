@@ -89,24 +89,20 @@
                 <!-- 一般表格檢視 -->
                 <div id="tableView" class="table-view">
                     <!-- 表格統計資訊會動態插入這裡 -->
-                    <div class="table-container">
+                    <div class="table-scroll-wrapper">
                         <table id="dataTable" class="data-table">
                             <thead id="tableHead"></thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="100%" class="empty-message">
+                                        <div class="loading">
+                                            <i class="fas fa-spinner fa-spin"></i>
+                                            <p>載入資料中...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
                         </table>
-                        <div class="table-body-wrapper">
-                            <table class="data-table body-table">
-                                <tbody id="tableBody">
-                                    <tr>
-                                        <td colspan="100%" class="empty-message">
-                                            <div class="loading">
-                                                <i class="fas fa-spinner fa-spin"></i>
-                                                <p>載入資料中...</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
                 </div>
                 

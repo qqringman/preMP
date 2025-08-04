@@ -193,17 +193,18 @@ body {
   overflow: hidden;
 }
 
-/* 資料控制列 - 新樣式 */
+/* 資料控制列 - 改進版 */
 .data-controls {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
+  padding: 20px 24px;
   border: 1px solid var(--border-light);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   gap: 20px;
+  box-shadow: var(--shadow-xs);
 }
 
 .control-left {
@@ -399,24 +400,26 @@ body {
   margin-top: 0;
 }
 
-/* 資料表格樣式 */
+/* 資料表格樣式 - 改進版 */
 .table-view {
   background: var(--bg-primary);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   border: 1px solid var(--border-light);
 }
 
-/* 表格統計資訊 */
+/* 表格統計資訊 - 改進版 */
 .table-stats-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  background: var(--nordic-gradient-soft);
-  border-bottom: 1px solid var(--border-light);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: 20px 24px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-xs);
 }
 
 .table-stats {
@@ -430,11 +433,13 @@ body {
 .table-stat-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  font-size: 0.9375rem;
 }
 
 .table-stat-item i {
   color: var(--nordic-blue);
+  font-size: 1rem;
 }
 
 .table-stat-value {
@@ -442,57 +447,60 @@ body {
   color: var(--text-primary);
 }
 
-/* 表格容器 */
-.table-wrapper {
+/* 表格容器 - 新設計 */
+.table-container {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  border: none;
-  border-radius: 0;
   position: relative;
-  max-height: 600px;
+  border: 1px solid var(--border-light);
 }
 
-.table-scroll-container {
+/* 表格滾動容器 */
+.table-scroll-wrapper {
   overflow-x: auto;
   overflow-y: auto;
   max-height: 600px;
-  scroll-behavior: smooth;
+  position: relative;
 }
 
 /* 自訂捲軸樣式 */
-.table-scroll-container::-webkit-scrollbar {
+.table-scroll-wrapper::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
 
-.table-scroll-container::-webkit-scrollbar-track {
+.table-scroll-wrapper::-webkit-scrollbar-track {
   background: #F0F7FF;
   border-radius: 6px;
   margin: 4px;
 }
 
-.table-scroll-container::-webkit-scrollbar-thumb {
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
   border-radius: 6px;
   border: 2px solid #F0F7FF;
   box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
-.table-scroll-container::-webkit-scrollbar-thumb:hover {
+.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.table-scroll-container::-webkit-scrollbar-corner {
+.table-scroll-wrapper::-webkit-scrollbar-corner {
   background: #F0F7FF;
   border-radius: 6px;
 }
 
+/* 資料表格 - 改進版 */
 .data-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
   background: var(--bg-primary);
-  min-width: 1400px;
+  table-layout: auto;
 }
 
 .data-table thead {
@@ -578,10 +586,48 @@ body {
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .data-table tr:hover td {
   background: var(--bg-hover);
+}
+
+/* 欄位最小寬度設定 */
+.data-table th:nth-child(1),
+.data-table td:nth-child(1) { /* SN */
+  min-width: 60px;
+  width: 60px;
+}
+
+.data-table th:nth-child(2),
+.data-table td:nth-child(2) { /* module */
+  min-width: 120px;
+}
+
+.data-table th:nth-child(3),
+.data-table td:nth-child(3) { /* location_path */
+  min-width: 200px;
+}
+
+.data-table th:nth-child(4),
+.data-table td:nth-child(4) { /* base_folder */
+  min-width: 150px;
+}
+
+.data-table th:nth-child(5),
+.data-table td:nth-child(5) { /* compare_folder */
+  min-width: 150px;
+}
+
+.data-table th:nth-child(6),
+.data-table td:nth-child(6) { /* name */
+  min-width: 200px;
+}
+
+.data-table th:nth-child(7),
+.data-table td:nth-child(7) { /* path */
+  min-width: 300px;
 }
 
 /* 特殊內容樣式 */
@@ -589,7 +635,13 @@ body {
   font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
   font-size: 0.85rem;
   word-break: break-all;
-  max-width: 400px;
+  white-space: normal;
+}
+
+.data-table td.path-cell {
+  max-width: none;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .data-table td.base-content {
@@ -771,35 +823,6 @@ body {
   min-height: 400px;
   max-height: 800px;
   overflow: auto;
-}
-
-/* 樞紐分析表捲軸樣式 */
-#pivotContainer::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-#pivotContainer::-webkit-scrollbar-track {
-  background: #F0F7FF;
-  border-radius: 6px;
-  margin: 4px;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border-radius: 6px;
-  border: 2px solid #F0F7FF;
-  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-#pivotContainer::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-#pivotContainer::-webkit-scrollbar-corner {
-  background: #F0F7FF;
-  border-radius: 6px;
 }
 
 /* PivotTable.js 樣式覆蓋 */
@@ -1042,6 +1065,31 @@ body {
   justify-content: center;
   min-height: 400px;
   gap: var(--spacing-lg);
+  width: 100%;
+  text-align: center;
+}
+
+/* 確保空資料訊息也置中 */
+.empty-message {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  color: var(--text-muted);
+  width: 100%;
+}
+
+.no-data-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: var(--spacing-md);
+}
+
+.loading p {
+  color: var(--text-secondary);
+  font-size: 1.125rem;
+  margin: 0;
 }
 
 .loading i {
@@ -1139,29 +1187,90 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* 捲軸樣式 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* 搜尋框樣式 - 改進版 */
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 20px;
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  min-width: 300px;
+  height: 42px;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-radius: 4px;
+.search-box:focus-within {
+  border-color: var(--nordic-blue);
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--nordic-blue-light);
-  border-radius: 4px;
+.search-box i {
+  color: var(--nordic-blue);
+  font-size: 0.875rem;
+  margin-right: 8px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--nordic-blue);
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 10px 0;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+}
+
+.search-count {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* 搜尋高亮樣式 */
+.highlight {
+  background-color: #FFE082;
+  color: #333;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+/* 篩選器搜尋框 */
+.filter-search {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.filter-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.filter-search-input:focus {
+  outline: none;
+  border-color: var(--nordic-blue);
+}
+
+.filter-search i {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 /* 確保 Firefox 相容性 */
 @supports (-moz-appearance: none) {
-  .table-scroll-container {
+  .table-scroll-wrapper {
     scrollbar-width: thin;
     scrollbar-color: #64B5F6 #F0F7FF;
   }
@@ -1287,17 +1396,102 @@ body {
   justify-content: center;
 }
 
-/* 搜尋框樣式 */
+/* 修正表格無法捲動到最右邊的問題 */
+.table-wrapper,
+.table-body-wrapper {
+  display: none !important;
+}
+
+/* 確保內容不會被截斷 */
+.truncated-content {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+/* 工具提示樣式 */
+.tooltip-content {
+  position: absolute;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  white-space: normal;
+  word-break: break-all;
+  max-width: 500px;
+  display: none;
+}
+
+.data-table td:hover .tooltip-content {
+  display: block;
+  top: 100%;
+  left: 0;
+}
+
+/* 優化小螢幕顯示 */
+@media (max-width: 1400px) {
+  .data-table {
+    font-size: 0.85rem;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 10px 15px;
+  }
+  
+  .data-table td.path-cell {
+    max-width: 300px;
+  }
+}
+
+/* 移除原有的紅色背景樣式 */
+.data-table td.base-content,
+.data-table td.compare-content {
+  /* 移除背景色 */
+  background: transparent;
+  color: inherit;
+}
+
+/* 新增特定內容的高亮樣式 */
+.highlight-git {
+  color: #D32F2F;
+  font-weight: 600;
+  background-color: rgba(244, 67, 54, 0.08);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.highlight-hash {
+  color: #E65100;
+  font-weight: 600;
+}
+
+/* 改進 content-cell 樣式 */
+.data-table td.content-cell {
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  padding: 12px 20px;
+}
+
+/* 搜尋框樣式 - 改進版 */
 .search-box {
   position: relative;
   display: flex;
   align-items: center;
   margin-left: 20px;
-  background: var(--bg-input);
+  background: var(--bg-secondary);
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 0 12px;
-  min-width: 250px;
+  min-width: 300px;
+  max-width: 400px; /* 設定最大寬度 */
+  height: 42px;
+  flex: 1; /* 允許彈性伸縮 */
 }
 
 .search-box:focus-within {
@@ -1309,6 +1503,7 @@ body {
   color: var(--nordic-blue);
   font-size: 0.875rem;
   margin-right: 8px;
+  flex-shrink: 0; /* 圖標不縮小 */
 }
 
 .search-input {
@@ -1319,131 +1514,80 @@ body {
   padding: 10px 0;
   font-size: 0.9375rem;
   color: var(--text-primary);
+  min-width: 150px; /* 設定最小寬度 */
 }
 
 .search-count {
   font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin-left: 8px;
+  color: var(--nordic-blue); /* 改為藍色 */
+  margin-left: 12px;
   white-space: nowrap;
-}
-
-/* 搜尋高亮樣式 */
-.highlight {
-  background-color: #FFE082;
-  color: #333;
-  font-weight: 600;
-  padding: 1px 3px;
-  border-radius: 3px;
-}
-
-/* 表格容器 - 修改為類似執行日誌的設計 */
-.table-container {
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  position: relative;
-  border: 1px solid var(--border-light);
-}
-
-/* 表頭固定 */
-.table-container > .data-table {
-  width: 100%;
-  table-layout: fixed;
-}
-
-.table-container > .data-table thead {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
-}
-
-/* 表身容器 */
-.table-body-wrapper {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 600px;
-  border-top: 2px solid #1976D2;
-}
-
-.body-table {
-  width: 100%;
-  table-layout: fixed;
-}
-
-.body-table tbody {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
-}
-
-/* 修改捲軸樣式 */
-.table-body-wrapper::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-.table-body-wrapper::-webkit-scrollbar-track {
-  background: #F0F7FF;
-  border-radius: 6px;
-  margin: 4px;
-}
-
-.table-body-wrapper::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border-radius: 6px;
-  border: 2px solid #F0F7FF;
-  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-body-wrapper::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-/* 篩選器搜尋框 */
-.filter-search {
-  position: relative;
-  margin-bottom: 8px;
-}
-
-.filter-search-input {
-  width: 100%;
-  padding: 6px 28px 6px 10px;
-  border: 1px solid var(--border-color);
+  flex-shrink: 0; /* 不縮小 */
+  font-weight: 500;
+  padding: 4px 8px;
+  background: var(--info-light);
   border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  border: 1px solid var(--nordic-blue-light);
 }
 
-.filter-search-input:focus {
-  outline: none;
-  border-color: var(--nordic-blue);
-}
-
-.filter-search i {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
+/* 當搜尋結果很多時的樣式 */
+.search-count.large-count {
   font-size: 0.75rem;
 }
 
-/* 移除原有的 table-wrapper 和 table-scroll-container 樣式衝突 */
-.table-view {
+/* 資料控制列 - 響應式改進 */
+.data-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   background: var(--bg-primary);
   border-radius: var(--radius-md);
-  overflow: visible;
-  position: relative;
+  padding: 20px 24px;
   border: 1px solid var(--border-light);
+  margin-bottom: 24px;
+  gap: 20px;
+  box-shadow: var(--shadow-xs);
+  flex-wrap: wrap; /* 允許換行 */
 }
 
-.table-wrapper {
-  display: none; /* 隱藏舊的包裝器 */
+.control-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0; /* 允許縮小 */
 }
 
-.table-scroll-container {
-  display: none; /* 隱藏舊的捲動容器 */
+.control-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 在小螢幕上調整佈局 */
+@media (max-width: 1200px) {
+  .search-box {
+    min-width: 250px;
+    max-width: 350px;
+  }
+}
+
+@media (max-width: 900px) {
+  .data-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .control-left,
+  .control-right {
+    width: 100%;
+  }
+  
+  .search-box {
+    min-width: 200px;
+    max-width: 100%;
+    margin-left: 0;
+    margin-top: 12px;
+  }
 }
