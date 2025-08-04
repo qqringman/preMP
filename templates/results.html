@@ -106,9 +106,24 @@
                         </table>
                     </div>
                 </div>
-                
-                <!-- 樞紐分析檢視 -->
+                <!-- 修改 pivotView 部分 -->
                 <div id="pivotView" class="pivot-view hidden">
+                    <div class="pivot-controls">
+                        <div class="pivot-controls-left">
+                            <h3 class="pivot-title">
+                                <i class="fas fa-chart-pie"></i> 樞紐分析表
+                            </h3>
+                        </div>
+                        <div class="pivot-controls-right">
+                            <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
+                                <i class="fas fa-file-excel"></i> 匯出
+                            </button>
+                        </div>
+                    </div>
+                    
                     <div class="pivot-instructions">
                         <i class="fas fa-info-circle"></i>
                         <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
@@ -170,6 +185,10 @@
     <div class="fab-container">
         <button class="fab-secondary" onclick="exportPageAsHTML()" title="匯出此頁面">
             <i class="fas fa-file-code"></i>
+        </button>
+        <!-- 新增篩選器按鈕 -->
+        <button class="fab-filter" onclick="toggleFilterPanel()" title="資料篩選器" id="fabFilter" style="display: none;">
+            <i class="fas fa-filter"></i>
         </button>
     </div>
 </div>

@@ -498,7 +498,17 @@ function renderDataTable(sheetData) {
         `;
         updateTableStats(sheetData.data.length, 0, 0);
     }
-    
+
+    // 控制浮動篩選按鈕的顯示
+    const fabFilter = document.getElementById('fabFilter');
+    if (fabFilter) {
+        if (sheetData.data && sheetData.data.length > 0) {
+            fabFilter.style.display = 'flex';
+        } else {
+            fabFilter.style.display = 'none';
+        }
+    }
+
     // 啟用表格功能
     setTimeout(() => {
         enableTableFeatures();
@@ -682,7 +692,11 @@ function updateTableStats(total, displayed, searchMatches) {
     `;
 }
 
-// 渲染樞紐分析表
+// 儲存初始的樞紐分析表配置
+let pivotConfig = null;
+let pivotData = null;
+
+// 修改 renderPivotTable 函數
 function renderPivotTable(sheetData) {
     const container = document.getElementById('pivotContainer');
     container.innerHTML = '';
@@ -692,9 +706,12 @@ function renderPivotTable(sheetData) {
         return;
     }
     
-    // 使用 PivotTable.js - 修復錯誤
+    // 儲存資料供重置使用
+    pivotData = sheetData.data;
+    
+    // 使用 PivotTable.js
     try {
-        const pivotConfig = {
+        pivotConfig = {
             rows: [],
             cols: [],
             aggregatorName: "Count",
@@ -702,15 +719,283 @@ function renderPivotTable(sheetData) {
             unusedAttrsVertical: true,
             renderers: $.pivotUtilities.renderers,
             aggregators: $.pivotUtilities.aggregators,
-            localeStrings: $.pivotUtilities.locales.zh
+            localeStrings: $.pivotUtilities.locales.zh,
+            onRefresh: function(config) {
+                // 儲存當前配置供匯出使用
+                pivotConfig = config;
+            }
         };
         
-        $(container).pivotUI(sheetData.data, pivotConfig);
+        $(container).pivotUI(pivotData, pivotConfig);
     } catch (error) {
         console.error('樞紐分析錯誤:', error);
         container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
     }
 }
+
+// 重置樞紐分析表
+function resetPivotTable() {
+    if (!pivotData) {
+        alert('沒有資料可重置');
+        return;
+    }
+    
+    // 確認對話框
+    if (confirm('確定要重置樞紐分析表嗎？這將清除所有目前的設定。')) {
+        const container = document.getElementById('pivotContainer');
+        container.innerHTML = '';
+        
+        // 重新初始化樞紐分析表
+        const resetConfig = {
+            rows: [],
+            cols: [],
+            aggregatorName: "Count",
+            rendererName: "Table",
+            unusedAttrsVertical: true,
+            renderers: $.pivotUtilities.renderers,
+            aggregators: $.pivotUtilities.aggregators,
+            localeStrings: $.pivotUtilities.locales.zh,
+            onRefresh: function(config) {
+                pivotConfig = config;
+            }
+        };
+        
+        $(container).pivotUI(pivotData, resetConfig);
+        
+        // 顯示成功訊息
+        showToast('樞紐分析表已重置', 'success');
+    }
+}
+
+// 匯出樞紐分析表
+function exportPivotTable() {
+    try {
+        // 獲取樞紐分析表的 HTML
+        const pivotTable = document.querySelector('#pivotContainer .pvtTable');
+        
+        if (!pivotTable) {
+            alert('請先建立樞紐分析表');
+            return;
+        }
+        
+        // 顯示匯出選項
+        const exportFormat = prompt(
+            '請選擇匯出格式：\n' +
+            '1. Excel (.xlsx)\n' +
+            '2. CSV (.csv)\n' +
+            '3. HTML (.html)\n' +
+            '請輸入數字 (1-3)：',
+            '1'
+        );
+        
+        if (!exportFormat) return;
+        
+        switch(exportFormat) {
+            case '1':
+                exportPivotToExcel(pivotTable);
+                break;
+            case '2':
+                exportPivotToCSV(pivotTable);
+                break;
+            case '3':
+                exportPivotToHTML(pivotTable);
+                break;
+            default:
+                alert('無效的選項');
+        }
+        
+    } catch (error) {
+        console.error('匯出錯誤:', error);
+        alert('匯出失敗：' + error.message);
+    }
+}
+
+// 匯出為 Excel
+function exportPivotToExcel(table) {
+    try {
+        // 將 HTML 表格轉換為工作表
+        const worksheet = XLSX.utils.table_to_sheet(table);
+        const workbook = XLSX.utils.book_new();
+        
+        // 添加工作表
+        XLSX.utils.book_append_sheet(workbook, worksheet, '樞紐分析結果');
+        
+        // 生成檔案
+        const timestamp = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(workbook, `pivot_analysis_${timestamp}.xlsx`);
+        
+        showToast('Excel 檔案已匯出', 'success');
+    } catch (error) {
+        console.error('Excel 匯出錯誤:', error);
+        alert('Excel 匯出失敗');
+    }
+}
+
+// 匯出為 CSV
+function exportPivotToCSV(table) {
+    try {
+        const rows = table.querySelectorAll('tr');
+        let csv = [];
+        
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('th, td');
+            const rowData = Array.from(cells).map(cell => {
+                // 處理包含逗號的內容
+                let text = cell.textContent.trim();
+                if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+                    text = '"' + text.replace(/"/g, '""') + '"';
+                }
+                return text;
+            });
+            csv.push(rowData.join(','));
+        });
+        
+        // 創建 Blob 並下載
+        const csvContent = '\ufeff' + csv.join('\n'); // 添加 BOM 支援中文
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `pivot_analysis_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showToast('CSV 檔案已匯出', 'success');
+    } catch (error) {
+        console.error('CSV 匯出錯誤:', error);
+        alert('CSV 匯出失敗');
+    }
+}
+
+// 匯出為 HTML
+function exportPivotToHTML(table) {
+    try {
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>樞紐分析結果 - ${currentSheet} - ${taskId}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1A237E;
+            margin-bottom: 10px;
+        }
+        .meta {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #2196F3;
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        tr:hover {
+            background: #f0f0f0;
+        }
+        .pvtTotal {
+            background: #E3F2FD !important;
+            font-weight: 600;
+        }
+        .pvtGrandTotal {
+            background: #1976D2 !important;
+            color: white !important;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>樞紐分析結果</h1>
+        <div class="meta">
+            <p>資料表：${currentSheet}</p>
+            <p>任務 ID：${taskId}</p>
+            <p>匯出時間：${new Date().toLocaleString('zh-TW')}</p>
+        </div>
+        ${table.outerHTML}
+    </div>
+</body>
+</html>
+        `;
+        
+        // 創建 Blob 並下載
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `pivot_analysis_${currentSheet}_${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showToast('HTML 檔案已匯出', 'success');
+    } catch (error) {
+        console.error('HTML 匯出錯誤:', error);
+        alert('HTML 匯出失敗');
+    }
+}
+
+// 顯示提示訊息
+function showToast(message, type = 'info') {
+    // 創建提示元素
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-info-circle'}"></i>
+        <span>${message}</span>
+    `;
+    
+    // 添加到頁面
+    document.body.appendChild(toast);
+    
+    // 顯示動畫
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    // 3秒後移除
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
+
+// 匯出函數
+window.resetPivotTable = resetPivotTable;
+window.exportPivotTable = exportPivotTable;
 
 // 切換樞紐分析模式
 function togglePivotMode() {
@@ -1288,8 +1573,46 @@ async function exportCurrentView(format) {
     
     try {
         if (format === 'excel') {
-            // 直接下載原始的 Excel 檔案，但只包含當前資料表
-            window.location.href = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
+            // 查找原始 Excel 檔案路徑
+            let originalExcelPath = null;
+            
+            // 從 processing_status 或 task_results 中獲取原始檔案路徑
+            const apiResponse = await fetch(`/api/get-original-excel/${taskId}`);
+            if (apiResponse.ok) {
+                const data = await apiResponse.json();
+                originalExcelPath = data.excel_path;
+            }
+            
+            if (originalExcelPath) {
+                // 如果有原始檔案，創建一個只包含當前資料表的副本
+                window.location.href = `/api/export-sheet-from-original/${taskId}/${encodeURIComponent(currentSheet)}`;
+            } else {
+                // 如果沒有原始檔案，從當前資料創建新的 Excel
+                const sheetData = currentData[currentSheet];
+                if (!sheetData || !sheetData.data) {
+                    alert('當前資料表沒有資料');
+                    return;
+                }
+                
+                // 創建 Blob 並下載
+                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, currentSheet);
+                
+                // 生成檔案
+                const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                
+                // 下載
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${currentSheet}_${taskId}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
         }
     } catch (error) {
         console.error('匯出錯誤:', error);
@@ -1538,8 +1861,35 @@ function exportPageAsHTML() {
 }
 
 function getAllRequiredFunctions() {
-    // 這裡應該包含所有必要的函數定義
-    return `
+    // 收集所有必要的函數定義
+    const functions = [
+        'getSheetDisplayName',
+        'loadSheet',
+        'renderDataTable',
+        'renderPivotTable',
+        'updateStatistics',
+        'updateTableStats',
+        'generateFilters',
+        'applyFilters',
+        'clearFilters',
+        'applyDataFilters',
+        'togglePivotMode',
+        'toggleFilterPanel',
+        'initializeSearch',
+        'highlightText',
+        'rowMatchesSearch',
+        'formatFVersionContent',
+        'formatFHashContent',
+        'formatColonContent',
+        'sortTable',
+        'getColumnWidth',
+        'debounce',
+        'enableTableFeatures',
+        'drawDataCharts',
+        'updateClearButton'
+    ];
+    
+    let code = `
         let currentData = null;
         let currentSheet = null;
         let pivotMode = false;
@@ -1548,27 +1898,16 @@ function getAllRequiredFunctions() {
         let searchTerm = '';
         let taskId = '';
         
-        ${getSheetDisplayName.toString()}
-        ${loadSheet.toString()}
-        ${renderDataTable.toString()}
-        ${updateStatistics.toString()}
-        ${generateFilters.toString()}
-        ${applyFilters.toString()}
-        ${clearFilters.toString()}
-        ${togglePivotMode.toString()}
-        ${toggleFilterPanel.toString()}
-        ${initializeSearch.toString()}
-        ${highlightText.toString()}
-        ${rowMatchesSearch.toString()}
-        ${formatFVersionContent.toString()}
-        ${formatFHashContent.toString()}
-        ${formatColonContent.toString()}
-        ${updateTableStats.toString()}
-        ${applyDataFilters.toString()}
-        ${sortTable.toString()}
-        ${getColumnWidth.toString()}
-        ${debounce.toString()}
     `;
+    
+    // 添加每個函數的定義
+    functions.forEach(funcName => {
+        if (window[funcName]) {
+            code += window[funcName].toString() + '\n\n';
+        }
+    });
+    
+    return code;
 }
 
 // 監聽資料表選擇
