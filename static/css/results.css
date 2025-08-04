@@ -1937,3 +1937,457 @@ body {
   border-left: 4px solid var(--danger);
   color: var(--danger);
 }
+
+/* Toast 提示訊息 */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: white;
+  padding: 20px 32px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  z-index: 10000;
+  min-width: 300px;
+  border: 1px solid var(--border-light);
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast i {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.toast-success {
+  border-left: 4px solid var(--success);
+  background: linear-gradient(135deg, #FFFFFF 0%, #E8F5E9 100%);
+}
+
+.toast-success i {
+  color: var(--success);
+}
+
+.toast-info {
+  border-left: 4px solid var(--info);
+  background: linear-gradient(135deg, #FFFFFF 0%, #E3F2FD 100%);
+}
+
+.toast-info i {
+  color: var(--info);
+}
+
+.toast-error {
+  border-left: 4px solid var(--danger);
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFEBEE 100%);
+}
+
+.toast-error i {
+  color: var(--danger);
+}
+
+#pivotContainer {
+  min-height: 500px;
+  max-height: 800px;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 20px;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
+  position: relative;
+}
+
+/* 自定義捲軸樣式 */
+#pivotContainer::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+#pivotContainer::-webkit-scrollbar-track {
+  background: #F0F7FF;
+  border-radius: 6px;
+}
+
+#pivotContainer::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
+  border-radius: 6px;
+  border: 2px solid #F0F7FF;
+}
+
+#pivotContainer::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
+}
+
+#pivotContainer::-webkit-scrollbar-corner {
+  background: #F0F7FF;
+}
+
+#pivotContainer {
+  min-height: 500px;
+  max-height: 800px;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 20px;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
+  position: relative;
+}
+
+/* 自定義捲軸樣式 */
+#pivotContainer::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+#pivotContainer::-webkit-scrollbar-track {
+  background: #F0F7FF;
+  border-radius: 6px;
+}
+
+#pivotContainer::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
+  border-radius: 6px;
+  border: 2px solid #F0F7FF;
+}
+
+#pivotContainer::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
+}
+
+#pivotContainer::-webkit-scrollbar-corner {
+  background: #F0F7FF;
+}
+
+.pvtTable {
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  border-spacing: 0;
+  background: white;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  margin-top: 24px;
+  width: 100%;
+  border: 1px solid #E3E7F3;
+}
+
+.pvtTable th,
+.pvtTable td {
+  padding: 12px 16px;
+  border: 1px solid var(--border-light);
+  font-size: 0.9375rem;
+}
+
+.pvtTable th {
+  background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
+  color: white;
+  font-weight: 600;
+  border: 1px solid #1976D2;
+  text-align: left;
+  letter-spacing: 0.025em;
+}
+
+.pvtTable tbody tr:hover td {
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
+  transition: background 0.2s ease;
+}
+
+.pvtTable tbody tr:nth-child(even) td {
+  background: #FAFBFD;
+}
+
+.pvtTotal, .pvtTotalLabel {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%) !important;
+  font-weight: 700;
+  color: #1565C0;
+  font-size: 1rem;
+}
+
+.pvtGrandTotal {
+  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
+  color: white !important;
+  font-weight: 700;
+}
+
+.pvtRowTotalLabel, .pvtColTotalLabel {
+  background: linear-gradient(135deg, #E8F4FD 0%, #BBDEFB 100%) !important;
+  color: #1976D2;
+  font-weight: 600;
+}
+
+.pvtUnused::before {
+  content: "📊 可用欄位 - 拖曳到下方區域";
+  position: absolute;
+  top: -28px;  /* 從 -32px 改為 -28px */
+  left: 16px;
+  font-size: 0.9375rem;
+  color: #1976D2;
+  font-weight: 500;
+  background: white;
+  padding: 4px 8px;  /* 增加 padding */
+  white-space: nowrap;
+  z-index: 10;  /* 增加 z-index */
+  border-radius: 4px;  /* 添加圓角 */
+}
+
+.pvtRows::before {
+  content: "↔️ 列區域 - 拖曳欄位到此";
+  position: absolute;
+  top: -28px;  /* 從 -32px 改為 -28px */
+  left: 16px;
+  font-size: 0.9375rem;
+  color: #1976D2;
+  font-weight: 500;
+  background: white;
+  padding: 4px 8px;
+  white-space: nowrap;
+  z-index: 10;
+  border-radius: 4px;
+}
+
+.pvtCols::before {
+  content: "↕️ 欄區域 - 拖曳欄位到此";
+  position: absolute;
+  top: -28px;  /* 從 -32px 改為 -28px */
+  left: 16px;
+  font-size: 0.9375rem;
+  color: #1976D2;
+  font-weight: 500;
+  background: white;
+  padding: 4px 8px;
+  white-space: nowrap;
+  z-index: 10;
+  border-radius: 4px;
+}
+
+.pvtVals::before {
+  content: "📈 值區域 - 拖曳欄位到此";
+  position: absolute;
+  top: -28px;  /* 從 -32px 改為 -28px */
+  left: 16px;
+  font-size: 0.9375rem;
+  color: #1976D2;
+  font-weight: 500;
+  background: white;
+  padding: 4px 8px;
+  white-space: nowrap;
+  z-index: 10;
+  border-radius: 4px;
+}
+
+.pvtUnused {
+  border: 2px dashed #B3D9FF;
+  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  min-height: 80px;
+  position: relative;
+  margin: 8px;
+  max-height: 300px;
+  margin-top: 48px;  /* 從 40px 改為 48px */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.pvtRows {
+  margin-top: 48px !important;  /* 確保有足夠空間 */
+}
+
+.pvtCols {
+  margin-top: 48px !important;
+}
+
+.pvtVals {
+  margin-top: 48px !important;
+}
+
+/* 自定義對話框樣式 */
+.custom-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(4px);
+}
+
+.custom-dialog-overlay.show {
+  opacity: 1;
+}
+
+.custom-dialog {
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 90%;
+  transform: scale(0.9) translateY(20px);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+.custom-dialog.show {
+  transform: scale(1) translateY(0);
+}
+
+.dialog-header {
+  padding: 24px 32px;
+  background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dialog-header i {
+  font-size: 2rem;
+  color: var(--nordic-blue);
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 1.375rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dialog-body {
+  padding: 32px;
+}
+
+.dialog-body p {
+  margin: 0;
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.dialog-footer {
+  padding: 20px 32px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* 匯出選項樣式 */
+.export-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 24px !important;
+}
+
+.export-option {
+  padding: 24px;
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.export-option:hover {
+  border-color: var(--nordic-blue);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.15);
+}
+
+.export-option i {
+  font-size: 2rem;
+  color: var(--nordic-blue);
+}
+
+/* 全螢幕樣式 */
+.pivot-view.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 9999 !important;
+  background: white !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+
+.pivot-view.fullscreen .pivot-controls {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  border-radius: 0;
+}
+
+.pivot-view.fullscreen #pivotContainer {
+  max-height: calc(100vh - 80px);
+  height: calc(100vh - 80px);
+  border-radius: 0;
+  margin: 0;
+}
+
+/* 隱藏拖曳區域時的樣式 */
+#pivotContainer.areas-hidden {
+  padding-top: 40px;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea {
+  margin-top: 0;
+}
+
+#pivotContainer.areas-hidden .pvtTable {
+  margin-top: 0;
+}
+
+/* 按鈕組響應式 */
+@media (max-width: 768px) {
+  .pivot-controls {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .pivot-controls-right {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .export-options {
+    grid-template-columns: 1fr;
+  }
+}

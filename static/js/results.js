@@ -733,38 +733,79 @@ function renderPivotTable(sheetData) {
     }
 }
 
-// 重置樞紐分析表
 function resetPivotTable() {
     if (!pivotData) {
-        alert('沒有資料可重置');
+        showAlertDialog('提示', '沒有資料可重置', 'warning');
         return;
     }
     
-    // 確認對話框
-    if (confirm('確定要重置樞紐分析表嗎？這將清除所有目前的設定。')) {
-        const container = document.getElementById('pivotContainer');
-        container.innerHTML = '';
-        
-        // 重新初始化樞紐分析表
-        const resetConfig = {
-            rows: [],
-            cols: [],
-            aggregatorName: "Count",
-            rendererName: "Table",
-            unusedAttrsVertical: true,
-            renderers: $.pivotUtilities.renderers,
-            aggregators: $.pivotUtilities.aggregators,
-            localeStrings: $.pivotUtilities.locales.zh,
-            onRefresh: function(config) {
-                pivotConfig = config;
-            }
-        };
-        
-        $(container).pivotUI(pivotData, resetConfig);
-        
-        // 顯示成功訊息
-        showToast('樞紐分析表已重置', 'success');
-    }
+    // 使用自定義確認對話框
+    showConfirmDialog(
+        '重置樞紐分析表',
+        '確定要重置樞紐分析表嗎？這將清除所有目前的設定。',
+        () => {
+            // 確認後的操作
+            const container = document.getElementById('pivotContainer');
+            
+            // 完全清空容器
+            $(container).empty();
+            
+            // 重新初始化為初始配置
+            const initialConfig = {
+                rows: [],
+                cols: [],
+                vals: [],
+                aggregatorName: "Count",
+                rendererName: "Table",
+                unusedAttrsVertical: true,
+                renderers: $.pivotUtilities.renderers,
+                aggregators: $.pivotUtilities.aggregators,
+                localeStrings: {
+                    renderError: "結果計算錯誤",
+                    computeError: "資料計算錯誤",
+                    uiRenderError: "介面繪製錯誤",
+                    aggregators: {
+                        "Count": "計數",
+                        "Count Unique Values": "計數唯一值",
+                        "List Unique Values": "列出唯一值",
+                        "Sum": "總和",
+                        "Integer Sum": "整數總和",
+                        "Average": "平均",
+                        "Median": "中位數",
+                        "Sample Variance": "樣本變異數",
+                        "Sample Standard Deviation": "樣本標準差",
+                        "Minimum": "最小值",
+                        "Maximum": "最大值",
+                        "First": "第一個",
+                        "Last": "最後一個",
+                        "Sum over Sum": "總和比例",
+                        "Sum as Fraction of Total": "總和佔比",
+                        "Sum as Fraction of Rows": "列總和佔比",
+                        "Sum as Fraction of Columns": "欄總和佔比",
+                        "Count as Fraction of Total": "計數佔比",
+                        "Count as Fraction of Rows": "列計數佔比",
+                        "Count as Fraction of Columns": "欄計數佔比"
+                    },
+                    renderers: {
+                        "Table": "表格",
+                        "Table Barchart": "表格長條圖",
+                        "Heatmap": "熱圖",
+                        "Row Heatmap": "列熱圖",
+                        "Col Heatmap": "欄熱圖"
+                    }
+                },
+                onRefresh: function(config) {
+                    pivotConfig = config;
+                }
+            };
+            
+            // 重新初始化
+            $(container).pivotUI(pivotData, initialConfig);
+            
+            // 顯示成功訊息
+            showToast('樞紐分析表已重置', 'success');
+        }
+    );
 }
 
 // 匯出樞紐分析表
@@ -774,39 +815,86 @@ function exportPivotTable() {
         const pivotTable = document.querySelector('#pivotContainer .pvtTable');
         
         if (!pivotTable) {
-            alert('請先建立樞紐分析表');
+            showAlertDialog('提示', '請先建立樞紐分析表', 'warning');
             return;
         }
         
-        // 顯示匯出選項
-        const exportFormat = prompt(
-            '請選擇匯出格式：\n' +
-            '1. Excel (.xlsx)\n' +
-            '2. CSV (.csv)\n' +
-            '3. HTML (.html)\n' +
-            '請輸入數字 (1-3)：',
-            '1'
-        );
+        // 顯示匯出選項對話框
+        const exportHtml = `
+            <div class="custom-dialog-overlay">
+                <div class="custom-dialog export-dialog">
+                    <div class="dialog-header">
+                        <i class="fas fa-file-export"></i>
+                        <h3>選擇匯出格式</h3>
+                    </div>
+                    <div class="dialog-body export-options">
+                        <button class="export-option" data-format="1">
+                            <i class="fas fa-file-excel"></i>
+                            <span>Excel (.xlsx)</span>
+                        </button>
+                        <button class="export-option" data-format="2">
+                            <i class="fas fa-file-csv"></i>
+                            <span>CSV (.csv)</span>
+                        </button>
+                        <button class="export-option" data-format="3">
+                            <i class="fas fa-file-code"></i>
+                            <span>HTML (.html)</span>
+                        </button>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn btn-outline btn-sm" id="exportCancel">
+                            <i class="fas fa-times"></i> 取消
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
         
-        if (!exportFormat) return;
+        const dialogElement = document.createElement('div');
+        dialogElement.innerHTML = exportHtml;
+        document.body.appendChild(dialogElement);
         
-        switch(exportFormat) {
-            case '1':
-                exportPivotToExcel(pivotTable);
-                break;
-            case '2':
-                exportPivotToCSV(pivotTable);
-                break;
-            case '3':
-                exportPivotToHTML(pivotTable);
-                break;
-            default:
-                alert('無效的選項');
-        }
+        setTimeout(() => {
+            dialogElement.querySelector('.custom-dialog-overlay').classList.add('show');
+            dialogElement.querySelector('.custom-dialog').classList.add('show');
+        }, 10);
+        
+        const closeDialog = () => {
+            dialogElement.querySelector('.custom-dialog-overlay').classList.remove('show');
+            dialogElement.querySelector('.custom-dialog').classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(dialogElement);
+            }, 300);
+        };
+        
+        // 綁定事件
+        const cancelBtn = document.getElementById('exportCancel');
+        const exportOptions = dialogElement.querySelectorAll('.export-option');
+        
+        cancelBtn.addEventListener('click', closeDialog);
+        
+        exportOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                const format = option.dataset.format;
+                closeDialog();
+                
+                switch(format) {
+                    case '1':
+                        exportPivotToExcel(pivotTable);
+                        break;
+                    case '2':
+                        exportPivotToCSV(pivotTable);
+                        break;
+                    case '3':
+                        exportPivotToHTML(pivotTable);
+                        break;
+                }
+            });
+        });
         
     } catch (error) {
         console.error('匯出錯誤:', error);
-        alert('匯出失敗：' + error.message);
+        showAlertDialog('錯誤', '匯出失敗：' + error.message, 'error');
     }
 }
 
@@ -2022,6 +2110,202 @@ function formatColonContent(value1, value2) {
     return value1;
 }
 
+// 自定義確認對話框
+function showConfirmDialog(title, message, onConfirm, onCancel) {
+    // 創建對話框元素
+    const dialogHtml = `
+        <div class="custom-dialog-overlay">
+            <div class="custom-dialog">
+                <div class="dialog-header">
+                    <i class="fas fa-question-circle"></i>
+                    <h3>${title}</h3>
+                </div>
+                <div class="dialog-body">
+                    <p>${message}</p>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn btn-outline btn-sm" id="dialogCancel">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="dialogConfirm">
+                        <i class="fas fa-check"></i> 確定
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 添加到頁面
+    const dialogElement = document.createElement('div');
+    dialogElement.innerHTML = dialogHtml;
+    document.body.appendChild(dialogElement);
+    
+    // 添加動畫類
+    setTimeout(() => {
+        dialogElement.querySelector('.custom-dialog-overlay').classList.add('show');
+        dialogElement.querySelector('.custom-dialog').classList.add('show');
+    }, 10);
+    
+    // 綁定事件
+    const confirmBtn = document.getElementById('dialogConfirm');
+    const cancelBtn = document.getElementById('dialogCancel');
+    const overlay = dialogElement.querySelector('.custom-dialog-overlay');
+    
+    const closeDialog = () => {
+        overlay.classList.remove('show');
+        dialogElement.querySelector('.custom-dialog').classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(dialogElement);
+        }, 300);
+    };
+    
+    confirmBtn.addEventListener('click', () => {
+        closeDialog();
+        if (onConfirm) onConfirm();
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+        closeDialog();
+        if (onCancel) onCancel();
+    });
+    
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeDialog();
+            if (onCancel) onCancel();
+        }
+    });
+}
+
+// 自定義提示對話框（替代 alert）
+function showAlertDialog(title, message, type = 'info') {
+    const iconMap = {
+        'info': 'fa-info-circle',
+        'warning': 'fa-exclamation-triangle',
+        'error': 'fa-times-circle',
+        'success': 'fa-check-circle'
+    };
+    
+    const colorMap = {
+        'info': '#2196F3',
+        'warning': '#FF9800',
+        'error': '#F44336',
+        'success': '#4CAF50'
+    };
+    
+    const dialogHtml = `
+        <div class="custom-dialog-overlay">
+            <div class="custom-dialog alert-dialog">
+                <div class="dialog-header" style="color: ${colorMap[type]}">
+                    <i class="fas ${iconMap[type]}"></i>
+                    <h3>${title}</h3>
+                </div>
+                <div class="dialog-body">
+                    <p>${message}</p>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn btn-primary btn-sm" id="dialogOk">
+                        <i class="fas fa-check"></i> 確定
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const dialogElement = document.createElement('div');
+    dialogElement.innerHTML = dialogHtml;
+    document.body.appendChild(dialogElement);
+    
+    setTimeout(() => {
+        dialogElement.querySelector('.custom-dialog-overlay').classList.add('show');
+        dialogElement.querySelector('.custom-dialog').classList.add('show');
+    }, 10);
+    
+    const okBtn = document.getElementById('dialogOk');
+    const overlay = dialogElement.querySelector('.custom-dialog-overlay');
+    
+    const closeDialog = () => {
+        overlay.classList.remove('show');
+        dialogElement.querySelector('.custom-dialog').classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(dialogElement);
+        }, 300);
+    };
+    
+    okBtn.addEventListener('click', closeDialog);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeDialog();
+    });
+}
+
+// 全螢幕功能
+function togglePivotFullscreen() {
+    const pivotView = document.getElementById('pivotView');
+    const icon = document.getElementById('fullscreenIcon');
+    const text = document.getElementById('fullscreenText');
+    
+    if (!document.fullscreenElement) {
+        // 進入全螢幕
+        pivotView.requestFullscreen().then(() => {
+            pivotView.classList.add('fullscreen');
+            icon.classList.remove('fa-expand');
+            icon.classList.add('fa-compress');
+            text.textContent = '退出全螢幕';
+        }).catch(err => {
+            console.error('無法進入全螢幕:', err);
+            showAlertDialog('錯誤', '無法進入全螢幕模式', 'error');
+        });
+    } else {
+        // 退出全螢幕
+        document.exitFullscreen().then(() => {
+            pivotView.classList.remove('fullscreen');
+            icon.classList.remove('fa-compress');
+            icon.classList.add('fa-expand');
+            text.textContent = '全螢幕';
+        });
+    }
+}
+
+// 監聽全螢幕變化
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+        const pivotView = document.getElementById('pivotView');
+        const icon = document.getElementById('fullscreenIcon');
+        const text = document.getElementById('fullscreenText');
+        
+        pivotView.classList.remove('fullscreen');
+        icon.classList.remove('fa-compress');
+        icon.classList.add('fa-expand');
+        text.textContent = '全螢幕';
+    }
+});
+
+// 切換拖曳區域顯示/隱藏
+let areasVisible = true;
+function togglePivotAreas() {
+    const icon = document.getElementById('toggleAreasIcon');
+    const text = document.getElementById('toggleAreasText');
+    const pivotContainer = document.getElementById('pivotContainer');
+    
+    areasVisible = !areasVisible;
+    
+    if (areasVisible) {
+        // 顯示拖曳區域
+        $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').show();
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+        text.textContent = '隱藏拖曳區';
+        pivotContainer.classList.remove('areas-hidden');
+    } else {
+        // 隱藏拖曳區域
+        $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+        text.textContent = '顯示拖曳區';
+        pivotContainer.classList.add('areas-hidden');
+    }
+}
+
 // 匯出函數
 window.togglePivotMode = togglePivotMode;
 window.applyFilters = applyFilters;
@@ -2030,3 +2314,5 @@ window.toggleFilterPanel = toggleFilterPanel;
 window.exportCurrentView = exportCurrentView;
 window.downloadFullReport = downloadFullReport;
 window.exportPageAsHTML = exportPageAsHTML;
+window.togglePivotFullscreen = togglePivotFullscreen;
+window.togglePivotAreas = togglePivotAreas;
