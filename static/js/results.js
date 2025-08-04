@@ -5,6 +5,7 @@ let currentData = null;
 let currentSheet = null;
 let pivotMode = false;
 let filters = {};
+let sortOrder = {};
 
 console.log('Task ID:', taskId);  // 除錯用
 
@@ -119,6 +120,12 @@ function showNoDataMessage() {
     
     // 隱藏統計和圖表
     document.getElementById('statsGrid').innerHTML = '';
+    
+    // 清除表格統計
+    const statsBar = document.querySelector('.table-stats-bar');
+    if (statsBar) {
+        statsBar.remove();
+    }
 }
 
 // 顯示錯誤訊息
@@ -199,6 +206,7 @@ function loadSheet(sheetName) {
 
 // 渲染資料表格
 function renderDataTable(sheetData) {
+    const tableView = document.getElementById('tableView');
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
@@ -208,6 +216,7 @@ function renderDataTable(sheetData) {
     
     if (!sheetData.data || sheetData.data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">此資料表沒有資料</td></tr>';
+        updateTableStats(0, 0);
         return;
     }
     
@@ -215,25 +224,65 @@ function renderDataTable(sheetData) {
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     console.log('欄位:', columns);
     
+    // 更新表格統計
+    const filteredData = applyDataFilters(sheetData.data);
+    updateTableStats(sheetData.data.length, filteredData.length);
+    
     // 建立表頭
     const headerRow = document.createElement('tr');
     columns.forEach(col => {
         const th = document.createElement('th');
-        th.textContent = col;
-        th.onclick = () => sortTable(col);
-        th.style.cursor = 'pointer';
         
-        // 標記重要欄位
-        if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'problem', '狀態', 'is_different'].includes(col)) {
+        // 特殊欄位樣式
+        if (col === 'base_content') {
+            th.classList.add('base-content-header');
+        } else if (col === 'compare_content') {
+            th.classList.add('compare-content-header');
+        } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'problem', '狀態', 'is_different'].includes(col)) {
             th.classList.add('highlight-header');
         }
+        
+        // 建立表頭內容
+        const thContent = document.createElement('div');
+        thContent.className = 'th-content';
+        
+        const thText = document.createElement('span');
+        thText.className = 'th-text';
+        thText.textContent = col;
+        
+        const thIcons = document.createElement('span');
+        thIcons.className = 'th-icons';
+        
+        // 排序圖示
+        const sortIcon = document.createElement('i');
+        sortIcon.className = 'fas fa-sort sort-icon';
+        if (sortOrder[col]) {
+            sortIcon.className = sortOrder[col] === 'asc' ? 
+                'fas fa-sort-up sort-icon active' : 
+                'fas fa-sort-down sort-icon active';
+        }
+        
+        thIcons.appendChild(sortIcon);
+        
+        // 篩選圖示（如果有篩選器）
+        if (filters[col]) {
+            const filterIcon = document.createElement('i');
+            filterIcon.className = 'fas fa-filter filter-icon active';
+            thIcons.appendChild(filterIcon);
+        }
+        
+        thContent.appendChild(thText);
+        thContent.appendChild(thIcons);
+        th.appendChild(thContent);
+        
+        th.onclick = () => sortTable(col);
+        th.style.cursor = 'pointer';
         
         headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
     
     // 建立表格內容
-    const filteredData = applyDataFilters(sheetData.data);
     console.log(`顯示 ${filteredData.length} 筆資料`);
     
     filteredData.forEach((row, index) => {
@@ -241,6 +290,17 @@ function renderDataTable(sheetData) {
         columns.forEach(col => {
             const td = document.createElement('td');
             const value = row[col];
+            
+            // 特殊欄位樣式
+            if (col === 'base_content') {
+                td.classList.add('base-content', 'content-cell');
+            } else if (col === 'compare_content') {
+                td.classList.add('compare-content', 'content-cell');
+            } else if (col === 'file_type') {
+                td.classList.add('file-type');
+            } else if (col === 'org_folder') {
+                td.classList.add('org-cell');
+            }
             
             // 特殊格式處理
             if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
@@ -258,6 +318,9 @@ function renderDataTable(sheetData) {
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
             } else if (col === 'problem' && value) {
                 td.innerHTML = `<span class="text-danger font-weight-bold">${value}</span>`;
+            } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
+                td.classList.add('highlight-hash');
+                td.textContent = value;
             } else {
                 td.textContent = value !== null && value !== undefined ? value : '';
             }
@@ -275,7 +338,41 @@ function renderDataTable(sheetData) {
     // 如果沒有資料顯示
     if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合篩選條件的資料</td></tr>';
+        updateTableStats(sheetData.data.length, 0);
     }
+}
+
+// 更新表格統計資訊
+function updateTableStats(total, displayed) {
+    // 檢查是否已有統計欄，如果沒有則創建
+    let statsBar = document.querySelector('.table-stats-bar');
+    if (!statsBar) {
+        statsBar = document.createElement('div');
+        statsBar.className = 'table-stats-bar';
+        
+        const tableView = document.getElementById('tableView');
+        const tableWrapper = tableView.querySelector('.table-wrapper');
+        tableView.insertBefore(statsBar, tableWrapper);
+    }
+    
+    statsBar.innerHTML = `
+        <div class="table-stats">
+            <div class="table-stat-item">
+                <i class="fas fa-database"></i>
+                <span>總筆數：<span class="table-stat-value">${total}</span></span>
+            </div>
+            <div class="table-stat-item">
+                <i class="fas fa-eye"></i>
+                <span>顯示：<span class="table-stat-value">${displayed}</span></span>
+            </div>
+            ${total !== displayed ? `
+            <div class="table-stat-item">
+                <i class="fas fa-filter"></i>
+                <span>已篩選：<span class="table-stat-value">${total - displayed}</span></span>
+            </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 // 渲染樞紐分析表
@@ -326,7 +423,18 @@ function togglePivotMode() {
     
     document.getElementById('tableView').classList.toggle('hidden', pivotMode);
     document.getElementById('pivotView').classList.toggle('hidden', !pivotMode);
-    document.getElementById('pivotToggleText').textContent = pivotMode ? '切換表格檢視' : '切換樞紐分析';
+    
+    // 更新圖示狀態
+    const pivotIcon = document.getElementById('pivotIcon');
+    if (pivotMode) {
+        pivotIcon.classList.remove('fa-chart-pie');
+        pivotIcon.classList.add('fa-table');
+        pivotIcon.parentElement.classList.add('active');
+    } else {
+        pivotIcon.classList.remove('fa-table');
+        pivotIcon.classList.add('fa-chart-pie');
+        pivotIcon.parentElement.classList.remove('active');
+    }
     
     if (currentSheet) {
         loadSheet(currentSheet);
@@ -457,14 +565,31 @@ function generateFilters(sheetData) {
         if (uniqueValues.length > 0 && uniqueValues.length < 50) {
             const filterGroup = document.createElement('div');
             filterGroup.className = 'filter-group';
+            
+            // 建立選擇器
+            const select = document.createElement('select');
+            select.className = 'filter-select';
+            select.multiple = true;
+            select.dataset.column = col;
+            
+            // 加入選項
+            uniqueValues.forEach(val => {
+                const option = document.createElement('option');
+                option.value = val;
+                option.textContent = val;
+                
+                // 如果該值已被篩選，則選中
+                if (filters[col] && filters[col].includes(String(val))) {
+                    option.selected = true;
+                }
+                
+                select.appendChild(option);
+            });
+            
             filterGroup.innerHTML = `
                 <label class="filter-label">${col}</label>
-                <select class="filter-select" multiple data-column="${col}">
-                    ${uniqueValues.map(val => `
-                        <option value="${val}">${val}</option>
-                    `).join('')}
-                </select>
             `;
+            filterGroup.appendChild(select);
             filterContent.appendChild(filterGroup);
         }
     });
@@ -492,7 +617,13 @@ function applyFilters() {
         loadSheet(currentSheet);
     }
     
-    utils.showNotification('已套用篩選', 'success');
+    // 提示訊息
+    const filterCount = Object.keys(filters).length;
+    const message = filterCount > 0 
+        ? `已套用 ${filterCount} 個篩選條件` 
+        : '已清除所有篩選';
+    
+    console.log(message);
     
     // 關閉篩選面板
     document.getElementById('filterPanel').classList.remove('show');
@@ -509,7 +640,7 @@ function clearFilters() {
         loadSheet(currentSheet);
     }
     
-    utils.showNotification('已清除篩選', 'info');
+    console.log('已清除篩選');
 }
 
 // 套用資料篩選
@@ -528,7 +659,6 @@ function applyDataFilters(data) {
 }
 
 // 表格排序
-let sortOrder = {};
 function sortTable(column) {
     const order = sortOrder[column] === 'asc' ? 'desc' : 'asc';
     sortOrder[column] = order;
@@ -560,6 +690,7 @@ function sortTable(column) {
         }
     });
     
+    // 重新渲染表格，保留排序狀態
     renderDataTable(sheetData);
 }
 
@@ -725,116 +856,45 @@ function toggleFilterPanel() {
 // 匯出當前檢視
 function exportCurrentView(format) {
     if (!currentData || !currentSheet) {
-        utils.showNotification('請先選擇資料表', 'error');
+        alert('請先選擇資料表');
         return;
     }
     
     if (format === 'excel') {
-        window.location.href = `/api/export-excel/${taskId}`;
-    } else if (format === 'html') {
-        // 生成當前檢視的 HTML
-        const sheetData = currentData[currentSheet];
-        const htmlContent = generateHTMLReport(sheetData);
-        
-        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `report_${taskId}_${currentSheet}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // 呼叫 API 匯出當前資料表
+        window.location.href = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
     }
-}
-
-// 生成 HTML 報告
-function generateHTMLReport(sheetData) {
-    const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
-    const rows = sheetData.data || [];
-    
-    let tableHTML = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    ${columns.map(col => `<th>${col}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    rows.forEach(row => {
-        tableHTML += '<tr>';
-        columns.forEach(col => {
-            const value = row[col];
-            let cellContent = value !== null && value !== undefined ? value : '';
-            
-            // 特殊格式處理
-            if (col === 'has_wave' || col === 'is_different') {
-                if (value === 'Y') {
-                    cellContent = '<span class="badge badge-success">Y</span>';
-                } else {
-                    cellContent = '<span class="badge badge-default">N</span>';
-                }
-            } else if (col === '狀態') {
-                if (value === '新增') {
-                    cellContent = '<span class="badge badge-success">新增</span>';
-                } else if (value === '刪除') {
-                    cellContent = '<span class="badge badge-danger">刪除</span>';
-                }
-            }
-            
-            tableHTML += `<td>${cellContent}</td>`;
-        });
-        tableHTML += '</tr>';
-    });
-    
-    tableHTML += '</tbody></table>';
-    
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>報表: ${getSheetDisplayName(currentSheet)} - ${taskId}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #1A237E; margin-bottom: 10px; }
-        .info { color: #666; margin-bottom: 30px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #2196F3; color: white; padding: 12px; text-align: left; font-weight: 600; }
-        td { padding: 10px; border-bottom: 1px solid #e0e0e0; }
-        tr:hover { background: #f5f5f5; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.85em; font-weight: 500; }
-        .badge-success { background: #E8F5E9; color: #2E7D32; }
-        .badge-danger { background: #FFEBEE; color: #C62828; }
-        .badge-default { background: #F5F5F5; color: #757575; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>報表: ${getSheetDisplayName(currentSheet)}</h1>
-        <div class="info">
-            <p>任務 ID: ${taskId}</p>
-            <p>匯出時間: ${new Date().toLocaleString('zh-TW')}</p>
-            <p>資料筆數: ${rows.length} 筆</p>
-        </div>
-        ${tableHTML}
-    </div>
-</body>
-</html>
-    `;
 }
 
 // 下載完整報表
 function downloadFullReport() {
-    window.location.href = `/api/export-zip/${taskId}`;
+    window.location.href = `/api/export-excel/${taskId}`;
+}
+
+// 匯出整個頁面為 HTML
+function exportPageAsHTML() {
+    // 取得當前頁面的完整 HTML
+    const pageHTML = document.documentElement.outerHTML;
+    
+    // 建立 Blob
+    const blob = new Blob([pageHTML], { type: 'text/html;charset=utf-8' });
+    
+    // 建立下載連結
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report_${taskId}_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // 監聽資料表選擇
 document.getElementById('sheetSelector').addEventListener('change', (e) => {
     if (e.target.value) {
+        // 清除排序狀態
+        sortOrder = {};
         loadSheet(e.target.value);
     }
 });
@@ -846,3 +906,4 @@ window.clearFilters = clearFilters;
 window.toggleFilterPanel = toggleFilterPanel;
 window.exportCurrentView = exportCurrentView;
 window.downloadFullReport = downloadFullReport;
+window.exportPageAsHTML = exportPageAsHTML;
