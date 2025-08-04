@@ -3,7 +3,6 @@
 {% block title %}匯出報表 - SFTP 下載與比較系統{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/export_report.css') }}">
 {% endblock %}
 
@@ -13,29 +12,32 @@
         <h1 class="page-title">
             <i class="fas fa-file-export"></i> 匯出報表
         </h1>
-        <p class="page-subtitle">選擇任務並匯出為各種格式</p>
+        <p class="page-subtitle">選擇任務並匯出各種格式的報表</p>
     </div>
 
-    <!-- 報表選擇區塊 -->
-    <div class="report-selector-section">
-        <div class="section-header">
-            <h2 class="step-title">選擇報表</h2>
+    <!-- 步驟 1：選擇任務 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h2 class="step-title">選擇任務</h2>
+                <p class="step-subtitle">選擇要匯出報表的任務</p>
+            </div>
         </div>
         
-        <div class="section-content">
+        <div class="section-body">
             <div class="selector-grid">
                 <div class="form-group">
                     <label class="form-label">
-                        <i class="fas fa-tasks"></i> 選擇任務
+                        <i class="fas fa-tasks"></i> 任務列表
                     </label>
                     <select class="form-select" id="taskSelector">
-                        <option value="">載入中...</option>
+                        <option value="">請選擇任務...</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label class="form-label">
-                        <i class="fas fa-table"></i> 選擇資料表
+                        <i class="fas fa-table"></i> 資料表
                     </label>
                     <select class="form-select" id="sheetSelector" disabled>
                         <option value="">請先選擇任務...</option>
@@ -44,102 +46,130 @@
             </div>
             
             <!-- 任務摘要 -->
-            <div id="taskSummary" style="margin-top: 24px;">
+            <div id="taskSummary" class="task-summary hidden">
                 <!-- 動態顯示任務統計 -->
             </div>
         </div>
     </div>
 
+    <!-- 步驟 2：資料預覽 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h2 class="step-title">資料預覽</h2>
+                <p class="step-subtitle">預覽選擇的資料內容</p>
+            </div>
+        </div>
+        
+        <div class="section-body">
+            <div id="previewContainer" class="preview-container">
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <h3>尚未選擇資料</h3>
+                    <p>請先選擇任務和資料表來預覽內容</p>
+                </div>
+            </div>
+            
+            <!-- 資料統計 -->
+            <div id="sheetStatistics" class="sheet-statistics hidden">
+                <!-- 動態顯示資料統計 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 步驟 3：選擇匯出格式 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h2 class="step-title">選擇匯出格式</h2>
+                <p class="step-subtitle">選擇要匯出的檔案格式</p>
+            </div>
+        </div>
+        
+        <div class="section-body">
+            <div class="export-formats">
+                <div class="format-card excel" onclick="exportData('current-excel')">
+                    <div class="format-icon">
+                        <i class="fas fa-file-excel"></i>
+                    </div>
+                    <div class="format-title">匯出當前資料表</div>
+                    <div class="format-desc">將選擇的資料表匯出為 Excel 檔案</div>
+                </div>
+                
+                <div class="format-card excel" onclick="exportData('all-excel')">
+                    <div class="format-icon">
+                        <i class="fas fa-table"></i>
+                    </div>
+                    <div class="format-title">匯出所有資料表</div>
+                    <div class="format-desc">將所有資料表匯出到一個 Excel 檔案</div>
+                </div>
+                
+                <div class="format-card pdf" onclick="exportData('pdf')">
+                    <div class="format-icon">
+                        <i class="fas fa-file-pdf"></i>
+                    </div>
+                    <div class="format-title">匯出 PDF 報告</div>
+                    <div class="format-desc">生成專業的 PDF 格式報告</div>
+                </div>
+                
+                <div class="format-card html" onclick="exportData('html')">
+                    <div class="format-icon">
+                        <i class="fas fa-file-code"></i>
+                    </div>
+                    <div class="format-title">匯出 HTML 報告</div>
+                    <div class="format-desc">生成可在瀏覽器中查看的 HTML 報告</div>
+                </div>
+                
+                <div class="format-card zip" onclick="exportData('zip')">
+                    <div class="format-icon">
+                        <i class="fas fa-file-archive"></i>
+                    </div>
+                    <div class="format-title">下載完整報表</div>
+                    <div class="format-desc">包含所有資料和原始檔案的 ZIP 壓縮包</div>
+                </div>
+            </div>
+            
+            <!-- 匯出提示 -->
+            <div class="export-hint">
+                <i class="fas fa-lightbulb"></i>
+                <span>提示：您可以選擇不同的格式來滿足不同的需求。Excel 適合資料分析，PDF 適合分享報告。</span>
+            </div>
+        </div>
+    </div>
+
     <!-- 快速操作 -->
-    <div class="quick-actions">
-        <button class="btn-quick" onclick="quickExport('all-excel')">
-            <i class="fas fa-file-excel"></i>
-            <span>匯出所有 Excel</span>
-        </button>
-        <button class="btn-quick" onclick="quickExport('pdf')">
-            <i class="fas fa-file-pdf"></i>
-            <span>匯出 PDF 報告</span>
-        </button>
-        <button class="btn-quick" onclick="quickExport('html')">
-            <i class="fas fa-file-code"></i>
-            <span>匯出 HTML</span>
-        </button>
-        <button class="btn-quick" onclick="quickExport('zip')">
-            <i class="fas fa-file-archive"></i>
-            <span>下載完整包</span>
-        </button>
-    </div>
-
-    <!-- 報表預覽區塊 -->
-    <div class="report-preview-section">
-        <div class="section-header">
-            <h2 class="step-title">資料預覽</h2>
-        </div>
-        
-        <div class="section-content">
-            <!-- 資料表統計 -->
-            <div id="sheetStatistics">
-                <!-- 動態顯示統計 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">
+                <i class="fas fa-rocket"></i>
             </div>
-            
-            <!-- 預覽容器 -->
-            <div class="preview-container" id="previewContainer">
-                <!-- 動態載入資料預覽 -->
-            </div>
-        </div>
-    </div>
-
-    <!-- 匯出選項區塊 -->
-    <div class="export-options-section">
-        <div class="section-header">
-            <h2 class="step-title">匯出選項</h2>
-        </div>
-        
-        <div class="export-formats">
-            <div class="format-card excel" onclick="exportData('current-excel')">
-                <div class="format-icon">
-                    <i class="fas fa-file-excel"></i>
-                </div>
-                <div class="format-title">Excel (當前表)</div>
-                <div class="format-desc">匯出當前選擇的資料表為 Excel 檔案</div>
-            </div>
-            
-            <div class="format-card excel" onclick="exportData('all-excel')">
-                <div class="format-icon">
-                    <i class="fas fa-table"></i>
-                </div>
-                <div class="format-title">Excel (所有表)</div>
-                <div class="format-desc">匯出所有資料表為單一 Excel 檔案</div>
-            </div>
-            
-            <div class="format-card pdf" onclick="exportData('pdf')">
-                <div class="format-icon">
-                    <i class="fas fa-file-pdf"></i>
-                </div>
-                <div class="format-title">PDF 報告</div>
-                <div class="format-desc">產生格式化的 PDF 報告文件</div>
-            </div>
-            
-            <div class="format-card html" onclick="exportData('html')">
-                <div class="format-icon">
-                    <i class="fas fa-file-code"></i>
-                </div>
-                <div class="format-title">HTML 網頁</div>
-                <div class="format-desc">產生可在瀏覽器檢視的 HTML 檔案</div>
-            </div>
-            
-            <div class="format-card zip" onclick="downloadFullReport()">
-                <div class="format-icon">
-                    <i class="fas fa-file-archive"></i>
-                </div>
-                <div class="format-title">完整壓縮包</div>
-                <div class="format-desc">下載包含所有檔案的 ZIP 壓縮包</div>
+            <div class="step-content">
+                <h2 class="step-title">快速操作</h2>
+                <p class="step-subtitle">常用的快速匯出選項</p>
             </div>
         </div>
         
-        <div class="export-hint">
-            <i class="fas fa-lightbulb"></i>
-            <span>提示：您可以先預覽資料，確認內容正確後再進行匯出。所有匯出格式都會保留原始資料的完整性。</span>
+        <div class="section-body">
+            <div class="quick-actions">
+                <button class="btn-quick" onclick="quickExport('latest-excel')">
+                    <i class="fas fa-clock"></i>
+                    <span>匯出最新結果</span>
+                </button>
+                <button class="btn-quick" onclick="quickExport('all-in-one')">
+                    <i class="fas fa-layer-group"></i>
+                    <span>一鍵匯出全部</span>
+                </button>
+                <button class="btn-quick" onclick="quickExport('summary-only')">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>僅匯出摘要</span>
+                </button>
+                <button class="btn-quick" onclick="downloadFullReport()">
+                    <i class="fas fa-download"></i>
+                    <span>下載完整報表</span>
+                </button>
+            </div>
         </div>
     </div>
 </div>

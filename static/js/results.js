@@ -1,4 +1,4 @@
-// 結果報表頁面 JavaScript
+// 結果報表頁面 JavaScript - 使用真實資料
 
 const taskId = window.location.pathname.split('/').pop();
 let currentData = null;
@@ -6,32 +6,66 @@ let currentSheet = null;
 let pivotMode = false;
 let filters = {};
 
+console.log('Task ID:', taskId);  // 除錯用
+
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('頁面載入完成，開始載入資料...');
     loadPivotData();
 });
 
 // 載入樞紐分析資料
 async function loadPivotData() {
     try {
-        utils.showLoading('載入資料中...');
+        // 顯示載入中狀態
+        showLoading();
         
-        const data = await utils.apiRequest(`/api/pivot-data/${taskId}`);
+        console.log(`正在載入任務 ${taskId} 的資料...`);
+        
+        const response = await fetch(`/api/pivot-data/${taskId}`);
+        console.log('API 回應狀態:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('收到的資料:', data);
         
         if (!data || Object.keys(data).length === 0) {
             // 如果沒有資料，顯示提示訊息
+            console.log('沒有找到資料');
             showNoDataMessage();
-            utils.hideLoading();
             return;
         }
         
         currentData = data;
+        console.log('資料載入成功，工作表數量:', Object.keys(data).length);
         
         // 填充資料表選項
         const selector = document.getElementById('sheetSelector');
         selector.innerHTML = '';
         
+        // 按照特定順序顯示資料表
+        const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對', '摘要'];
+        const orderedSheets = [];
+        
+        // 先加入已定義順序的資料表
+        sheetOrder.forEach(sheetName => {
+            if (data[sheetName]) {
+                orderedSheets.push(sheetName);
+            }
+        });
+        
+        // 再加入其他資料表
         Object.keys(data).forEach(sheetName => {
+            if (!orderedSheets.includes(sheetName)) {
+                orderedSheets.push(sheetName);
+            }
+        });
+        
+        // 填充選擇器
+        orderedSheets.forEach(sheetName => {
             const option = document.createElement('option');
             option.value = sheetName;
             option.textContent = getSheetDisplayName(sheetName);
@@ -39,51 +73,75 @@ async function loadPivotData() {
         });
         
         // 載入第一個資料表
-        if (Object.keys(data).length > 0) {
-            loadSheet(Object.keys(data)[0]);
+        if (orderedSheets.length > 0) {
+            console.log('載入第一個資料表:', orderedSheets[0]);
+            loadSheet(orderedSheets[0]);
         }
         
-        utils.hideLoading();
-        
     } catch (error) {
-        console.error('Load data error:', error);
-        utils.hideLoading();
-        showErrorMessage();
+        console.error('載入資料錯誤:', error);
+        showErrorMessage(error.message);
     }
+}
+
+// 顯示載入中
+function showLoading() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="100%" class="empty-message">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>載入資料中...</p>
+                </div>
+            </td>
+        </tr>
+    `;
 }
 
 // 顯示無資料訊息
 function showNoDataMessage() {
-    const container = document.querySelector('.data-view-container');
-    container.innerHTML = `
-        <div class="no-data-message">
-            <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-            <h3>暫無資料可顯示</h3>
-            <p class="text-muted">此任務可能還在處理中，或尚未產生報表。</p>
-            <button class="btn btn-primary mt-3" onclick="location.reload()">
-                <i class="fas fa-sync"></i> 重新載入
-            </button>
-        </div>
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="100%" class="empty-message">
+                <div class="no-data-message">
+                    <i class="fas fa-inbox"></i>
+                    <h3>暫無資料可顯示</h3>
+                    <p>此任務可能還在處理中，或尚未產生報表。</p>
+                    <button class="btn btn-primary" onclick="location.reload()">
+                        <i class="fas fa-sync"></i> 重新載入
+                    </button>
+                </div>
+            </td>
+        </tr>
     `;
+    
+    // 隱藏統計和圖表
+    document.getElementById('statsGrid').innerHTML = '';
 }
 
 // 顯示錯誤訊息
-function showErrorMessage() {
-    const container = document.querySelector('.data-view-container');
-    container.innerHTML = `
-        <div class="error-message">
-            <i class="fas fa-exclamation-triangle fa-4x text-danger mb-3"></i>
-            <h3>載入資料失敗</h3>
-            <p class="text-muted">無法載入報表資料，請稍後再試。</p>
-            <div class="mt-3">
-                <button class="btn btn-primary" onclick="location.reload()">
-                    <i class="fas fa-sync"></i> 重試
-                </button>
-                <button class="btn btn-outline ml-2" onclick="window.history.back()">
-                    <i class="fas fa-arrow-left"></i> 返回
-                </button>
-            </div>
-        </div>
+function showErrorMessage(message = '無法載入報表資料') {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="100%" class="empty-message">
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>載入資料失敗</h3>
+                    <p>${message}</p>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            <i class="fas fa-sync"></i> 重試
+                        </button>
+                        <button class="btn btn-outline" onclick="window.history.back()">
+                            <i class="fas fa-arrow-left"></i> 返回
+                        </button>
+                    </div>
+                </div>
+            </td>
+        </tr>
     `;
 }
 
@@ -106,13 +164,17 @@ function getSheetDisplayName(sheetName) {
 
 // 載入資料表
 function loadSheet(sheetName) {
+    console.log('載入資料表:', sheetName);
+    
     currentSheet = sheetName;
     const sheetData = currentData[sheetName];
     
     if (!sheetData) {
-        console.error('Sheet data not found:', sheetName);
+        console.error('找不到資料表:', sheetName);
         return;
     }
+    
+    console.log(`資料表 ${sheetName} 有 ${sheetData.data ? sheetData.data.length : 0} 筆資料`);
     
     // 更新選擇器
     document.getElementById('sheetSelector').value = sheetName;
@@ -137,7 +199,6 @@ function loadSheet(sheetName) {
 
 // 渲染資料表格
 function renderDataTable(sheetData) {
-    const table = document.getElementById('dataTable');
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
@@ -152,6 +213,7 @@ function renderDataTable(sheetData) {
     
     // 取得欄位（從資料或定義中）
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+    console.log('欄位:', columns);
     
     // 建立表頭
     const headerRow = document.createElement('tr');
@@ -172,6 +234,8 @@ function renderDataTable(sheetData) {
     
     // 建立表格內容
     const filteredData = applyDataFilters(sheetData.data);
+    console.log(`顯示 ${filteredData.length} 筆資料`);
+    
     filteredData.forEach((row, index) => {
         const tr = document.createElement('tr');
         columns.forEach(col => {
@@ -187,7 +251,10 @@ function renderDataTable(sheetData) {
                 const badgeClass = value === 'Y' ? 'badge-success' : 'badge-default';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || 'N'}</span>`;
             } else if (col === '狀態') {
-                const badgeClass = value === '新增' ? 'badge-success' : 'badge-warning';
+                let badgeClass = 'badge-default';
+                if (value === '新增') badgeClass = 'badge-success';
+                else if (value === '刪除') badgeClass = 'badge-danger';
+                else if (value === '修改') badgeClass = 'badge-warning';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
             } else if (col === 'problem' && value) {
                 td.innerHTML = `<span class="text-danger font-weight-bold">${value}</span>`;
@@ -248,7 +315,7 @@ function renderPivotTable(sheetData) {
             }
         });
     } catch (error) {
-        console.error('Pivot table error:', error);
+        console.error('樞紐分析錯誤:', error);
         container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
     }
 }
@@ -292,19 +359,33 @@ function updateStatistics(sheetData) {
     // 特定資料表的統計
     if (currentSheet === 'revision_diff') {
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
-        const hasWaveCount = sheetData.data.filter(row => row.has_wave === 'Y').length;
+        const hasWaveY = sheetData.data.filter(row => row.has_wave === 'Y').length;
+        const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
+        
         stats.push({
             label: '模組數',
             value: uniqueModules.size,
             icon: 'fa-cube',
             color: 'purple'
         });
-        stats.push({
-            label: '包含 Wave',
-            value: hasWaveCount,
-            icon: 'fa-water',
-            color: 'info'
-        });
+        
+        if (hasWaveY > 0) {
+            stats.push({
+                label: '包含 Wave',
+                value: hasWaveY,
+                icon: 'fa-check-circle',
+                color: 'success'
+            });
+        }
+        
+        if (hasWaveN > 0) {
+            stats.push({
+                label: '缺少 Wave',
+                value: hasWaveN,
+                icon: 'fa-exclamation-triangle',
+                color: 'warning'
+            });
+        }
     }
     
     if (currentSheet === 'branch_error') {
@@ -322,6 +403,7 @@ function updateStatistics(sheetData) {
     if (currentSheet === 'lost_project') {
         const added = sheetData.data.filter(row => row['狀態'] === '新增').length;
         const deleted = sheetData.data.filter(row => row['狀態'] === '刪除').length;
+        
         if (added > 0) {
             stats.push({
                 label: '新增專案',
@@ -345,7 +427,7 @@ function updateStatistics(sheetData) {
         const card = document.createElement('div');
         card.className = `stat-card ${stat.color || ''}`;
         card.innerHTML = `
-            <div class="stat-icon ${stat.color ? `bg-${stat.color}` : ''}">
+            <div class="stat-icon">
                 <i class="fas ${stat.icon}"></i>
             </div>
             <div class="stat-content">
@@ -492,6 +574,11 @@ function drawDataCharts(sheetData) {
         if (canvas) {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 銷毀舊的 Chart 實例
+            if (window[chartId + 'Instance']) {
+                window[chartId + 'Instance'].destroy();
+            }
         }
     });
     
@@ -538,7 +625,7 @@ function drawDataCharts(sheetData) {
         }
         
         if (Object.keys(chartData).length > 0) {
-            new Chart(distCtx, {
+            window.distributionChartInstance = new Chart(distCtx, {
                 type: 'pie',
                 data: {
                     labels: Object.keys(chartData),
@@ -592,13 +679,18 @@ function drawDataCharts(sheetData) {
             }
         });
         
-        new Chart(trendCtx, {
+        // 只顯示前 10 個模組
+        const sortedModules = Object.entries(moduleData)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+        
+        window.trendChartInstance = new Chart(trendCtx, {
             type: 'bar',
             data: {
-                labels: Object.keys(moduleData),
+                labels: sortedModules.map(item => item[0]),
                 datasets: [{
                     label: '差異數量',
-                    data: Object.values(moduleData),
+                    data: sortedModules.map(item => item[1]),
                     backgroundColor: '#2196F3',
                     borderColor: '#1976D2',
                     borderWidth: 1
@@ -632,42 +724,19 @@ function toggleFilterPanel() {
 
 // 匯出當前檢視
 function exportCurrentView(format) {
+    if (!currentData || !currentSheet) {
+        utils.showNotification('請先選擇資料表', 'error');
+        return;
+    }
+    
     if (format === 'excel') {
         window.location.href = `/api/export-excel/${taskId}`;
     } else if (format === 'html') {
         // 生成當前檢視的 HTML
-        const currentView = pivotMode ? 
-            document.getElementById('pivotContainer').innerHTML : 
-            document.getElementById('dataTable').outerHTML;
-            
-        const htmlContent = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>報表匯出 - ${taskId}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    table { border-collapse: collapse; width: 100%; }
-                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                    th { background-color: #f2f2f2; font-weight: bold; }
-                    tr:nth-child(even) { background-color: #f9f9f9; }
-                    .highlight-red { color: #F44336; font-weight: bold; }
-                    .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
-                    .badge-success { background: #4CAF50; color: white; }
-                    .badge-warning { background: #FF9800; color: white; }
-                    .badge-default { background: #9E9E9E; color: white; }
-                </style>
-            </head>
-            <body>
-                <h1>報表: ${getSheetDisplayName(currentSheet)}</h1>
-                <p>匯出時間: ${new Date().toLocaleString('zh-TW')}</p>
-                ${currentView}
-            </body>
-            </html>
-        `;
+        const sheetData = currentData[currentSheet];
+        const htmlContent = generateHTMLReport(sheetData);
         
-        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -677,6 +746,85 @@ function exportCurrentView(format) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
+}
+
+// 生成 HTML 報告
+function generateHTMLReport(sheetData) {
+    const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+    const rows = sheetData.data || [];
+    
+    let tableHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    ${columns.map(col => `<th>${col}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    rows.forEach(row => {
+        tableHTML += '<tr>';
+        columns.forEach(col => {
+            const value = row[col];
+            let cellContent = value !== null && value !== undefined ? value : '';
+            
+            // 特殊格式處理
+            if (col === 'has_wave' || col === 'is_different') {
+                if (value === 'Y') {
+                    cellContent = '<span class="badge badge-success">Y</span>';
+                } else {
+                    cellContent = '<span class="badge badge-default">N</span>';
+                }
+            } else if (col === '狀態') {
+                if (value === '新增') {
+                    cellContent = '<span class="badge badge-success">新增</span>';
+                } else if (value === '刪除') {
+                    cellContent = '<span class="badge badge-danger">刪除</span>';
+                }
+            }
+            
+            tableHTML += `<td>${cellContent}</td>`;
+        });
+        tableHTML += '</tr>';
+    });
+    
+    tableHTML += '</tbody></table>';
+    
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>報表: ${getSheetDisplayName(currentSheet)} - ${taskId}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #1A237E; margin-bottom: 10px; }
+        .info { color: #666; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #2196F3; color: white; padding: 12px; text-align: left; font-weight: 600; }
+        td { padding: 10px; border-bottom: 1px solid #e0e0e0; }
+        tr:hover { background: #f5f5f5; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.85em; font-weight: 500; }
+        .badge-success { background: #E8F5E9; color: #2E7D32; }
+        .badge-danger { background: #FFEBEE; color: #C62828; }
+        .badge-default { background: #F5F5F5; color: #757575; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>報表: ${getSheetDisplayName(currentSheet)}</h1>
+        <div class="info">
+            <p>任務 ID: ${taskId}</p>
+            <p>匯出時間: ${new Date().toLocaleString('zh-TW')}</p>
+            <p>資料筆數: ${rows.length} 筆</p>
+        </div>
+        ${tableHTML}
+    </div>
+</body>
+</html>
+    `;
 }
 
 // 下載完整報表

@@ -12,83 +12,136 @@
 <div class="container">
     <div class="page-header">
         <h1 class="page-title">
-            <i class="fas fa-chart-line"></i> 結果報表
+            <i class="fas fa-chart-line"></i> 比對結果報表
         </h1>
         <p class="page-subtitle">任務 ID: {{ task_id }}</p>
     </div>
 
-    <!-- 報表控制列 -->
-    <div class="report-controls">
-        <div class="control-group">
-            <label class="control-label">選擇資料表</label>
-            <select class="form-input" id="sheetSelector">
-                <option value="">載入中...</option>
-            </select>
+    <!-- 步驟 1：選擇資料表 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h2 class="step-title">選擇資料表</h2>
+                <p class="step-subtitle">選擇要查看的比對結果資料表</p>
+            </div>
         </div>
         
-        <div class="control-actions">
-            <button class="btn btn-primary" onclick="exportCurrentView('excel')">
-                <i class="fas fa-file-excel"></i> 匯出 Excel
-            </button>
-            <button class="btn btn-info" onclick="exportCurrentView('html')">
-                <i class="fas fa-file-code"></i> 匯出 HTML
-            </button>
-            <button class="btn btn-success" onclick="downloadFullReport()">
-                <i class="fas fa-download"></i> 下載完整報表
-            </button>
-            <button class="btn btn-outline" onclick="togglePivotMode()">
-                <i class="fas fa-table"></i> <span id="pivotToggleText">切換樞紐分析</span>
-            </button>
+        <div class="section-body">
+            <div class="report-controls">
+                <div class="control-group">
+                    <label class="form-label">
+                        <i class="fas fa-table"></i> 資料表
+                    </label>
+                    <select class="form-input" id="sheetSelector">
+                        <option value="">載入中...</option>
+                    </select>
+                </div>
+                
+                <div class="control-actions">
+                    <button class="btn btn-primary" onclick="exportCurrentView('excel')">
+                        <i class="fas fa-file-excel"></i> 匯出 Excel
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportCurrentView('html')">
+                        <i class="fas fa-file-code"></i> 匯出 HTML
+                    </button>
+                    <button class="btn btn-success" onclick="downloadFullReport()">
+                        <i class="fas fa-download"></i> 下載完整報表
+                    </button>
+                    <button class="btn btn-outline" onclick="togglePivotMode()">
+                        <i class="fas fa-table"></i> <span id="pivotToggleText">切換樞紐分析</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- 資料檢視區 -->
-    <div class="data-view-container">
-        <!-- 一般表格檢視 -->
-        <div id="tableView" class="table-view">
-            <div class="table-container">
-                <table id="dataTable" class="data-table">
-                    <thead id="tableHead"></thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
+    <!-- 步驟 2：資料統計 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h2 class="step-title">資料統計</h2>
+                <p class="step-subtitle">查看資料的統計摘要</p>
             </div>
         </div>
         
-        <!-- 樞紐分析檢視 -->
-        <div id="pivotView" class="pivot-view hidden">
-            <div class="pivot-instructions">
-                <i class="fas fa-info-circle"></i>
-                <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
-                <ul>
-                    <li>拖曳欄位到列或欄區域來分組資料</li>
-                    <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                    <li>使用篩選器來過濾資料</li>
-                    <li>點擊表格標題來排序</li>
-                </ul>
+        <div class="section-body">
+            <div class="stats-grid" id="statsGrid">
+                <!-- 動態填充統計資料 -->
             </div>
-            <div id="pivotContainer"></div>
         </div>
     </div>
 
-    <!-- 資料統計 -->
-    <div class="data-statistics">
-        <h2 class="section-title">
-            <i class="fas fa-chart-pie"></i> 資料統計
-        </h2>
-        
-        <div class="stats-grid" id="statsGrid">
-            <!-- 動態填充統計資料 -->
+    <!-- 步驟 3：資料檢視 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h2 class="step-title">資料檢視</h2>
+                <p class="step-subtitle">查看詳細的比對結果資料</p>
+            </div>
         </div>
         
-        <!-- 圖表區域 -->
-        <div class="charts-section">
-            <div class="chart-container">
-                <h3 class="chart-title">資料分布圖</h3>
-                <canvas id="distributionChart"></canvas>
+        <div class="section-body">
+            <div class="data-view-container">
+                <!-- 一般表格檢視 -->
+                <div id="tableView" class="table-view">
+                    <div class="table-wrapper">
+                        <table id="dataTable" class="data-table">
+                            <thead id="tableHead"></thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="100%" class="empty-message">
+                                        <div class="loading">
+                                            <i class="fas fa-spinner fa-spin"></i>
+                                            <p>載入資料中...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 樞紐分析檢視 -->
+                <div id="pivotView" class="pivot-view hidden">
+                    <div class="pivot-instructions">
+                        <i class="fas fa-info-circle"></i>
+                        <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
+                        <ul>
+                            <li>拖曳欄位到列或欄區域來分組資料</li>
+                            <li>選擇不同的彙總函數（總和、平均、計數等）</li>
+                            <li>使用篩選器來過濾資料</li>
+                            <li>點擊表格標題來排序</li>
+                        </ul>
+                    </div>
+                    <div id="pivotContainer"></div>
+                </div>
             </div>
-            <div class="chart-container">
-                <h3 class="chart-title">趨勢分析圖</h3>
-                <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 步驟 4：圖表分析 -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <h2 class="step-title">圖表分析</h2>
+                <p class="step-subtitle">視覺化資料分析結果</p>
+            </div>
+        </div>
+        
+        <div class="section-body">
+            <div class="charts-section">
+                <div class="chart-container">
+                    <h3 class="chart-title">資料分布圖</h3>
+                    <canvas id="distributionChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">趨勢分析圖</h3>
+                    <canvas id="trendChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -123,5 +176,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/results.js') }}"></script>
 {% endblock %}

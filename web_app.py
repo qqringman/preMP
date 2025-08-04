@@ -18,6 +18,7 @@ from file_comparator import FileComparator
 from zip_packager import ZipPackager
 import utils
 from flask import make_response
+import utils
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -709,12 +710,15 @@ def get_statistics():
 def get_pivot_data(task_id):
     """取得樞紐分析資料 API - 使用真實資料"""
     try:
+        app.logger.info(f'Getting pivot data for task: {task_id}')
+        
         # 查找任務結果
         result_found = False
         summary_report_path = None
         
         # 1. 從處理狀態中查找
         if task_id in processing_status:
+            app.logger.info(f'Found in processing_status')
             task_data = processing_status[task_id]
             results = task_data.get('results', {})
             
@@ -726,13 +730,14 @@ def get_pivot_data(task_id):
                 # 如果有多個比對結果，找到 all_compare.xlsx
                 compare_results = results['compare_results']
                 for scenario, files in compare_results.items():
-                    if 'summary' in files:
+                    if isinstance(files, dict) and 'summary' in files:
                         summary_report_path = files['summary']
                         result_found = True
                         break
         
         # 2. 從儲存的任務結果中查找
         if not result_found and task_id in task_results:
+            app.logger.info(f'Found in task_results')
             result_info = task_results[task_id]
             summary_report_path = result_info.get('summary_report')
             result_found = True
@@ -740,25 +745,50 @@ def get_pivot_data(task_id):
         # 3. 從比對結果目錄中查找
         if not result_found:
             compare_dir = os.path.join('compare_results', task_id)
+            app.logger.info(f'Checking directory: {compare_dir}')
+            
             if os.path.exists(compare_dir):
-                # 查找 all_compare.xlsx
+                # 查找所有可能的報告檔案
+                possible_files = ['all_compare.xlsx', 'all_scenarios_summary.xlsx']
+                
+                # 也查找其他 xlsx 檔案
                 for file in os.listdir(compare_dir):
-                    if file == 'all_compare.xlsx' or file.endswith('_summary.xlsx'):
+                    if file.endswith('.xlsx'):
+                        app.logger.info(f'Found Excel file: {file}')
                         summary_report_path = os.path.join(compare_dir, file)
                         result_found = True
                         break
+                
+                # 如果沒找到，嘗試特定檔名
+                if not result_found:
+                    for filename in possible_files:
+                        file_path = os.path.join(compare_dir, filename)
+                        if os.path.exists(file_path):
+                            summary_report_path = file_path
+                            result_found = True
+                            app.logger.info(f'Found report: {filename}')
+                            break
         
         # 4. 讀取並返回資料
         if result_found and summary_report_path and os.path.exists(summary_report_path):
             try:
-                # 讀取 Excel 檔案
+                app.logger.info(f'Reading Excel file: {summary_report_path}')
+                
+                # 讀取 Excel 檔案的所有工作表
                 excel_data = pd.read_excel(summary_report_path, sheet_name=None)
                 
                 # 轉換為 JSON 格式
                 pivot_data = {}
                 for sheet_name, df in excel_data.items():
-                    # 處理 NaN 值
+                    app.logger.info(f'Processing sheet: {sheet_name} with {len(df)} rows')
+                    
+                    # 處理 NaN 值和日期格式
                     df = df.fillna('')
+                    
+                    # 將日期轉換為字串
+                    for col in df.columns:
+                        if df[col].dtype == 'datetime64[ns]':
+                            df[col] = df[col].astype(str)
                     
                     # 將 DataFrame 轉換為記錄格式
                     pivot_data[sheet_name] = {
@@ -766,17 +796,24 @@ def get_pivot_data(task_id):
                         'data': df.to_dict('records')
                     }
                 
+                app.logger.info(f'Successfully loaded {len(pivot_data)} sheets')
                 return jsonify(pivot_data)
                 
             except Exception as e:
                 app.logger.error(f'Error reading Excel file: {e}')
+                import traceback
+                app.logger.error(traceback.format_exc())
                 return jsonify({'error': f'讀取資料失敗：{str(e)}'}), 500
+        else:
+            app.logger.warning(f'No data found for task: {task_id}')
         
-        # 如果沒有找到資料
+        # 如果沒有找到資料，返回空對象
         return jsonify({})
         
     except Exception as e:
         app.logger.error(f'Get pivot data error: {e}')
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 def get_mock_pivot_data():
@@ -2173,6 +2210,11 @@ def generate_table_html(sheet_data):
     
     html += '</table>'
     return html
+
+@app.route('/export-report')
+def export_report_page():
+    """匯出報表頁面"""
+    return render_template('export_report.html')
                     
 if __name__ == '__main__':
     # 開發模式執行
