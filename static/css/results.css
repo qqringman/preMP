@@ -2422,3 +2422,137 @@ body {
   max-height: calc(100vh - 120px);
 }
 
+/* 樞紐分析表格基礎樣式 */
+.pvtTable {
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  border-spacing: 0;
+  background: white;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  margin-top: 24px;
+  width: 100%;
+  border: 1px solid #E3E7F3;
+}
+
+.pvtTable tbody td {
+  padding: 12px 16px;
+  border: 1px solid #EDF2FC;
+  background: white;
+  font-size: 0.9375rem;
+  color: #424242;
+  transition: all 0.2s ease;
+}
+
+/* 一般行 hover 效果 - 非常淡的黃色 */
+.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #FFFEF7 !important;
+}
+
+/* 偶數行背景 - 非常淡的灰色 */
+.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #FAFBFC;
+}
+
+/* 小計樣式 - 淡綠色 */
+.pvtTotal {
+  background: #F1F8F4 !important;
+  font-weight: 600;
+  color: #2E7D32;
+  font-size: 0.9375rem;
+  border: 1px solid #C8E6C9 !important;
+}
+
+/* 小計 hover 效果 */
+.pvtTable tbody tr:hover td.pvtTotal {
+  background: #E8F5E9 !important;
+  border-color: #A5D6A7 !important;
+}
+
+/* 行總計標籤 - 淡橙色 */
+.pvtRowTotalLabel {
+  background: #FFF3E0 !important;
+  color: #E65100;
+  font-weight: 600;
+  border: 1px solid #FFE0B2 !important;
+  text-align: right;
+}
+
+/* 列總計標籤 - 淡紫色 */
+.pvtColTotalLabel {
+  background: #F3E5F5 !important;
+  color: #6A1B9A;
+  font-weight: 600;
+  border: 1px solid #E1BEE7 !important;
+  text-align: center;
+}
+
+/* 行/列總計標籤 hover */
+.pvtTable tbody tr:hover td.pvtRowTotalLabel {
+  background: #FFE0B2 !important;
+}
+
+.pvtTable tbody tr:hover td.pvtColTotalLabel {
+  background: #E1BEE7 !important;
+}
+
+/* 最終總計（Grand Total）- 深紅色 */
+.pvtGrandTotal {
+  background: #D32F2F !important;
+  color: white !important;
+  font-weight: 700;
+  font-size: 1.0625rem;
+  border: 2px solid #C62828 !important;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 最終總計 hover 效果 */
+.pvtTable tbody tr:hover td.pvtGrandTotal {
+  background: #C62828 !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 屬性值欄位（第一列）- 淡藍色背景 */
+.pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
+  background: #E8F4FD;
+  font-weight: 500;
+  color: #1565C0;
+  border-right: 2px solid #BBDEFB;
+}
+
+/* 屬性值欄位 hover */
+.pvtTable tbody tr:hover td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
+  background: #BBDEFB !important;
+}
+
+/* 值欄位樣式（數字）*/
+.pvtVal {
+  text-align: right;
+  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  font-weight: 500;
+}
+
+/* 空單元格 */
+.pvtTable tbody td.pvtEmpty {
+  background: #F5F5F5;
+  color: #BDBDBD;
+}
+
+/* 確保對話框總是在最上層，即使在全螢幕模式下 */
+.custom-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483647; /* 最大 z-index 值 */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(4px);
+}

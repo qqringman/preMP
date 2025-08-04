@@ -767,7 +767,7 @@ function renderPivotTable(sheetData) {
 }
 
 function resetPivotTable() {
-    if (!pivotInitialData || !pivotInitialConfig) {
+    if (!currentSheet || !currentData) {
         showAlertDialog('提示', '沒有資料可重置', 'warning');
         return;
     }
@@ -776,47 +776,22 @@ function resetPivotTable() {
         '重置樞紐分析表',
         '確定要重置樞紐分析表嗎？這將清除所有目前的設定，還原到初始狀態。',
         () => {
-            const container = document.getElementById('pivotContainer');
+            // 記住當前的顯示模式
+            const currentAreasVisible = areasVisible;
             
-            // 移除舊的樞紐分析表
-            $(container).pivot("destroy");
-            container.innerHTML = '';
+            // 重新載入樞紐分析表
+            pivotMode = true;
+            renderPivotTable(currentData[currentSheet]);
             
-            // 創建全新的配置（深拷貝）
-            const freshConfig = {
-                rows: [],
-                cols: [],
-                vals: [],
-                aggregatorName: "Count",
-                rendererName: "Table",
-                unusedAttrsVertical: true,
-                renderers: $.pivotUtilities.renderers,
-                aggregators: $.pivotUtilities.aggregators,
-                localeStrings: pivotInitialConfig.localeStrings,
-                onRefresh: function(config) {
-                    pivotConfig = config;
-                }
-            };
-            
-            // 使用原始資料的深拷貝重新初始化
-            const freshData = JSON.parse(JSON.stringify(pivotInitialData));
-            
-            try {
-                $(container).pivotUI(freshData, freshConfig);
-                
-                // 如果目前是隱藏拖曳區的狀態，重新應用
-                if (!areasVisible) {
-                    setTimeout(() => {
-                        $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
-                        $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().hide();
-                    }, 100);
-                }
-                
-                showToast('樞紐分析表已重置為初始狀態', 'success');
-            } catch (error) {
-                console.error('重置失敗:', error);
-                showAlertDialog('錯誤', '重置失敗，請重新整理頁面', 'error');
+            // 恢復顯示模式
+            if (!currentAreasVisible) {
+                areasVisible = true; // 先設為 true，讓 togglePivotAreas 能正確切換
+                setTimeout(() => {
+                    togglePivotAreas();
+                }, 100);
             }
+            
+            showToast('樞紐分析表已重置為初始狀態', 'success');
         }
     );
 }
@@ -824,7 +799,6 @@ function resetPivotTable() {
 // 匯出樞紐分析表
 function exportPivotTable() {
     try {
-        // 獲取樞紐分析表的 HTML
         const pivotTable = document.querySelector('#pivotContainer .pvtTable');
         
         if (!pivotTable) {
@@ -832,7 +806,6 @@ function exportPivotTable() {
             return;
         }
         
-        // 顯示匯出選項對話框
         const exportHtml = `
             <div class="custom-dialog-overlay">
                 <div class="custom-dialog export-dialog">
@@ -865,7 +838,14 @@ function exportPivotTable() {
         
         const dialogElement = document.createElement('div');
         dialogElement.innerHTML = exportHtml;
-        document.body.appendChild(dialogElement);
+        
+        // 檢查是否在全螢幕模式
+        const fullscreenElement = document.fullscreenElement;
+        if (fullscreenElement) {
+            fullscreenElement.appendChild(dialogElement);
+        } else {
+            document.body.appendChild(dialogElement);
+        }
         
         setTimeout(() => {
             dialogElement.querySelector('.custom-dialog-overlay').classList.add('show');
@@ -876,11 +856,14 @@ function exportPivotTable() {
             dialogElement.querySelector('.custom-dialog-overlay').classList.remove('show');
             dialogElement.querySelector('.custom-dialog').classList.remove('show');
             setTimeout(() => {
-                document.body.removeChild(dialogElement);
+                if (fullscreenElement && dialogElement.parentNode === fullscreenElement) {
+                    fullscreenElement.removeChild(dialogElement);
+                } else {
+                    document.body.removeChild(dialogElement);
+                }
             }, 300);
         };
         
-        // 綁定事件
         const cancelBtn = document.getElementById('exportCancel');
         const exportOptions = dialogElement.querySelectorAll('.export-option');
         
@@ -2148,10 +2131,17 @@ function showConfirmDialog(title, message, onConfirm, onCancel) {
         </div>
     `;
     
-    // 添加到頁面
+    // 添加到頁面 - 檢查是否在全螢幕模式
     const dialogElement = document.createElement('div');
     dialogElement.innerHTML = dialogHtml;
-    document.body.appendChild(dialogElement);
+    
+    // 如果在全螢幕模式，附加到全螢幕元素內
+    const fullscreenElement = document.fullscreenElement;
+    if (fullscreenElement) {
+        fullscreenElement.appendChild(dialogElement);
+    } else {
+        document.body.appendChild(dialogElement);
+    }
     
     // 添加動畫類
     setTimeout(() => {
@@ -2168,7 +2158,11 @@ function showConfirmDialog(title, message, onConfirm, onCancel) {
         overlay.classList.remove('show');
         dialogElement.querySelector('.custom-dialog').classList.remove('show');
         setTimeout(() => {
-            document.body.removeChild(dialogElement);
+            if (fullscreenElement && dialogElement.parentNode === fullscreenElement) {
+                fullscreenElement.removeChild(dialogElement);
+            } else {
+                document.body.removeChild(dialogElement);
+            }
         }, 300);
     };
     
@@ -2227,7 +2221,14 @@ function showAlertDialog(title, message, type = 'info') {
     
     const dialogElement = document.createElement('div');
     dialogElement.innerHTML = dialogHtml;
-    document.body.appendChild(dialogElement);
+    
+    // 檢查是否在全螢幕模式
+    const fullscreenElement = document.fullscreenElement;
+    if (fullscreenElement) {
+        fullscreenElement.appendChild(dialogElement);
+    } else {
+        document.body.appendChild(dialogElement);
+    }
     
     setTimeout(() => {
         dialogElement.querySelector('.custom-dialog-overlay').classList.add('show');
@@ -2241,7 +2242,11 @@ function showAlertDialog(title, message, type = 'info') {
         overlay.classList.remove('show');
         dialogElement.querySelector('.custom-dialog').classList.remove('show');
         setTimeout(() => {
-            document.body.removeChild(dialogElement);
+            if (fullscreenElement && dialogElement.parentNode === fullscreenElement) {
+                fullscreenElement.removeChild(dialogElement);
+            } else {
+                document.body.removeChild(dialogElement);
+            }
         }, 300);
     };
     
