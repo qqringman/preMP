@@ -278,7 +278,16 @@ function renderDataTable(sheetData) {
     tbody.innerHTML = '';
     
     if (!sheetData.data || sheetData.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">此資料表沒有資料</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="100%" style="padding: 0; border: none;">
+                    <div class="no-data-message">
+                        <i class="fas fa-inbox"></i>
+                        <h3>此資料表沒有資料</h3>
+                    </div>
+                </td>
+            </tr>
+        `;
         updateTableStats(0, 0, 0);
         return;
     }
@@ -309,17 +318,16 @@ function renderDataTable(sheetData) {
         th.style.minWidth = getColumnWidth(col);
         
         // 設定標頭顏色
-        if (col === 'base_content') {
+        if (col === 'base_content' || col === 'compare_content') {
             th.classList.add('base-content-header');
-        } else if (col === 'compare_content') {
-            th.classList.add('compare-content-header');
         } else if (col === 'problem' || col === '問題') {
             th.classList.add('danger-header');
         } else if ((currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') && 
-                   (col === 'base_folder' || col === 'Base folder' || col === '狀態')) {
+                (col === 'base_folder' || col === 'Base folder' || col === '狀態')) {
             th.classList.add('danger-header');
-        } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision', 'is_different'].includes(col)) {
-            th.classList.add('highlight-header');
+        } else if (currentSheet === 'revision_diff' && 
+                ['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
+            th.classList.add('danger-header');  // 為 revision_diff 的特定欄位加紅底
         }
         
         const thContent = document.createElement('div');
@@ -387,25 +395,54 @@ function renderDataTable(sheetData) {
                 td.classList.add('content-cell');
                 
                 if (value) {
-                    // 解析內容，只對特定部分標紅
-                    let formattedValue = String(value);
-                    
-                    // 對 P_GIT_ 開頭的行進行高亮
-                    formattedValue = formattedValue.replace(/(P_GIT_\d+:[^;]+;[^;]+;[^;]+;[a-f0-9]+)/g, 
-                        '<span class="highlight-git">$1</span>');
-                    
-                    // 對 F_HASH 行進行高亮
-                    formattedValue = formattedValue.replace(/(F_HASH:\s*[a-f0-9]+)/g, 
-                        '<span class="highlight-hash">$1</span>');
-                    
-                    // 如果有搜尋詞，也要高亮
-                    if (searchTerm) {
-                        formattedValue = highlightText(formattedValue, searchTerm);
+                    // 處理檔案不存在的情況
+                    if (value === '(檔案不存在)' || value === '(檔案存在)') {
+                        if (value === '(檔案不存在)') {
+                            td.classList.add('highlight-red');
+                        }
+                        td.innerHTML = searchTerm ? highlightText(value, searchTerm) : value;
+                    } else {
+                        // 獲取對應的比較值
+                        const isBaseContent = col === 'base_content';
+                        const compareCol = isBaseContent ? 'compare_content' : 'base_content';
+                        const compareValue = row[compareCol];
+                        
+                        // 根據檔案類型處理
+                        const fileType = row['file_type'] || '';
+                        let formattedValue = String(value);
+                        
+                        // 檢查是否包含 F_HASH
+                        if (value.includes('F_HASH:')) {
+                            // 特別處理 F_HASH，包括 (not found) 的情況
+                            if (compareValue) {
+                                formattedValue = formatFHashContent(value, compareValue);
+                            } else {
+                                // 如果沒有比較值，檢查是否是 (not found)
+                                if (value.includes('(not found)')) {
+                                    formattedValue = value.replace('(not found)', '<span class="highlight-red">(not found)</span>');
+                                }
+                            }
+                        } else if (fileType.toLowerCase() === 'f_version.txt' && value.startsWith('P_GIT_')) {
+                            // F_Version.txt: 只標記不同的部分
+                            if (compareValue && compareValue.startsWith('P_GIT_')) {
+                                formattedValue = formatFVersionContent(value, compareValue);
+                            }
+                        } else if (value.includes(':') && !value.includes('F_HASH:')) {
+                            // Other Version.txt with colon (排除 F_HASH)
+                            if (compareValue && compareValue.includes(':')) {
+                                formattedValue = formatColonContent(value, compareValue);
+                            }
+                        }
+                        
+                        // 如果有搜尋詞，也要高亮
+                        if (searchTerm) {
+                            formattedValue = highlightText(formattedValue, searchTerm);
+                        }
+                        
+                        td.innerHTML = formattedValue;
                     }
-                    
-                    td.innerHTML = formattedValue;
                 } else {
-                    td.innerHTML = value || '';
+                    td.innerHTML = '';
                 }
             } else if (col === 'file_type') {
                 td.classList.add('file-type');
@@ -447,8 +484,18 @@ function renderDataTable(sheetData) {
         tbody.appendChild(tr);
     });
     
+    // 當篩選後沒有資料時
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="100%" class="empty-message">沒有符合搜尋或篩選條件的資料</td></tr>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="100%" style="padding: 0; border: none;">
+                    <div class="no-data-message">
+                        <i class="fas fa-filter"></i>
+                        <h3>沒有符合搜尋或篩選條件的資料</h3>
+                    </div>
+                </td>
+            </tr>
+        `;
         updateTableStats(sheetData.data.length, 0, 0);
     }
     
@@ -705,58 +752,26 @@ function updateStatistics(sheetData) {
     ];
     
     // 根據資料表類型調整統計
-    if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
-        // 計算版本不同的數量
-        const differentCount = sheetData.data.filter(row => 
-            row.is_different === 'Y' || row['是否不同'] === 'Y'
-        ).length;
-        
-        stats.push({
-            label: '版本不同',
-            value: differentCount,
-            icon: 'fa-code-branch',
-            color: 'warning'
-        });
-    } else if (currentSheet === '比對差異' || currentSheet === 'compare_diff' || 
-               currentSheet.includes('vs')) {
-        // 計算成功和失敗模組
-        const successModules = sheetData.data.filter(row => 
-            row.status === 'success' || row['狀態'] === '成功'
-        ).length;
-        
-        const failedModules = sheetData.data.filter(row => 
-            row.status === 'failed' || row['狀態'] === '失敗'
-        ).length;
-        
-        stats.push({
-            label: '成功模組',
-            value: successModules,
-            icon: 'fa-check-circle',
-            color: 'success'
-        });
-        
-        stats.push({
-            label: '失敗模組',
-            value: failedModules,
-            icon: 'fa-times-circle',
-            color: 'danger'
-        });
-    } else {
-        // 其他資料表保留欄位數統計
-        stats.push({
-            label: '欄位數',
-            value: sheetData.columns ? sheetData.columns.length : Object.keys(sheetData.data[0] || {}).length,
-            icon: 'fa-columns',
-            color: 'blue'
-        });
-    }
-    
-    // 特定資料表的額外統計
     if (currentSheet === 'revision_diff') {
+        // 計算不同版號的數量（實際上就是總筆數，因為每一筆都代表版號不同）
+        const differentRevisions = sheetData.data.length;
+        
+        // 計算唯一模組數
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
+        
+        // 計算 has_wave 的統計
         const hasWaveY = sheetData.data.filter(row => row.has_wave === 'Y').length;
         const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
         
+        // 加入不同版號統計
+        stats.push({
+            label: '不同版號',
+            value: differentRevisions,
+            icon: 'fa-code-branch',
+            color: 'warning'
+        });
+        
+        // 加入模組數統計
         stats.push({
             label: '模組數',
             value: uniqueModules.size,
@@ -764,6 +779,7 @@ function updateStatistics(sheetData) {
             color: 'purple'
         });
         
+        // 加入 has_wave 統計
         if (hasWaveY > 0) {
             stats.push({
                 label: '包含 Wave',
@@ -781,9 +797,82 @@ function updateStatistics(sheetData) {
                 color: 'warning'
             });
         }
-    }
-    
-    if (currentSheet === 'branch_error') {
+    } else if (currentSheet === '摘要' || currentSheet === '比對摘要' || currentSheet === 'summary') {
+        // 比對摘要的統計邏輯（保持不變）
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        
+        sheetData.data.forEach(row => {
+            const scenario = row['比對情境'] || row['scenario'] || '';
+            if (scenario === '總計' || scenario.toLowerCase() === 'total') {
+                return;
+            }
+            
+            const successCount = parseInt(row['成功模組數'] || row['success_count'] || 0);
+            const failedCount = parseInt(row['失敗模組數'] || row['failed_count'] || 0);
+            
+            if (!isNaN(successCount)) {
+                totalSuccess += successCount;
+            }
+            if (!isNaN(failedCount)) {
+                totalFailed += failedCount;
+            }
+        });
+        
+        stats[0].value = sheetData.data.filter(row => {
+            const scenario = row['比對情境'] || row['scenario'] || '';
+            return scenario !== '總計' && scenario.toLowerCase() !== 'total';
+        }).length;
+        
+        stats.push({
+            label: '成功模組',
+            value: totalSuccess,
+            icon: 'fa-check-circle',
+            color: 'success'
+        });
+        
+        if (totalFailed > 0) {
+            stats.push({
+                label: '失敗模組',
+                value: totalFailed,
+                icon: 'fa-times-circle',
+                color: 'danger'
+            });
+        }
+    } else if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
+        // 版本檔案差異的統計邏輯（保持不變）
+        let differentCount = 0;
+        let fileNotFoundCount = 0;
+        
+        sheetData.data.forEach(row => {
+            const baseContent = row.base_content || '';
+            const compareContent = row.compare_content || '';
+            
+            if (baseContent === '(檔案不存在)' || compareContent === '(檔案不存在)') {
+                fileNotFoundCount++;
+            }
+            
+            if (baseContent !== compareContent) {
+                differentCount++;
+            }
+        });
+        
+        stats.push({
+            label: '版本不同',
+            value: differentCount,
+            icon: 'fa-code-branch',
+            color: 'warning'
+        });
+        
+        if (fileNotFoundCount > 0) {
+            stats.push({
+                label: '找不到檔案',
+                value: fileNotFoundCount,
+                icon: 'fa-file-excel',
+                color: 'danger'
+            });
+        }
+    } else if (currentSheet === 'branch_error') {
         const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
         if (hasWaveN > 0) {
             stats.push({
@@ -793,9 +882,7 @@ function updateStatistics(sheetData) {
                 color: 'warning'
             });
         }
-    }
-    
-    if (currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') {
+    } else if (currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') {
         const added = sheetData.data.filter(row => row['狀態'] === '新增').length;
         const deleted = sheetData.data.filter(row => row['狀態'] === '刪除').length;
         
@@ -815,8 +902,16 @@ function updateStatistics(sheetData) {
                 color: 'danger'
             });
         }
+    } else {
+        stats.push({
+            label: '欄位數',
+            value: sheetData.columns ? sheetData.columns.length : Object.keys(sheetData.data[0] || {}).length,
+            icon: 'fa-columns',
+            color: 'blue'
+        });
     }
     
+    // 渲染統計卡片
     stats.forEach(stat => {
         const card = document.createElement('div');
         card.className = `stat-card ${stat.color || ''}`;
@@ -825,7 +920,7 @@ function updateStatistics(sheetData) {
                 <i class="fas ${stat.icon}"></i>
             </div>
             <div class="stat-content">
-                <div class="stat-value">${stat.value}</div>
+                <div class="stat-value">${stat.value.toLocaleString()}</div>
                 <div class="stat-label">${stat.label}</div>
             </div>
         `;
@@ -1185,86 +1280,350 @@ function toggleFilterPanel() {
 }
 
 // 匯出當前檢視
-function exportCurrentView(format) {
+async function exportCurrentView(format) {
     if (!currentData || !currentSheet) {
         alert('請先選擇資料表');
         return;
     }
     
-    if (format === 'excel') {
-        window.location.href = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
+    try {
+        if (format === 'excel') {
+            // 顯示載入中
+            showExportLoading();
+            
+            // 準備當前資料表的資料
+            const sheetData = currentData[currentSheet];
+            const filteredData = applyDataFilters(sheetData.data);
+            
+            // 建立 Excel 檔案
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.json_to_sheet(filteredData);
+            
+            // 設定欄寬
+            const columns = sheetData.columns || Object.keys(filteredData[0] || {});
+            const wscols = columns.map(col => ({ wch: getColumnWidth(col).replace('px', '') / 8 }));
+            worksheet['!cols'] = wscols;
+            
+            XLSX.utils.book_append_sheet(workbook, worksheet, currentSheet);
+            
+            // 下載檔案
+            XLSX.writeFile(workbook, `${currentSheet}_${taskId}.xlsx`);
+            
+            hideExportLoading();
+        }
+    } catch (error) {
+        console.error('匯出錯誤:', error);
+        alert('匯出失敗：' + error.message);
+        hideExportLoading();
     }
 }
 
 // 下載完整報表
-function downloadFullReport() {
-    window.location.href = `/api/export-excel/${taskId}`;
+async function downloadFullReport() {
+    if (!currentData) {
+        alert('沒有可下載的資料');
+        return;
+    }
+    
+    try {
+        showExportLoading();
+        
+        // 建立 Excel 檔案包含所有資料表
+        const workbook = XLSX.utils.book_new();
+        
+        // 按順序加入資料表
+        const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對'];
+        
+        sheetOrder.forEach(sheetName => {
+            if (currentData[sheetName]) {
+                const sheetData = currentData[sheetName];
+                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
+                XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+            }
+        });
+        
+        // 加入其他資料表
+        Object.keys(currentData).forEach(sheetName => {
+            if (!sheetOrder.includes(sheetName)) {
+                const sheetData = currentData[sheetName];
+                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
+                XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+            }
+        });
+        
+        // 下載檔案
+        XLSX.writeFile(workbook, `complete_report_${taskId}.xlsx`);
+        
+        hideExportLoading();
+        
+    } catch (error) {
+        console.error('下載完整報表錯誤:', error);
+        alert('下載失敗：' + error.message);
+        hideExportLoading();
+    }
+}
+
+// 顯示匯出載入中
+function showExportLoading() {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'exportLoading';
+    loadingDiv.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+                    background: rgba(0,0,0,0.5); z-index: 9999; 
+                    display: flex; align-items: center; justify-content: center;">
+            <div style="background: white; padding: 30px; border-radius: 12px; 
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #2196F3;"></i>
+                <p style="margin-top: 15px; color: #333;">正在準備檔案...</p>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(loadingDiv);
+}
+
+// 隱藏匯出載入中
+function hideExportLoading() {
+    const loadingDiv = document.getElementById('exportLoading');
+    if (loadingDiv) {
+        loadingDiv.remove();
+    }
 }
 
 // 匯出整個頁面為 HTML（保留 JS/CSS）
 function exportPageAsHTML() {
-    // 複製當前頁面 HTML
-    const htmlContent = document.documentElement.cloneNode(true);
-    
-    // 將所有外部 CSS 轉為內嵌
-    const styleSheets = document.styleSheets;
-    const inlineStyles = document.createElement('style');
-    let cssText = '';
-    
-    for (let i = 0; i < styleSheets.length; i++) {
-        try {
-            const rules = styleSheets[i].cssRules || styleSheets[i].rules;
-            for (let j = 0; j < rules.length; j++) {
-                cssText += rules[j].cssText + '\n';
+    try {
+        // 收集所有 CSS
+        let allCSS = '';
+        const styleSheets = document.styleSheets;
+        
+        for (let i = 0; i < styleSheets.length; i++) {
+            try {
+                const rules = styleSheets[i].cssRules || styleSheets[i].rules;
+                for (let j = 0; j < rules.length; j++) {
+                    allCSS += rules[j].cssText + '\n';
+                }
+            } catch (e) {
+                // 跨域樣式表
+                if (styleSheets[i].href) {
+                    allCSS += `@import url("${styleSheets[i].href}");\n`;
+                }
             }
-        } catch (e) {
-            // 跨域樣式表無法讀取，保留原連結
         }
-    }
+        
+        // 建立離線 HTML
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>比對結果報表 - ${taskId} (離線版)</title>
     
-    inlineStyles.textContent = cssText;
-    htmlContent.querySelector('head').appendChild(inlineStyles);
+    <!-- 外部資源 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
-    // 內嵌當前資料
-    const dataScript = document.createElement('script');
-    dataScript.textContent = `
-        window.exportedData = ${JSON.stringify(currentData)};
-        window.currentSheet = '${currentSheet}';
-        window.taskId = '${taskId}';
-        // 頁面載入時自動載入資料
+    <style>
+        ${allCSS}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <h1 class="page-title">
+                <i class="fas fa-chart-line"></i> 比對結果報表
+            </h1>
+            <p class="page-subtitle">任務 ID: ${taskId}</p>
+            <p class="page-subtitle">匯出時間: ${new Date().toLocaleString('zh-TW')}</p>
+        </div>
+
+        <!-- 步驟 1：資料統計 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h2 class="step-title">資料統計</h2>
+                    <p class="step-subtitle">查看資料的統計摘要</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="stats-grid" id="statsGrid"></div>
+            </div>
+        </div>
+
+        <!-- 步驟 2：資料檢視 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h2 class="step-title">資料檢視</h2>
+                    <p class="step-subtitle">選擇資料表並查看詳細的比對結果</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="data-controls">
+                    <div class="control-left">
+                        <label class="form-label">
+                            <i class="fas fa-table"></i> 資料表
+                        </label>
+                        <select class="form-input" id="sheetSelector"></select>
+                        
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" class="search-input" id="quickSearchInput" 
+                                   placeholder="快速搜尋..." autocomplete="off">
+                            <span class="search-count" id="searchCount"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="control-right">
+                        <button class="btn-icon" onclick="togglePivotMode()" title="切換樞紐分析">
+                            <i class="fas fa-chart-pie" id="pivotIcon"></i>
+                        </button>
+                        <button class="btn-icon" onclick="toggleFilterPanel()" title="篩選資料">
+                            <i class="fas fa-filter"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-view-container">
+                    <div id="tableView" class="table-view">
+                        <div class="table-scroll-wrapper">
+                            <table id="dataTable" class="data-table">
+                                <thead id="tableHead"></thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div id="pivotView" class="pivot-view hidden">
+                        <div id="pivotContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 篩選器面板 -->
+    <div class="filter-panel" id="filterPanel">
+        <div class="filter-header">
+            <h3>資料篩選器</h3>
+            <button class="btn-icon" onclick="toggleFilterPanel()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="filter-content" id="filterContent"></div>
+        <div class="filter-actions">
+            <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
+            <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
+        </div>
+    </div>
+
+    <script>
+        // 內嵌資料
+        const exportedData = ${JSON.stringify(currentData)};
+        const exportedTaskId = '${taskId}';
+        const exportedSheet = '${currentSheet}';
+        
+        // 內嵌必要的函數
+        ${getAllRequiredFunctions()}
+        
+        // 初始化
         document.addEventListener('DOMContentLoaded', function() {
-            if (window.exportedData) {
-                currentData = window.exportedData;
-                // 重新初始化頁面
-                const selector = document.getElementById('sheetSelector');
-                selector.innerHTML = '';
-                Object.keys(currentData).forEach(sheetName => {
+            currentData = exportedData;
+            taskId = exportedTaskId;
+            
+            // 填充資料表選項
+            const selector = document.getElementById('sheetSelector');
+            const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對'];
+            
+            sheetOrder.forEach(sheetName => {
+                if (exportedData[sheetName]) {
                     const option = document.createElement('option');
                     option.value = sheetName;
                     option.textContent = getSheetDisplayName(sheetName);
                     selector.appendChild(option);
-                });
-                if (window.currentSheet) {
-                    loadSheet(window.currentSheet);
                 }
+            });
+            
+            // 載入初始資料表
+            if (exportedSheet && exportedData[exportedSheet]) {
+                loadSheet(exportedSheet);
             }
+            
+            // 初始化搜尋
+            initializeSearch();
+            
+            // 綁定事件
+            document.getElementById('sheetSelector').addEventListener('change', (e) => {
+                if (e.target.value) {
+                    sortOrder = {};
+                    searchTerm = '';
+                    document.getElementById('quickSearchInput').value = '';
+                    loadSheet(e.target.value);
+                }
+            });
         });
+    </script>
+</body>
+</html>
+        `;
+        
+        // 下載檔案
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${taskId}_offline_${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        console.error('匯出 HTML 錯誤:', error);
+        alert('匯出失敗：' + error.message);
+    }
+}
+
+function getAllRequiredFunctions() {
+    // 這裡應該包含所有必要的函數定義
+    return `
+        let currentData = null;
+        let currentSheet = null;
+        let pivotMode = false;
+        let filters = {};
+        let sortOrder = {};
+        let searchTerm = '';
+        let taskId = '';
+        
+        ${getSheetDisplayName.toString()}
+        ${loadSheet.toString()}
+        ${renderDataTable.toString()}
+        ${updateStatistics.toString()}
+        ${generateFilters.toString()}
+        ${applyFilters.toString()}
+        ${clearFilters.toString()}
+        ${togglePivotMode.toString()}
+        ${toggleFilterPanel.toString()}
+        ${initializeSearch.toString()}
+        ${highlightText.toString()}
+        ${rowMatchesSearch.toString()}
+        ${formatFVersionContent.toString()}
+        ${formatFHashContent.toString()}
+        ${formatColonContent.toString()}
+        ${updateTableStats.toString()}
+        ${applyDataFilters.toString()}
+        ${sortTable.toString()}
+        ${getColumnWidth.toString()}
+        ${debounce.toString()}
     `;
-    htmlContent.querySelector('body').appendChild(dataScript);
-    
-    // 轉換為字串
-    const htmlString = '<!DOCTYPE html>\n' + htmlContent.outerHTML;
-    
-    // 下載
-    const blob = new Blob([htmlString], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `report_${taskId}_${new Date().toISOString().slice(0, 10)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 }
 
 // 監聽資料表選擇
@@ -1281,6 +1640,103 @@ document.getElementById('sheetSelector').addEventListener('change', (e) => {
 window.addEventListener('resize', debounce(() => {
     // 不需要同步欄寬，因為表格現在會自動適應
 }, 200));
+
+// 格式化 F_Version.txt 內容 - 只標記不同的部分
+function formatFVersionContent(value1, value2) {
+    const parts1 = value1.split(';');
+    const parts2 = value2.split(';');
+    
+    if (parts1.length < 5 || parts2.length < 5) {
+        return value1;
+    }
+    
+    let result = '';
+    for (let i = 0; i < parts1.length; i++) {
+        if (i > 0) result += ';';
+        
+        // 只有第3、4部分（索引2和3，即git hash 和 svn number）需要比較
+        if (i === 3 || i === 4) {
+            if (parts2[i] && parts1[i] !== parts2[i]) {
+                result += `<span class="highlight-red">${parts1[i]}</span>`;
+            } else {
+                result += parts1[i];
+            }
+        } else {
+            result += parts1[i];
+        }
+    }
+    
+    return result;
+}
+
+// 格式化 F_HASH 內容 - 只標記不同的 hash 值
+function formatFHashContent(value1, value2) {
+    // 處理 F_HASH: (not found) 的情況
+    const notFoundPattern = /F_HASH:\s*\(not found\)/i;
+    const hashPattern = /F_HASH:\s*([a-f0-9]+)/i;
+    
+    // 檢查是否包含 (not found)
+    const hasNotFound1 = notFoundPattern.test(value1);
+    const hasNotFound2 = notFoundPattern.test(value2);
+    
+    // 如果其中一個是 (not found)，另一個不是，則標記紅色
+    if (hasNotFound1 || hasNotFound2) {
+        if (hasNotFound1 && !hasNotFound2) {
+            // value1 是 (not found)，標記為紅色
+            return value1.replace('(not found)', '<span class="highlight-red">(not found)</span>');
+        } else if (!hasNotFound1 && hasNotFound2) {
+            // value2 是 (not found)，value1 有 hash 值，標記 hash 為紅色
+            const match1 = value1.match(hashPattern);
+            if (match1) {
+                return value1.replace(match1[1], `<span class="highlight-red">${match1[1]}</span>`);
+            }
+        } else if (hasNotFound1 && hasNotFound2) {
+            // 兩個都是 (not found)，不標記
+            return value1;
+        }
+    }
+    
+    // 正常的 hash 比較
+    const match1 = value1.match(hashPattern);
+    const match2 = value2.match(hashPattern);
+    
+    if (match1 && match2) {
+        const hash1 = match1[1];
+        const hash2 = match2[1];
+        
+        if (hash1 !== hash2) {
+            return value1.replace(hash1, `<span class="highlight-red">${hash1}</span>`);
+        }
+    }
+    
+    return value1;
+}
+
+// 格式化包含冒號的內容 - 只標記不同的值
+function formatColonContent(value1, value2) {
+    const colonIndex1 = value1.indexOf(':');
+    const colonIndex2 = value2.indexOf(':');
+    
+    if (colonIndex1 === -1 || colonIndex2 === -1) {
+        return value1;
+    }
+    
+    const key1 = value1.substring(0, colonIndex1).trim();
+    const key2 = value2.substring(0, colonIndex2).trim();
+    
+    if (key1 !== key2) {
+        return value1;
+    }
+    
+    const val1 = value1.substring(colonIndex1 + 1).trim();
+    const val2 = value2.substring(colonIndex2 + 1).trim();
+    
+    if (val1 !== val2) {
+        return `${key1}: <span class="highlight-red">${val1}</span>`;
+    }
+    
+    return value1;
+}
 
 // 匯出函數
 window.togglePivotMode = togglePivotMode;

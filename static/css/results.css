@@ -1544,3 +1544,499 @@ body {
     max-width: 300px;
   }
 }
+
+/* 空資料訊息 */
+.empty-message,
+.no-data-message {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    color: var(--text-muted);
+    width: 100%;
+}
+
+.empty-message td {
+    text-align: center !important;
+    width: 100%;
+}
+
+.no-data-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    gap: var(--spacing-md);
+}
+
+.highlight-red {
+  color: #D32F2F !important;
+  font-weight: 600;
+}
+
+.data-table td.highlight-red {
+  color: var(--danger) !important;
+  font-weight: 600;
+}
+
+.data-table td.highlight-red span {
+  color: inherit;
+}
+
+/* 空資料訊息 - 強化置中 */
+.empty-message {
+  text-align: center !important;
+  padding: 0 !important;
+  width: 100%;
+}
+
+.empty-message td {
+  text-align: center !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+}
+
+.no-data-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: var(--spacing-md);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--spacing-2xl);
+}
+
+.no-data-message i {
+  font-size: 4rem;
+  margin-bottom: var(--spacing-lg);
+  color: var(--nordic-blue-light);
+  opacity: 0.5;
+}
+
+.no-data-message h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+  font-size: 1.5rem;
+}
+
+.no-data-message p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+  font-size: 1.125rem;
+}
+
+/* 特定內容高亮樣式 */
+.highlight-red {
+  color: #D32F2F !important;
+  font-weight: 600;
+}
+
+.data-table td.content-cell .highlight-red {
+  color: #D32F2F !important;
+  font-weight: 600;
+  background: transparent;
+  padding: 0 2px;
+}
+
+/* 檔案不存在的樣式 */
+.data-table td.highlight-red {
+  color: #D32F2F !important;
+  font-weight: 600;
+}
+
+/* 統計卡片的危險樣式 */
+.stat-card.danger .stat-icon {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.stat-card.danger::before {
+  background: var(--danger);
+}
+
+/* 確保內容單元格的樣式正確 */
+.data-table td.content-cell {
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  padding: 12px 20px;
+}
+
+/* 統計卡片 - 改進版 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  margin-bottom: 0;
+}
+
+.stat-card {
+  background: #FFFFFF;
+  border: 2px solid #E3E7F3;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  overflow: hidden;
+  padding: 24px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.stat-card::before {
+  content: "";
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: all 0.3s ease;
+  width: 5px;
+}
+
+.stat-card:hover {
+  border-color: var(--nordic-blue-light);
+  box-shadow: 0 8px 24px rgba(33, 150, 243, 0.12);
+  transform: translateY(-3px);
+}
+
+.stat-card:hover::before {
+  transform: scaleX(1);
+}
+
+.stat-card.blue {
+  border-color: #BBDEFB;
+}
+
+.stat-card.blue::before {
+  background: var(--nordic-blue);
+}
+
+.stat-card.purple {
+  border-color: #E1BEE7;
+}
+
+.stat-card.purple::before {
+  background: var(--purple-500);
+}
+
+.stat-card.success {
+  border-color: #C8E6C9;
+}
+
+.stat-card.success::before {
+  background: var(--success);
+}
+
+.stat-card.warning {
+  border-color: #FFE0B2;
+}
+
+.stat-card.warning::before {
+  background: var(--warning);
+}
+
+.stat-card.danger {
+  border-color: #FFCDD2;
+}
+
+.stat-card.danger::before {
+  background: var(--danger);
+}
+
+/* 統計圖標容器 */
+.stat-icon {
+  align-items: center;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  color: var(--text-muted);
+  display: flex;
+  flex-shrink: 0;
+  font-size: 1.75rem;
+  height: 60px;
+  justify-content: center;
+  position: relative;
+  width: 60px;
+  transition: all 0.3s ease;
+}
+
+.stat-card.blue .stat-icon {
+  background: rgba(33, 150, 243, 0.1);
+  color: var(--nordic-blue);
+}
+
+.stat-card.purple .stat-icon {
+  background: rgba(156, 39, 176, 0.1);
+  color: var(--purple-600);
+}
+
+.stat-card.success .stat-icon {
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--success);
+}
+
+.stat-card.warning .stat-icon {
+  background: rgba(255, 152, 0, 0.1);
+  color: var(--warning);
+}
+
+.stat-card.danger .stat-icon {
+  background: rgba(244, 67, 54, 0.1);
+  color: var(--danger);
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.1);
+}
+
+/* 統計內容 */
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+/* 響應式設計 - 統計卡片 */
+@media (max-width: 1200px) {
+  .stats-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+      grid-template-columns: 1fr;
+      gap: 16px;
+  }
+  
+  .stat-card {
+      padding: 20px;
+  }
+  
+  .stat-icon {
+      width: 50px;
+      height: 50px;
+      font-size: 1.5rem;
+  }
+  
+  .stat-value {
+      font-size: 1.875rem;
+  }
+  
+  .stat-label {
+      font-size: 0.875rem;
+  }
+}
+
+/* 統計卡片 - 改進版 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  margin-bottom: 0;
+}
+
+.stat-card {
+  background: #FFFFFF;
+  border: 2px solid #E3E7F3;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  overflow: hidden;
+  padding: 24px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.stat-card::before {
+  content: "";
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: all 0.3s ease;
+  width: 5px;
+}
+
+.stat-card:hover {
+  border-color: var(--nordic-blue-light);
+  box-shadow: 0 8px 24px rgba(33, 150, 243, 0.12);
+  transform: translateY(-3px);
+}
+
+.stat-card:hover::before {
+  transform: scaleX(1);
+}
+
+.stat-card.blue {
+  border-color: #BBDEFB;
+}
+
+.stat-card.blue::before {
+  background: var(--nordic-blue);
+}
+
+.stat-card.purple {
+  border-color: #E1BEE7;
+}
+
+.stat-card.purple::before {
+  background: var(--purple-500);
+}
+
+.stat-card.success {
+  border-color: #C8E6C9;
+}
+
+.stat-card.success::before {
+  background: var(--success);
+}
+
+.stat-card.warning {
+  border-color: #FFE0B2;
+}
+
+.stat-card.warning::before {
+  background: var(--warning);
+}
+
+.stat-card.danger {
+  border-color: #FFCDD2;
+}
+
+.stat-card.danger::before {
+  background: var(--danger);
+}
+
+/* 統計圖標容器 */
+.stat-icon {
+  align-items: center;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  color: var(--text-muted);
+  display: flex;
+  flex-shrink: 0;
+  font-size: 1.75rem;
+  height: 60px;
+  justify-content: center;
+  position: relative;
+  width: 60px;
+  transition: all 0.3s ease;
+}
+
+.stat-card.blue .stat-icon {
+  background: rgba(33, 150, 243, 0.1);
+  color: var(--nordic-blue);
+}
+
+.stat-card.purple .stat-icon {
+  background: rgba(156, 39, 176, 0.1);
+  color: var(--purple-600);
+}
+
+.stat-card.success .stat-icon {
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--success);
+}
+
+.stat-card.warning .stat-icon {
+  background: rgba(255, 152, 0, 0.1);
+  color: var(--warning);
+}
+
+.stat-card.danger .stat-icon {
+  background: rgba(244, 67, 54, 0.1);
+  color: var(--danger);
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.1);
+}
+
+/* 統計內容 */
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+/* 無資料訊息 - 完全置中 */
+.no-data-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  width: 100%;
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.no-data-message i {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  color: #B0BEC5;
+  opacity: 0.6;
+}
+
+.no-data-message h3 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #5C6BC0;
+  margin: 0 0 12px 0;
+}
+
+.no-data-message p {
+  font-size: 1rem;
+  color: #9FA8DA;
+  margin: 0;
+}
+
+/* 確保表格單元格不影響置中 */
+.data-table tbody tr td[colspan] {
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
