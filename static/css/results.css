@@ -119,13 +119,13 @@ body {
 .step-header {
   align-items: center;
   background: #2196F3;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   color: white;
   display: flex;
   gap: 24px;
   overflow: hidden;
   padding: 24px 32px;
   position: relative;
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 
 .step-header::before {
@@ -184,52 +184,52 @@ body {
 
 .section-body {
   background: var(--bg-primary);
-  padding: 36px 32px;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   overflow: hidden;
+  padding: 36px 32px;
 }
 
 .data-controls {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
   background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  padding: 20px 24px;
   border: 1px solid var(--border-light);
-  margin-bottom: 24px;
-  gap: 20px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
+  display: flex;
   flex-wrap: wrap;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 20px 24px;
 }
 
 .control-left {
-  display: flex;
   align-items: center;
-  gap: 12px;
+  display: flex;
   flex: 1;
+  gap: 12px;
   min-width: 0;
 }
 
 .control-right {
-  display: flex;
   align-items: center;
-  gap: 12px;
+  display: flex;
   flex-shrink: 0;
+  gap: 12px;
 }
 
 .btn-group {
+  border-left: 1px solid var(--border-color);
   display: flex;
   gap: 8px;
-  border-left: 1px solid var(--border-color);
-  padding-left: 12px;
   margin-left: 4px;
+  padding-left: 12px;
 }
 
 .btn-sm {
   font-size: 0.8125rem;
-  padding: 8px 16px;
   gap: 6px;
+  padding: 8px 16px;
 }
 
 .btn-sm i {
@@ -258,10 +258,10 @@ body {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.9375rem;
+  max-width: 280px;
+  min-width: 200px;
   padding: 10px 14px;
   transition: all 0.2s ease;
-  min-width: 200px;
-  max-width: 280px;
 }
 
 .form-input:focus {
@@ -273,18 +273,18 @@ body {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   margin-bottom: 0;
 }
 
 .stat-card {
+  align-items: center;
   background: #FFFFFF;
   border: 2px solid #E3E7F3;
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   display: flex;
-  align-items: center;
   gap: 20px;
   overflow: hidden;
   padding: 24px;
@@ -305,9 +305,9 @@ body {
 }
 
 .stat-card:hover {
+  border-color: var(--nordic-blue-light);
   box-shadow: 0 8px 24px rgba(33, 150, 243, 0.12);
   transform: translateY(-3px);
-  border-color: var(--nordic-blue-light);
 }
 
 .stat-card:hover::before {
@@ -340,13 +340,13 @@ body {
   border-radius: 50%;
   color: var(--text-muted);
   display: flex;
+  flex-shrink: 0;
   font-size: 1.75rem;
   height: 60px;
   justify-content: center;
-  width: 60px;
-  flex-shrink: 0;
   position: relative;
   transition: all 0.3s ease;
+  width: 60px;
 }
 
 .stat-card.blue .stat-icon {
@@ -380,12 +380,12 @@ body {
 }
 
 .stat-value {
+  color: var(--text-primary);
   font-size: 2.25rem;
   font-weight: 700;
-  color: var(--text-primary);
+  letter-spacing: -0.02em;
   line-height: 1;
   margin-bottom: 6px;
-  letter-spacing: -0.02em;
 }
 
 .stat-label {
@@ -397,43 +397,43 @@ body {
 .data-view-container {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
-  padding: 0;
   margin-top: 0;
+  padding: 0;
 }
 
 .table-view {
   background: var(--bg-primary);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   overflow: visible;
   position: relative;
-  border: 1px solid var(--border-light);
 }
 
 .table-stats-bar {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  margin-bottom: 16px;
   box-shadow: var(--shadow-xs);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 20px 24px;
 }
 
 .table-stats {
-  display: flex;
   align-items: center;
-  gap: 20px;
-  font-size: 0.875rem;
   color: var(--text-secondary);
+  display: flex;
+  font-size: 0.875rem;
+  gap: 20px;
 }
 
 .table-stat-item {
-  display: flex;
   align-items: center;
-  gap: 8px;
+  display: flex;
   font-size: 0.9375rem;
+  gap: 8px;
 }
 
 .table-stat-item i {
@@ -442,28 +442,28 @@ body {
 }
 
 .table-stat-value {
-  font-weight: 600;
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .table-container {
   background: var(--bg-primary);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   overflow: hidden;
   position: relative;
-  border: 1px solid var(--border-light);
 }
 
 .table-scroll-wrapper {
+  max-height: 600px;
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 600px;
   position: relative;
 }
 
 .table-scroll-wrapper::-webkit-scrollbar {
-  width: 12px;
   height: 12px;
+  width: 12px;
 }
 
 .table-scroll-wrapper::-webkit-scrollbar-track {
@@ -474,8 +474,8 @@ body {
 
 .table-scroll-wrapper::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border-radius: 6px;
   border: 2px solid #F0F7FF;
+  border-radius: 6px;
   box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -490,32 +490,32 @@ body {
 }
 
 .data-table {
-  width: max-content;
-  min-width: 100%;
+  background: var(--bg-primary);
   border-collapse: collapse;
   font-size: 0.9rem;
-  background: var(--bg-primary);
+  min-width: 100%;
   table-layout: auto;
+  width: max-content;
 }
 
 .data-table thead {
+  background: #2196F3;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #2196F3;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .data-table th {
   background: #2196F3;
-  color: white;
-  padding: 14px 20px;
-  text-align: left;
-  cursor: move;
-  user-select: none;
-  font-weight: 600;
   border-bottom: 2px solid #1976D2;
+  color: white;
+  cursor: move;
+  font-weight: 600;
+  padding: 14px 20px;
   position: relative;
+  text-align: left;
+  user-select: none;
   white-space: nowrap;
 }
 
@@ -524,18 +524,18 @@ body {
 }
 
 .data-table th.dragging {
-  opacity: 0.5;
   cursor: grabbing;
+  opacity: 0.5;
 }
 
 .column-resizer {
+  bottom: 0;
+  cursor: col-resize;
   position: absolute;
   right: 0;
   top: 0;
-  bottom: 0;
-  width: 5px;
-  cursor: col-resize;
   user-select: none;
+  width: 5px;
 }
 
 .column-resizer:hover {
@@ -563,8 +563,8 @@ body {
 }
 
 .th-content {
-  display: flex;
   align-items: center;
+  display: flex;
   gap: 8px;
   justify-content: space-between;
 }
@@ -574,8 +574,8 @@ body {
 }
 
 .th-icons {
-  display: flex;
   align-items: center;
+  display: flex;
   gap: 4px;
 }
 
@@ -592,19 +592,19 @@ body {
 }
 
 .sort-icon.active {
-  opacity: 1;
   color: #FFD600;
+  opacity: 1;
 }
 
 .filter-icon.active {
-  opacity: 1;
   color: #4CAF50;
+  opacity: 1;
 }
 
 .data-table td {
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  padding: 12px 20px;
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -652,10 +652,10 @@ body {
 .data-table td.content-cell {
   font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
   font-size: 0.85rem;
-  white-space: pre-wrap;
-  word-break: break-word;
   line-height: 1.5;
   padding: 12px 20px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .data-table td.path-cell {
@@ -665,11 +665,11 @@ body {
 }
 
 .highlight-git {
+  background-color: rgba(244, 67, 54, 0.08);
+  border-radius: 2px;
   color: #D32F2F;
   font-weight: 600;
-  background-color: rgba(244, 67, 54, 0.08);
   padding: 0 2px;
-  border-radius: 2px;
 }
 
 .highlight-hash {
@@ -694,20 +694,20 @@ body {
 }
 
 .data-table td.highlight-hash {
+  color: #E65100;
   font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
   font-size: 0.85rem;
-  color: #E65100;
 }
 
 .data-table td.file-type {
-  font-weight: 500;
   color: var(--nordic-blue);
+  font-weight: 500;
 }
 
 .data-table td a {
   color: var(--nordic-blue);
-  text-decoration: none;
   font-weight: 500;
+  text-decoration: none;
 }
 
 .data-table td a:hover {
@@ -716,8 +716,8 @@ body {
 }
 
 .data-table .org-cell {
-  font-weight: 500;
   color: #7B1FA2;
+  font-weight: 500;
 }
 
 .btn {
@@ -726,6 +726,7 @@ body {
   border-radius: var(--radius-md);
   cursor: pointer;
   display: inline-flex;
+  flex-shrink: 0;
   font-size: 0.875rem;
   font-weight: 500;
   gap: 8px;
@@ -734,7 +735,6 @@ body {
   position: relative;
   transition: all 0.2s ease;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .btn i {
@@ -801,9 +801,9 @@ body {
   display: flex;
   height: 36px;
   justify-content: center;
+  padding: 0;
   transition: all 0.2s ease;
   width: 36px;
-  padding: 0;
 }
 
 .btn-icon:hover {
@@ -830,45 +830,48 @@ body {
   background: linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%);
   border: 2px solid #B3D9FF;
   border-radius: var(--radius-xl);
-  padding: 32px;
-  margin-bottom: 40px;
-  color: #1A237E;
-  position: relative;
-  overflow: hidden;
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.08);
+  color: #1A237E;
+  margin-bottom: 40px;
+  overflow: hidden;
+  padding: 32px;
+  position: relative;
 }
 
 .pivot-instructions i {
   color: #2196F3;
-  margin-right: 12px;
   font-size: 1.5rem;
+  margin-right: 12px;
   vertical-align: middle;
 }
 
 .pivot-instructions ul {
-  margin-top: 16px;
-  margin-left: 40px;
   list-style: none;
+  margin-left: 40px;
+  margin-top: 16px;
   position: relative;
   z-index: 1;
 }
 
 #pivotContainer {
-  min-height: 500px;
-  max-height: none;
-  overflow: visible;
-  padding: 20px;
   background: white;
   border-radius: var(--radius-lg);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
+  max-height: 800px;
+  min-height: 500px;
+  overflow: visible;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 20px;
+  position: relative;
 }
 
 .pvtUi {
-  font-family: inherit;
-  padding: 32px;
   background: linear-gradient(135deg, #FAFBFD 0%, #F8FBFF 100%);
   border-radius: var(--radius-xl);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  font-family: inherit;
+  padding: 32px;
 }
 
 .pvtUi select,
@@ -876,8 +879,8 @@ body {
   background: var(--bg-input);
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
   font-size: 0.875rem;
+  padding: 6px 10px;
 }
 
 .pvtUi select:focus,
@@ -887,44 +890,45 @@ body {
 }
 
 .pvtTable {
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  border-spacing: 0;
   background: white;
-  border-radius: var(--radius-lg);
-  overflow: visible;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  margin-top: 24px;
-  width: 100%;
   border: 1px solid #E3E7F3;
+  border-collapse: collapse;
+  border-radius: var(--radius-lg);
+  border-spacing: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  font-size: 0.9375rem;
+  margin-top: 24px;
+  overflow: hidden;
+  width: 100%;
 }
 
 .pvtTable th,
 .pvtTable td {
-  padding: 8px 12px;
   border: 1px solid var(--border-light);
+  font-size: 0.9375rem;
+  padding: 12px 16px;
 }
 
 .pvtTable th {
-  background: #2196F3;
-  color: white;
-  font-weight: 600;
-  padding: 14px 20px;
+  background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
   border: 1px solid #1976D2;
-  text-align: left;
-  letter-spacing: 0.025em;
+  color: white;
   font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  padding: 14px 20px;
+  text-align: left;
 }
 
 .pvtTable tbody tr:hover td {
-  background: linear-gradient(135deg, hsl(59, 64%, 87%) 0%, hwb(83 72% 5%) 100%);
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
   transition: background 0.2s ease;
 }
 
 .charts-section {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: var(--spacing-xl);
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   margin-top: var(--spacing-xl);
 }
 
@@ -939,9 +943,9 @@ body {
 }
 
 .chart-title {
+  color: var(--text-primary);
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--text-primary);
   margin-bottom: var(--spacing-lg);
   text-align: center;
 }
@@ -951,18 +955,18 @@ body {
 }
 
 .filter-panel {
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  bottom: 0;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
   position: fixed;
   right: -400px;
   top: 0;
-  bottom: 0;
-  width: 400px;
-  background: var(--bg-primary);
-  box-shadow: var(--shadow-xl);
   transition: right 0.3s ease;
+  width: 400px;
   z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--border-color);
 }
 
 .filter-panel.show {
@@ -970,26 +974,26 @@ body {
 }
 
 .filter-header {
-  padding: var(--spacing-lg);
+  align-items: center;
+  background: var(--nordic-gradient-soft);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: var(--nordic-gradient-soft);
+  padding: var(--spacing-lg);
 }
 
 .filter-header h3 {
-  margin: 0;
   color: var(--nordic-blue-dark);
   font-size: 1.25rem;
   font-weight: 600;
+  margin: 0;
 }
 
 .filter-content {
+  background: var(--bg-secondary);
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-lg);
-  background: var(--bg-secondary);
 }
 
 .filter-group {
@@ -997,30 +1001,30 @@ body {
 }
 
 .filter-header-row {
+  align-items: center;
   display: flex;
   justify-content: space-between;
-  align-items: center;
   margin-bottom: 8px;
 }
 
 .filter-label {
-  display: block;
-  font-weight: 600;
   color: var(--text-primary);
+  display: block;
   font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .clear-filter-btn {
-  padding: 4px 8px;
-  font-size: 0.75rem;
+  align-items: center;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   cursor: pointer;
   display: inline-flex;
-  align-items: center;
+  font-size: 0.75rem;
   gap: 4px;
+  padding: 4px 8px;
   transition: all 0.2s ease;
 }
 
@@ -1035,68 +1039,68 @@ body {
 }
 
 .filter-select {
-  width: 100%;
-  min-height: 100px;
+  background: var(--bg-primary);
   border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: var(--spacing-sm);
-  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem;
+  min-height: 100px;
+  padding: var(--spacing-sm);
+  width: 100%;
 }
 
 .filter-select:focus {
-  outline: none;
   border-color: var(--nordic-blue);
   box-shadow: 0 0 0 3px var(--border-focus);
+  outline: none;
 }
 
 .filter-actions {
-  padding: var(--spacing-lg);
+  background: var(--bg-tertiary);
   border-top: 1px solid var(--border-color);
   display: flex;
   gap: var(--spacing-sm);
-  background: var(--bg-tertiary);
+  padding: var(--spacing-lg);
 }
 
 .fab-container {
-  position: fixed;
+  align-items: flex-end;
   bottom: 30px;
-  right: 30px;
-  z-index: 999;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-items: flex-end;
+  position: fixed;
+  right: 30px;
+  z-index: 999;
 }
 
 .fab-secondary {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--bg-primary);
-  color: var(--nordic-blue);
-  border: 2px solid var(--nordic-blue);
-  box-shadow: var(--shadow-lg);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1.25rem;
-  display: flex;
   align-items: center;
+  background: var(--bg-primary);
+  border: 2px solid var(--nordic-blue);
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  color: var(--nordic-blue);
+  cursor: pointer;
+  display: flex;
+  font-size: 1.25rem;
+  height: 56px;
   justify-content: center;
+  transition: all 0.3s ease;
+  width: 56px;
 }
 
 .fab-secondary:hover {
-  transform: scale(1.1);
   background: var(--nordic-blue);
-  color: white;
   box-shadow: 0 12px 40px rgba(33, 150, 243, 0.3);
+  color: white;
+  transform: scale(1.1);
 }
 
 .error-message {
-  text-align: center;
-  padding: var(--spacing-2xl);
   color: var(--danger);
+  padding: var(--spacing-2xl);
+  text-align: center;
 }
 
 .error-message i {
@@ -1117,65 +1121,65 @@ body {
 
 .empty-message,
 .no-data-message {
-  text-align: center;
-  padding: var(--spacing-2xl);
   color: var(--text-muted);
+  padding: var(--spacing-2xl);
+  text-align: center;
   width: 100%;
 }
 
 .no-data-message {
+  align-items: center;
+  background: transparent;
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
   gap: var(--spacing-md);
-  width: 100%;
+  justify-content: center;
   margin: 0 auto;
+  min-height: 400px;
   padding: 40px;
   text-align: center;
-  color: var(--text-muted);
-  background: transparent;
+  width: 100%;
 }
 
 .no-data-message i,
 .empty-message i {
+  color: var(--nordic-blue-light);
   font-size: 4rem;
   margin-bottom: var(--spacing-lg);
-  color: var(--nordic-blue-light);
   opacity: 0.5;
 }
 
 .no-data-message h3 {
   color: #5C6BC0;
-  margin-bottom: var(--spacing-md);
   font-size: 1.25rem;
   font-weight: 500;
   margin: 0 0 12px 0;
+  margin-bottom: var(--spacing-md);
 }
 
 .no-data-message p {
   color: #9FA8DA;
-  margin-bottom: var(--spacing-xl);
   font-size: 1rem;
   margin: 0;
+  margin-bottom: var(--spacing-xl);
 }
 
 .loading {
+  align-items: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: var(--spacing-lg);
   justify-content: center;
   min-height: 400px;
-  gap: var(--spacing-lg);
-  width: 100%;
   text-align: center;
+  width: 100%;
 }
 
 .loading i {
-  font-size: 3rem;
-  color: var(--nordic-blue);
   animation: spin 1s linear infinite;
+  color: var(--nordic-blue);
+  font-size: 3rem;
 }
 
 .loading p {
@@ -1185,50 +1189,50 @@ body {
 }
 
 .badge {
-  display: inline-block;
-  padding: 4px 12px;
   border-radius: var(--radius-full);
+  display: inline-block;
   font-size: 0.8125rem;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.025em;
+  padding: 4px 12px;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .badge-success {
   background: var(--success-light);
-  color: var(--success);
   border: 1px solid var(--success);
+  color: var(--success);
 }
 
 .badge-warning {
   background: var(--warning-light);
-  color: var(--warning);
   border: 1px solid var(--warning);
+  color: var(--warning);
 }
 
 .badge-danger {
   background: var(--danger-light);
-  color: var(--danger);
   border: 1px solid var(--danger);
+  color: var(--danger);
 }
 
 .badge-info {
   background: var(--info-light);
-  color: var(--info);
   border: 1px solid var(--info);
+  color: var(--info);
 }
 
 .badge-default {
   background: var(--bg-tertiary);
-  color: var(--text-secondary);
   border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .link {
   color: var(--nordic-blue);
-  text-decoration: none;
   font-weight: 500;
+  text-decoration: none;
   transition: all 0.2s ease;
 }
 
@@ -1238,23 +1242,23 @@ body {
 }
 
 .link i {
-  margin-left: 4px;
   font-size: 0.875em;
+  margin-left: 4px;
 }
 
 .search-box {
-  position: relative;
-  display: flex;
   align-items: center;
-  margin-left: 20px;
   background: var(--bg-secondary);
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 0 12px;
-  min-width: 300px;
-  max-width: 400px;
-  height: 42px;
+  display: flex;
   flex: 1;
+  height: 42px;
+  margin-left: 20px;
+  max-width: 400px;
+  min-width: 300px;
+  padding: 0 12px;
+  position: relative;
 }
 
 .search-box:focus-within {
@@ -1264,34 +1268,34 @@ body {
 
 .search-box i {
   color: var(--nordic-blue);
+  flex-shrink: 0;
   font-size: 0.875rem;
   margin-right: 8px;
-  flex-shrink: 0;
 }
 
 .search-input {
-  flex: 1;
-  border: none;
   background: transparent;
+  border: none;
+  color: var(--text-primary);
+  flex: 1;
+  font-size: 0.9375rem;
+  min-width: 150px;
   outline: none;
   padding: 10px 0;
-  font-size: 0.9375rem;
-  color: var(--text-primary);
-  min-width: 150px;
 }
 
 .search-count {
-  font-size: 0.8125rem;
-  color: var(--nordic-blue);
-  margin-left: 12px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  font-weight: 500;
-  padding: 4px 8px;
   background: var(--info-light);
-  border-radius: var(--radius-sm);
   border: 1px solid var(--nordic-blue-light);
+  border-radius: var(--radius-sm);
+  color: var(--nordic-blue);
   display: none;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-left: 12px;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
 .search-count.large-count {
@@ -1300,39 +1304,39 @@ body {
 
 .highlight {
   background-color: #FFE082;
+  border-radius: 3px;
   color: #333;
   font-weight: 600;
   padding: 1px 3px;
-  border-radius: 3px;
 }
 
 .filter-search {
-  position: relative;
   margin-bottom: 8px;
+  position: relative;
 }
 
 .filter-search-input {
-  width: 100%;
-  padding: 6px 28px 6px 10px;
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  background: var(--bg-primary);
   color: var(--text-primary);
+  font-size: 0.8125rem;
+  padding: 6px 28px 6px 10px;
+  width: 100%;
 }
 
 .filter-search-input:focus {
-  outline: none;
   border-color: var(--nordic-blue);
+  outline: none;
 }
 
 .filter-search i {
+  color: var(--text-muted);
+  font-size: 0.75rem;
   position: absolute;
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
-  font-size: 0.75rem;
 }
 
 .hidden {
@@ -1359,36 +1363,36 @@ body {
 }
 
 .truncated-content {
-  position: relative;
   display: inline-block;
+  position: relative;
   width: 100%;
 }
 
 .tooltip-content {
-  position: absolute;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
   box-shadow: var(--shadow-md);
-  z-index: 1000;
+  display: none;
+  max-width: 500px;
+  padding: 8px 12px;
+  position: absolute;
   white-space: normal;
   word-break: break-all;
-  max-width: 500px;
-  display: none;
+  z-index: 1000;
 }
 
 .data-table td:hover .tooltip-content {
   display: block;
-  top: 100%;
   left: 0;
+  top: 100%;
 }
 
 .empty-message td {
-  text-align: center;
-  width: 100%;
   padding: 0;
+  text-align: center;
   vertical-align: middle;
+  width: 100%;
 }
 
 .highlight-red {
@@ -1401,22 +1405,22 @@ body {
 }
 
 .empty-message {
-  text-align: center;
   padding: 0;
+  text-align: center;
   width: 100%;
 }
 
 .no-data-message i {
+  color: #B0BEC5;
   font-size: 4rem;
   margin-bottom: 20px;
-  color: #B0BEC5;
   opacity: 0.6;
 }
 
 .data-table td.content-cell .highlight-red {
+  background: transparent;
   color: #D32F2F;
   font-weight: 600;
-  background: transparent;
   padding: 0 2px;
 }
 
@@ -1445,97 +1449,114 @@ body {
 }
 
 .data-table tbody tr td[colspan] {
-  text-align: center;
-  vertical-align: middle;
-  padding: 0;
   background: transparent;
   border: none;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .fab-filter {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--nordic-blue);
-  color: white;
-  border: none;
-  box-shadow: var(--shadow-lg);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1.25rem;
-  display: flex;
   align-items: center;
+  background: var(--nordic-blue);
+  border: none;
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  font-size: 1.25rem;
+  height: 56px;
   justify-content: center;
+  transition: all 0.3s ease;
+  width: 56px;
 }
 
 .fab-filter:hover {
-  transform: scale(1.1);
   background: var(--nordic-blue-dark);
   box-shadow: 0 12px 40px rgba(33, 150, 243, 0.3);
+  transform: scale(1.1);
 }
 
 .pvtUnused {
-  border: 2px dashed #B3D9FF;
-  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 80px;
-  position: relative;
-  margin-bottom: 24px;
-  margin: 8px;
-  max-height: 300px;
-  margin-top: 40px;
+  /* 從 40px 改為 48px */
   overflow-y: auto;
+  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
+  border: 2px dashed #B3D9FF;
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  margin-bottom: 24px;
+  margin-top: 48px;
+  max-height: 300px;
+  min-height: 80px;
   overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
 }
 
 .pvtRows, .pvtCols {
-  border: 2px dashed #B3D9FF;
   background: linear-gradient(135deg, #F5F9FF 0%, #EEF6FF 100%);
+  border: 2px dashed #B3D9FF;
   border-radius: var(--radius-lg);
-  padding: 20px;
-  min-height: 80px;
-  position: relative;
   margin: 12px 0;
+  min-height: 80px;
+  padding: 20px;
+  position: relative;
 }
 
 .pvtUnused::before {
-  content: "📊 可用欄位 - 拖曳到下方區域";
-  position: absolute;
-  top: -32px;
-  left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
-  background: white;
-  padding: 0 8px;
+  /* 增加 padding */
   white-space: nowrap;
+  /* 增加 z-index */
+  border-radius: 4px;
+  /* 從 -32px 改為 -28px */
+  left: 16px;
+  background: white;
+  color: #1976D2;
+  content: "📊 可用欄位 - 拖曳到下方區域";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 4px 8px;
+  position: absolute;
+  top: -28px;
+  white-space: nowrap;
+  z-index: 10;
 }
 
 .pvtRows::before {
-  content: "↔️ 列區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -32px;
+  /* 從 -32px 改為 -28px */
   left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
   background: white;
-  padding: 0 8px;
+  border-radius: 4px;
+  color: #1976D2;
+  content: "↔️ 列區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 4px 8px;
+  position: absolute;
+  top: -28px;
   white-space: nowrap;
+  z-index: 10;
 }
 
 .pvtCols::before {
-  content: "↕️ 欄區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -32px;
+  /* 從 -32px 改為 -28px */
   left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
   background: white;
-  padding: 0 8px;
+  border-radius: 4px;
+  color: #1976D2;
+  content: "↕️ 欄區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 4px 8px;
+  position: absolute;
+  top: -28px;
   white-space: nowrap;
+  z-index: 10;
 }
 
 .pvtUnused.pvtDragOver, 
@@ -1552,38 +1573,38 @@ body {
   background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
   border: 1.5px solid #E3F2FD;
   border-radius: 10px;
-  padding: 10px 16px;
-  margin: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   color: #1A237E;
   cursor: move;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   font-size: 0.9375rem;
   font-weight: 500;
+  margin: 6px;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
 }
 
 .pvtAxisContainer li:hover, .pvtVals li:hover {
   background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
   border-color: #64B5F6;
-  transform: translateY(-3px);
   box-shadow: 0 6px 12px rgba(33, 150, 243, 0.15);
+  transform: translateY(-3px);
 }
 
 .pvtAxisContainer li.ui-sortable-helper,
 .pvtVals li.ui-sortable-helper {
-  opacity: 0.9;
   box-shadow: 0 8px 24px rgba(33, 150, 243, 0.25);
+  opacity: 0.9;
   transform: scale(1.08) rotate(2deg);
 }
 
 .pvtTable td {
-  padding: 12px 20px;
+  background: white;
   border: 1px solid #E8EAF6;
   border-bottom: 1px solid #EEF6FF;
   border-right: 1px solid #EEF6FF;
-  background: white;
-  font-size: 0.9375rem;
   color: #424242;
+  font-size: 0.9375rem;
+  padding: 12px 20px;
 }
 
 .pvtTable tbody tr:nth-child(even) td {
@@ -1592,93 +1613,94 @@ body {
 
 .pvtTotal, .pvtGrandTotal {
   background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-  font-weight: 700;
   color: #1565C0;
   font-size: 1rem;
+  font-weight: 700;
 }
 
 .pvtGrandTotal {
-  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
-  color: white;
+  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
+  color: white !important;
+  font-weight: 700;
 }
 
 .pvtUi select, .pvtUi input[type="text"] {
   background: white;
   border: 2px solid #E3F2FD;
   border-radius: 10px;
-  padding: 10px 16px;
-  font-size: 0.9375rem;
   color: #1A237E;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-size: 0.9375rem;
   margin: 4px;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
 }
 
 .pvtUi select:hover, .pvtUi input[type="text"]:hover {
-  border-color: #90CAF9;
   background: #F8FBFF;
+  border-color: #90CAF9;
 }
 
 .pvtUi select:focus, .pvtUi input[type="text"]:focus {
-  border-color: #2196F3;
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
   background: white;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+  outline: none;
 }
 
 .pivot-instructions::before {
-  content: "";
-  position: absolute;
-  top: -100px;
-  right: -100px;
-  width: 300px;
-  height: 300px;
   background: radial-gradient(circle, #64B5F6 0%, transparent 60%);
+  content: "";
+  height: 300px;
   opacity: 0.08;
+  position: absolute;
+  right: -100px;
+  top: -100px;
+  width: 300px;
 }
 
 .pivot-instructions::after {
-  content: "";
-  position: absolute;
-  bottom: -50px;
-  left: -50px;
-  width: 200px;
-  height: 200px;
   background: radial-gradient(circle, #90CAF9 0%, transparent 60%);
+  bottom: -50px;
+  content: "";
+  height: 200px;
+  left: -50px;
   opacity: 0.06;
+  position: absolute;
+  width: 200px;
 }
 
 .pivot-instructions p {
-  font-size: 1.0625rem;
-  margin-bottom: 16px;
-  font-weight: 500;
   color: #1565C0;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  margin-bottom: 16px;
   position: relative;
   z-index: 1;
 }
 
 .pivot-instructions ul li {
-  position: relative;
-  padding-left: 32px;
-  margin-bottom: 12px;
   color: #424242;
   font-size: 0.9375rem;
   line-height: 1.6;
+  margin-bottom: 12px;
+  padding-left: 32px;
+  position: relative;
 }
 
 .pivot-instructions ul li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
   color: #2196F3;
-  font-weight: bold;
+  content: "✓";
   font-size: 1.25rem;
+  font-weight: bold;
+  left: 0;
+  position: absolute;
   top: -2px;
 }
 
 .pvtUi > table {
-  width: 100%;
   margin-top: 24px;
+  width: 100%;
 }
 
 .pvtUi td {
@@ -1690,13 +1712,13 @@ body {
   background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
   border: 2px dashed #42A5F5;
   border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 60px;
   margin: 8px;
+  margin-top: 48px !important;
   max-height: 150px;
-  margin-top: 40px;
-  overflow-y: auto;
+  min-height: 60px;
   overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
   position: relative;
 }
 
@@ -1704,26 +1726,26 @@ body {
   background: white;
   border: 1px solid #E3F2FD;
   border-radius: var(--radius-md);
-  padding: 12px;
-  margin: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  margin: 4px;
+  padding: 12px;
 }
 
 .pvtUi button {
-  margin: 4px;
-  padding: 8px 16px;
   background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
-  color: white;
   border: none;
   border-radius: 8px;
-  font-weight: 500;
+  color: white;
   cursor: pointer;
+  font-weight: 500;
+  margin: 4px;
+  padding: 8px 16px;
   transition: all 0.2s ease;
 }
 
 .pvtUi button:hover {
-  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+  transform: translateY(-2px);
 }
 
 .pvtUi table {
@@ -1731,31 +1753,31 @@ body {
 }
 
 .pvtRows {
-  border: 2px dashed #90CAF9;
   background: linear-gradient(135deg, #F5F9FF 0%, #EEF6FF 100%);
+  border: 2px dashed #90CAF9;
   border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 80px;
   margin: 8px;
+  margin-top: 48px !important;
   max-height: 200px;
-  margin-top: 40px;
-  overflow-y: auto;
+  min-height: 80px;
   overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
   position: relative;
 }
 
 .pvtCols {
-  border: 2px dashed #64B5F6;
   background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
+  border: 2px dashed #64B5F6;
   border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 80px;
   margin: 8px;
-  min-width: 500px;
+  margin-top: 48px !important;
   max-height: 200px;
-  margin-top: 40px;
-  overflow-y: auto;
+  min-height: 80px;
+  min-width: 500px;
   overflow-x: auto;
+  overflow-y: auto;
+  padding: 16px;
   position: relative;
 }
 
@@ -1768,16 +1790,20 @@ body {
 }
 
 .pvtVals::before {
-  content: "📈 值區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -32px;
+  /* 從 -32px 改為 -28px */
   left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
   background: white;
-  padding: 0 8px;
+  border-radius: 4px;
+  color: #1976D2;
+  content: "📈 值區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 4px 8px;
+  position: absolute;
+  top: -28px;
   white-space: nowrap;
+  z-index: 10;
 }
 
 .pvtUi > table > tbody > tr:first-child > td {
@@ -1789,10 +1815,10 @@ body {
 .pvtRows ul,
 .pvtCols ul,
 .pvtVals ul {
-    margin: 0 !important;
-    padding: 8px !important;
-    padding-top: 16px !important;
-    min-height: 40px;
+  margin: 0 !important;
+  min-height: 40px;
+  padding: 8px !important;
+  padding-top: 16px !important;
 }
 
 /* 樞紐表格 hover 效果 - 使用北歐藍色系 */
@@ -1808,18 +1834,6 @@ body {
 
 /* 調整拖曳區域間距 */
 .pvtUnused {
-  margin-top: 48px !important; /* 稍微增加一點 */
-}
-
-.pvtRows {
-  margin-top: 48px !important;
-}
-
-.pvtCols {
-  margin-top: 48px !important; 
-}
-
-.pvtVals {
   margin-top: 48px !important;
 }
 
@@ -1830,37 +1844,39 @@ body {
 
 /* 樞紐分析表控制區域 */
 .pivot-controls {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding: 20px 24px;
   background: white;
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 20px 24px;
 }
 
 .pivot-controls-left {
-  display: flex;
   align-items: center;
+  display: flex;
   gap: 12px;
 }
 
 .pivot-controls-right {
-  display: flex;
   align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  justify-content: center;
 }
 
 .pivot-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
+  align-items: center;
   color: var(--text-primary);
   display: flex;
-  align-items: center;
+  font-size: 1.25rem;
+  font-weight: 600;
   gap: 12px;
+  margin: 0;
 }
 
 .pivot-title i {
@@ -1886,8 +1902,8 @@ body {
 
 .pivot-controls .btn-primary {
   background: var(--nordic-blue);
-  color: white;
   border: 1.5px solid var(--nordic-blue);
+  color: white;
 }
 
 .pivot-controls .btn-primary:hover {
@@ -1897,122 +1913,70 @@ body {
 
 /* Toast 提示訊息 */
 .toast {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  background: white;
-  padding: 16px 24px;
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.9375rem;
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  display: flex;
+  font-size: 1rem;
+  font-weight: 500;
+  gap: 16px;
+  left: 50%;
+  min-width: 300px;
   opacity: 0;
-  transition: all 0.3s ease;
+  padding: 20px 32px;
+  position: fixed;
+  transform: translateX(-50%) translateY(100px);
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   z-index: 10000;
 }
 
 .toast.show {
-  transform: translateX(-50%) translateY(0);
   opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .toast i {
-  font-size: 1.25rem;
+  flex-shrink: 0;
+  font-size: 1.5rem;
 }
 
 .toast-success {
+  background: linear-gradient(135deg, #FFFFFF 0%, #E8F5E9 100%);
   border-left: 4px solid var(--success);
   color: var(--success);
 }
 
 .toast-info {
+  background: linear-gradient(135deg, #FFFFFF 0%, #E3F2FD 100%);
   border-left: 4px solid var(--info);
   color: var(--info);
 }
 
 .toast-error {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFEBEE 100%);
   border-left: 4px solid var(--danger);
   color: var(--danger);
-}
-
-/* Toast 提示訊息 */
-.toast {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  background: white;
-  padding: 20px 32px;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 1rem;
-  font-weight: 500;
-  opacity: 0;
-  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  z-index: 10000;
-  min-width: 300px;
-  border: 1px solid var(--border-light);
-}
-
-.toast.show {
-  transform: translateX(-50%) translateY(0);
-  opacity: 1;
-}
-
-.toast i {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.toast-success {
-  border-left: 4px solid var(--success);
-  background: linear-gradient(135deg, #FFFFFF 0%, #E8F5E9 100%);
 }
 
 .toast-success i {
   color: var(--success);
 }
 
-.toast-info {
-  border-left: 4px solid var(--info);
-  background: linear-gradient(135deg, #FFFFFF 0%, #E3F2FD 100%);
-}
-
 .toast-info i {
   color: var(--info);
-}
-
-.toast-error {
-  border-left: 4px solid var(--danger);
-  background: linear-gradient(135deg, #FFFFFF 0%, #FFEBEE 100%);
 }
 
 .toast-error i {
   color: var(--danger);
 }
 
-#pivotContainer {
-  min-height: 500px;
-  max-height: 800px;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: 20px;
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
-  position: relative;
-}
-
 /* 自定義捲軸樣式 */
 #pivotContainer::-webkit-scrollbar {
-  width: 12px;
   height: 12px;
+  width: 12px;
 }
 
 #pivotContainer::-webkit-scrollbar-track {
@@ -2022,8 +1986,8 @@ body {
 
 #pivotContainer::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border-radius: 6px;
   border: 2px solid #F0F7FF;
+  border-radius: 6px;
 }
 
 #pivotContainer::-webkit-scrollbar-thumb:hover {
@@ -2032,93 +1996,12 @@ body {
 
 #pivotContainer::-webkit-scrollbar-corner {
   background: #F0F7FF;
-}
-
-#pivotContainer {
-  min-height: 500px;
-  max-height: 800px;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: 20px;
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
-  position: relative;
-}
-
-/* 自定義捲軸樣式 */
-#pivotContainer::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-#pivotContainer::-webkit-scrollbar-track {
-  background: #F0F7FF;
-  border-radius: 6px;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border-radius: 6px;
-  border: 2px solid #F0F7FF;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-}
-
-#pivotContainer::-webkit-scrollbar-corner {
-  background: #F0F7FF;
-}
-
-.pvtTable {
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  border-spacing: 0;
-  background: white;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  margin-top: 24px;
-  width: 100%;
-  border: 1px solid #E3E7F3;
-}
-
-.pvtTable th,
-.pvtTable td {
-  padding: 12px 16px;
-  border: 1px solid var(--border-light);
-  font-size: 0.9375rem;
-}
-
-.pvtTable th {
-  background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
-  color: white;
-  font-weight: 600;
-  border: 1px solid #1976D2;
-  text-align: left;
-  letter-spacing: 0.025em;
-}
-
-.pvtTable tbody tr:hover td {
-  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
-  transition: background 0.2s ease;
-}
-
-.pvtTable tbody tr:nth-child(even) td {
-  background: #FAFBFD;
 }
 
 .pvtTotal, .pvtTotalLabel {
   background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%) !important;
-  font-weight: 700;
   color: #1565C0;
   font-size: 1rem;
-}
-
-.pvtGrandTotal {
-  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
-  color: white !important;
   font-weight: 700;
 }
 
@@ -2128,107 +2011,21 @@ body {
   font-weight: 600;
 }
 
-.pvtUnused::before {
-  content: "📊 可用欄位 - 拖曳到下方區域";
-  position: absolute;
-  top: -28px;  /* 從 -32px 改為 -28px */
-  left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
-  background: white;
-  padding: 4px 8px;  /* 增加 padding */
-  white-space: nowrap;
-  z-index: 10;  /* 增加 z-index */
-  border-radius: 4px;  /* 添加圓角 */
-}
-
-.pvtRows::before {
-  content: "↔️ 列區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -28px;  /* 從 -32px 改為 -28px */
-  left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
-  background: white;
-  padding: 4px 8px;
-  white-space: nowrap;
-  z-index: 10;
-  border-radius: 4px;
-}
-
-.pvtCols::before {
-  content: "↕️ 欄區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -28px;  /* 從 -32px 改為 -28px */
-  left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
-  background: white;
-  padding: 4px 8px;
-  white-space: nowrap;
-  z-index: 10;
-  border-radius: 4px;
-}
-
-.pvtVals::before {
-  content: "📈 值區域 - 拖曳欄位到此";
-  position: absolute;
-  top: -28px;  /* 從 -32px 改為 -28px */
-  left: 16px;
-  font-size: 0.9375rem;
-  color: #1976D2;
-  font-weight: 500;
-  background: white;
-  padding: 4px 8px;
-  white-space: nowrap;
-  z-index: 10;
-  border-radius: 4px;
-}
-
-.pvtUnused {
-  border: 2px dashed #B3D9FF;
-  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 80px;
-  position: relative;
-  margin: 8px;
-  max-height: 300px;
-  margin-top: 48px;  /* 從 40px 改為 48px */
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.pvtRows {
-  margin-top: 48px !important;  /* 確保有足夠空間 */
-}
-
-.pvtCols {
-  margin-top: 48px !important;
-}
-
-.pvtVals {
-  margin-top: 48px !important;
-}
-
 /* 自定義對話框樣式 */
 .custom-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 10001;
-  opacity: 0;
-  transition: opacity 0.3s ease;
   backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  opacity: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  transition: opacity 0.3s ease;
+  z-index: 10001;
 }
 
 .custom-dialog-overlay.show {
@@ -2237,14 +2034,14 @@ body {
 
 .custom-dialog {
   background: white;
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   max-width: 500px;
-  width: 90%;
+  overflow: hidden;
   transform: scale(0.9) translateY(20px);
   transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  border: 1px solid var(--border-light);
-  overflow: hidden;
+  width: 90%;
 }
 
 .custom-dialog.show {
@@ -2252,24 +2049,24 @@ body {
 }
 
 .dialog-header {
-  padding: 24px 32px;
+  align-items: center;
   background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
   border-bottom: 1px solid var(--border-light);
   display: flex;
-  align-items: center;
   gap: 16px;
+  padding: 24px 32px;
 }
 
 .dialog-header i {
-  font-size: 2rem;
   color: var(--nordic-blue);
+  font-size: 2rem;
 }
 
 .dialog-header h3 {
-  margin: 0;
-  font-size: 1.375rem;
   color: var(--text-primary);
+  font-size: 1.375rem;
   font-weight: 600;
+  margin: 0;
 }
 
 .dialog-body {
@@ -2277,89 +2074,92 @@ body {
 }
 
 .dialog-body p {
-  margin: 0;
-  font-size: 1.0625rem;
   color: var(--text-secondary);
+  font-size: 1.0625rem;
   line-height: 1.6;
+  margin: 0;
 }
 
 .dialog-footer {
-  padding: 20px 32px;
   background: var(--bg-tertiary);
   border-top: 1px solid var(--border-light);
   display: flex;
-  justify-content: flex-end;
   gap: 12px;
+  justify-content: flex-end;
+  padding: 20px 32px;
 }
 
 /* 匯出選項樣式 */
 .export-options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  grid-template-columns: repeat(3, 1fr);
   padding: 24px !important;
 }
 
 .export-option {
-  padding: 24px;
+  align-items: center;
+  background: white;
   border: 2px solid var(--border-light);
   border-radius: var(--radius-lg);
-  background: white;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
   font-size: 0.9375rem;
-  color: var(--text-secondary);
   font-weight: 500;
+  gap: 12px;
+  padding: 24px;
+  transition: all 0.3s ease;
 }
 
 .export-option:hover {
-  border-color: var(--nordic-blue);
   background: var(--bg-hover);
-  transform: translateY(-2px);
+  border-color: var(--nordic-blue);
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.15);
+  transform: translateY(-2px);
 }
 
 .export-option i {
-  font-size: 2rem;
   color: var(--nordic-blue);
+  font-size: 2rem;
 }
 
 /* 全螢幕樣式 */
 .pivot-view.fullscreen {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999 !important;
   background: white !important;
-  padding: 0 !important;
+  border-radius: 0 !important;
+  bottom: 0 !important;
+  height: 100% !important;
+  left: 0 !important;
   margin: 0 !important;
   max-width: 100% !important;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  top: 0 !important;
   width: 100% !important;
-  height: 100% !important;
-  border-radius: 0 !important;
+  z-index: 9999 !important;
 }
 
 .pivot-view.fullscreen .pivot-controls {
+  background: white;
+  border-radius: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 0;
   position: sticky;
   top: 0;
   z-index: 100;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin: 0;
-  border-radius: 0;
 }
 
 .pivot-view.fullscreen #pivotContainer {
-  max-height: calc(100vh - 80px);
-  height: calc(100vh - 80px);
+  background: #F8FBFF;
   border-radius: 0;
-  margin: 0;
+  height: calc(100vh - 100px);
+  margin: 20px;
+  margin-top: 10px;
+  max-height: calc(100vh - 100px);
+  padding: 30px;
 }
 
 /* 隱藏拖曳區域時的樣式 */
@@ -2379,15 +2179,246 @@ body {
 @media (max-width: 768px) {
   .pivot-controls {
     flex-direction: column;
-    gap: 16px;
-  }
-  
-  .pivot-controls-right {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  
-  .export-options {
-    grid-template-columns: 1fr;
-  }
+  gap: 16px;
 }
+
+.export-options {
+  grid-template-columns: 1fr;
+}
+
+}
+
+.custom-dialog-overlay {
+  /* 從 10001 改為 100000，確保在全螢幕之上 */
+  opacity: 0;
+  align-items: center;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  transition: opacity 0.3s ease;
+  z-index: 100000;
+}
+
+/* 樞紐分析表格 hover 效果 - 改為更柔和的藍色 */
+.pvtTable tbody tr:hover td {
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
+  transition: background 0.2s ease;
+}
+
+/* 總計欄位樣式 - 使用更協調的藍色系 */
+.pvtTotal, .pvtTotalLabel {
+  background: linear-gradient(135deg, #BBDEFB 0%, #90CAF9 100%) !important;
+  border: 1px solid #64B5F6 !important;
+  color: #1565C0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* 總計欄位 hover 效果 */
+.pvtTable tbody tr:hover td.pvtTotal {
+  background: linear-gradient(135deg, #90CAF9 0%, #64B5F6 100%) !important;
+}
+
+/* 總計標籤樣式 */
+.pvtRowTotalLabel, .pvtColTotalLabel {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%) !important;
+  border: 1px solid #90CAF9 !important;
+  color: #1976D2;
+  font-weight: 600;
+}
+
+/* 最終總計（Grand Total）樣式 */
+.pvtGrandTotal {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
+  border: 2px solid #1565C0 !important;
+  color: white !important;
+  font-size: 1rem;
+  font-weight: 700;
+  position: relative;
+}
+
+/* 最終總計 hover 效果 */
+.pvtTable tbody tr:hover td.pvtGrandTotal {
+  background: #1565C0 !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 一般單元格樣式優化 */
+.pvtTable tbody td {
+  background: white;
+  border: 1px solid #E8EAF6;
+  color: #424242;
+  font-size: 0.9375rem;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+/* 偶數行背景 */
+.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #FAFBFD;
+}
+
+/* 偶數行 hover */
+.pvtTable tbody tr:nth-child(even):hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
+}
+
+/* 值欄位樣式（數字） */
+.pvtVal {
+  color: #1565C0;
+  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  text-align: right;
+}
+
+/* 屬性值欄位 */
+.pvtAttr {
+  color: #424242;
+  font-weight: 500;
+}
+
+/* 全螢幕樣式 - 修正 z-index */
+.pivot-view.fullscreen {
+  /* 降低 z-index */
+  background: white !important;
+  border-radius: 0 !important;
+  bottom: 0 !important;
+  height: 100% !important;
+  left: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  z-index: 9999 !important;
+}
+
+/* 確保對話框在最上層 */
+.custom-dialog-overlay {
+  /* 提高到最高層級 */
+  opacity: 0;
+  align-items: center;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  transition: opacity 0.3s ease;
+  z-index: 999999;
+}
+
+/* 樞紐分析表格基礎樣式 */
+.pvtTable tbody td {
+  background: white;
+  border: 1px solid #E3E7F3;
+  color: #424242;
+  font-size: 0.9375rem;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+/* 一般行 hover 效果 - 淡藍色背景 */
+.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #F0F7FF !important;
+}
+
+/* 小計樣式 - 使用淡灰藍色 */
+.pvtTotal {
+  background: #F5F7FA !important;
+  border: 1px solid #D5DAE1 !important;
+  color: #1A237E;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* 小計 hover 效果 */
+.pvtTable tbody tr:hover td.pvtTotal {
+  background: #EEF2F7 !important;
+}
+
+/* 行/列總計標籤 - 稍深的灰藍色 */
+.pvtRowTotalLabel, .pvtColTotalLabel {
+  background: #E8ECF0 !important;
+  border: 1px solid #CFD8DC !important;
+  color: #455A64;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* 最終總計（Grand Total）- 使用深藍色突出 */
+.pvtGrandTotal {
+  background: #1976D2 !important;
+  border: 2px solid #1565C0 !important;
+  color: white !important;
+  font-size: 1rem;
+  font-weight: 700;
+  position: relative;
+}
+
+/* 屬性值欄位（第一列）- 使用淡藍色背景 */
+.pvtTable tbody tr td:first-child {
+  background: #E8F4FD;
+  color: #1565C0;
+  font-weight: 500;
+}
+
+/* 屬性值欄位 hover */
+.pvtTable tbody tr:hover td:first-child {
+  background: #BBDEFB !important;
+}
+
+/* 值欄位樣式（數字）*/
+.pvtVal {
+  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  font-weight: 500;
+  text-align: right;
+}
+
+/* 空單元格 */
+.pvtTable tbody td.pvtEmpty {
+  background: #FAFAFA;
+  color: #B0BEC5;
+}
+
+/* 全螢幕模式下的特殊調整 */
+.pivot-view.fullscreen .pivot-instructions {
+  /* 給控制欄留空間 */
+  max-width: calc(100% - 40px);
+  margin: 20px;
+  margin-top: 80px;
+}
+
+/* 全螢幕下的控制欄調整 */
+.pivot-view.fullscreen .pivot-controls {
+  background: white;
+  border-radius: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  padding: 20px 40px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* 全螢幕下隱藏說明區域 */
+.pivot-view.fullscreen.hide-instructions .pivot-instructions {
+  display: none;
+}
+
+.pivot-view.fullscreen.hide-instructions #pivotContainer {
+  height: calc(100vh - 120px);
+  margin-top: 80px;
+  max-height: calc(100vh - 120px);
+}
+

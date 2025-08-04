@@ -692,9 +692,8 @@ function updateTableStats(total, displayed, searchMatches) {
     `;
 }
 
-// 儲存初始的樞紐分析表配置
-let pivotConfig = null;
-let pivotData = null;
+let pivotInitialData = null;
+let pivotInitialConfig = null;
 
 // 修改 renderPivotTable 函數
 function renderPivotTable(sheetData) {
@@ -706,27 +705,61 @@ function renderPivotTable(sheetData) {
         return;
     }
     
-    // 儲存資料供重置使用
+    // 儲存原始資料和配置
     pivotData = sheetData.data;
+    pivotInitialData = JSON.parse(JSON.stringify(sheetData.data)); // 深拷貝
     
-    // 使用 PivotTable.js
-    try {
-        pivotConfig = {
-            rows: [],
-            cols: [],
-            aggregatorName: "Count",
-            rendererName: "Table",
-            unusedAttrsVertical: true,
-            renderers: $.pivotUtilities.renderers,
-            aggregators: $.pivotUtilities.aggregators,
-            localeStrings: $.pivotUtilities.locales.zh,
-            onRefresh: function(config) {
-                // 儲存當前配置供匯出使用
-                pivotConfig = config;
+    // 定義初始配置
+    pivotInitialConfig = {
+        rows: [],
+        cols: [],
+        vals: [],
+        aggregatorName: "Count",
+        rendererName: "Table",
+        unusedAttrsVertical: true,
+        renderers: $.pivotUtilities.renderers,
+        aggregators: $.pivotUtilities.aggregators,
+        localeStrings: {
+            renderError: "結果計算錯誤",
+            computeError: "資料計算錯誤",
+            uiRenderError: "介面繪製錯誤",
+            aggregators: {
+                "Count": "計數",
+                "Count Unique Values": "計數唯一值",
+                "List Unique Values": "列出唯一值",
+                "Sum": "總和",
+                "Integer Sum": "整數總和",
+                "Average": "平均",
+                "Median": "中位數",
+                "Sample Variance": "樣本變異數",
+                "Sample Standard Deviation": "樣本標準差",
+                "Minimum": "最小值",
+                "Maximum": "最大值",
+                "First": "第一個",
+                "Last": "最後一個",
+                "Sum over Sum": "總和比例",
+                "Sum as Fraction of Total": "總和佔比",
+                "Sum as Fraction of Rows": "列總和佔比",
+                "Sum as Fraction of Columns": "欄總和佔比",
+                "Count as Fraction of Total": "計數佔比",
+                "Count as Fraction of Rows": "列計數佔比",
+                "Count as Fraction of Columns": "欄計數佔比"
+            },
+            renderers: {
+                "Table": "表格",
+                "Table Barchart": "表格長條圖",
+                "Heatmap": "熱圖",
+                "Row Heatmap": "列熱圖",
+                "Col Heatmap": "欄熱圖"
             }
-        };
-        
-        $(container).pivotUI(pivotData, pivotConfig);
+        },
+        onRefresh: function(config) {
+            pivotConfig = config;
+        }
+    };
+    
+    try {
+        $(container).pivotUI(pivotInitialData, pivotInitialConfig);
     } catch (error) {
         console.error('樞紐分析錯誤:', error);
         container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
@@ -734,24 +767,23 @@ function renderPivotTable(sheetData) {
 }
 
 function resetPivotTable() {
-    if (!pivotData) {
+    if (!pivotInitialData || !pivotInitialConfig) {
         showAlertDialog('提示', '沒有資料可重置', 'warning');
         return;
     }
     
-    // 使用自定義確認對話框
     showConfirmDialog(
         '重置樞紐分析表',
-        '確定要重置樞紐分析表嗎？這將清除所有目前的設定。',
+        '確定要重置樞紐分析表嗎？這將清除所有目前的設定，還原到初始狀態。',
         () => {
-            // 確認後的操作
             const container = document.getElementById('pivotContainer');
             
-            // 完全清空容器
-            $(container).empty();
+            // 移除舊的樞紐分析表
+            $(container).pivot("destroy");
+            container.innerHTML = '';
             
-            // 重新初始化為初始配置
-            const initialConfig = {
+            // 創建全新的配置（深拷貝）
+            const freshConfig = {
                 rows: [],
                 cols: [],
                 vals: [],
@@ -760,50 +792,31 @@ function resetPivotTable() {
                 unusedAttrsVertical: true,
                 renderers: $.pivotUtilities.renderers,
                 aggregators: $.pivotUtilities.aggregators,
-                localeStrings: {
-                    renderError: "結果計算錯誤",
-                    computeError: "資料計算錯誤",
-                    uiRenderError: "介面繪製錯誤",
-                    aggregators: {
-                        "Count": "計數",
-                        "Count Unique Values": "計數唯一值",
-                        "List Unique Values": "列出唯一值",
-                        "Sum": "總和",
-                        "Integer Sum": "整數總和",
-                        "Average": "平均",
-                        "Median": "中位數",
-                        "Sample Variance": "樣本變異數",
-                        "Sample Standard Deviation": "樣本標準差",
-                        "Minimum": "最小值",
-                        "Maximum": "最大值",
-                        "First": "第一個",
-                        "Last": "最後一個",
-                        "Sum over Sum": "總和比例",
-                        "Sum as Fraction of Total": "總和佔比",
-                        "Sum as Fraction of Rows": "列總和佔比",
-                        "Sum as Fraction of Columns": "欄總和佔比",
-                        "Count as Fraction of Total": "計數佔比",
-                        "Count as Fraction of Rows": "列計數佔比",
-                        "Count as Fraction of Columns": "欄計數佔比"
-                    },
-                    renderers: {
-                        "Table": "表格",
-                        "Table Barchart": "表格長條圖",
-                        "Heatmap": "熱圖",
-                        "Row Heatmap": "列熱圖",
-                        "Col Heatmap": "欄熱圖"
-                    }
-                },
+                localeStrings: pivotInitialConfig.localeStrings,
                 onRefresh: function(config) {
                     pivotConfig = config;
                 }
             };
             
-            // 重新初始化
-            $(container).pivotUI(pivotData, initialConfig);
+            // 使用原始資料的深拷貝重新初始化
+            const freshData = JSON.parse(JSON.stringify(pivotInitialData));
             
-            // 顯示成功訊息
-            showToast('樞紐分析表已重置', 'success');
+            try {
+                $(container).pivotUI(freshData, freshConfig);
+                
+                // 如果目前是隱藏拖曳區的狀態，重新應用
+                if (!areasVisible) {
+                    setTimeout(() => {
+                        $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
+                        $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().hide();
+                    }, 100);
+                }
+                
+                showToast('樞紐分析表已重置為初始狀態', 'success');
+            } catch (error) {
+                console.error('重置失敗:', error);
+                showAlertDialog('錯誤', '重置失敗，請重新整理頁面', 'error');
+            }
         }
     );
 }
@@ -2290,15 +2303,17 @@ function togglePivotAreas() {
     areasVisible = !areasVisible;
     
     if (areasVisible) {
-        // 顯示拖曳區域
+        // 顯示拖曳區域和控制區
         $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').show();
+        $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().show();
         icon.classList.remove('fa-eye');
         icon.classList.add('fa-eye-slash');
         text.textContent = '隱藏拖曳區';
         pivotContainer.classList.remove('areas-hidden');
     } else {
-        // 隱藏拖曳區域
+        // 隱藏拖曳區域和控制區
         $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
+        $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().hide();
         icon.classList.remove('fa-eye-slash');
         icon.classList.add('fa-eye');
         text.textContent = '顯示拖曳區';
