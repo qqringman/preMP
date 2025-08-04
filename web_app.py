@@ -1025,28 +1025,47 @@ def export_excel(task_id):
             task_data = processing_status[task_id]
             results = task_data.get('results', {})
             
-            if 'summary_report' in results:
+            # 嘗試多個可能的鍵值
+            if 'compare_results' in results:
+                compare_results = results['compare_results']
+                if isinstance(compare_results, dict) and 'summary_report' in compare_results:
+                    summary_report_path = compare_results['summary_report']
+            
+            if not summary_report_path and 'summary_report' in results:
                 summary_report_path = results['summary_report']
         
         # 2. 從比對結果目錄中查找
         if not summary_report_path:
             compare_dir = os.path.join('compare_results', task_id)
             if os.path.exists(compare_dir):
-                for file in os.listdir(compare_dir):
-                    if file == 'all_compare.xlsx' or file.endswith('_summary.xlsx'):
-                        summary_report_path = os.path.join(compare_dir, file)
+                # 優先查找 all_scenarios_compare.xlsx
+                priority_files = ['all_scenarios_compare.xlsx', 'all_compare.xlsx']
+                
+                for filename in priority_files:
+                    file_path = os.path.join(compare_dir, filename)
+                    if os.path.exists(file_path):
+                        summary_report_path = file_path
                         break
+                
+                # 如果還是沒找到，查找任何 xlsx 檔案
+                if not summary_report_path:
+                    for file in os.listdir(compare_dir):
+                        if file.endswith('.xlsx'):
+                            summary_report_path = os.path.join(compare_dir, file)
+                            break
         
         # 3. 返回檔案
         if summary_report_path and os.path.exists(summary_report_path):
             return send_file(
                 summary_report_path, 
                 as_attachment=True,
-                download_name=f'compare_results_{task_id}.xlsx'
+                download_name=f'compare_results_{task_id}.xlsx',
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
         
-        # 如果沒有找到檔案
-        return jsonify({'error': '找不到報表檔案'}), 404
+        # 如果沒有找到檔案，嘗試從任務結果重新生成
+        app.logger.error(f'No Excel file found for task {task_id}')
+        return jsonify({'error': '找不到報表檔案，檔案可能已被移除或任務尚未完成'}), 404
         
     except Exception as e:
         app.logger.error(f'Export Excel error: {e}')

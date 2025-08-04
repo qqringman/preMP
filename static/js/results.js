@@ -1288,78 +1288,23 @@ async function exportCurrentView(format) {
     
     try {
         if (format === 'excel') {
-            // 顯示載入中
-            showExportLoading();
-            
-            // 準備當前資料表的資料
-            const sheetData = currentData[currentSheet];
-            const filteredData = applyDataFilters(sheetData.data);
-            
-            // 建立 Excel 檔案
-            const workbook = XLSX.utils.book_new();
-            const worksheet = XLSX.utils.json_to_sheet(filteredData);
-            
-            // 設定欄寬
-            const columns = sheetData.columns || Object.keys(filteredData[0] || {});
-            const wscols = columns.map(col => ({ wch: getColumnWidth(col).replace('px', '') / 8 }));
-            worksheet['!cols'] = wscols;
-            
-            XLSX.utils.book_append_sheet(workbook, worksheet, currentSheet);
-            
-            // 下載檔案
-            XLSX.writeFile(workbook, `${currentSheet}_${taskId}.xlsx`);
-            
-            hideExportLoading();
+            // 直接下載原始的 Excel 檔案，但只包含當前資料表
+            window.location.href = `/api/export-sheet/${taskId}/${currentSheet}?format=excel`;
         }
     } catch (error) {
         console.error('匯出錯誤:', error);
         alert('匯出失敗：' + error.message);
-        hideExportLoading();
     }
 }
 
 // 下載完整報表
 async function downloadFullReport() {
-    if (!currentData) {
-        alert('沒有可下載的資料');
-        return;
-    }
-    
     try {
-        showExportLoading();
-        
-        // 建立 Excel 檔案包含所有資料表
-        const workbook = XLSX.utils.book_new();
-        
-        // 按順序加入資料表
-        const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對'];
-        
-        sheetOrder.forEach(sheetName => {
-            if (currentData[sheetName]) {
-                const sheetData = currentData[sheetName];
-                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
-                XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-            }
-        });
-        
-        // 加入其他資料表
-        Object.keys(currentData).forEach(sheetName => {
-            if (!sheetOrder.includes(sheetName)) {
-                const sheetData = currentData[sheetName];
-                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
-                XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-            }
-        });
-        
-        // 下載檔案
-        XLSX.writeFile(workbook, `complete_report_${taskId}.xlsx`);
-        
-        hideExportLoading();
-        
+        // 直接下載原始的完整 Excel 檔案
+        window.location.href = `/api/export-excel/${taskId}`;
     } catch (error) {
         console.error('下載完整報表錯誤:', error);
         alert('下載失敗：' + error.message);
-        hideExportLoading();
     }
 }
 
