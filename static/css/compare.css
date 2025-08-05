@@ -2267,3 +2267,667 @@ input.path-input::-webkit-contacts-auto-fill-button {
 #compareDetailsModal .file-list-container {
     margin: 0 !important;
 }
+
+/* 表格捲軸容器 */
+.table-scroll-container {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: white;
+}
+
+/* 修改表格標頭樣式 */
+.files-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.files-table thead {
+    background: white !important;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.files-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: #424242;
+    background: white !important;
+    border-bottom: 2px solid #E3F2FD;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+}
+
+.files-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #F5F5F5;
+    vertical-align: middle;
+}
+
+.files-table tbody tr:hover {
+    background-color: #FAFAFA;
+}
+
+/* 操作按鈕樣式 */
+.action-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #E0E0E0;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    background: #E3F2FD;
+    border-color: #2196F3;
+    transform: scale(1.05);
+}
+
+.action-btn i {
+    color: #757575;
+    font-size: 0.875rem;
+}
+
+.action-btn:hover i {
+    color: #2196F3;
+}
+
+/* 底部統計樣式 */
+.table-footer {
+    text-align: center;
+    padding: 20px;
+    background: #FAFAFA;
+    border-top: 1px solid #F0F0F0;
+    color: #9E9E9E;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.table-footer i {
+    color: #BDBDBD;
+}
+
+/* 移除橫向捲軸 */
+.modal-body {
+    overflow-x: hidden !important;
+}
+
+/* 檔案列表容器樣式調整 */
+#filesModalBody .file-list-container,
+#compareDetailsModal .file-list-container {
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+
+/* 表格容器樣式 */
+.files-table-wrapper {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: white;
+}
+
+/* 確保捲軸樣式一致 */
+.table-scroll-container::-webkit-scrollbar,
+.files-table-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track,
+.files-table-wrapper::-webkit-scrollbar-track {
+    background: #F5F5F5;
+    border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb,
+.files-table-wrapper::-webkit-scrollbar-thumb {
+    background: #BDBDBD;
+    border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover,
+.files-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #9E9E9E;
+}
+
+/* 表格捲軸容器 */
+.table-scroll-container {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: auto; /* 允許橫向捲軸 */
+    background: white;
+    border-left: 1px solid #F0F0F0;
+    border-right: 1px solid #F0F0F0;
+}
+
+/* 修改表格標頭樣式 */
+#compareDetailsModal .files-table {
+    width: auto; /* 改為 auto，不限制寬度 */
+    min-width: 100%; /* 確保至少填滿容器 */
+    border-collapse: collapse;
+    table-layout: auto; /* 改為 auto */
+}
+
+#compareDetailsModal .files-table thead {
+    background: linear-gradient(to bottom, #FFFFFF 0%, #FAFAFA 100%) !important;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#compareDetailsModal .files-table th {
+    padding: 18px 24px;
+    text-align: left;
+    font-weight: 600;
+    color: #37474F;
+    background: transparent;
+    border-bottom: 3px solid #E3F2FD;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+    position: relative;
+}
+
+/* 標頭設計感 */
+#compareDetailsModal .files-table th::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #2196F3, transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#compareDetailsModal .files-table th:hover::after {
+    opacity: 1;
+}
+
+#compareDetailsModal .files-table td {
+    padding: 16px 24px;
+    border-bottom: 1px solid #F5F5F5;
+    vertical-align: middle;
+    white-space: nowrap; /* 防止文字換行 */
+}
+
+#compareDetailsModal .files-table tbody tr:hover {
+    background-color: #F8FBFF;
+}
+
+/* 操作欄位固定在右側 */
+#compareDetailsModal .files-table th:last-child,
+#compareDetailsModal .files-table td:last-child {
+    position: sticky;
+    right: 0;
+    background: white;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.05);
+}
+
+#compareDetailsModal .files-table th:last-child {
+    background: linear-gradient(to bottom, #FFFFFF 0%, #FAFAFA 100%);
+}
+
+/* 操作按鈕樣式 */
+.action-btn {
+    width: 36px;
+    height: 36px;
+    border: 2px solid #E3F2FD;
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    border-color: #2196F3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+}
+
+.action-btn i {
+    color: #64B5F6;
+    font-size: 0.9375rem;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover i {
+    color: #1976D2;
+    transform: scale(1.1);
+}
+
+/* 底部統計樣式 */
+.table-footer {
+    text-align: center;
+    padding: 24px;
+    background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
+    border-top: 2px solid #E3F2FD;
+    color: #78909C;
+    font-size: 0.9375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+.table-footer i {
+    color: #90CAF9;
+    font-size: 1.125rem;
+}
+
+/* 捲軸樣式美化 */
+.table-scroll-container::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+    background: #F5F9FF;
+    border-radius: 5px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+    background: #90CAF9;
+    border-radius: 5px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #64B5F6;
+}
+
+.table-scroll-container::-webkit-scrollbar-corner {
+    background: #F5F9FF;
+}
+
+/* 修改模態框內容區域 */
+#compareDetailsModal .modal-body {
+    padding: 0 !important;
+    background: #FFFFFF;
+    max-height: 80vh;
+    overflow: hidden; /* 防止模態框本身有捲軸 */
+}
+
+/* 確保檔案列表標頭有設計感 */
+#compareDetailsModal .file-list-header {
+    position: relative;
+    overflow: hidden;
+}
+
+#compareDetailsModal .file-list-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    animation: pulse 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.1); opacity: 0.3; }
+}
+
+/* 模態框表格標頭設計 */
+.modal-table-header {
+    position: relative;
+    padding: 24px 32px !important;
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
+    overflow: hidden;
+}
+
+.modal-table-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -30%;
+    width: 60%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+    transform: rotate(35deg);
+    animation: shimmer 3s ease-in-out infinite;
+}
+
+.header-background-effect {
+    position: absolute;
+    top: 0;
+    right: -200px;
+    width: 400px;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+    transform: skewX(-20deg);
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%) rotate(35deg); }
+    100% { transform: translateX(200%) rotate(35deg); }
+}
+
+/* 修改模態框內容高度限制 */
+#compareDetailsModal .modal-content {
+    max-height: 90vh !important;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+#compareDetailsModal .modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(90vh - 60px); /* 減去標頭高度 */
+}
+
+/* 表格捲軸容器 */
+.table-scroll-wrapper {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: auto;
+    background: white;
+    max-height: calc(80vh - 180px); /* 限制高度 */
+}
+
+/* 表格樣式 */
+#compareDetailsModal .files-table {
+    width: auto;
+    min-width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+#compareDetailsModal .files-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: linear-gradient(to bottom, #FFFFFF 0%, #FAFAFA 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#compareDetailsModal .files-table th {
+    padding: 18px 24px;
+    text-align: left;
+    font-weight: 600;
+    color: #37474F;
+    background: white;
+    border-bottom: 3px solid #E3F2FD;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+}
+
+#compareDetailsModal .files-table td {
+    padding: 16px 24px;
+    border-bottom: 1px solid #F5F5F5;
+    vertical-align: middle;
+}
+
+/* 連結樣式 */
+.table-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #2196F3;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.table-link:hover {
+    background: #E3F2FD;
+    color: #1976D2;
+}
+
+.table-link i {
+    font-size: 0.875rem;
+}
+
+/* 移除之前的操作欄位固定樣式 */
+#compareDetailsModal .files-table th:last-child,
+#compareDetailsModal .files-table td:last-child {
+    position: static;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* 表格容器高度限制 */
+.file-list-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* 捲軸樣式 */
+.table-scroll-wrapper::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-track {
+    background: #F5F9FF;
+    border-radius: 5px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+    background: #90CAF9;
+    border-radius: 5px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #64B5F6;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-corner {
+    background: #F5F9FF;
+}
+
+/* 確保底部統計不被遮擋 */
+.table-footer {
+    position: relative;
+    text-align: center;
+    padding: 24px;
+    background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
+    border-top: 2px solid #E3F2FD;
+    color: #78909C;
+    font-size: 0.9375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+/* 修正標頭文字顏色 */
+.modal-table-header .file-list-title,
+.modal-table-header .file-count-badge {
+    color: white !important;
+}
+
+/* 修正頁籤內容區域 */
+#compareDetailsModal .tab-content {
+    display: none;
+    height: 100%;
+    overflow: hidden;
+}
+
+#compareDetailsModal .tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 比對模態框標頭 - 統一設計 */
+.compare-modal-header {
+    position: relative;
+    background: #2196F3;
+    color: white;
+    padding: 24px 32px;
+    overflow: hidden;
+}
+
+.compare-modal-header::before {
+    content: "";
+    position: absolute;
+    top: -100%;
+    right: -25%;
+    width: 70%;
+    height: 300%;
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    transform: rotate(35deg);
+    opacity: 0.5;
+}
+
+/* 統一的表格標頭設計 */
+.modal-table-header {
+    position: relative;
+    padding: 24px 32px !important;
+    overflow: hidden;
+    background: #2196F3;
+    color: white;
+}
+
+.modal-table-header::before {
+    content: "";
+    position: absolute;
+    top: -100%;
+    right: -25%;
+    width: 70%;
+    height: 300%;
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    transform: rotate(35deg);
+    opacity: 0.5;
+}
+
+.modal-table-header .file-list-title,
+.modal-table-header .file-count-badge {
+    position: relative;
+    z-index: 1;
+    color: white !important;
+}
+
+/* 修正表格捲軸容器 */
+.table-scroll-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: white;
+}
+
+.table-scroll-wrapper .files-table-container {
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+/* 確保表格容器正確顯示 */
+#compareDetailsModal .file-list-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* 表格樣式調整 */
+#compareDetailsModal .files-table {
+    width: auto;
+    min-width: 100%;
+    border-collapse: collapse;
+}
+
+/* 固定表頭 */
+#compareDetailsModal .files-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+#compareDetailsModal .files-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: #424242;
+    background: white !important;
+    border-bottom: 2px solid #E3F2FD;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+}
+
+/* 頁籤容器修正 */
+#compareDetailsModal .tab-container {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#compareDetailsModal .tab-content {
+    flex: 1;
+    overflow: hidden;
+    display: none;
+}
+
+#compareDetailsModal .tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 移除多餘的捲軸 */
+#compareDetailsModal .modal-body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#compareDetailsModal .modal-body::-webkit-scrollbar {
+    display: none;
+}
+
+/* 只在表格內容區顯示捲軸 */
+.files-table-container {
+    scrollbar-width: thin;
+    scrollbar-color: #90CAF9 #F5F9FF;
+}
+
+.files-table-container::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.files-table-container::-webkit-scrollbar-track {
+    background: #F5F9FF;
+    border-radius: 5px;
+}
+
+.files-table-container::-webkit-scrollbar-thumb {
+    background: #90CAF9;
+    border-radius: 5px;
+}
+
+.files-table-container::-webkit-scrollbar-thumb:hover {
+    background: #64B5F6;
+}
+
+.files-table-container::-webkit-scrollbar-corner {
+    background: #F5F9FF;
+}

@@ -662,12 +662,11 @@ async function showCompareDetails(type) {
     }
 }
 
-// 顯示比對模態框 - 美化版本
+// 顯示比對模態框 - 修正版本
 function showCompareModal(pivotData, sheets, title, modalClass) {
     // 創建或取得模態框
     let modal = document.getElementById('compareDetailsModal');
     if (!modal) {
-        // 創建新的模態框
         modal = document.createElement('div');
         modal.id = 'compareDetailsModal';
         modal.className = 'modal hidden';
@@ -678,16 +677,16 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     let headerColor = '';
     switch(modalClass) {
         case 'info':
-            headerColor = '#2196F3'; // 藍色 - Master vs PreMP
+            headerColor = '#2196F3';
             break;
         case 'success':
-            headerColor = '#4CAF50'; // 綠色 - PreMP vs Wave
+            headerColor = '#4CAF50';
             break;
         case 'warning':
-            headerColor = '#FF9800'; // 橘色 - Wave vs Backup
+            headerColor = '#FF9800';
             break;
         case 'danger':
-            headerColor = '#F44336'; // 紅色 - 無法比對
+            headerColor = '#F44336';
             break;
         default:
             headerColor = '#2196F3';
@@ -698,8 +697,8 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     // 如果沒有資料
     if (!sheets || sheets.length === 0) {
         modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header" style="background: ${headerColor};">
+            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
@@ -721,8 +720,8 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         const tableHtml = sheetData ? generateCompareTable(sheetData, sheets[0].title, headerColor) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
         
         modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header" style="background: ${headerColor};">
+            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
@@ -730,7 +729,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="modal-body" style="padding: 0;">
+                <div class="modal-body" style="padding: 0; flex: 1; overflow: hidden;">
                     ${tableHtml}
                 </div>
             </div>
@@ -738,7 +737,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     } else {
         // 多個資料表，顯示頁籤
         let tabsHtml = '<div class="source-tabs" style="margin: 20px 20px 0 20px;">';
-        let contentHtml = '<div class="tab-container">';
+        let contentHtml = '<div class="tab-container" style="flex: 1; overflow: hidden;">';
         
         sheets.forEach((sheet, index) => {
             const isActive = index === 0;
@@ -755,7 +754,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
             // 頁籤內容
             const tableHtml = sheetData ? generateCompareTable(sheetData, sheet.title, headerColor) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
             contentHtml += `
-                <div class="tab-content ${isActive ? 'active' : ''}" id="tab-${sheet.name}">
+                <div class="tab-content ${isActive ? 'active' : ''}" id="tab-${sheet.name}" style="height: 100%; display: ${isActive ? 'flex' : 'none'}; flex-direction: column;">
                     ${tableHtml}
                 </div>
             `;
@@ -765,8 +764,8 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         contentHtml += '</div>';
         
         modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header" style="background: ${headerColor};">
+            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
@@ -774,7 +773,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="modal-body" style="padding: 0;">
+                <div class="modal-body" style="padding: 0; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
                     ${tabsHtml}
                     ${contentHtml}
                 </div>
@@ -804,227 +803,120 @@ function switchModalTab(sheetName, clickedBtn) {
     }
 }
 
-// 生成比對表格 - 統一設計風格
+// 生成比對表格 - 修正版本
 function generateCompareTable(sheetData, sheetTitle, headerColor) {
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
     }
     
-    // 根據標題判斷是否為無法比對的模組
-    const isFailedModule = sheetTitle.includes('無法比對');
-    
     // 使用統一的表格結構
     let html = `
-        <div class="file-list-container" style="border-radius: 0; border: none; box-shadow: none; margin: 0;">
-            <div class="file-list-header" style="background: ${headerColor}; padding: 20px 24px;">
-                <h4 class="file-list-title" style="font-size: 1.125rem; display: flex; align-items: center; gap: 12px;">
+        <div class="file-list-container">
+            <div class="file-list-header modal-table-header">
+                <h4 class="file-list-title">
                     <i class="fas fa-list"></i> ${sheetTitle}
                 </h4>
-                <span class="file-count-badge" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);">
+                <span class="file-count-badge">
                     共 ${sheetData.data.length} 個檔案
                 </span>
             </div>
-            <div style="background: white; padding: 0;">
-                <table class="files-table" style="width: 100%; border-collapse: collapse;">
+            <div class="table-scroll-wrapper">
+                <div class="files-table-container">
+                    <table class="files-table">
     `;
     
     // 表頭
-    html += '<thead style="background: #FAFAFA;"><tr>';
-    html += '<th style="width: 50px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">#</th>';
+    html += '<thead><tr>';
     
-    if (isFailedModule) {
-        // 無法比對模組的表頭
-        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">檔案名稱</th>';
-        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">FTP 路徑</th>';
-        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">本地路徑</th>';
-        html += '<th style="width: 80px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">操作</th>';
-    } else {
-        // 其他比對結果的表頭
-        sheetData.columns.forEach(col => {
-            let width = '';
-            let thText = col;
-            
-            // 轉換欄位名稱
-            const columnMap = {
-                'module': '檔案名稱',
-                'location_path': 'FTP 路徑',
-                'path': 'FTP 路徑',
-                'base_folder': '本地路徑'
-            };
-            
-            if (columnMap[col]) {
-                thText = columnMap[col];
-            }
-            
-            // 設定寬度
-            if (col === 'module' || thText === '檔案名稱') {
-                width = 'width: 200px;';
-            } else if (thText === 'FTP 路徑') {
-                width = 'width: 35%;';
-            } else if (thText === '本地路徑') {
-                width = 'width: 35%;';
-            }
-            
-            html += `<th style="${width} padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">${thText}</th>`;
-        });
+    // 動態生成欄位
+    sheetData.columns.forEach(col => {
+        let thText = col;
+        let minWidth = '150px';
         
-        // 操作欄位
-        html += '<th style="width: 80px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">操作</th>';
-    }
+        // 欄位名稱對應
+        const columnMap = {
+            'module': { text: '模組名稱', width: '200px' },
+            'location_path': { text: 'FTP 路徑', width: '400px' },
+            'path': { text: 'FTP 路徑', width: '400px' },
+            'base_folder': { text: '本地路徑', width: '300px' },
+            'compare_folder': { text: 'compare_folder', width: '200px' },
+            'file_type': { text: 'file_type', width: '150px' },
+            'base_content': { text: 'base_content', width: '300px' }
+        };
+        
+        if (columnMap[col]) {
+            thText = columnMap[col].text;
+            minWidth = columnMap[col].width;
+        } else if (col.length > 20) {
+            minWidth = '250px';
+        }
+        
+        html += `<th style="min-width: ${minWidth};">${thText}</th>`;
+    });
     
     html += '</tr></thead>';
     
     // 表身
     html += '<tbody>';
     
-    if (isFailedModule) {
-        // 無法比對模組的資料處理
-        sheetData.data.forEach((row, index) => {
-            html += '<tr style="border-bottom: 1px solid #F5F5F5;">';
-            html += `<td style="text-align: center; padding: 14px 20px; color: #BDBDBD; font-weight: 500;">${index + 1}</td>`;
+    sheetData.data.forEach((row) => {
+        html += '<tr>';
+        
+        sheetData.columns.forEach(col => {
+            let value = row[col] || '';
+            let cellContent = value;
             
-            // 檔案名稱
-            const moduleName = row['模組名稱'] || row['module'] || '-';
-            let icon = 'fa-cube';
-            if (moduleName.includes('dprx_quickshow')) {
-                icon = 'fa-file';
-            } else if (moduleName.includes('bootcode')) {
-                icon = 'fa-file-code';
-            } else if (moduleName.includes('Merlin7')) {
-                icon = 'fa-folder';
+            // 處理不同類型的欄位
+            if (col === 'module' || col === '模組名稱') {
+                let icon = 'fa-file';
+                const fileName = value.toLowerCase();
+                
+                if (fileName.includes('manifest.xml')) {
+                    icon = 'fa-file-code';
+                } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
+                    icon = 'fa-file-alt';
+                } else if (fileName.includes('.txt')) {
+                    icon = 'fa-file-alt';
+                } else if (fileName.includes('dprx_quickshow')) {
+                    icon = 'fa-cube';
+                } else if (fileName.includes('bootcode')) {
+                    icon = 'fa-microchip';
+                }
+                
+                cellContent = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas ${icon}" style="color: #2196F3;"></i>
+                        <span>${value}</span>
+                    </div>
+                `;
+            } else if (col.includes('link') || col.includes('_link')) {
+                if (value && value.startsWith('http')) {
+                    cellContent = `<a href="${value}" target="_blank" class="table-link">
+                        <i class="fas fa-external-link-alt"></i> 查看
+                    </a>`;
+                }
+            } else if (col.includes('path') || col.includes('folder')) {
+                cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
             }
             
-            html += `
-                <td style="padding: 14px 20px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas ${icon}" style="color: #2196F3; font-size: 1rem;"></i>
-                        <span style="color: #424242; font-weight: 500;">${moduleName}</span>
-                    </div>
-                </td>
-            `;
-            
-            // FTP 路徑（失敗原因）
-            html += `<td style="padding: 14px 20px; color: #757575; font-size: 0.875rem;">-</td>`;
-            
-            // 本地路徑（比對情境）
-            html += `<td style="padding: 14px 20px; color: #757575; font-size: 0.875rem;">-</td>`;
-            
-            // 操作
-            html += `
-                <td style="text-align: center; padding: 14px 20px;">
-                    <button class="action-btn" style="
-                        width: 32px; 
-                        height: 32px; 
-                        border: 1px solid #E0E0E0; 
-                        background: white; 
-                        border-radius: 6px; 
-                        cursor: pointer;
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: all 0.2s ease;
-                    " 
-                    onmouseover="this.style.background='#F5F5F5'" 
-                    onmouseout="this.style.background='white'"
-                    onclick="previewFailedModule('${moduleName}')"
-                    title="預覽">
-                        <i class="fas fa-eye" style="color: #757575; font-size: 0.875rem;"></i>
-                    </button>
-                </td>
-            `;
-            
-            html += '</tr>';
+            html += `<td>${cellContent}</td>`;
         });
-    } else {
-        // 其他比對結果的資料處理
-        sheetData.data.forEach((row, index) => {
-            html += '<tr style="border-bottom: 1px solid #F5F5F5;">';
-            html += `<td style="text-align: center; padding: 14px 20px; color: #BDBDBD; font-weight: 500;">${index + 1}</td>`;
-            
-            sheetData.columns.forEach(col => {
-                let value = row[col] || '';
-                
-                if (col === 'module' || col === '模組名稱') {
-                    // 檔案名稱欄位
-                    let icon = 'fa-file';
-                    const fileName = value.toLowerCase();
-                    
-                    if (fileName.includes('manifest.xml')) {
-                        icon = 'fa-file-code';
-                    } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
-                        icon = 'fa-file-alt';
-                    }
-                    
-                    html += `
-                        <td style="padding: 14px 20px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <i class="fas ${icon}" style="color: #2196F3; font-size: 1rem;"></i>
-                                <span style="color: #424242; font-weight: 500;">${value}</span>
-                            </div>
-                        </td>
-                    `;
-                } else if (col === 'location_path' || col === 'path') {
-                    // FTP 路徑
-                    html += `<td style="padding: 14px 20px; color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">${value}</td>`;
-                } else if (col === 'base_folder') {
-                    // 本地路徑
-                    html += `<td style="padding: 14px 20px; color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">downloads/${value}</td>`;
-                } else {
-                    // 其他欄位
-                    html += `<td style="padding: 14px 20px; color: #757575;">${value}</td>`;
-                }
-            });
-            
-            // 操作按鈕
-            html += `
-                <td style="text-align: center; padding: 14px 20px;">
-                    <button class="action-btn" style="
-                        width: 32px; 
-                        height: 32px; 
-                        border: 1px solid #E0E0E0; 
-                        background: white; 
-                        border-radius: 6px; 
-                        cursor: pointer;
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: all 0.2s ease;
-                    " 
-                    onmouseover="this.style.background='#F5F5F5'" 
-                    onmouseout="this.style.background='white'"
-                    onclick="previewCompareFile('${row.module || ''}', '${row.path || row.location_path || ''}')"
-                    title="預覽">
-                        <i class="fas fa-eye" style="color: #757575; font-size: 0.875rem;"></i>
-                    </button>
-                </td>
-            `;
-            
-            html += '</tr>';
-        });
-    }
+        
+        html += '</tr>';
+    });
     
     html += '</tbody></table>';
+    html += '</div></div>'; // 關閉 files-table-container 和 table-scroll-wrapper
     
-    // 底部統計 - 統一樣式
+    // 底部統計
     html += `
-        <div style="
-            text-align: center; 
-            padding: 20px; 
-            background: #FAFAFA; 
-            border-top: 1px solid #F0F0F0; 
-            color: #9E9E9E; 
-            font-size: 0.875rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        ">
-            <i class="fas fa-chart-bar" style="color: #BDBDBD;"></i>
+        <div class="table-footer">
+            <i class="fas fa-chart-bar"></i>
             共 ${sheetData.data.length} 個檔案
         </div>
     `;
     
-    html += '</div></div>';
+    html += '</div>';
     
     return html;
 }
