@@ -522,34 +522,64 @@ function showCompareResults(results) {
     utils.showNotification('比對完成！', 'success');
 }
 
-// 生成比對結果摘要
+// 生成比對結果摘要 - 使用與下載頁面相同的樣式
 function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
-    let html = '<div class="result-summary">';
-    // 遍歷所有比對結果
-    for (const [scenario, data] of Object.entries(compareResults)) {
-        const scenarioInfo = getScenarioInfo(scenario);
-        html += createSummaryCard(scenarioInfo.name, data, scenarioInfo.icon);
+    
+    // 使用與下載頁面相同的 progress-stats 結構
+    let html = '<div class="progress-stats">';
+    
+    // Master vs PreMP
+    if (compareResults.master_vs_premp) {
+        const data = compareResults.master_vs_premp;
+        html += createStatCard('master_vs_premp', 'Master vs PreMP', data.success || 0, 'blue', 'fa-code-branch');
     }
     
-    // 如果有失敗的模組
-    const totalFailed = Object.values(compareResults).reduce((sum, data) => sum + (data.failed || 0), 0);
+    // PreMP vs Wave  
+    if (compareResults.premp_vs_wave) {
+        const data = compareResults.premp_vs_wave;
+        html += createStatCard('premp_vs_wave', 'PreMP vs Wave', data.success || 0, 'success', 'fa-water');
+    }
+    
+    // Wave vs Backup
+    if (compareResults.wave_vs_backup) {
+        const data = compareResults.wave_vs_backup;
+        html += createStatCard('wave_vs_backup', 'Wave vs Backup', data.success || 0, 'warning', 'fa-database');
+    }
+    
+    // 計算總失敗數
+    const totalFailed = Object.values(compareResults).reduce((sum, data) => {
+        if (typeof data === 'object' && data.failed) {
+            return sum + data.failed;
+        }
+        return sum;
+    }, 0);
+    
+    // 失敗的模組
     if (totalFailed > 0) {
-        html += `
-            <div class="summary-card error">
-                <div class="card-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="card-content">
-                    <div class="card-value">${totalFailed}</div>
-                    <div class="card-label">個模組無法比對</div>
-                </div>
-            </div>
-        `;
+        html += createStatCard('failed', '無法比對', totalFailed, 'danger', 'fa-exclamation-triangle');
     }
     
     html += '</div>';
+    
+    // 移除提示文字部分
+    
     return html;
+}
+
+// 創建統計卡片 - 新函數
+function createStatCard(type, title, value, colorClass, icon) {
+    return `
+        <div class="stat-card ${colorClass}" onclick="showCompareDetails('${type}')" title="點擊查看詳細資料">
+            <div class="stat-icon">
+                <i class="fas ${icon}"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">${value}</div>
+                <div class="stat-label">${title}</div>
+            </div>
+        </div>
+    `;
 }
 
 // 創建摘要卡片
@@ -567,6 +597,250 @@ function createSummaryCard(title, data, icon) {
             </div>
         </div>
     `;
+}
+
+// 顯示比對詳細資料
+async function showCompareDetails(type) {
+    if (!currentTaskId) {
+        utils.showNotification('無法取得任務資訊', 'error');
+        return;
+    }
+    
+    try {
+        // 取得比對資料
+        const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
+        
+        // 決定要顯示的資料和標題
+        let modalTitle = '';
+        let modalClass = '';
+        let relevantSheets = [];
+        
+        switch(type) {
+            case 'master_vs_premp':
+                modalTitle = 'Master vs PreMP';
+                modalClass = 'info';
+                // 可能的相關資料表
+                relevantSheets = [
+                    { name: 'revision_diff', title: 'Revision 差異' },
+                    { name: 'branch_error', title: '分支錯誤' },
+                    { name: 'lost_project', title: '新增/刪除專案' },
+                    { name: 'version_diff', title: '版本檔案差異' }
+                ];
+                break;
+            case 'premp_vs_wave':
+                modalTitle = 'PreMP vs Wave';
+                modalClass = 'success';
+                relevantSheets = [
+                    { name: 'premp_wave_diff', title: '差異比對' }
+                ];
+                break;
+            case 'wave_vs_backup':
+                modalTitle = 'Wave vs Backup';
+                modalClass = 'warning';
+                relevantSheets = [
+                    { name: 'wave_backup_diff', title: '差異比對' }
+                ];
+                break;
+            case 'failed':
+                modalTitle = '無法比對的模組';
+                modalClass = 'danger';
+                relevantSheets = [
+                    { name: '無法比對', title: '無法比對的模組' }
+                ];
+                break;
+        }
+        
+        // 過濾出實際存在的資料表
+        const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
+        
+        // 顯示資料
+        showCompareModal(pivotData, availableSheets, modalTitle, modalClass);
+        
+    } catch (error) {
+        console.error('Show compare details error:', error);
+        utils.showNotification('無法載入詳細資料', 'error');
+    }
+}
+
+// 顯示比對模態框
+function showCompareModal(pivotData, sheets, title, modalClass) {
+    // 創建或取得模態框
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        // 創建新的模態框
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    // 如果沒有資料
+    if (!sheets || sheets.length === 0) {
+        modal.innerHTML = `
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="fas fa-table"></i> ${title}
+                    </h3>
+                    <button class="modal-close" onclick="closeCompareModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="empty-message">
+                        <i class="fas fa-inbox fa-3x"></i>
+                        <p>沒有資料</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (sheets.length === 1) {
+        // 只有一個資料表，不需要頁籤
+        const sheetData = pivotData[sheets[0].name];
+        const tableHtml = sheetData ? generateCompareTable(sheetData) : '<div class="empty-message">沒有資料</div>';
+        
+        modal.innerHTML = `
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="fas fa-table"></i> ${title} - ${sheets[0].title}
+                    </h3>
+                    <button class="modal-close" onclick="closeCompareModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    ${tableHtml}
+                </div>
+            </div>
+        `;
+    } else {
+        // 多個資料表，顯示頁籤
+        let tabsHtml = '<div class="modal-tabs">';
+        let contentHtml = '<div class="modal-tab-content">';
+        
+        sheets.forEach((sheet, index) => {
+            const isActive = index === 0;
+            const sheetData = pivotData[sheet.name];
+            
+            // 頁籤按鈕
+            tabsHtml += `
+                <button class="tab-btn ${isActive ? 'active' : ''}" 
+                        onclick="switchModalTab('${sheet.name}')">
+                    <i class="fas fa-file-alt"></i> ${sheet.title}
+                </button>
+            `;
+            
+            // 頁籤內容
+            const tableHtml = sheetData ? generateCompareTable(sheetData) : '<div class="empty-message">沒有資料</div>';
+            contentHtml += `
+                <div class="tab-pane ${isActive ? 'active' : ''}" id="tab-${sheet.name}">
+                    ${tableHtml}
+                </div>
+            `;
+        });
+        
+        tabsHtml += '</div>';
+        contentHtml += '</div>';
+        
+        modal.innerHTML = `
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="fas fa-table"></i> ${title}
+                    </h3>
+                    <button class="modal-close" onclick="closeCompareModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    ${tabsHtml}
+                    ${contentHtml}
+                </div>
+            </div>
+        `;
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+// 切換模態框內的頁籤
+function switchModalTab(sheetName) {
+    // 更新頁籤按鈕狀態
+    document.querySelectorAll('#compareDetailsModal .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.textContent.includes(sheetName) || btn.onclick.toString().includes(sheetName)) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 切換內容
+    document.querySelectorAll('#compareDetailsModal .tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+    const targetPane = document.getElementById(`tab-${sheetName}`);
+    if (targetPane) {
+        targetPane.classList.add('active');
+    }
+}
+
+// 生成比對表格
+function generateCompareTable(sheetData) {
+    if (!sheetData || !sheetData.columns) return '';
+    
+    let html = '<div class="files-table-container"><table class="files-table">';
+    
+    // 表頭
+    html += '<thead><tr>';
+    html += '<th style="width: 50px">#</th>';
+    sheetData.columns.forEach(col => {
+        html += `<th>${col}</th>`;
+    });
+    html += '</tr></thead>';
+    
+    // 表身
+    html += '<tbody>';
+    sheetData.data.forEach((row, index) => {
+        html += '<tr>';
+        html += `<td class="index-cell">${index + 1}</td>`;
+        
+        sheetData.columns.forEach(col => {
+            let value = row[col] || '';
+            let cellClass = '';
+            
+            // 特殊處理某些欄位
+            if (col === 'problem' || col === '問題') {
+                cellClass = 'highlight-red';
+            }
+            
+            html += `<td class="${cellClass}">${value}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    
+    // 統計摘要
+    if (sheetData.data.length > 0) {
+        html += `
+            <div class="files-summary">
+                <i class="fas fa-chart-bar"></i>
+                共 ${sheetData.data.length} 筆資料
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// 關閉比對模態框
+function closeCompareModal() {
+    const modal = document.getElementById('compareDetailsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 // 繪製圖表
@@ -1256,3 +1530,6 @@ window.selectFolder = selectFolder;
 window.goToPath = goToPath;
 window.compareAgain = compareAgain;
 window.compareNewData = compareNewData;
+window.showCompareDetails = showCompareDetails;
+window.closeCompareModal = closeCompareModal;
+window.switchModalTab = switchModalTab;

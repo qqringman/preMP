@@ -384,33 +384,81 @@ class WebProcessor:
                 self.update_progress(30, 'comparing', '正在執行所有比對情境...')
                 all_results = self.comparator.compare_all_scenarios(source_dir, compare_dir)
                 
-                # 確保資料結構正確
-                self.results['compare_results'] = {
-                    'master_vs_premp': all_results.get('master_vs_premp', {
-                        'success': 0,
-                        'failed': 0,
-                        'modules': [],
-                        'failed_modules': [],
-                        'reports': []
-                    }),
-                    'premp_vs_wave': all_results.get('premp_vs_wave', {
-                        'success': 0,
-                        'failed': 0,
-                        'modules': [],
-                        'failed_modules': [],
-                        'reports': []
-                    }),
-                    'wave_vs_backup': all_results.get('wave_vs_backup', {
-                        'success': 0,
-                        'failed': 0,
-                        'modules': [],
-                        'failed_modules': [],
-                        'reports': []
-                    }),
-                    'failed': all_results.get('failed', 0),
-                    'failed_modules': all_results.get('failed_modules', []),
-                    'summary_report': all_results.get('summary_report', '')
-                }
+                # 確保資料結構正確，包含失敗的模組
+                compare_results = {}
+                failed_modules_list = []
+                
+                # 處理每個情境的結果
+                for scenario in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
+                    if scenario in all_results:
+                        scenario_data = all_results[scenario]
+                        compare_results[scenario] = {
+                            'success': scenario_data.get('success', 0),
+                            'failed': scenario_data.get('failed', 0),
+                            'modules': scenario_data.get('modules', []),
+                            'failed_modules': scenario_data.get('failed_modules', [])
+                        }
+                        # 收集失敗的模組
+                        for failed_module in scenario_data.get('failed_modules', []):
+                            # 確保失敗模組有正確的格式
+                            if isinstance(failed_module, str):
+                                # 如果只是字串，添加預設原因
+                                failed_modules_list.append({
+                                    '模組名稱': failed_module,
+                                    '失敗原因': '找不到對應的檔案',
+                                    '比對情境': scenario
+                                })
+                            elif isinstance(failed_module, dict):
+                                # 如果是字典，確保有必要的欄位
+                                failed_modules_list.append({
+                                    '模組名稱': failed_module.get('name', 'Unknown'),
+                                    '失敗原因': failed_module.get('reason', '找不到對應的檔案'),
+                                    '比對情境': scenario
+                                })
+                            elif isinstance(failed_module, (list, tuple)) and len(failed_module) >= 2:
+                                # 如果是列表或元組
+                                failed_modules_list.append({
+                                    '模組名稱': failed_module[0],
+                                    '失敗原因': failed_module[1] if len(failed_module) > 1 else '找不到對應的檔案',
+                                    '比對情境': scenario
+                                })
+                    else:
+                        compare_results[scenario] = {
+                            'success': 0,
+                            'failed': 0,
+                            'modules': [],
+                            'failed_modules': []
+                        }
+                
+                self.results['compare_results'] = compare_results
+                
+                # 如果有失敗的模組，創建一個專門的資料表
+                if failed_modules_list:
+                    # 使用字典列表創建 DataFrame
+                    failed_df = pd.DataFrame(failed_modules_list)
+                    
+                    # 確保比對結果目錄存在
+                    if not os.path.exists(compare_dir):
+                        os.makedirs(compare_dir)
+                    
+                    # 檢查是否已有摘要報告
+                    summary_report_path = os.path.join(compare_dir, 'all_scenarios_compare.xlsx')
+                    if os.path.exists(summary_report_path):
+                        # 如果已有報告，添加失敗模組到現有檔案
+                        with pd.ExcelWriter(summary_report_path, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
+                            failed_df.to_excel(writer, sheet_name='無法比對', index=False)
+                    else:
+                        # 創建新的 Excel 檔案
+                        failed_path = os.path.join(compare_dir, 'failed_modules.xlsx')
+                        with pd.ExcelWriter(failed_path, engine='openpyxl') as writer:
+                            failed_df.to_excel(writer, sheet_name='無法比對', index=False)
+                    
+                    self.logger.info(f'Created failed modules report with {len(failed_modules_list)} entries')
+                
+                # 儲存摘要報告路徑
+                if 'summary_report' in all_results:
+                    self.results['summary_report'] = all_results['summary_report']
+                    
             else:
                 # 執行單一比對情境
                 self.update_progress(30, 'comparing', f'正在執行 {scenarios} 比對...')
@@ -426,18 +474,26 @@ class WebProcessor:
                         'reports': compare_files or []
                     }
                 }
-                self.results['compare_files'] = compare_files
-                self.results['summary_report'] = os.path.join(compare_dir, 'all_compare.xlsx')
+                
+                # 查找摘要報告
+                summary_path = os.path.join(compare_dir, 'all_compare.xlsx')
+                if os.path.exists(summary_path):
+                    self.results['summary_report'] = summary_path
             
             self.update_progress(100, 'completed', '比對完成！')
             
             # 記錄比對
-            add_comparison(scenarios, 'completed', 15)
+            total_modules = 0
+            for scenario_data in self.results['compare_results'].values():
+                total_modules += scenario_data.get('success', 0) + scenario_data.get('failed', 0)
+                
+            add_comparison(scenarios, 'completed', total_modules)
             
-            # 儲存結果
-            save_task_results(self.task_id, self.results.get('compare_results', {}))
+            # 儲存結果供後續查看
+            save_task_results(self.task_id, self.results)
             
         except Exception as e:
+            self.logger.error(f"Comparison error: {str(e)}")
             self.update_progress(0, 'error', f'比對失敗：{str(e)}')
             add_comparison(scenarios, 'error', 0)
             raise
@@ -473,12 +529,17 @@ def add_comparison(scenario, status, modules):
 
 def save_task_results(task_id, results):
     """儲存任務結果供樞紐分析使用"""
-    # 模擬儲存比對結果
-    if 'summary_report' in results:
-        task_results[task_id] = {
-            'summary_report': results['summary_report'],
-            'timestamp': datetime.now()
-        }
+    # 確保儲存完整的結果
+    task_results[task_id] = {
+        'results': results,
+        'summary_report': results.get('summary_report', ''),
+        'compare_results': results.get('compare_results', {}),
+        'timestamp': datetime.now()
+    }
+    
+    # 同時更新 processing_status 以確保資料持久性
+    if task_id in processing_status:
+        processing_status[task_id]['results'] = results
 
 # 路由定義
 @app.route('/')
@@ -658,27 +719,22 @@ def list_directories():
     """列出可用的目錄 API"""
     directories = []
     
-    # 檢查 downloads 目錄
-    if os.path.exists('downloads'):
-        for item in os.listdir('downloads'):
-            item_path = os.path.join('downloads', item)
-            if os.path.isdir(item_path):
-                directories.append({
-                    'path': item_path,
-                    'name': f'downloads/{item}',
-                    'type': 'download'
-                })
+    # 只檢查 downloads 目錄下的 task_ 開頭的資料夾
+    download_base_dir = config.DEFAULT_OUTPUT_DIR  # 使用 config 中的預設目錄
+    if os.path.exists(download_base_dir):
+        for item in os.listdir(download_base_dir):
+            # 只列出 task_ 開頭的資料夾
+            if item.startswith('task_'):
+                item_path = os.path.join(download_base_dir, item)
+                if os.path.isdir(item_path):
+                    directories.append({
+                        'path': item_path,
+                        'name': f'{os.path.basename(download_base_dir)}/{item}',  # 顯示相對路徑
+                        'type': 'download'
+                    })
     
-    # 檢查 compare_results 目錄
-    if os.path.exists('compare_results'):
-        for item in os.listdir('compare_results'):
-            item_path = os.path.join('compare_results', item)
-            if os.path.isdir(item_path):
-                directories.append({
-                    'path': item_path,
-                    'name': f'compare_results/{item}',
-                    'type': 'compare'
-                })
+    # 按時間排序（最新的在前）
+    directories.sort(key=lambda x: os.path.getmtime(x['path']), reverse=True)
     
     return jsonify(directories)
 
@@ -716,64 +772,54 @@ def get_pivot_data(task_id):
         app.logger.info(f'Getting pivot data for task: {task_id}')
         
         # 查找任務結果
-        result_found = False
         summary_report_path = None
         
-        # 1. 從處理狀態中查找
-        if task_id in processing_status:
+        # 1. 優先從儲存的任務結果中查找
+        if task_id in task_results:
+            app.logger.info(f'Found in task_results')
+            result_info = task_results[task_id]
+            
+            # 嘗試多個可能的鍵
+            if 'summary_report' in result_info:
+                summary_report_path = result_info['summary_report']
+            elif 'results' in result_info and 'summary_report' in result_info['results']:
+                summary_report_path = result_info['results']['summary_report']
+        
+        # 2. 從處理狀態中查找
+        if not summary_report_path and task_id in processing_status:
             app.logger.info(f'Found in processing_status')
             task_data = processing_status[task_id]
             results = task_data.get('results', {})
             
-            # 查找比對結果報告
             if 'summary_report' in results:
                 summary_report_path = results['summary_report']
-                result_found = True
-            elif 'compare_results' in results:
-                # 如果有多個比對結果，找到 all_compare.xlsx
-                compare_results = results['compare_results']
-                for scenario, files in compare_results.items():
-                    if isinstance(files, dict) and 'summary' in files:
-                        summary_report_path = files['summary']
-                        result_found = True
-                        break
-        
-        # 2. 從儲存的任務結果中查找
-        if not result_found and task_id in task_results:
-            app.logger.info(f'Found in task_results')
-            result_info = task_results[task_id]
-            summary_report_path = result_info.get('summary_report')
-            result_found = True
         
         # 3. 從比對結果目錄中查找
-        if not result_found:
+        if not summary_report_path:
             compare_dir = os.path.join('compare_results', task_id)
             app.logger.info(f'Checking directory: {compare_dir}')
             
             if os.path.exists(compare_dir):
-                # 查找所有可能的報告檔案
-                possible_files = ['all_compare.xlsx', 'all_scenarios_summary.xlsx']
+                # 優先查找特定檔名
+                priority_files = ['all_scenarios_compare.xlsx', 'all_compare.xlsx']
                 
-                # 也查找其他 xlsx 檔案
-                for file in os.listdir(compare_dir):
-                    if file.endswith('.xlsx'):
-                        app.logger.info(f'Found Excel file: {file}')
-                        summary_report_path = os.path.join(compare_dir, file)
-                        result_found = True
+                for filename in priority_files:
+                    file_path = os.path.join(compare_dir, filename)
+                    if os.path.exists(file_path):
+                        summary_report_path = file_path
+                        app.logger.info(f'Found report: {filename}')
                         break
                 
-                # 如果沒找到，嘗試特定檔名
-                if not result_found:
-                    for filename in possible_files:
-                        file_path = os.path.join(compare_dir, filename)
-                        if os.path.exists(file_path):
-                            summary_report_path = file_path
-                            result_found = True
-                            app.logger.info(f'Found report: {filename}')
+                # 如果沒找到，查找任何 xlsx 檔案
+                if not summary_report_path:
+                    for file in os.listdir(compare_dir):
+                        if file.endswith('.xlsx') and not file.startswith('~'):
+                            summary_report_path = os.path.join(compare_dir, file)
+                            app.logger.info(f'Found Excel file: {file}')
                             break
         
         # 4. 讀取並返回資料
-        if result_found and summary_report_path and os.path.exists(summary_report_path):
+        if summary_report_path and os.path.exists(summary_report_path):
             try:
                 app.logger.info(f'Reading Excel file: {summary_report_path}')
                 
@@ -808,7 +854,7 @@ def get_pivot_data(task_id):
                 app.logger.error(traceback.format_exc())
                 return jsonify({'error': f'讀取資料失敗：{str(e)}'}), 500
         else:
-            app.logger.warning(f'No data found for task: {task_id}')
+            app.logger.warning(f'No data found for task: {task_id}, path: {summary_report_path}')
         
         # 如果沒有找到資料，返回空對象
         return jsonify({})
@@ -1092,6 +1138,7 @@ def export_zip(task_id):
                 dest_downloads = os.path.join(temp_dir, 'downloads')
                 shutil.copytree(download_dir, dest_downloads)
                 files_added = True
+                app.logger.info(f'Added downloads directory: {download_dir}')
             
             # 複製比對結果
             compare_dir = os.path.join('compare_results', task_id)
@@ -1099,6 +1146,7 @@ def export_zip(task_id):
                 dest_compare = os.path.join(temp_dir, 'compare_results')
                 shutil.copytree(compare_dir, dest_compare)
                 files_added = True
+                app.logger.info(f'Added compare results directory: {compare_dir}')
             
             # 確保有檔案要打包
             if not files_added:
@@ -1109,27 +1157,34 @@ def export_zip(task_id):
                     f.write(f'創建時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n')
                     f.write('暫無比對結果\n')
             
-            # 創建 ZIP
-            packager = ZipPackager()
-            timestamp = utils.get_timestamp()
+            # 創建 ZIP - 使用 shutil 而不是 ZipPackager
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            zip_filename = f'results_{task_id}_{timestamp}.zip'
             
             # 創建臨時 ZIP 檔案
-            temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-            temp_zip.close()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+                temp_zip_path = temp_zip.name
             
-            # 打包
-            zip_path = packager.create_zip(temp_dir, temp_zip.name)
+            # 使用 shutil 創建 ZIP
+            base_name = temp_zip_path.replace('.zip', '')
+            shutil.make_archive(base_name, 'zip', temp_dir)
+            
+            # 確保檔案存在
+            if not os.path.exists(temp_zip_path):
+                raise Exception('無法創建 ZIP 檔案')
             
             # 返回檔案
             return send_file(
-                zip_path,
+                temp_zip_path,
                 as_attachment=True,
-                download_name=f'results_{task_id}.zip',
+                download_name=zip_filename,
                 mimetype='application/zip'
             )
         
     except Exception as e:
         app.logger.error(f'Export ZIP error: {e}')
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     
 def create_mock_excel(task_id):
