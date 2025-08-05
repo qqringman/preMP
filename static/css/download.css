@@ -4484,3 +4484,467 @@ to {
 .preview-content .xml-value {
   color: #CE9178;
 }
+
+/* 預覽模態框 - 北歐風格配色 */
+#filePreviewModal .modal-header {
+  background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+  padding: 20px 24px;
+  border-bottom: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 添加裝飾性光效 */
+#filePreviewModal .modal-header::before {
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  content: "";
+  height: 300%;
+  opacity: 0.5;
+  position: absolute;
+  right: -25%;
+  top: -100%;
+  transform: rotate(35deg);
+  width: 70%;
+}
+
+#filePreviewModal .modal-body {
+  background: #FAFBFD;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 預覽工具列 - 淺色設計 */
+#filePreviewModal .preview-toolbar {
+  background: #F8FBFF;
+  border-bottom: 1px solid #E3F2FD;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 檔案名稱樣式 */
+#filePreviewModal .preview-filename {
+  color: #1A237E;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#filePreviewModal .preview-filename i {
+  color: #2196F3;
+  font-size: 1.125rem;
+}
+
+/* 預覽內容區域 - 淺色主題 */
+.preview-content {
+  background: #FFFFFF;
+  border: 1px solid #E8F4FD;
+  border-radius: 0;
+  color: #1A237E;
+  flex: 1;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0;
+  overflow: auto;
+  padding: 32px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+/* XML 語法高亮 - 北歐風格配色 */
+.preview-content.xml {
+  background: #FFFFFF;
+  color: #1A237E;
+}
+
+.preview-content .xml-bracket {
+  color: #90CAF9;
+  font-weight: 600;
+}
+
+.preview-content .xml-tag {
+  color: #1976D2;
+  font-weight: 500;
+}
+
+.preview-content .xml-attr {
+  color: #7B1FA2;
+  font-weight: 400;
+}
+
+.preview-content .xml-value {
+  color: #388E3C;
+  font-weight: 400;
+}
+
+/* 純文字檔案樣式 */
+.preview-content.plain-text {
+  background: #FFFFFF;
+  color: #263238;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 0.3px;
+}
+
+/* 複製按鈕 - 配合主題 */
+#filePreviewModal .btn-copy {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 500;
+  gap: 6px;
+  padding: 8px 16px;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 11;
+}
+
+#filePreviewModal .btn-copy:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 關閉按鈕樣式 */
+#filePreviewModal .modal-close {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 1.25rem;
+  height: 36px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 11;
+}
+
+#filePreviewModal .modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+/* 預覽視窗捲軸 - 淺色主題 */
+.preview-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+  background: #F5F9FF;
+  border-radius: 6px;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+  background: #90CAF9;
+  border-radius: 6px;
+  border: 2px solid #F5F9FF;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+  background: #64B5F6;
+}
+
+.preview-content::-webkit-scrollbar-corner {
+  background: #F5F9FF;
+}
+
+/* 載入和錯誤狀態 */
+.preview-content .loading,
+.preview-content .error {
+  align-items: center;
+  background: transparent;
+  color: #5C6BC0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+}
+
+.preview-content .loading i {
+  animation: spin 1s linear infinite;
+  color: #2196F3;
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+.preview-content .error {
+  color: #F44336;
+}
+
+.preview-content .error i {
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+/* 添加細微的陰影效果 */
+#filePreviewModal .modal-content {
+  box-shadow: 0 20px 60px rgba(33, 150, 243, 0.1);
+}
+
+/* 為了更好的可讀性，給程式碼添加背景 */
+.preview-content.xml,
+.preview-content.plain-text {
+  background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFD 100%);
+}
+
+/* 所有預覽內容的統一淺色背景 */
+.preview-content {
+  background: #FFFFFF;
+  border: none;
+  border-radius: 0;
+  color: #263238;
+  flex: 1;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0;
+  overflow: auto;
+  padding: 32px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 純文字檔案樣式 (Version.txt, F_Version.txt 等) */
+.preview-content.plain-text {
+  background: #FAFBFD; /* 淺灰藍背景 */
+  color: #1A237E; /* 深藍色文字 */
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 0.3px;
+  padding: 32px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+/* Version.txt 專用樣式 */
+.preview-content.version-txt {
+  background: linear-gradient(to bottom, #FFFFFF 0%, #F8FBFF 100%);
+  color: #1A237E;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 32px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  letter-spacing: 0.5px;
+}
+
+/* XML 檔案樣式 */
+.preview-content.xml {
+  background: #FFFFFF;
+  color: #263238;
+  padding: 32px;
+}
+
+/* 移除任何可能的深色背景樣式 */
+.preview-content,
+.preview-content.plain-text,
+.preview-content.version-txt,
+.preview-content.xml {
+  /* 確保沒有深色背景 */
+  background-color: #FFFFFF !important;
+}
+
+/* 給不同類型的檔案添加細微的背景變化 */
+.preview-content.plain-text {
+  background: #FAFBFD !important;
+}
+
+.preview-content.version-txt {
+  background: linear-gradient(to bottom, #FFFFFF 0%, #F8FBFF 100%) !important;
+}
+
+.preview-content.xml {
+  background: #FFFFFF !important;
+}
+
+/* 調整文字顏色以配合淺色背景 */
+.preview-content,
+.preview-content * {
+  color: #263238;
+}
+
+/* XML 語法高亮 - 適合淺色背景的配色 */
+.preview-content .xml-bracket {
+  color: #64B5F6;
+  font-weight: 500;
+}
+
+.preview-content .xml-tag {
+  color: #1565C0;
+  font-weight: 500;
+}
+
+.preview-content .xml-attr {
+  color: #6A1B9A;
+  font-weight: 400;
+}
+
+.preview-content .xml-value {
+  color: #2E7D32;
+  font-weight: 400;
+}
+
+/* 確保預覽區域的整體背景也是淺色 */
+#filePreviewModal .modal-body {
+  background: #F5F9FF;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 添加一個內邊框來增加層次感 */
+.preview-content {
+  border: 1px solid #E3F2FD;
+  margin: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* 預覽視窗捲軸 - 移除邊框 */
+.preview-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+  background: #F5F9FF;
+  border-radius: 0;
+  border: none; /* 移除邊框 */
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+  background: #90CAF9;
+  border-radius: 5px;
+  border: none; /* 移除邊框 */
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+  background: #64B5F6;
+}
+
+.preview-content::-webkit-scrollbar-corner {
+  background: #F5F9FF;
+}
+
+/* 移除預覽內容的邊框 */
+.preview-content {
+  border: none; /* 移除邊框 */
+  margin: 0; /* 移除邊距 */
+  border-radius: 0; /* 移除圓角 */
+  box-shadow: none; /* 移除陰影 */
+}
+
+/* 預覽視窗標題列檔案名稱 - 改善配色 */
+#filePreviewModal .preview-filename {
+  color: rgba(255, 255, 255, 0.95); /* 白色，略微透明 */
+  font-size: 0.9375rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1); /* 淺白背景 */
+  padding: 6px 16px;
+  border-radius: 20px; /* 圓角標籤樣式 */
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#filePreviewModal .preview-filename i {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+}
+
+/* 或者使用更簡潔的樣式 */
+#filePreviewModal .preview-filename {
+  color: #FFFFFF;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.95;
+}
+
+#filePreviewModal .preview-filename i {
+  color: #FFFFFF;
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+/* 調整整體標題列樣式以提高對比度 */
+#filePreviewModal .modal-header {
+  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
+  padding: 16px 24px;
+  border-bottom: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 確保標題文字清晰可見 */
+#filePreviewModal .modal-title {
+  color: #FFFFFF;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 預覽內容整體樣式優化 */
+.preview-content {
+  background: #FFFFFF;
+  border: none;
+  border-radius: 0;
+  color: #263238;
+  flex: 1;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0;
+  overflow: auto;
+  padding: 24px 32px; /* 調整內邊距 */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: none;
+}
+
+/* 確保 modal body 沒有額外的內邊距 */
+#filePreviewModal .modal-body {
+  background: #FFFFFF;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* XML 檔案特定樣式 */
+.preview-content.xml {
+  background: #FAFBFD;
+  padding: 24px 32px;
+}
+
+/* 純文字檔案特定樣式 */
+.preview-content.plain-text,
+.preview-content.version-txt {
+  background: #FFFFFF;
+  padding: 24px 32px;
+}

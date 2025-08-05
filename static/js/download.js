@@ -1551,10 +1551,15 @@ async function previewFile(path) {
             content.className = 'preview-content xml';
             
         } else if (fileName.toLowerCase().includes('version') || fileExt === 'txt') {
-            // Version.txt - 不做複雜的語法高亮，保持簡單
-            // 直接顯示原始內容，只用 CSS 來美化
+            // 所有文字檔案都使用淺色主題
             content.textContent = response.content;
-            content.className = 'preview-content version-txt';
+            
+            // 根據檔名設定不同的 class
+            if (fileName.toLowerCase() === 'version.txt' || fileName.toLowerCase() === 'f_version.txt') {
+                content.className = 'preview-content version-txt';
+            } else {
+                content.className = 'preview-content plain-text';
+            }
         } else {
             // 純文字顯示
             content.textContent = response.content;
