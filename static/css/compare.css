@@ -2068,3 +2068,183 @@ input.path-input::-webkit-contacts-auto-fill-button {
 .modal-tab-content .tab-pane.active {
     display: block;
 }
+
+/* 模態框美化樣式 */
+#compareDetailsModal .modal-content {
+    max-width: 1200px;
+    width: 90%;
+}
+
+/* 使用與下載頁面相同的表格樣式 */
+#compareDetailsModal .file-list-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    margin-bottom: 0;
+}
+
+#compareDetailsModal .file-list-header {
+    align-items: center;
+    background: #2196F3;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    padding: 18px 24px;
+}
+
+#compareDetailsModal .file-list-title {
+    align-items: center;
+    color: white;
+    display: flex;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    gap: 10px;
+    margin: 0;
+}
+
+#compareDetailsModal .file-count-badge {
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: var(--radius-full);
+    color: white;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 4px 12px;
+}
+
+/* 高亮樣式 */
+#compareDetailsModal .highlight-red {
+    color: var(--danger) !important;
+    font-weight: 600;
+}
+
+/* 檔案名稱樣式 */
+#compareDetailsModal .file-name-cell {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+#compareDetailsModal .file-name-cell i {
+    color: var(--nordic-blue);
+    font-size: 0.875rem;
+    margin-right: 8px;
+}
+
+/* 路徑樣式 */
+#compareDetailsModal .file-path-cell {
+    color: var(--text-muted);
+    font-family: "SF Mono", Monaco, monospace;
+    font-size: 0.8125rem;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 確保頁籤樣式正確 */
+#compareDetailsModal .source-tabs {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    padding: 6px;
+}
+
+#compareDetailsModal .tab-btn {
+    align-items: center;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    gap: 10px;
+    justify-content: center;
+    padding: 12px 24px;
+    transition: all 0.2s ease;
+}
+
+#compareDetailsModal .tab-btn:hover {
+    background: rgba(33, 150, 243, 0.08);
+    color: var(--nordic-blue);
+}
+
+#compareDetailsModal .tab-btn.active {
+    background: var(--nordic-blue);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
+    color: white;
+    font-weight: 600;
+}
+
+#compareDetailsModal .tab-content {
+    display: none;
+}
+
+#compareDetailsModal .tab-content.active {
+    display: block;
+}
+
+/* 比對結果模態框樣式 */
+#compareDetailsModal .modal-body {
+    padding: 0 !important;
+    background: #FFFFFF;
+}
+
+#compareDetailsModal .files-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+#compareDetailsModal .files-table thead {
+    background: #F5F5F5;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+#compareDetailsModal .files-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #424242;
+    border-bottom: 1px solid #E0E0E0;
+    font-size: 0.875rem;
+}
+
+#compareDetailsModal .files-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #F5F5F5;
+    vertical-align: middle;
+}
+
+#compareDetailsModal .files-table tbody tr:hover {
+    background-color: #FAFAFA;
+}
+
+/* 操作按鈕樣式 */
+#compareDetailsModal .btn-icon:hover {
+    background: #E0E0E0 !important;
+    border-color: #BDBDBD !important;
+}
+
+#compareDetailsModal .btn-icon:hover i {
+    color: #424242 !important;
+}
+
+/* 確保檔案圖標顏色正確 */
+#compareDetailsModal .fa-file,
+#compareDetailsModal .fa-file-code,
+#compareDetailsModal .fa-file-lines,
+#compareDetailsModal .fa-file-alt {
+    color: #2196F3;
+}
