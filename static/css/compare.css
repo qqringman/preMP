@@ -3271,3 +3271,109 @@ input.path-input::-webkit-contacts-auto-fill-button {
     max-height: 500px !important; /* 臨時加入固定高度 */
     height: 500px !important; /* 臨時加入固定高度 */
 }
+
+/* 資料區域 */
+.modal-data-area {
+    flex: 1;
+    overflow: hidden; /* 改為 hidden */
+    background: white;
+    padding: 0;
+    min-height: 0;
+    height: 0; /* 強制 flex 不擴展 */
+    display: flex;
+    flex-direction: column;
+}
+
+/* 固定標頭的表格容器 */
+.table-container-fixed {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* 固定的表頭 */
+.table-header-fixed {
+    flex-shrink: 0;
+    overflow: hidden;
+    border-bottom: 2px solid #E3F2FD;
+    background: white;
+}
+
+.files-table-header {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.files-table-header th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: #424242;
+    background: #F8FBFF;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+    border-right: 1px solid #E3F2FD;
+}
+
+.files-table-header th:last-child {
+    border-right: none;
+}
+
+/* 可捲動的表身 */
+.table-body-scrollable {
+    flex: 1;
+    overflow: auto;
+    background: white;
+}
+
+.files-table-body {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.files-table-body td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #F5F5F5;
+    border-right: 1px solid #F5F5F5;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.files-table-body td:last-child {
+    border-right: none;
+}
+
+.files-table-body tbody tr:hover {
+    background-color: #F8FBFF;
+}
+
+/* 捲軸樣式 */
+.table-body-scrollable::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.table-body-scrollable::-webkit-scrollbar-track {
+    background: #F5F9FF;
+    border-radius: 5px;
+}
+
+.table-body-scrollable::-webkit-scrollbar-thumb {
+    background: #90CAF9;
+    border-radius: 5px;
+}
+
+.table-body-scrollable::-webkit-scrollbar-thumb:hover {
+    background: #64B5F6;
+}
+
+.table-body-scrollable::-webkit-scrollbar-corner {
+    background: #F5F9FF;
+}
+
+/* 移除臨時測試樣式 */

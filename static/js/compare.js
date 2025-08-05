@@ -807,9 +807,12 @@ function generateCompareTableContent(sheetData, sheetTitle) {
         return '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
     }
     
-    let html = '<table class="files-table">';
+    // 新結構：分離 header 和 body
+    let html = '<div class="table-container-fixed">';
     
-    // 表頭
+    // 固定的表頭
+    html += '<div class="table-header-fixed">';
+    html += '<table class="files-table-header">';
     html += '<thead><tr>';
     
     // 動態生成欄位
@@ -835,12 +838,15 @@ function generateCompareTableContent(sheetData, sheetTitle) {
             minWidth = '250px';
         }
         
-        html += `<th style="min-width: ${minWidth};">${thText}</th>`;
+        html += `<th style="width: ${minWidth}; min-width: ${minWidth};">${thText}</th>`;
     });
     
-    html += '</tr></thead>';
+    html += '</tr></thead></table>';
+    html += '</div>';
     
-    // 表身
+    // 可捲動的表身
+    html += '<div class="table-body-scrollable">';
+    html += '<table class="files-table-body">';
     html += '<tbody>';
     
     sheetData.data.forEach((row) => {
@@ -849,6 +855,24 @@ function generateCompareTableContent(sheetData, sheetTitle) {
         sheetData.columns.forEach(col => {
             let value = row[col] || '';
             let cellContent = value;
+            let minWidth = '150px';
+            
+            // 取得與標頭相同的寬度
+            const columnMap = {
+                'module': { width: '200px' },
+                'location_path': { width: '400px' },
+                'path': { width: '400px' },
+                'base_folder': { width: '300px' },
+                'compare_folder': { width: '200px' },
+                'file_type': { width: '150px' },
+                'base_content': { width: '300px' }
+            };
+            
+            if (columnMap[col]) {
+                minWidth = columnMap[col].width;
+            } else if (col.length > 20) {
+                minWidth = '250px';
+            }
             
             // 處理不同類型的欄位
             if (col === 'module' || col === '模組名稱') {
@@ -883,13 +907,15 @@ function generateCompareTableContent(sheetData, sheetTitle) {
                 cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
             }
             
-            html += `<td>${cellContent}</td>`;
+            html += `<td style="width: ${minWidth}; min-width: ${minWidth};">${cellContent}</td>`;
         });
         
         html += '</tr>';
     });
     
     html += '</tbody></table>';
+    html += '</div>';
+    html += '</div>';
     
     return html;
 }
