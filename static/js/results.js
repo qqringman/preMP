@@ -269,14 +269,23 @@ function getColumnWidth(columnName) {
 
 // 渲染資料表格 - 改進版
 function renderDataTable(sheetData) {
+    // 使用原本的元素 ID
     const tableView = document.getElementById('tableView');
     const table = document.getElementById('dataTable');
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     
+    // 確保元素存在
+    if (!table || !thead || !tbody) {
+        console.error('找不到表格元素');
+        return;
+    }
+    
+    // 清空現有內容
     thead.innerHTML = '';
     tbody.innerHTML = '';
     
+    // 檢查是否有資料
     if (!sheetData.data || sheetData.data.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -292,6 +301,7 @@ function renderDataTable(sheetData) {
         return;
     }
     
+    // 取得欄位列表
     const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
     console.log('欄位:', columns);
     
@@ -308,6 +318,7 @@ function renderDataTable(sheetData) {
         });
     }
     
+    // 更新統計資訊
     updateTableStats(sheetData.data.length, filteredData.length, searchMatches);
     
     // 建立表頭
@@ -327,9 +338,10 @@ function renderDataTable(sheetData) {
             th.classList.add('danger-header');
         } else if (currentSheet === 'revision_diff' && 
                 ['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
-            th.classList.add('danger-header');  // 為 revision_diff 的特定欄位加紅底
+            th.classList.add('danger-header');
         }
         
+        // 建立標頭內容
         const thContent = document.createElement('div');
         thContent.className = 'th-content';
         
@@ -340,6 +352,7 @@ function renderDataTable(sheetData) {
         const thIcons = document.createElement('span');
         thIcons.className = 'th-icons';
         
+        // 排序圖示
         const sortIcon = document.createElement('i');
         sortIcon.className = 'fas fa-sort sort-icon';
         if (sortOrder[col]) {
@@ -350,6 +363,7 @@ function renderDataTable(sheetData) {
         
         thIcons.appendChild(sortIcon);
         
+        // 篩選圖示
         if (filters[col]) {
             const filterIcon = document.createElement('i');
             filterIcon.className = 'fas fa-filter filter-icon active';
@@ -360,6 +374,7 @@ function renderDataTable(sheetData) {
         thContent.appendChild(thIcons);
         th.appendChild(thContent);
         
+        // 綁定排序事件
         th.onclick = () => sortTable(col);
         th.style.cursor = 'pointer';
         
@@ -376,15 +391,16 @@ function renderDataTable(sheetData) {
     
     filteredData.forEach((row, index) => {
         const tr = document.createElement('tr');
+        
         columns.forEach(col => {
             const td = document.createElement('td');
             const value = row[col];
             
-            // 檢查是否為路徑欄位
+            // 根據欄位類型處理顯示
             if (col === 'path' || col.toLowerCase().includes('path')) {
+                // 路徑欄位處理
                 td.classList.add('path-cell');
                 
-                // 如果路徑太長，顯示縮略版本
                 if (value && value.length > 50) {
                     const truncated = value.substring(0, 25) + '...' + value.substring(value.length - 20);
                     td.innerHTML = `<span class="truncated-content" title="${value}">${searchTerm ? highlightText(truncated, searchTerm) : truncated}</span>`;
@@ -392,10 +408,10 @@ function renderDataTable(sheetData) {
                     td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
                 }
             } else if (col === 'base_content' || col === 'compare_content') {
+                // 內容比較欄位處理
                 td.classList.add('content-cell');
                 
                 if (value) {
-                    // 處理檔案不存在的情況
                     if (value === '(檔案不存在)' || value === '(檔案存在)') {
                         if (value === '(檔案不存在)') {
                             td.classList.add('highlight-red');
@@ -411,30 +427,24 @@ function renderDataTable(sheetData) {
                         const fileType = row['file_type'] || '';
                         let formattedValue = String(value);
                         
-                        // 檢查是否包含 F_HASH
                         if (value.includes('F_HASH:')) {
-                            // 特別處理 F_HASH，包括 (not found) 的情況
                             if (compareValue) {
                                 formattedValue = formatFHashContent(value, compareValue);
                             } else {
-                                // 如果沒有比較值，檢查是否是 (not found)
                                 if (value.includes('(not found)')) {
                                     formattedValue = value.replace('(not found)', '<span class="highlight-red">(not found)</span>');
                                 }
                             }
                         } else if (fileType.toLowerCase() === 'f_version.txt' && value.startsWith('P_GIT_')) {
-                            // F_Version.txt: 只標記不同的部分
                             if (compareValue && compareValue.startsWith('P_GIT_')) {
                                 formattedValue = formatFVersionContent(value, compareValue);
                             }
                         } else if (value.includes(':') && !value.includes('F_HASH:')) {
-                            // Other Version.txt with colon (排除 F_HASH)
                             if (compareValue && compareValue.includes(':')) {
                                 formattedValue = formatColonContent(value, compareValue);
                             }
                         }
                         
-                        // 如果有搜尋詞，也要高亮
                         if (searchTerm) {
                             formattedValue = highlightText(formattedValue, searchTerm);
                         }
@@ -445,42 +455,51 @@ function renderDataTable(sheetData) {
                     td.innerHTML = '';
                 }
             } else if (col === 'file_type') {
+                // 檔案類型欄位
                 td.classList.add('file-type');
                 td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
             } else if (col === 'org_folder') {
+                // 組織資料夾欄位
                 td.classList.add('org-cell');
                 td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
             } else if (col.includes('link') && value && typeof value === 'string' && value.startsWith('http')) {
-                // 特殊格式處理 - 連結
+                // 連結欄位
                 td.innerHTML = `<a href="${value}" target="_blank" class="link">
                     <i class="fas fa-external-link-alt"></i> 查看
                 </a>`;
             } else if (col === 'has_wave' || col === 'is_different') {
+                // 布林值欄位
                 const badgeClass = value === 'Y' ? 'badge-success' : 'badge-default';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || 'N'}</span>`;
             } else if (col === '狀態') {
+                // 狀態欄位
                 let badgeClass = 'badge-default';
                 if (value === '新增') badgeClass = 'badge-success';
                 else if (value === '刪除') badgeClass = 'badge-danger';
                 else if (value === '修改') badgeClass = 'badge-warning';
                 td.innerHTML = `<span class="badge ${badgeClass}">${value || ''}</span>`;
             } else if (col === 'problem' && value) {
+                // 問題欄位
                 const highlightedValue = searchTerm ? highlightText(value, searchTerm) : value;
                 td.innerHTML = `<span class="text-danger font-weight-bold">${highlightedValue}</span>`;
             } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
+                // 版本相關欄位
                 td.classList.add('highlight-hash');
                 td.innerHTML = searchTerm ? highlightText(value, searchTerm) : value;
             } else {
+                // 一般欄位
                 const textValue = value !== null && value !== undefined ? value : '';
                 td.innerHTML = searchTerm ? highlightText(textValue, searchTerm) : textValue;
             }
             
+            // 特殊樣式處理
             if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
                 td.classList.add('highlight-red');
             }
             
             tr.appendChild(td);
         });
+        
         tbody.appendChild(tr);
     });
     
@@ -509,7 +528,7 @@ function renderDataTable(sheetData) {
         }
     }
 
-    // 啟用表格功能
+    // 啟用表格功能（拖曳和調整寬度）
     setTimeout(() => {
         enableTableFeatures();
     }, 100);
@@ -1692,49 +1711,20 @@ async function exportCurrentView(format) {
     
     try {
         if (format === 'excel') {
-            // 查找原始 Excel 檔案路徑
-            let originalExcelPath = null;
+            showExportLoading();
             
-            // 從 processing_status 或 task_results 中獲取原始檔案路徑
-            const apiResponse = await fetch(`/api/get-original-excel/${taskId}`);
-            if (apiResponse.ok) {
-                const data = await apiResponse.json();
-                originalExcelPath = data.excel_path;
-            }
+            // 直接下載完整報表（保留格式）
+            // 後端會處理只保留當前頁籤的邏輯
+            window.location.href = `/api/export-excel/${taskId}?sheet=${encodeURIComponent(currentSheet)}`;
             
-            if (originalExcelPath) {
-                // 如果有原始檔案，創建一個只包含當前資料表的副本
-                window.location.href = `/api/export-sheet-from-original/${taskId}/${encodeURIComponent(currentSheet)}`;
-            } else {
-                // 如果沒有原始檔案，從當前資料創建新的 Excel
-                const sheetData = currentData[currentSheet];
-                if (!sheetData || !sheetData.data) {
-                    alert('當前資料表沒有資料');
-                    return;
-                }
-                
-                // 創建 Blob 並下載
-                const worksheet = XLSX.utils.json_to_sheet(sheetData.data);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, currentSheet);
-                
-                // 生成檔案
-                const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-                const blob = new Blob([wbout], { type: 'application/octet-stream' });
-                
-                // 下載
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${currentSheet}_${taskId}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
+            setTimeout(() => {
+                hideExportLoading();
+                showToast('Excel 檔案已匯出', 'success');
+            }, 2000);
         }
     } catch (error) {
         console.error('匯出錯誤:', error);
+        hideExportLoading();
         alert('匯出失敗：' + error.message);
     }
 }

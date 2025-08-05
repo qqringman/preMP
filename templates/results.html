@@ -89,7 +89,6 @@
             <div class="data-view-container">
                 <!-- 一般表格檢視 -->
                 <div id="tableView" class="table-view">
-                    <!-- 表格統計資訊會動態插入這裡 -->
                     <div class="table-scroll-wrapper">
                         <table id="dataTable" class="data-table">
                             <thead id="tableHead"></thead>
@@ -108,38 +107,40 @@
                 </div>
                 <!-- 修改 pivotView 部分 -->
                 <div id="pivotView" class="pivot-view hidden">
-                    <div class="pivot-instructions">
-                        <i class="fas fa-info-circle"></i>
-                        <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
-                        <ul>
-                            <li>拖曳欄位到列或欄區域來分組資料</li>
-                            <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                            <li>使用篩選器來過濾資料</li>
-                            <li>點擊表格標題來排序</li>
-                        </ul>
+                    <div class="step-section">
+                        <div class="step-header pivot-header">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h2 class="step-title">樞紐分析表</h2>
+                                <p class="step-subtitle">拖曳欄位來建立自訂的分析報表</p>
+                            </div>
+                        </div>
+                        
+                        <div class="section-body">
+                            <div class="pivot-controls">
+                                <div class="pivot-controls-left">
+                                </div>
+                                <div class="pivot-controls-right">
+                                    <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
+                                        <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> 
+                                        <span id="toggleAreasText">隱藏拖曳區</span>
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
+                                        <i class="fas fa-expand" id="fullscreenIcon"></i> 
+                                        <span id="fullscreenText">全螢幕</span>
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
+                                        <i class="fas fa-undo"></i> 重置
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
+                                        <i class="fas fa-file-excel"></i> 匯出
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="pivotContainer"></div>
+                        </div>
                     </div>
-                    <div class="pivot-controls">
-                        <div class="pivot-controls-left">
-                            <h3 class="pivot-title">
-                                <i class="fas fa-chart-pie"></i> 樞紐分析表
-                            </h3>
-                        </div>
-                        <div class="pivot-controls-right">
-                            <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
-                                <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> <span id="toggleAreasText">隱藏拖曳區</span>
-                            </button>
-                            <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
-                                <i class="fas fa-expand" id="fullscreenIcon"></i> <span id="fullscreenText">全螢幕</span>
-                            </button>
-                            <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
-                                <i class="fas fa-undo"></i> 重置
-                            </button>
-                            <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
-                                <i class="fas fa-file-excel"></i> 匯出
-                            </button>
-                        </div>
-                    </div>                    
-                    <div id="pivotContainer"></div>
                 </div>
             </div>
         </div>
