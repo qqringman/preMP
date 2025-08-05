@@ -804,146 +804,234 @@ function switchModalTab(sheetName, clickedBtn) {
     }
 }
 
-// 生成比對表格 - 完整美化版本
+// 生成比對表格 - 統一設計風格
 function generateCompareTable(sheetData, sheetTitle, headerColor) {
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
     }
     
-    // 使用與下載頁面完全相同的表格結構
+    // 根據標題判斷是否為無法比對的模組
+    const isFailedModule = sheetTitle.includes('無法比對');
+    
+    // 使用統一的表格結構
     let html = `
-        <div class="file-list-container" style="border-radius: 0; border: none; box-shadow: none;">
-            <div class="file-list-header" style="background: ${headerColor};">
-                <h4 class="file-list-title">
+        <div class="file-list-container" style="border-radius: 0; border: none; box-shadow: none; margin: 0;">
+            <div class="file-list-header" style="background: ${headerColor}; padding: 20px 24px;">
+                <h4 class="file-list-title" style="font-size: 1.125rem; display: flex; align-items: center; gap: 12px;">
                     <i class="fas fa-list"></i> ${sheetTitle}
                 </h4>
-                <span class="file-count-badge">共 ${sheetData.data.length} 筆檔案</span>
+                <span class="file-count-badge" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);">
+                    共 ${sheetData.data.length} 個檔案
+                </span>
             </div>
-            <div class="files-table-container" style="max-height: 500px; overflow-y: auto;">
-                <table class="files-table">
+            <div style="background: white; padding: 0;">
+                <table class="files-table" style="width: 100%; border-collapse: collapse;">
     `;
     
     // 表頭
-    html += '<thead><tr>';
-    html += '<th style="width: 50px; text-align: center;">#</th>';
+    html += '<thead style="background: #FAFAFA;"><tr>';
+    html += '<th style="width: 50px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">#</th>';
     
-    // 根據欄位設定表頭
-    sheetData.columns.forEach(col => {
-        let width = '';
-        let thText = col;
+    if (isFailedModule) {
+        // 無法比對模組的表頭
+        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">檔案名稱</th>';
+        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">FTP 路徑</th>';
+        html += '<th style="padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">本地路徑</th>';
+        html += '<th style="width: 80px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">操作</th>';
+    } else {
+        // 其他比對結果的表頭
+        sheetData.columns.forEach(col => {
+            let width = '';
+            let thText = col;
+            
+            // 轉換欄位名稱
+            const columnMap = {
+                'module': '檔案名稱',
+                'location_path': 'FTP 路徑',
+                'path': 'FTP 路徑',
+                'base_folder': '本地路徑'
+            };
+            
+            if (columnMap[col]) {
+                thText = columnMap[col];
+            }
+            
+            // 設定寬度
+            if (col === 'module' || thText === '檔案名稱') {
+                width = 'width: 200px;';
+            } else if (thText === 'FTP 路徑') {
+                width = 'width: 35%;';
+            } else if (thText === '本地路徑') {
+                width = 'width: 35%;';
+            }
+            
+            html += `<th style="${width} padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">${thText}</th>`;
+        });
         
-        // 轉換欄位名稱為中文
-        const columnMap = {
-            'module': '檔案名稱',
-            'location_path': 'FTP 路徑',
-            'path': 'FTP 路徑',
-            'base_folder': '本地路徑',
-            'problem': '操作',
-            '模組名稱': '檔案名稱',
-            '失敗原因': '操作',
-            '比對情境': '操作'
-        };
-        
-        if (columnMap[col]) {
-            thText = columnMap[col];
-        }
-        
-        // 設定寬度
-        if (col === 'module' || col === '模組名稱') {
-            width = 'style="width: 200px;"';
-        } else if (col === 'location_path' || col === 'path') {
-            width = 'style="width: 35%;"';
-        } else if (col === 'base_folder' || col === '本地路徑') {
-            width = 'style="width: 35%;"';
-        } else if (col === 'problem' || col === '失敗原因' || col === '比對情境') {
-            width = 'style="width: 80px; text-align: center;"';
-        }
-        
-        html += `<th ${width}>${thText}</th>`;
-    });
+        // 操作欄位
+        html += '<th style="width: 80px; text-align: center; padding: 16px 20px; color: #757575; font-weight: 600; font-size: 0.875rem;">操作</th>';
+    }
+    
     html += '</tr></thead>';
     
     // 表身
     html += '<tbody>';
-    sheetData.data.forEach((row, index) => {
-        html += '<tr>';
-        html += `<td style="text-align: center; color: #9E9E9E; font-weight: 500;">${index + 1}</td>`;
-        
-        sheetData.columns.forEach(col => {
-            let value = row[col] || '';
-            let cellContent = '';
+    
+    if (isFailedModule) {
+        // 無法比對模組的資料處理
+        sheetData.data.forEach((row, index) => {
+            html += '<tr style="border-bottom: 1px solid #F5F5F5;">';
+            html += `<td style="text-align: center; padding: 14px 20px; color: #BDBDBD; font-weight: 500;">${index + 1}</td>`;
             
-            if (col === 'module' || col === '模組名稱') {
-                // 檔案名稱欄位 - 根據檔案類型顯示不同圖標
-                let icon = 'fa-file';
-                const fileName = value.toLowerCase();
-                
-                if (fileName.includes('manifest.xml')) {
-                    icon = 'fa-file-code';
-                } else if (fileName.includes('version.txt')) {
-                    icon = 'fa-file-lines';
-                } else if (fileName.includes('f_version.txt')) {
-                    icon = 'fa-file-alt';
-                } else if (fileName.endsWith('.xml')) {
-                    icon = 'fa-file-code';
-                } else if (fileName.endsWith('.txt')) {
-                    icon = 'fa-file-alt';
-                }
-                
-                cellContent = `
-                    <td style="font-weight: 500;">
-                        <i class="fas ${icon}" style="color: #2196F3; margin-right: 8px;"></i>
-                        ${value}
-                    </td>
-                `;
-            } else if (col === 'location_path' || col === 'path') {
-                // FTP 路徑欄位
-                cellContent = `
-                    <td style="color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">
-                        ${value}
-                    </td>
-                `;
-            } else if (col === 'base_folder' || col === '本地路徑') {
-                // 本地路徑欄位
-                cellContent = `
-                    <td style="color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">
-                        downloads/${value || '-'}
-                    </td>
-                `;
-            } else if (col === 'problem' || col === '失敗原因' || col === '比對情境') {
-                // 操作欄位 - 顯示預覽按鈕
-                cellContent = `
-                    <td style="text-align: center;">
-                        <button class="btn-icon" style="width: 32px; height: 32px; border: 1px solid #E0E0E0; background: #F5F5F5; border-radius: 6px; cursor: pointer;" 
-                                onclick="previewCompareFile('${row.module || row['模組名稱'] || ''}', '${row.path || row.location_path || ''}')"
-                                title="預覽">
-                            <i class="fas fa-eye" style="color: #757575;"></i>
-                        </button>
-                    </td>
-                `;
-            } else {
-                // 其他欄位
-                cellContent = `<td>${value}</td>`;
+            // 檔案名稱
+            const moduleName = row['模組名稱'] || row['module'] || '-';
+            let icon = 'fa-cube';
+            if (moduleName.includes('dprx_quickshow')) {
+                icon = 'fa-file';
+            } else if (moduleName.includes('bootcode')) {
+                icon = 'fa-file-code';
+            } else if (moduleName.includes('Merlin7')) {
+                icon = 'fa-folder';
             }
             
-            html += cellContent;
+            html += `
+                <td style="padding: 14px 20px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas ${icon}" style="color: #2196F3; font-size: 1rem;"></i>
+                        <span style="color: #424242; font-weight: 500;">${moduleName}</span>
+                    </div>
+                </td>
+            `;
+            
+            // FTP 路徑（失敗原因）
+            html += `<td style="padding: 14px 20px; color: #757575; font-size: 0.875rem;">-</td>`;
+            
+            // 本地路徑（比對情境）
+            html += `<td style="padding: 14px 20px; color: #757575; font-size: 0.875rem;">-</td>`;
+            
+            // 操作
+            html += `
+                <td style="text-align: center; padding: 14px 20px;">
+                    <button class="action-btn" style="
+                        width: 32px; 
+                        height: 32px; 
+                        border: 1px solid #E0E0E0; 
+                        background: white; 
+                        border-radius: 6px; 
+                        cursor: pointer;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s ease;
+                    " 
+                    onmouseover="this.style.background='#F5F5F5'" 
+                    onmouseout="this.style.background='white'"
+                    onclick="previewFailedModule('${moduleName}')"
+                    title="預覽">
+                        <i class="fas fa-eye" style="color: #757575; font-size: 0.875rem;"></i>
+                    </button>
+                </td>
+            `;
+            
+            html += '</tr>';
         });
-        
-        html += '</tr>';
-    });
-    html += '</tbody></table></div>';
+    } else {
+        // 其他比對結果的資料處理
+        sheetData.data.forEach((row, index) => {
+            html += '<tr style="border-bottom: 1px solid #F5F5F5;">';
+            html += `<td style="text-align: center; padding: 14px 20px; color: #BDBDBD; font-weight: 500;">${index + 1}</td>`;
+            
+            sheetData.columns.forEach(col => {
+                let value = row[col] || '';
+                
+                if (col === 'module' || col === '模組名稱') {
+                    // 檔案名稱欄位
+                    let icon = 'fa-file';
+                    const fileName = value.toLowerCase();
+                    
+                    if (fileName.includes('manifest.xml')) {
+                        icon = 'fa-file-code';
+                    } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
+                        icon = 'fa-file-alt';
+                    }
+                    
+                    html += `
+                        <td style="padding: 14px 20px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas ${icon}" style="color: #2196F3; font-size: 1rem;"></i>
+                                <span style="color: #424242; font-weight: 500;">${value}</span>
+                            </div>
+                        </td>
+                    `;
+                } else if (col === 'location_path' || col === 'path') {
+                    // FTP 路徑
+                    html += `<td style="padding: 14px 20px; color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">${value}</td>`;
+                } else if (col === 'base_folder') {
+                    // 本地路徑
+                    html += `<td style="padding: 14px 20px; color: #757575; font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">downloads/${value}</td>`;
+                } else {
+                    // 其他欄位
+                    html += `<td style="padding: 14px 20px; color: #757575;">${value}</td>`;
+                }
+            });
+            
+            // 操作按鈕
+            html += `
+                <td style="text-align: center; padding: 14px 20px;">
+                    <button class="action-btn" style="
+                        width: 32px; 
+                        height: 32px; 
+                        border: 1px solid #E0E0E0; 
+                        background: white; 
+                        border-radius: 6px; 
+                        cursor: pointer;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s ease;
+                    " 
+                    onmouseover="this.style.background='#F5F5F5'" 
+                    onmouseout="this.style.background='white'"
+                    onclick="previewCompareFile('${row.module || ''}', '${row.path || row.location_path || ''}')"
+                    title="預覽">
+                        <i class="fas fa-eye" style="color: #757575; font-size: 0.875rem;"></i>
+                    </button>
+                </td>
+            `;
+            
+            html += '</tr>';
+        });
+    }
     
-    // 底部統計
+    html += '</tbody></table>';
+    
+    // 底部統計 - 統一樣式
     html += `
-        <div style="text-align: center; padding: 16px; background: #F5F5F5; border-top: 1px solid #E0E0E0; color: #757575; font-size: 0.875rem;">
-            <i class="fas fa-info-circle" style="color: #2196F3; margin-right: 8px;"></i>
+        <div style="
+            text-align: center; 
+            padding: 20px; 
+            background: #FAFAFA; 
+            border-top: 1px solid #F0F0F0; 
+            color: #9E9E9E; 
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        ">
+            <i class="fas fa-chart-bar" style="color: #BDBDBD;"></i>
             共 ${sheetData.data.length} 個檔案
         </div>
     `;
     
-    html += '</div>';
+    html += '</div></div>';
     
     return html;
+}
+
+// 預覽失敗模組
+function previewFailedModule(moduleName) {
+    utils.showNotification(`無法預覽失敗的模組: ${moduleName}`, 'info');
 }
 
 // 預覽比對檔案
@@ -1652,3 +1740,4 @@ window.showCompareDetails = showCompareDetails;
 window.closeCompareModal = closeCompareModal;
 window.switchModalTab = switchModalTab;
 window.previewCompareFile = previewCompareFile;
+window.previewFailedModule = previewFailedModule;

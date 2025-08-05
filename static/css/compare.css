@@ -2248,3 +2248,22 @@ input.path-input::-webkit-contacts-auto-fill-button {
 #compareDetailsModal .fa-file-alt {
     color: #2196F3;
 }
+
+/* 統一操作按鈕樣式 */
+#compareDetailsModal .action-btn:hover {
+    transform: scale(1.05);
+}
+
+#compareDetailsModal .action-btn:active {
+    transform: scale(0.95);
+}
+
+/* 確保表格行 hover 效果 */
+#compareDetailsModal .files-table tbody tr:hover {
+    background-color: #FAFAFA;
+}
+
+/* 移除多餘的邊框和陰影 */
+#compareDetailsModal .file-list-container {
+    margin: 0 !important;
+}
