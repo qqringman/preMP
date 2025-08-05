@@ -135,8 +135,8 @@ function showNoDataMessage() {
                     <i class="fas fa-inbox"></i>
                     <h3>暫無資料可顯示</h3>
                     <p>此任務可能還在處理中，或尚未產生報表。</p>
-                    <button class="btn btn-primary" onclick="location.reload()">
-                        <i class="fas fa-sync"></i> 重新載入
+                    <button class="btn-refresh">
+                        <span>重新整理</span>
                     </button>
                 </div>
             </td>
@@ -162,8 +162,8 @@ function showErrorMessage(message = '無法載入報表資料') {
                     <h3>載入資料失敗</h3>
                     <p>${message}</p>
                     <div class="action-buttons">
-                        <button class="btn btn-primary" onclick="location.reload()">
-                            <i class="fas fa-sync"></i> 重試
+                        <button class="btn-refresh" onclick="location.reload()">
+                            <span>重試</span>
                         </button>
                         <button class="btn btn-outline" onclick="window.history.back()">
                             <i class="fas fa-arrow-left"></i> 返回

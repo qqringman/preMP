@@ -2843,3 +2843,39 @@ body {
   width: auto;
   min-width: 300px;
 }
+
+.btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 6px 20px rgba(33, 150, 243, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-refresh:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(33, 150, 243, 0.45);
+}
+
+.btn-refresh:active {
+  transform: translateY(0);
+}
+
+.btn-refresh i {
+  font-size: 1.1rem;
+  transition: transform 0.4s ease;
+}
+
+.btn-refresh:hover i {
+  transform: rotate(180deg);
+}
