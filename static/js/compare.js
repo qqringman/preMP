@@ -1600,7 +1600,10 @@ function viewDetailedResults() {
 
 // 匯出結果
 async function exportResults(format) {
-    if (!currentTaskId) return;
+    if (!currentTaskId) {
+        utils.showNotification('無任務 ID', 'error');
+        return;
+    }
     
     const endpoints = {
         excel: `/api/export-excel/${currentTaskId}`,
@@ -1609,23 +1612,57 @@ async function exportResults(format) {
     };
     
     if (format === 'zip') {
-        // ZIP 檔案可能較大，使用非同步下載
         utils.showNotification('正在準備 ZIP 檔案，請稍候...', 'info');
         
         try {
-            const response = await utils.apiRequest(`/api/prepare-download/${currentTaskId}`, {
-                method: 'POST',
-                body: JSON.stringify({ format: 'zip' })
-            });
-            
-            if (response.ready) {
-                downloadAsyncFile(response.download_url);
-            } else {
-                // 輪詢下載狀態
-                pollDownloadStatus(response.task_id);
+            // 先檢查任務是否存在
+            const checkResponse = await fetch(`/api/status/${currentTaskId}`);
+            if (!checkResponse.ok) {
+                utils.showNotification('找不到任務資料', 'error');
+                return;
             }
+            
+            // 下載 ZIP 檔案
+            const response = await fetch(endpoints[format]);
+            
+            if (!response.ok) {
+                const error = await response.json();
+                utils.showNotification(`下載失敗: ${error.error || '未知錯誤'}`, 'error');
+                return;
+            }
+            
+            // 檢查 content-type
+            const contentType = response.headers.get('content-type');
+            console.log('Content-Type:', contentType);
+            
+            if (!contentType || !contentType.includes('application/zip')) {
+                utils.showNotification('回應格式錯誤，不是有效的 ZIP 檔案', 'error');
+                return;
+            }
+            
+            // 下載檔案
+            const blob = await response.blob();
+            console.log('Blob size:', blob.size);
+            
+            if (blob.size === 0) {
+                utils.showNotification('下載的檔案為空', 'error');
+                return;
+            }
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `results_${currentTaskId}_${new Date().getTime()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            utils.showNotification('ZIP 檔案下載完成', 'success');
+            
         } catch (error) {
-            utils.showNotification('準備下載失敗', 'error');
+            console.error('Download error:', error);
+            utils.showNotification('下載失敗', 'error');
         }
     } else {
         // 其他格式直接下載

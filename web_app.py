@@ -1138,73 +1138,58 @@ def export_zip(task_id):
         import tempfile
         import shutil
         import zipfile
+        import io
         
-        # 創建臨時 ZIP 檔案
-        fd, temp_zip_path = tempfile.mkstemp(suffix='.zip')
-        os.close(fd)  # 關閉檔案描述符
+        # 使用 BytesIO 而不是臨時檔案
+        zip_buffer = io.BytesIO()
         
-        try:
-            # 使用 zipfile 模組創建 ZIP
-            with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                files_added = False
-                
-                # 添加下載的檔案
-                download_dir = os.path.join('downloads', task_id)
-                if os.path.exists(download_dir):
-                    for root, dirs, files in os.walk(download_dir):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arc_name = os.path.join('downloads', os.path.relpath(file_path, download_dir))
-                            zipf.write(file_path, arc_name)
-                            files_added = True
-                    app.logger.info(f'Added downloads directory: {download_dir}')
-                
-                # 添加比對結果
-                compare_dir = os.path.join('compare_results', task_id)
-                if os.path.exists(compare_dir):
-                    for root, dirs, files in os.walk(compare_dir):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arc_name = os.path.join('compare_results', os.path.relpath(file_path, compare_dir))
-                            zipf.write(file_path, arc_name)
-                            files_added = True
-                    app.logger.info(f'Added compare results directory: {compare_dir}')
-                
-                # 確保有檔案要打包
-                if not files_added:
-                    # 至少創建一個 readme 文件
-                    readme_content = f'任務 ID: {task_id}\n'
-                    readme_content += f'創建時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n'
-                    readme_content += '暫無比對結果\n'
-                    zipf.writestr('README.txt', readme_content.encode('utf-8'))
+        # 創建 ZIP
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            files_added = False
             
-            # 生成檔案名稱
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            zip_filename = f'results_{task_id}_{timestamp}.zip'
+            # 添加下載的檔案
+            download_dir = os.path.join('downloads', task_id)
+            if os.path.exists(download_dir):
+                for root, dirs, files in os.walk(download_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.join('downloads', os.path.relpath(file_path, download_dir))
+                        zipf.write(file_path, arc_name)
+                        files_added = True
+                app.logger.info(f'Added downloads directory: {download_dir}')
             
-            # 確保檔案存在且有內容
-            if not os.path.exists(temp_zip_path) or os.path.getsize(temp_zip_path) == 0:
-                raise Exception('ZIP 檔案創建失敗或為空')
+            # 添加比對結果
+            compare_dir = os.path.join('compare_results', task_id)
+            if os.path.exists(compare_dir):
+                for root, dirs, files in os.walk(compare_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.join('compare_results', os.path.relpath(file_path, compare_dir))
+                        zipf.write(file_path, arc_name)
+                        files_added = True
+                app.logger.info(f'Added compare results directory: {compare_dir}')
             
-            # 讀取 ZIP 檔案內容
-            with open(temp_zip_path, 'rb') as f:
-                zip_data = f.read()
-            
-            # 創建回應
-            response = make_response(zip_data)
-            response.headers['Content-Type'] = 'application/zip'
-            response.headers['Content-Disposition'] = f'attachment; filename={zip_filename}'
-            
-            # 清理臨時檔案
-            os.unlink(temp_zip_path)
-            
-            return response
-            
-        except Exception as e:
-            # 確保清理臨時檔案
-            if os.path.exists(temp_zip_path):
-                os.unlink(temp_zip_path)
-            raise
+            # 如果沒有檔案，至少添加一個 README
+            if not files_added:
+                readme_content = f'任務 ID: {task_id}\n'
+                readme_content += f'創建時間: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n'
+                readme_content += '暫無比對結果\n'
+                zipf.writestr('README.txt', readme_content.encode('utf-8'))
+        
+        # 重置 buffer 位置
+        zip_buffer.seek(0)
+        
+        # 生成檔案名稱
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        zip_filename = f'results_{task_id}_{timestamp}.zip'
+        
+        # 返回檔案
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=zip_filename
+        )
         
     except Exception as e:
         app.logger.error(f'Export ZIP error: {e}')
