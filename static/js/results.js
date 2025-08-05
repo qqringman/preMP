@@ -556,42 +556,53 @@ function renderDataTable(sheetData) {
 
     // 啟用表格功能（拖曳和調整寬度）
     setTimeout(() => {
-        // 觸發 window resize 事件
-        window.dispatchEvent(new Event('resize'));
-        
-        // 強制重新計算樞紐分析表大小
-        const pivotContainer = document.getElementById('pivotContainer');
-        if (pivotContainer) {
-            // 獲取實際元素高度
-            const pivotView = document.querySelector('.pivot-view.fullscreen');
-            const stepHeader = pivotView.querySelector('.step-header');
-            const pivotControls = pivotView.querySelector('.pivot-controls');
-            const instructions = pivotView.querySelector('.pivot-instructions');
+        try {
+            enableTableFeatures();
             
-            // 計算已使用高度
-            let usedHeight = 0;
-            if (stepHeader) usedHeight += stepHeader.offsetHeight;
-            if (pivotControls) usedHeight += pivotControls.offsetHeight;
-            if (instructions && instructions.style.display !== 'none') {
-                usedHeight += instructions.offsetHeight;
+            // 同步標頭和內容的橫向捲動
+            const bodyContainer = document.querySelector('.table-body-container');
+            const headerContainer = document.querySelector('.table-header-container');
+            
+            if (bodyContainer && headerContainer) {
+                // 同步捲動
+                bodyContainer.addEventListener('scroll', function() {
+                    headerContainer.scrollLeft = bodyContainer.scrollLeft;
+                });
+                
+                // 同步欄位寬度
+                const headerTable = headerContainer.querySelector('table');
+                const bodyTable = bodyContainer.querySelector('table');
+                
+                if (headerTable && bodyTable) {
+                    const headerCells = headerTable.querySelectorAll('th');
+                    const firstBodyRow = bodyTable.querySelector('tr');
+                    
+                    if (firstBodyRow) {
+                        const bodyCells = firstBodyRow.querySelectorAll('td');
+                        
+                        // 確保兩個表格的總寬度一致
+                        let totalWidth = 0;
+                        headerCells.forEach((th, index) => {
+                            const width = th.offsetWidth;
+                            totalWidth += width;
+                            
+                            if (bodyCells[index]) {
+                                bodyCells[index].style.width = width + 'px';
+                                bodyCells[index].style.minWidth = width + 'px';
+                                bodyCells[index].style.maxWidth = width + 'px';
+                            }
+                        });
+                        
+                        // 設定表格總寬度
+                        headerTable.style.width = totalWidth + 'px';
+                        bodyTable.style.width = totalWidth + 'px';
+                    }
+                }
             }
-            
-            // 設定容器高度 (留 20px 緩衝)
-            const availableHeight = window.innerHeight - usedHeight - 20;
-            
-            pivotContainer.style.height = `${availableHeight}px`;
-            pivotContainer.style.maxHeight = `${availableHeight}px`;
+        } catch (error) {
+            console.error('同步表格功能時發生錯誤:', error);
         }
-        
-        // 如果有樞紐分析表實例，強制重新渲染
-        if (window.$ && window.$('#pivotContainer').data("pivotUIOptions")) {
-            const pivotData = window.$('#pivotContainer').data("pivotUIOptions");
-            // 觸發重新渲染
-            const $container = window.$('#pivotContainer');
-            $container.empty();
-            $container.pivotUI(pivotData.data || pivotInitialData, pivotData);
-        }
-    }, 100);
+    }, 200);
 }
 
 // 啟用表格功能（拖曳和調整寬度）
