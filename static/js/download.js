@@ -73,20 +73,19 @@ function showFilesList(type) {
         case 'downloaded':
             files = downloadedFilesList;
             title = '已下載的檔案';
-            modalClass = 'success';  // 綠色
+            modalClass = 'success';
             break;
         case 'skipped':
             files = skippedFilesList;
             title = '已跳過的檔案';
-            modalClass = 'info';     // 橘色
+            modalClass = 'info';
             break;
         case 'failed':
             files = failedFilesList;
             title = '下載失敗的檔案';
-            modalClass = 'danger';   // 紅色
+            modalClass = 'danger';
             break;
         case 'total':
-            // 合併所有檔案
             files = [
                 ...downloadedFilesList.map(f => ({...f, status: 'downloaded'})),
                 ...skippedFilesList.map(f => ({...f, status: 'skipped'})),
@@ -96,7 +95,6 @@ function showFilesList(type) {
             break;
     }
     
-    // 顯示模態框
     const modal = document.getElementById('filesListModal');
     const modalTitle = document.getElementById('filesModalTitle');
     const modalBody = document.getElementById('filesModalBody');
@@ -109,85 +107,80 @@ function showFilesList(type) {
     modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     modal.className = `modal ${modalClass}`;
     
-    // 生成檔案列表 HTML - 使用分離的 header 和 body 結構
+    // 生成檔案列表 HTML - 使用單一表格
     if (files.length === 0) {
         modalBody.innerHTML = '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有檔案</p></div>';
     } else {
-        let html = '<div class="table-container-fixed">';
+        let html = '';
         
-        // 固定的表頭
-        html += '<div class="table-header-fixed">';
-        html += '<table class="files-table-header">';
+        // 表格容器
+        html += '<div class="table-wrapper">';
+        html += '<table class="files-table">';
+        
+        // 表頭
         html += '<thead><tr>';
-        html += '<th style="width: 50px; min-width: 50px;">#</th>';
-        html += '<th style="width: 250px; min-width: 250px;">檔案名稱</th>';
-        html += '<th style="width: 400px; min-width: 400px;">FTP 路徑</th>';
-        html += '<th style="width: 400px; min-width: 400px;">本地路徑</th>';
+        html += '<th>#</th>';
+        html += '<th>檔案名稱</th>';
+        html += '<th>FTP 路徑</th>';
+        html += '<th>本地路徑</th>';
         
         if (type === 'total') {
-            html += '<th style="width: 100px; min-width: 100px;">狀態</th>';
+            html += '<th>狀態</th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
-            html += '<th style="width: 300px; min-width: 300px;">原因</th>';
+            html += '<th>原因</th>';
         }
         
-        html += '<th style="width: 80px; min-width: 80px;">操作</th>';
-        html += '</tr></thead></table>';
-        html += '</div>';
+        html += '<th>操作</th>';
+        html += '</tr></thead>';
         
-        // 可捲動的表身
-        html += '<div class="table-body-scrollable">';
-        html += '<table class="files-table-body">';
+        // 表身
         html += '<tbody>';
         
         files.forEach((file, index) => {
             html += '<tr>';
-            html += `<td style="width: 50px; min-width: 50px;" class="index-cell">${index + 1}</td>`;
-            html += `<td style="width: 250px; min-width: 250px;" class="file-name-cell">
+            html += `<td class="index-cell">${index + 1}</td>`;
+            html += `<td class="file-name-cell">
                         <i class="fas fa-file-alt"></i> ${file.name}
                      </td>`;
-            html += `<td style="width: 400px; min-width: 400px;" class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
-            html += `<td style="width: 400px; min-width: 400px;" class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
+            html += `<td class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
+            html += `<td class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
             
             if (type === 'total') {
                 const statusClass = file.status === 'downloaded' ? 'success' : 
                                   file.status === 'skipped' ? 'info' : 'danger';
                 const statusText = file.status === 'downloaded' ? '已下載' : 
                                  file.status === 'skipped' ? '已跳過' : '失敗';
-                html += `<td style="width: 100px; min-width: 100px;"><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
             }
             
             if (type === 'skipped' || type === 'failed') {
-                html += `<td style="width: 300px; min-width: 300px;">${file.reason || '-'}</td>`;
+                html += `<td>${file.reason || '-'}</td>`;
             }
             
-            // 操作按鈕
-            html += '<td style="width: 80px; min-width: 80px;" class="action-cell">';
+            html += '<td class="action-cell">';
             if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
-                // 確保路徑格式正確
                 const cleanPath = file.path.replace(/\\/g, '/');
                 html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                          </button>`;
             }
             html += '</td>';
-            
             html += '</tr>';
         });
         
-        html += '</tbody></table>';
-        html += '</div>'; // 關閉 table-body-scrollable
+        html += '</tbody>';
+        html += '</table>';
+        html += '</div>'; // 關閉 table-wrapper
         
-        // 統計摘要放在 table-container-fixed 內部
+        // 統計摘要
         html += `
             <div class="table-footer">
                 <i class="fas fa-chart-bar"></i>
                 共 ${files.length} 個檔案
             </div>
         `;
-        
-        html += '</div>'; // 關閉 table-container-fixed
         
         modalBody.innerHTML = html;
     }

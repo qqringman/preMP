@@ -2929,7 +2929,7 @@ button:hover,
   right: -25%;
   top: -100%;
   transform: rotate(35deg);
-  width: 70%;
+  width: 65%;
 }
 
 .preview-filename::before {
@@ -3525,7 +3525,6 @@ to {
   flex: 1;
   overflow: auto;
   background: white;
-  max-height: 500px; /* 限制最大高度 */
 }
 
 #filesListModal .files-table-body {
@@ -3653,10 +3652,11 @@ to {
 
 /* 固定的表頭 */
 #filesListModal .table-header-fixed {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   overflow: hidden;
   border-bottom: 2px solid #E3F2FD;
   background: white;
+  height: auto; /* 改為 auto */
 }
 
 #filesListModal .files-table-header {
@@ -3763,4 +3763,476 @@ to {
 
 #filesListModal .table-body-scrollable::-webkit-scrollbar-corner {
   background: #F5F9FF;
+}
+
+/* 在 download.css 中，找到檔案列表模態框相關的樣式，修改為： */
+
+/* 下載頁面的檔案列表模態框 - 固定標頭表格 */
+#filesListModal .modal-body {
+  padding: 0 !important;
+  background: #FFFFFF;
+  height: calc(100% - 60px); /* 減去 header 高度 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#filesListModal .table-container-fixed {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 固定的表頭 */
+#filesListModal .table-header-fixed {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-bottom: 2px solid #E3F2FD;
+  background: white;
+}
+
+#filesListModal .files-table-header {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+#filesListModal .files-table-header th {
+  padding: 16px 20px;
+  text-align: left;
+  font-weight: 600;
+  color: #424242;
+  background: #F8FBFF;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  border-right: 1px solid #E3F2FD;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* 可捲動的表身 */
+#filesListModal .table-body-scrollable {
+  flex: 1;
+  overflow-y: auto; /* 只允許垂直捲軸 */
+  overflow-x: hidden; /* 隱藏水平捲軸 */
+  background: white;
+}
+
+/* 確保表格寬度一致 */
+#filesListModal .files-table-header,
+#filesListModal .files-table-body {
+  width: calc(100% - 10px); /* 預留捲軸空間 */
+}
+
+/* 統一欄位寬度定義 */
+#filesListModal th:nth-child(1),
+#filesListModal td:nth-child(1) { width: 60px; }
+
+#filesListModal th:nth-child(2),
+#filesListModal td:nth-child(2) { width: 250px; }
+
+#filesListModal th:nth-child(3),
+#filesListModal td:nth-child(3) { width: 35%; }
+
+#filesListModal th:nth-child(4),
+#filesListModal td:nth-child(4) { width: 35%; }
+
+#filesListModal th:nth-child(5),
+#filesListModal td:nth-child(5) { width: 120px; }
+
+#filesListModal th:nth-child(6),
+#filesListModal td:nth-child(6) { width: 200px; }
+
+#filesListModal th:last-child,
+#filesListModal td:last-child { width: 80px; }
+
+/* 統計卡片 - 確保填滿高度 */
+.progress-stats {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  align-items: stretch; /* 改為 stretch 確保填滿高度 */
+  background: #FFFFFF !important;
+  border: 2px solid #E3E7F3;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  gap: 16px;
+  min-height: 100px; /* 設定最小高度 */
+  overflow: hidden;
+  padding: 20px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.stat-card .stat-icon {
+  align-items: center;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  display: flex;
+  flex-shrink: 0;
+  font-size: 1.5rem;
+  height: 52px;
+  justify-content: center;
+  width: 52px;
+  align-self: center; /* 垂直居中 */
+}
+
+.stat-card .stat-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center; /* 垂直居中內容 */
+}
+
+.stat-card .stat-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.stat-card .stat-label {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+/* 確保四個卡片高度一致 */
+.progress-stats .stat-card {
+  min-height: 120px;
+}
+
+/* 下載結果的統計卡片也使用相同樣式 */
+#downloadResults .progress-stats .stat-card {
+  min-height: 120px;
+}
+
+/* 更新模態框樣式 */
+#filesListModal .modal-content {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 1400px;
+  height: 85vh; /* 調整為 85vh */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 模態框 header 固定高度 */
+#filesListModal .modal-header {
+  height: 60px;
+  flex-shrink: 0;
+}
+
+/* 模態框 body 佔據剩餘空間 */
+#filesListModal .modal-body {
+  flex: 1;
+  min-height: 0; /* 重要：允許收縮 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* table footer 固定在底部 */
+#filesListModal .table-footer {
+  flex-shrink: 0;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 檔案列表模態框 - 修正高度計算 */
+#filesListModal .modal-content {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 1400px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filesListModal .modal-body {
+  padding: 0 !important;
+  background: #FFFFFF;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 重要：允許收縮 */
+}
+
+#filesListModal .table-container-fixed {
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* 佔滿可用空間 */
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 固定的表頭 */
+#filesListModal .table-header-fixed {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-bottom: 2px solid #E3F2FD;
+  background: white;
+}
+
+/* 可捲動的表身 - 重要修改 */
+#filesListModal .table-body-scrollable {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: white;
+  min-height: 0; /* 允許收縮 */
+}
+
+/* 底部統計 - 移到 table-container-fixed 外面 */
+#filesListModal .table-footer {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
+  border-top: 2px solid #E3F2FD;
+  color: #78909C;
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+/* 檔案列表模態框 - 使用 sticky 表頭方案 */
+#filesListModal .modal-body {
+  padding: 0 !important;
+  background: #FFFFFF;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 單一表格容器 */
+#filesListModal .table-wrapper {
+  flex: 1;
+  overflow: auto;
+  background: white;
+}
+
+/* 單一表格 */
+#filesListModal .files-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto; /* 自動調整寬度 */
+}
+
+/* Sticky 表頭 */
+#filesListModal .files-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #F8FBFF;
+}
+
+#filesListModal .files-table th {
+  padding: 16px 20px;
+  text-align: left;
+  font-weight: 600;
+  color: #424242;
+  background: #F8FBFF;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  border-bottom: 2px solid #E3F2FD;
+  border-right: 1px solid #E3F2FD;
+}
+
+#filesListModal .files-table th:last-child {
+  border-right: none;
+}
+
+#filesListModal .files-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid #F5F5F5;
+  vertical-align: middle;
+}
+
+#filesListModal .files-table tbody tr:hover {
+  background-color: #F8FBFF;
+}
+
+/* 路徑欄位可以有最大寬度，但會自動調整 */
+#filesListModal .file-path-cell {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 底部統計 */
+#filesListModal .table-footer {
+  flex-shrink: 0;
+  height: 60px;
+  text-align: center;
+  padding: 0 20px;
+  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
+  border-top: 2px solid #E3F2FD;
+  color: #78909C;
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+/* 捲軸樣式 */
+#filesListModal .table-wrapper::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#filesListModal .table-wrapper::-webkit-scrollbar-track {
+  background: #F5F9FF;
+  border-radius: 5px;
+}
+
+#filesListModal .table-wrapper::-webkit-scrollbar-thumb {
+  background: #90CAF9;
+  border-radius: 5px;
+}
+
+#filesListModal .table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #64B5F6;
+}
+
+/* 修正捲軸抖動 - 強制顯示捲軸 */
+#filesListModal .table-wrapper {
+  flex: 1;
+  overflow: auto;
+  background: white;
+  /* 強制顯示垂直捲軸，避免內容變化時的抖動 */
+  overflow-y: scroll;
+  overflow-x: auto;
+}
+
+/* 或者使用 overlay 捲軸（如果瀏覽器支援） */
+@supports (overflow: overlay) {
+  #filesListModal .table-wrapper {
+    overflow-y: overlay;
+    overflow-x: overlay;
+  }
+}
+
+/* 確保表格最小寬度，避免過度壓縮 */
+#filesListModal .files-table {
+  width: 100%;
+  min-width: 800px; /* 設定最小寬度 */
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* 狀態標籤不折行 */
+.status-badge {
+  border-radius: var(--radius-full);
+  display: inline-block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  white-space: nowrap; /* 防止折行 */
+  min-width: 60px; /* 設定最小寬度 */
+  text-align: center;
+}
+
+/* 確保狀態欄位不會太窄 */
+#filesListModal .files-table th:nth-child(5),
+#filesListModal .files-table td:nth-child(5) {
+  min-width: 80px; /* 確保有足夠空間 */
+  white-space: nowrap;
+}
+
+/* 所有表格單元格預設不折行 */
+#filesListModal .files-table th,
+#filesListModal .files-table td {
+  white-space: nowrap;
+}
+
+/* 只有路徑欄位可以使用省略號 */
+#filesListModal .file-path-cell {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 優化表格佈局 */
+#filesListModal .files-table {
+  width: 100%;
+  min-width: 1000px; /* 增加最小寬度，確保內容不會過度壓縮 */
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* 設定各欄位的最小寬度 */
+#filesListModal .files-table th,
+#filesListModal .files-table td {
+  padding: 14px 20px;
+  white-space: nowrap;
+}
+
+/* 序號欄 */
+#filesListModal .index-cell {
+  text-align: center;
+  min-width: 50px;
+}
+
+/* 檔案名稱欄 */
+#filesListModal .file-name-cell {
+  min-width: 200px;
+}
+
+/* 操作欄 */
+#filesListModal .action-cell {
+  text-align: center;
+  min-width: 80px;
+}
+
+/* 修正模態框內容區域 */
+#filesListModal .modal-body {
+  padding: 0 !important;
+  background: #FFFFFF;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* 設定最小寬度，避免過度縮小 */
+  min-width: 0;
+}
+
+/* 固定捲軸軌道大小 */
+#filesListModal .table-wrapper {
+  /* 為捲軸預留空間 */
+  scrollbar-gutter: stable;
+}
+
+/* 或者使用傳統方法 */
+#filesListModal .table-wrapper {
+  padding-right: 10px; /* 預留捲軸空間 */
+  box-sizing: content-box;
 }
