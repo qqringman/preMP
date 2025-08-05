@@ -2507,6 +2507,7 @@ input:checked + .switch-slider::before {
   animation: copySuccess 0.3s ease;
 }
 
+/*
 .action-cell .btn-icon:hover::after {
   background: var(--text-primary);
   border-radius: 4px;
@@ -2522,6 +2523,7 @@ input:checked + .switch-slider::before {
   white-space: nowrap;
   z-index: 10;
 }
+*/
 
 .notification {
   background: var(--bg-secondary);
@@ -4235,4 +4237,250 @@ to {
 #filesListModal .table-wrapper {
   padding-right: 10px; /* 預留捲軸空間 */
   box-sizing: content-box;
+}
+
+/* 預覽模態框 - 重新設計 */
+#filePreviewModal .modal-header {
+  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
+  padding: 20px 24px;
+  border-bottom: none;
+}
+
+#filePreviewModal .modal-body {
+  background: #263238;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 預覽工具列 */
+#filePreviewModal .preview-toolbar {
+  background: #37474F;
+  border-bottom: 1px solid #455A64;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* 檔案名稱樣式 */
+#filePreviewModal .preview-filename {
+  color: #CFD8DC;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#filePreviewModal .preview-filename i {
+  color: #80CBC4;
+  font-size: 1.125rem;
+}
+
+/* 預覽內容區域 - 美化樣式 */
+.preview-content {
+  background: #263238;
+  border: none;
+  border-radius: 0;
+  color: #ECEFF1;
+  flex: 1;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0;
+  overflow: auto;
+  padding: 24px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* XML 語法高亮 - 使用 Material Theme 配色 */
+.preview-content.xml {
+  background: #263238;
+}
+
+.preview-content .xml-bracket {
+  color: #89DDFF;
+}
+
+.preview-content .xml-tag {
+  color: #FF5370;
+  font-weight: 500;
+}
+
+.preview-content .xml-attr {
+  color: #FFCB6B;
+}
+
+.preview-content .xml-value {
+  color: #C3E88D;
+}
+
+/* 純文字檔案樣式 */
+.preview-content.plain-text {
+  background: #263238;
+  color: #ECEFF1;
+}
+
+/* Git 相關高亮 */
+.preview-content .git-label {
+  color: #82AAFF;
+  font-weight: 500;
+}
+
+.preview-content .git-path {
+  color: #FFCB6B;
+}
+
+.preview-content .git-commit {
+  color: #C3E88D;
+  font-family: monospace;
+}
+
+.preview-content .git-branch {
+  color: #F78C6C;
+}
+
+/* 行號樣式（可選） */
+.preview-content .line-number {
+  color: #546E7A;
+  display: inline-block;
+  margin-right: 16px;
+  min-width: 40px;
+  text-align: right;
+  user-select: none;
+}
+
+/* 修正複製按鈕的 z-index */
+#filePreviewModal .modal-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  position: relative;
+  z-index: 10; /* 確保在最上層 */
+}
+
+#filePreviewModal .btn-copy {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 6px;
+  padding: 8px 16px;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 11; /* 確保按鈕可點擊 */
+}
+
+#filePreviewModal .btn-copy:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 關閉按鈕也要確保可點擊 */
+#filePreviewModal .modal-close {
+  position: relative;
+  z-index: 11;
+}
+
+/* 移除可能的覆蓋元素 */
+#filePreviewModal .modal-header::before,
+#filePreviewModal .modal-header::after {
+  z-index: 0; /* 確保裝飾元素在底層 */
+}
+
+/* 預覽視窗捲軸 - 配合深色主題 */
+.preview-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+  background: #37474F;
+  border: 1px solid #263238;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+  background: #546E7A;
+  border-radius: 6px;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+  background: #607D8B;
+}
+
+.preview-content::-webkit-scrollbar-corner {
+  background: #37474F;
+}
+
+/* Version.txt 專用樣式 - 簡潔美觀 */
+.preview-content.version-txt {
+  background: #1E1E1E;
+  color: #D4D4D4;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 24px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 或者使用更現代的深色主題 */
+.preview-content.version-txt {
+  background: #282C34;
+  color: #ABB2BF;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 24px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  letter-spacing: 0.5px;
+}
+
+/* 純文字檔案的通用樣式 */
+.preview-content.plain-text {
+  background: #282C34;
+  color: #ABB2BF;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 24px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* XML 保持原有的語法高亮 */
+.preview-content.xml {
+  background: #1E1E1E;
+  color: #D4D4D4;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 24px;
+}
+
+/* XML 語法高亮顏色 */
+.preview-content .xml-bracket {
+  color: #808080;
+}
+
+.preview-content .xml-tag {
+  color: #569CD6;
+}
+
+.preview-content .xml-attr {
+  color: #9CDCFE;
+}
+
+.preview-content .xml-value {
+  color: #CE9178;
 }

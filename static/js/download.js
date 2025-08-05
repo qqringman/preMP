@@ -1488,8 +1488,6 @@ function toggleFolder(element) {
     }
 }
 
-// 預覽檔案
-// 預覽檔案 - 統一風格版本
 async function previewFile(path) {
     if (!previewSource) {
         previewSource = null;
@@ -1508,7 +1506,7 @@ async function previewFile(path) {
         filenameText.textContent = fileName;
     }
     
-    // 在 previewFile 函數中，設定預覽視窗的檔案圖標
+    // 設定預覽視窗的檔案圖標
     if (filenameElement) {
         filenameElement.className = `preview-filename ${fileExt}`;
         const icon = filenameElement.querySelector('i');
@@ -1540,7 +1538,7 @@ async function previewFile(path) {
         const response = await utils.apiRequest(`/api/preview-file?path=${encodeURIComponent(path)}`);
         
         if (response.type === 'xml' || fileExt === 'xml') {
-            // XML 語法高亮 - 簡潔版
+            // XML 語法高亮 - 先 escape HTML
             let formattedContent = response.content
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -1553,24 +1551,12 @@ async function previewFile(path) {
             content.className = 'preview-content xml';
             
         } else if (fileName.toLowerCase().includes('version') || fileExt === 'txt') {
-            let highlightedContent = response.content
-                // GIT Project 標籤
-                .replace(/(GIT Project\s*:|Local Path\s*:|commit\s*:|Branch\s*:|Tag info\s*:)/gi, 
-                    '<span class="git-label">$1</span>')
-                // 路徑
-                .replace(/(\/[a-zA-Z0-9_\-\/]+)/g, '<span class="git-path">$1</span>')
-                // Commit hash (40字元的16進位)
-                .replace(/\b([a-f0-9]{40})\b/g, '<span class="git-commit">$1</span>')
-                // Branch 名稱
-                .replace(/(rtk\/[^\s]+)/g, '<span class="git-branch">$1</span>')
-                // HEAD 標記
-                .replace(/\(HEAD\)/g, '<span class="git-head">(HEAD)</span>')
-                // Tag submissions
-                .replace(/(submissions\/\d+)/g, '<span class="git-tag">$1</span>');
-            
-            content.innerHTML = highlightedContent;
-            content.className = 'preview-content plain-text';
+            // Version.txt - 不做複雜的語法高亮，保持簡單
+            // 直接顯示原始內容，只用 CSS 來美化
+            content.textContent = response.content;
+            content.className = 'preview-content version-txt';
         } else {
+            // 純文字顯示
             content.textContent = response.content;
             content.className = 'preview-content';
         }
