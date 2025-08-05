@@ -2244,54 +2244,127 @@ def export_report_page():
 
 @app.route('/api/export-excel-single/<task_id>/<sheet_name>')
 def export_excel_single_sheet(task_id, sheet_name):
-    """匯出單一資料表的 Excel"""
+    """
+    匯出原始 Excel 檔案中的單一資料表
+    保留原始格式，只移除其他資料表
+    """
     try:
-        # 先嘗試從比對結果目錄查找
+        # 查找原始的比對結果檔案
+        excel_path = None
+        
+        # 1. 從比對結果目錄查找
         compare_dir = os.path.join('compare_results', task_id)
-        excel_files = []
-        
         if os.path.exists(compare_dir):
-            # 查找所有 Excel 檔案
-            for file in os.listdir(compare_dir):
-                if file.endswith('.xlsx'):
-                    excel_files.append(os.path.join(compare_dir, file))
+            # 優先查找 all_scenarios_compare.xlsx 或 all_compare.xlsx
+            priority_files = ['all_scenarios_compare.xlsx', 'all_compare.xlsx']
+            for filename in priority_files:
+                file_path = os.path.join(compare_dir, filename)
+                if os.path.exists(file_path):
+                    excel_path = file_path
+                    break
+            
+            # 如果沒找到，查找任何 xlsx 檔案
+            if not excel_path:
+                for file in os.listdir(compare_dir):
+                    if file.endswith('.xlsx') and not file.startswith('~'):
+                        excel_path = os.path.join(compare_dir, file)
+                        break
         
-        # 如果沒找到，從處理狀態中查找
-        if not excel_files and task_id in processing_status:
+        # 2. 從處理狀態中查找
+        if not excel_path and task_id in processing_status:
             task_data = processing_status[task_id]
             results = task_data.get('results', {})
-            if 'summary_report' in results:
-                excel_files.append(results['summary_report'])
+            if 'summary_report' in results and os.path.exists(results['summary_report']):
+                excel_path = results['summary_report']
+            elif 'compare_results' in results:
+                compare_results = results['compare_results']
+                if isinstance(compare_results, dict) and 'summary_report' in compare_results:
+                    if os.path.exists(compare_results['summary_report']):
+                        excel_path = compare_results['summary_report']
         
-        # 讀取找到的 Excel 檔案
-        for excel_path in excel_files:
-            if os.path.exists(excel_path):
-                try:
-                    # 使用 pandas 讀取並檢查是否包含所需的 sheet
-                    excel_data = pd.read_excel(excel_path, sheet_name=None)
-                    
-                    if sheet_name in excel_data:
-                        # 創建新的 Excel 只包含指定的 sheet
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            excel_data[sheet_name].to_excel(writer, sheet_name=sheet_name, index=False)
-                        
-                        output.seek(0)
-                        
-                        return send_file(
-                            output,
-                            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            as_attachment=True,
-                            download_name=f"{sheet_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                        )
-                except Exception as e:
-                    app.logger.error(f"讀取 Excel 檔案錯誤: {e}")
-                    continue
+        if not excel_path or not os.path.exists(excel_path):
+            app.logger.error(f'找不到 Excel 檔案: task_id={task_id}')
+            return jsonify({'error': '找不到原始檔案'}), 404
         
-        return jsonify({'error': '找不到資料表'}), 404
+        # 讀取原始 Excel 檔案
+        wb = openpyxl.load_workbook(excel_path, data_only=False, keep_vba=False)
+        
+        # 檢查資料表是否存在
+        if sheet_name not in wb.sheetnames:
+            app.logger.error(f'找不到資料表: {sheet_name} in {excel_path}')
+            return jsonify({'error': f'找不到資料表: {sheet_name}'}), 404
+        
+        # 創建新的工作簿，只包含指定的資料表
+        new_wb = openpyxl.Workbook()
+        
+        # 移除預設的工作表
+        default_sheet = new_wb.active
+        new_wb.remove(default_sheet)
+        
+        # 複製指定的工作表（包含格式）
+        source_sheet = wb[sheet_name]
+        target_sheet = new_wb.create_sheet(title=sheet_name)
+        
+        # 複製儲存格資料和格式
+        for row in source_sheet.iter_rows():
+            for cell in row:
+                target_cell = target_sheet.cell(
+                    row=cell.row, 
+                    column=cell.column, 
+                    value=cell.value
+                )
+                
+                # 複製格式
+                if cell.has_style:
+                    target_cell.font = copy(cell.font)
+                    target_cell.fill = copy(cell.fill)
+                    target_cell.border = copy(cell.border)
+                    target_cell.alignment = copy(cell.alignment)
+                    target_cell.number_format = cell.number_format
+                    target_cell.protection = copy(cell.protection)
+        
+        # 複製列寬
+        for column_cells in source_sheet.columns:
+            column_letter = column_cells[0].column_letter
+            if source_sheet.column_dimensions[column_letter].width:
+                target_sheet.column_dimensions[column_letter].width = \
+                    source_sheet.column_dimensions[column_letter].width
+        
+        # 複製行高
+        for row_cells in source_sheet.rows:
+            row_number = row_cells[0].row
+            if source_sheet.row_dimensions[row_number].height:
+                target_sheet.row_dimensions[row_number].height = \
+                    source_sheet.row_dimensions[row_number].height
+        
+        # 複製合併儲存格
+        for merged_range in source_sheet.merged_cells.ranges:
+            target_sheet.merge_cells(str(merged_range))
+        
+        # 複製自動篩選
+        if source_sheet.auto_filter.ref:
+            target_sheet.auto_filter.ref = source_sheet.auto_filter.ref
+        
+        # 儲存到記憶體
+        output = io.BytesIO()
+        new_wb.save(output)
+        output.seek(0)
+        
+        # 生成檔案名稱
+        filename = f"{sheet_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # 回傳檔案
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
         
     except Exception as e:
         app.logger.error(f"匯出單一資料表錯誤: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

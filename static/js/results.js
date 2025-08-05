@@ -1907,13 +1907,14 @@ function hideExportLoading() {
     }
 }
 
-// 匯出整個頁面為 HTML（保留 JS/CSS）- 完整版本
+// 匯出整個頁面為 HTML（保留 JS/CSS）- 完整離線版本
 function exportPageAsHTML() {
     try {
-        // 收集所有 CSS
+        // 收集所有內嵌的 CSS
         let allCSS = '';
-        const styleSheets = document.styleSheets;
         
+        // 收集所有樣式表
+        const styleSheets = document.styleSheets;
         for (let i = 0; i < styleSheets.length; i++) {
             try {
                 const rules = styleSheets[i].cssRules || styleSheets[i].rules;
@@ -1923,58 +1924,80 @@ function exportPageAsHTML() {
                     }
                 }
             } catch (e) {
-                // 跨域樣式表
+                // 跨域樣式表，使用 @import
                 if (styleSheets[i].href) {
                     allCSS += `@import url("${styleSheets[i].href}");\n`;
                 }
             }
         }
         
-        // 建立離線 HTML
+        // 獲取當前所有的 JavaScript 函數
+        const jsCode = getAllRequiredFunctions();
+        
+        // 建立完整的離線 HTML
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>比對結果報表 - ${taskId} (離線版)</title>
+    <title>比對結果報表 - ${taskId} (離線完整版)</title>
     
-    <!-- 外部資源 - 確保順序正確 -->
+    <!-- 外部資源 CDN -->
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- jQuery 必須在 PivotTable 之前 -->
+    <!-- jQuery 和 jQuery UI (必須在 PivotTable 之前載入) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/themes/base/jquery-ui.min.css">
     
     <!-- PivotTable.js -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.js"></script>
     
-    <!-- Chart.js 和其他庫 -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- SheetJS (XLSX) -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
+    <!-- 內嵌樣式 -->
     <style>
         ${allCSS}
+        
+        /* 額外的離線模式樣式 */
+        .offline-mode-notice {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #FF9800;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            z-index: 1000;
+            display: none;
+        }
+        
+        /* 確保離線模式下的響應式設計 */
+        @media print {
+            .offline-mode-notice,
+            .fab-container,
+            .filter-panel {
+                display: none !important;
+            }
+        }
     </style>
-    
-    <!-- 立即載入必要的函數定義 -->
-    <script>
-        // 內嵌資料 - 確保包含所有資料
-        const exportedData = ${JSON.stringify(currentData)};
-        const exportedTaskId = '${taskId}';
-        const exportedSheet = '${currentSheet}';
-        
-        // 立即載入所有函數
-        ${getAllRequiredFunctions()}
-        
-        // 設定全域變數
-        currentData = exportedData;
-        taskId = exportedTaskId;
-    </script>
 </head>
 <body>
+    <!-- 離線模式提示 -->
+    <div class="offline-mode-notice" id="offlineModeNotice">
+        <i class="fas fa-info-circle"></i> 離線模式
+    </div>
+
+    <!-- 主容器 -->
     <div class="container">
         <div class="page-header">
             <h1 class="page-title">
@@ -2010,6 +2033,7 @@ function exportPageAsHTML() {
             </div>
             
             <div class="section-body">
+                <!-- 資料表選擇與工具列 -->
                 <div class="data-controls">
                     <div class="control-left">
                         <label class="form-label">
@@ -2017,10 +2041,14 @@ function exportPageAsHTML() {
                         </label>
                         <select class="form-input" id="sheetSelector"></select>
                         
+                        <!-- 快速搜尋 -->
                         <div class="search-box">
                             <i class="fas fa-search"></i>
-                            <input type="text" class="search-input" id="quickSearchInput" 
-                                   placeholder="快速搜尋..." autocomplete="off">
+                            <input type="text" 
+                                   class="search-input" 
+                                   id="quickSearchInput" 
+                                   placeholder="快速搜尋..." 
+                                   autocomplete="off">
                             <span class="search-count" id="searchCount"></span>
                         </div>
                     </div>
@@ -2052,40 +2080,49 @@ function exportPageAsHTML() {
                     
                     <!-- 樞紐分析檢視 -->
                     <div id="pivotView" class="pivot-view hidden">
-                        <div class="pivot-controls">
-                            <div class="pivot-controls-left">
-                                <h3 class="pivot-title">
-                                    <i class="fas fa-chart-pie"></i> 樞紐分析表
-                                </h3>
+                        <div class="step-section">
+                            <div class="step-header pivot-header">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <h2 class="step-title">樞紐分析表</h2>
+                                    <p class="step-subtitle">拖曳欄位來建立自訂的分析報表</p>
+                                </div>
                             </div>
-                            <div class="pivot-controls-right">
-                                <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
-                                    <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> <span id="toggleAreasText">隱藏拖曳區</span>
-                                </button>
-                                <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
-                                    <i class="fas fa-expand" id="fullscreenIcon"></i> <span id="fullscreenText">全螢幕</span>
-                                </button>
-                                <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
-                                    <i class="fas fa-undo"></i> 重置
-                                </button>
-                                <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
-                                    <i class="fas fa-file-excel"></i> 匯出
-                                </button>
+                            
+                            <div class="section-body">
+                                <div class="pivot-controls">
+                                    <div class="pivot-controls-left"></div>
+                                    <div class="pivot-controls-right">
+                                        <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
+                                            <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> 
+                                            <span id="toggleAreasText">隱藏拖曳區</span>
+                                        </button>
+                                        <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
+                                            <i class="fas fa-expand" id="fullscreenIcon"></i> 
+                                            <span id="fullscreenText">全螢幕</span>
+                                        </button>
+                                        <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
+                                            <i class="fas fa-undo"></i> 重置
+                                        </button>
+                                        <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
+                                            <i class="fas fa-file-excel"></i> 匯出
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="pivot-instructions">
+                                    <i class="fas fa-info-circle"> 拖曳欄位到不同區域來建立樞紐分析表</i>
+                                    <ul>
+                                        <li>拖曳欄位到列或欄區域來分組資料</li>
+                                        <li>選擇不同的彙總函數（總和、平均、計數等）</li>
+                                        <li>使用篩選器來過濾資料</li>
+                                        <li>點擊表格標題來排序</li>
+                                    </ul>
+                                </div>
+                                
+                                <div id="pivotContainer"></div>
                             </div>
                         </div>
-                        
-                        <div class="pivot-instructions">
-                            <i class="fas fa-info-circle"></i>
-                            <p>拖曳欄位到不同區域來建立樞紐分析表。您可以：</p>
-                            <ul>
-                                <li>拖曳欄位到列或欄區域來分組資料</li>
-                                <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                                <li>使用篩選器來過濾資料</li>
-                                <li>點擊表格標題來排序</li>
-                            </ul>
-                        </div>
-                        
-                        <div id="pivotContainer"></div>
                     </div>
                 </div>
             </div>
@@ -2131,92 +2168,123 @@ function exportPageAsHTML() {
         </div>
     </div>
 
+    <!-- 浮動按鈕 -->
+    <div class="fab-container">
+        <button class="fab-filter" onclick="toggleFilterPanel()" title="資料篩選器" id="fabFilter">
+            <i class="fas fa-filter"></i>
+        </button>
+    </div>
+
+    <!-- JavaScript 程式碼 -->
     <script>
-        // 等待 DOM 載入完成後初始化
-        $(document).ready(function() {
-            console.log('DOM ready, 開始初始化...');
-            console.log('載入的資料:', exportedData);
-            
-            // 確認函數已載入
-            if (typeof togglePivotMode === 'undefined') {
-                console.error('togglePivotMode 函數未定義');
-            } else {
-                console.log('togglePivotMode 函數已載入');
+        // 設定離線模式標記
+        window.isOfflineMode = true;
+        
+        // 顯示離線模式提示
+        setTimeout(() => {
+            const notice = document.getElementById('offlineModeNotice');
+            if (notice) {
+                notice.style.display = 'block';
+                setTimeout(() => {
+                    notice.style.display = 'none';
+                }, 5000);
             }
+        }, 1000);
+        
+        // 內嵌資料
+        const exportedData = ${JSON.stringify(currentData)};
+        const exportedTaskId = '${taskId}';
+        const exportedSheet = '${currentSheet}';
+        
+        // 內嵌所有函數
+        ${jsCode}
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('離線模式初始化開始...');
             
-            // 確認 PivotTable.js 已載入
-            if (typeof $.pivotUtilities === 'undefined') {
-                console.error('PivotTable.js 未載入');
-                alert('樞紐分析表功能無法使用，請確保網路連線正常');
-            }
+            // 設定全域變數
+            currentData = exportedData;
+            taskId = exportedTaskId;
+            currentSheet = exportedSheet;
             
-            // 填充資料表選項
-            const selector = document.getElementById('sheetSelector');
-            if (selector) {
-                // 定義所有可能的資料表名稱
-                const sheetOrder = [
-                    'revision_diff', 'branch_error', 'lost_project', 
-                    'version_diff', '無法比對', '摘要', '比對摘要',
-                    'summary', 'all_scenarios', 
-                    'master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'
-                ];
-                
-                const orderedSheets = [];
-                
-                // 先按照預定順序添加
-                sheetOrder.forEach(sheetName => {
-                    if (exportedData && exportedData[sheetName]) {
-                        orderedSheets.push(sheetName);
-                    }
-                });
-                
-                // 再添加其他未在預定順序中的資料表
-                if (exportedData) {
+            // 初始化應用
+            initializeOfflineApp();
+        });
+        
+        // 離線模式初始化函數
+        function initializeOfflineApp() {
+            try {
+                // 填充資料表選項
+                const selector = document.getElementById('sheetSelector');
+                if (selector && exportedData) {
+                    selector.innerHTML = '';
+                    
+                    // 定義資料表順序
+                    const sheetOrder = [
+                        'revision_diff', 'branch_error', 'lost_project', 
+                        'version_diff', '無法比對', '摘要'
+                    ];
+                    
+                    const orderedSheets = [];
+                    
+                    // 按順序添加
+                    sheetOrder.forEach(sheetName => {
+                        if (exportedData[sheetName]) {
+                            orderedSheets.push(sheetName);
+                        }
+                    });
+                    
+                    // 添加其他資料表
                     Object.keys(exportedData).forEach(sheetName => {
                         if (!orderedSheets.includes(sheetName)) {
                             orderedSheets.push(sheetName);
                         }
                     });
+                    
+                    // 生成選項
+                    orderedSheets.forEach(sheetName => {
+                        const option = document.createElement('option');
+                        option.value = sheetName;
+                        option.textContent = getSheetDisplayName(sheetName);
+                        selector.appendChild(option);
+                    });
+                    
+                    // 綁定事件
+                    selector.addEventListener('change', function(e) {
+                        if (e.target.value) {
+                            currentSheet = e.target.value;
+                            loadSheet(e.target.value);
+                        }
+                    });
                 }
                 
-                console.log('可用的資料表:', orderedSheets);
+                // 初始化搜尋
+                initializeSearch();
                 
-                // 生成選項
-                orderedSheets.forEach(sheetName => {
-                    const option = document.createElement('option');
-                    option.value = sheetName;
-                    option.textContent = getSheetDisplayName(sheetName);
-                    selector.appendChild(option);
-                });
-                
-                // 載入初始資料表
-                if (exportedSheet && exportedData && exportedData[exportedSheet]) {
-                    currentSheet = exportedSheet;
+                // 載入初始資料
+                if (exportedSheet && exportedData[exportedSheet]) {
                     loadSheet(exportedSheet);
-                } else if (orderedSheets.length > 0) {
-                    currentSheet = orderedSheets[0];
+                } else if (orderedSheets && orderedSheets.length > 0) {
                     loadSheet(orderedSheets[0]);
                 }
+                
+                console.log('離線模式初始化完成');
+                
+            } catch (error) {
+                console.error('離線模式初始化錯誤:', error);
+                alert('初始化失敗: ' + error.message);
             }
-            
-            // 初始化搜尋
-            initializeSearch();
-            
-            // 綁定事件
-            const sheetSelector = document.getElementById('sheetSelector');
-            if (sheetSelector) {
-                sheetSelector.addEventListener('change', (e) => {
-                    if (e.target.value) {
-                        sortOrder = {};
-                        searchTerm = '';
-                        const searchInput = document.getElementById('quickSearchInput');
-                        if (searchInput) searchInput.value = '';
-                        currentSheet = e.target.value;
-                        loadSheet(e.target.value);
-                    }
-                });
-            }
-        });
+        }
+        
+        // 覆寫某些需要網路的功能
+        window.exportCurrentView = function(format) {
+            alert('離線模式下無法使用此功能');
+        };
+        
+        window.downloadFullReport = function() {
+            alert('離線模式下無法下載完整報表');
+        };
     </script>
 </body>
 </html>
@@ -2233,7 +2301,7 @@ function exportPageAsHTML() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        showToast('HTML 檔案已匯出', 'success');
+        showToast('HTML 檔案已匯出（包含完整離線功能）', 'success');
         
     } catch (error) {
         console.error('匯出 HTML 錯誤:', error);
