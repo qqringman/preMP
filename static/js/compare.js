@@ -467,6 +467,12 @@ function updateCompareProgress(data) {
     document.getElementById('compareMessage').textContent = message;
     
     if (status === 'completed') {
+        // 確保 results 中包含 task_id
+        if (!data.results) {
+            data.results = {};
+        }
+        data.results.task_id = currentTaskId;
+        
         showCompareResults(data.results);
     } else if (status === 'error') {
         utils.showNotification(`比對失敗：${message}`, 'error');
@@ -504,6 +510,9 @@ function getScenarioInfo(scenario) {
     return scenarioMap[scenario] || scenarioMap['all'];
 }
 
+// 如果後端沒有儲存歷史記錄的 API，可以在前端暫存
+let completedTasks = [];
+
 // 顯示比對結果
 function showCompareResults(results) {
     document.getElementById('compareProgress').classList.add('hidden');
@@ -521,10 +530,44 @@ function showCompareResults(results) {
     // 繪製圖表
     drawCharts(results);
     
-    // 在時間軸頂部插入當前任務
-    insertCurrentTaskToTimeline(results);
+    // 重新載入最近記錄
+    loadRecentComparisons();
     
     utils.showNotification('比對完成！', 'success');
+}
+
+// 新增函數：將任務儲存到歷史記錄
+async function saveTaskToHistory(results) {
+    try {
+        // 獲取當前選擇的情境
+        const scenarioInput = document.querySelector('input[name="scenario"]:checked');
+        const scenarioValue = scenarioInput ? scenarioInput.value : 'all';
+        const scenarioInfo = getScenarioInfo(scenarioValue);
+        
+        // 計算總模組數
+        const compareResults = results.compare_results || {};
+        let totalModules = 0;
+        Object.values(compareResults).forEach(data => {
+            if (typeof data === 'object' && data.success) {
+                totalModules += data.success;
+            }
+        });
+        
+        // 呼叫後端 API 儲存任務記錄
+        await utils.apiRequest('/api/save-comparison-history', {
+            method: 'POST',
+            body: JSON.stringify({
+                task_id: currentTaskId,
+                scenario: scenarioInfo.name,
+                modules: totalModules,
+                status: 'completed',
+                timestamp: new Date().toISOString()
+            })
+        });
+    } catch (error) {
+        console.error('Save task to history error:', error);
+        // 不顯示錯誤訊息給使用者，因為這是背景操作
+    }
 }
 
 function insertCurrentTaskToTimeline(results) {
@@ -547,7 +590,7 @@ function insertCurrentTaskToTimeline(results) {
     
     // 建立當前任務的 HTML
     const currentTaskHtml = `
-        <div class="timeline-item current-task-highlight">
+        <div class="timeline-item current-task-highlight" data-task-id="${currentTaskId}">
             <div class="timeline-dot"></div>
             <div class="timeline-content">
                 <div class="timeline-time">剛剛完成</div>
@@ -569,42 +612,30 @@ function insertCurrentTaskToTimeline(results) {
         </div>
     `;
     
-    // 檢查是否已有時間軸項目
-    const existingItems = container.querySelector('.timeline-item');
-    if (existingItems) {
-        // 在最前面插入
-        container.insertAdjacentHTML('afterbegin', currentTaskHtml);
-    } else {
-        // 如果沒有任何項目，替換整個內容
-        container.innerHTML = currentTaskHtml;
-    }
+    // 先設定當前任務
+    container.innerHTML = currentTaskHtml;
     
-    // 之後再載入其他最近記錄（排除當前任務）
-    loadRecentComparisonsExcludingCurrent();
+    // 然後載入歷史記錄（會附加在當前任務後面）
+    loadHistoricalComparisons();
 }
 
-// 修改 loadRecentComparisons 函數，排除當前任務
-async function loadRecentComparisonsExcludingCurrent() {
+// 載入歷史比對記錄（不包含當前任務）
+async function loadHistoricalComparisons() {
     try {
         const comparisons = await utils.apiRequest('/api/recent-comparisons');
         const container = document.getElementById('comparisonTimeline');
         
         if (!comparisons || comparisons.length === 0) {
-            // 如果沒有其他記錄，保持當前任務的顯示
+            // 如果沒有歷史記錄，只保留當前任務
             return;
         }
         
-        // 取得現有的當前任務元素
+        // 保存當前任務的 HTML（如果存在）
         const currentTaskElement = container.querySelector('.current-task-highlight');
-        let currentTaskHtml = '';
-        if (currentTaskElement) {
-            currentTaskHtml = currentTaskElement.outerHTML;
-        }
+        let html = currentTaskElement ? currentTaskElement.outerHTML : '';
         
-        // 生成時間軸（排除當前任務）
-        let html = currentTaskHtml; // 保持當前任務在最上方
-        
-        comparisons.forEach((comp, index) => {
+        // 生成歷史記錄
+        comparisons.forEach((comp) => {
             const taskId = comp.task_id || comp.id || '';
             
             // 跳過當前任務
@@ -625,6 +656,63 @@ async function loadRecentComparisonsExcludingCurrent() {
                             <span class="${statusColor} ml-2">
                                 <i class="fas ${statusIcon}"></i>
                             </span>
+                        </div>
+                        <div class="timeline-desc">
+                            ${comp.modules} 個模組 · ${comp.duration || '< 1 分鐘'}
+                        </div>
+                        <button class="btn btn-small btn-primary mt-2" 
+                                onclick="window.location.href='/results/${taskId}'">
+                            查看結果
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Load historical comparisons error:', error);
+    }
+}
+
+// 修改 loadRecentComparisons 函數，排除當前任務
+async function loadRecentComparisons() {
+    try {
+        const comparisons = await utils.apiRequest('/api/recent-comparisons');
+        const container = document.getElementById('comparisonTimeline');
+        
+        if (!comparisons || comparisons.length === 0) {
+            container.innerHTML = `
+                <div class="timeline-empty">
+                    <i class="fas fa-inbox fa-3x"></i>
+                    <p>暫無比對記錄</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // 生成時間軸
+        let html = '';
+        comparisons.forEach((comp, index) => {
+            const statusIcon = comp.status === 'completed' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            const statusColor = comp.status === 'completed' ? 'text-success' : 'text-danger';
+            const taskId = comp.task_id || comp.id || '';
+            
+            // 檢查是否為當前任務
+            const isCurrentTask = currentTaskId && taskId === currentTaskId;
+            
+            html += `
+                <div class="timeline-item ${isCurrentTask ? 'current-task' : ''}">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-time">${formatTimeAgo(comp.timestamp)}</div>
+                        <div class="timeline-title">
+                            ${comp.scenario}
+                            <span class="${statusColor} ml-2">
+                                <i class="fas ${statusIcon}"></i>
+                            </span>
+                            ${isCurrentTask ? '<span class="badge badge-primary ml-2">當前</span>' : ''}
                         </div>
                         <div class="timeline-desc">
                             ${comp.modules} 個模組 · ${comp.duration || '< 1 分鐘'}
@@ -1641,14 +1729,19 @@ function generateEmptyState(message = '暫無資料可顯示', showReloadBtn = t
     `;
 }
 
-// 載入最近比對記錄
+// 原始的 loadRecentComparisons 函數（頁面初次載入時使用）
 async function loadRecentComparisons() {
     try {
         const comparisons = await utils.apiRequest('/api/recent-comparisons');
         const container = document.getElementById('comparisonTimeline');
         
         if (!comparisons || comparisons.length === 0) {
-            container.innerHTML = generateEmptyState('暫無比對記錄', false);
+            container.innerHTML = `
+                <div class="timeline-empty">
+                    <i class="fas fa-inbox fa-3x"></i>
+                    <p>暫無比對記錄</p>
+                </div>
+            `;
             return;
         }
         
@@ -1659,8 +1752,11 @@ async function loadRecentComparisons() {
             const statusColor = comp.status === 'completed' ? 'text-success' : 'text-danger';
             const taskId = comp.task_id || comp.id || '';
             
+            // 判斷是否為最新任務（第一筆）
+            const isLatest = index === 0;
+            
             html += `
-                <div class="timeline-item">
+                <div class="timeline-item ${isLatest ? 'latest-task' : ''}">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
                         <div class="timeline-time">${formatTimeAgo(comp.timestamp)}</div>
@@ -1669,6 +1765,7 @@ async function loadRecentComparisons() {
                             <span class="${statusColor} ml-2">
                                 <i class="fas ${statusIcon}"></i>
                             </span>
+                            ${isLatest ? '<span class="badge badge-info ml-2">最新</span>' : ''}
                         </div>
                         <div class="timeline-desc">
                             ${comp.modules} 個模組 · ${comp.duration || '< 1 分鐘'}
@@ -1686,6 +1783,16 @@ async function loadRecentComparisons() {
         
     } catch (error) {
         console.error('Load recent comparisons error:', error);
+        const container = document.getElementById('comparisonTimeline');
+        container.innerHTML = `
+            <div class="timeline-empty">
+                <i class="fas fa-exclamation-triangle fa-3x"></i>
+                <p>載入歷史記錄時發生錯誤</p>
+                <button class="btn btn-small btn-secondary mt-2" onclick="loadRecentComparisons()">
+                    <i class="fas fa-sync-alt"></i> 重試
+                </button>
+            </div>
+        `;
     }
 }
 

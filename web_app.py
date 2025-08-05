@@ -482,12 +482,13 @@ class WebProcessor:
             
             self.update_progress(100, 'completed', '比對完成！')
             
-            # 記錄比對
+            # 記錄比對 - 重要：傳入 self.task_id
             total_modules = 0
             for scenario_data in self.results['compare_results'].values():
                 total_modules += scenario_data.get('success', 0) + scenario_data.get('failed', 0)
-                
-            add_comparison(scenarios, 'completed', total_modules)
+            
+            # 傳入正確的 task_id
+            add_comparison(self.task_id, scenarios, 'completed', total_modules)
             
             # 儲存結果供後續查看
             save_task_results(self.task_id, self.results)
@@ -495,7 +496,8 @@ class WebProcessor:
         except Exception as e:
             self.logger.error(f"Comparison error: {str(e)}")
             self.update_progress(0, 'error', f'比對失敗：{str(e)}')
-            add_comparison(scenarios, 'error', 0)
+            # 錯誤時也要傳入正確的 task_id
+            add_comparison(self.task_id, scenarios, 'error', 0)
             raise
 
 # 輔助函數
@@ -512,10 +514,11 @@ def add_activity(action, status, details=None):
     if len(recent_activities) > 20:
         recent_activities.pop()
 
-def add_comparison(scenario, status, modules):
+def add_comparison(task_id, scenario, status, modules):
     """添加比對記錄"""
     comparison = {
-        'id': f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        'id': task_id,  # 使用傳入的 task_id
+        'task_id': task_id,  # 明確保存 task_id
         'timestamp': datetime.now(),
         'scenario': scenario,
         'status': status,
@@ -759,12 +762,13 @@ def get_recent_activities():
 def get_recent_comparisons():
     """取得最近比對記錄"""
     return jsonify([{
-        'id': comp['id'],
+        'id': comp.get('task_id', comp.get('id', '')),  # 優先使用 task_id
+        'task_id': comp.get('task_id', comp.get('id', '')),  # 確保有 task_id
         'timestamp': comp['timestamp'].isoformat(),
         'scenario': comp['scenario'],
         'status': comp['status'],
         'modules': comp['modules'],
-        'duration': comp['duration']
+        'duration': comp.get('duration', '< 1 分鐘')
     } for comp in recent_comparisons[:10]])
 
 @app.route('/api/statistics')

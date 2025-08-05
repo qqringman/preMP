@@ -3715,3 +3715,35 @@ input.path-input::-webkit-contacts-auto-fill-button {
     font-weight: 600;
     box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
 }
+
+/* 最新任務樣式 */
+.timeline-item.latest-task .timeline-content {
+    border: 2px solid var(--nordic-blue-light);
+    background: linear-gradient(135deg, #F0F7FF 0%, #E3F2FD 100%);
+}
+
+.timeline-item.latest-task .timeline-dot {
+    background: var(--nordic-blue);
+    box-shadow: 0 0 0 6px rgba(33, 150, 243, 0.15);
+}
+
+.badge.badge-info {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--info);
+    color: white;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* 當前任務高亮 */
+.timeline-item.current-task .timeline-content {
+    border: 2px solid var(--nordic-blue-light);
+    background: var(--nordic-sky);
+}
+
+.timeline-item.current-task .timeline-dot {
+    background: var(--nordic-blue);
+    box-shadow: 0 0 0 6px rgba(33, 150, 243, 0.2);
+}
