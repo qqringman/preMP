@@ -87,11 +87,17 @@
             </div>
 
             <div class="data-view-container">
-                <!-- 一般表格檢視 -->
+                <!-- 修改表格檢視結構 -->
                 <div id="tableView" class="table-view">
-                    <div class="table-scroll-wrapper">
-                        <table id="dataTable" class="data-table">
+                    <!-- 新增固定標頭容器 -->
+                    <div class="table-header-container">
+                        <table class="data-table header-only">
                             <thead id="tableHead"></thead>
+                        </table>
+                    </div>
+                    <!-- 內容捲動容器 -->
+                    <div class="table-body-container">
+                        <table class="data-table body-only">
                             <tbody id="tableBody">
                                 <tr>
                                     <td colspan="100%" style="text-align: center; padding: 0;">

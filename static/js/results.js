@@ -267,17 +267,36 @@ function getColumnWidth(columnName) {
     return widthMap[columnName] || '150px';
 }
 
-// 渲染資料表格 - 改進版
+// 渲染資料表格 - 完整版本（配合新的表格結構）
 function renderDataTable(sheetData) {
-    // 使用原本的元素 ID
-    const tableView = document.getElementById('tableView');
-    const table = document.getElementById('dataTable');
-    const thead = document.getElementById('tableHead');
-    const tbody = document.getElementById('tableBody');
+    console.log('開始渲染資料表格', sheetData);
     
-    // 確保元素存在
-    if (!table || !thead || !tbody) {
-        console.error('找不到表格元素');
+    // 取得 DOM 元素 - 支援新舊結構
+    let thead, tbody;
+    
+    // 嘗試新結構
+    const headerTable = document.querySelector('.table-header-container .data-table');
+    const bodyTable = document.querySelector('.table-body-container .data-table');
+    
+    if (headerTable && bodyTable) {
+        // 新結構
+        thead = headerTable.querySelector('thead');
+        tbody = bodyTable.querySelector('tbody');
+        
+        // 如果 thead 不存在，創建它
+        if (!thead) {
+            thead = document.createElement('thead');
+            headerTable.appendChild(thead);
+        }
+    } else {
+        // 舊結構（fallback）
+        thead = document.getElementById('tableHead');
+        tbody = document.getElementById('tableBody');
+    }
+    
+    // 檢查元素是否存在
+    if (!thead || !tbody) {
+        console.error('找不到表格元素', { thead, tbody });
         return;
     }
     
@@ -286,7 +305,7 @@ function renderDataTable(sheetData) {
     tbody.innerHTML = '';
     
     // 檢查是否有資料
-    if (!sheetData.data || sheetData.data.length === 0) {
+    if (!sheetData || !sheetData.data || sheetData.data.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="100%" style="padding: 0; border: none;">
@@ -396,14 +415,25 @@ function renderDataTable(sheetData) {
             const td = document.createElement('td');
             const value = row[col];
             
+            // 移除固定寬度設定
+            // td.style.width = getColumnWidth(col);
+            // td.style.minWidth = getColumnWidth(col);
+            
+            // 根據欄位類型添加 class
+            td.classList.add('path-cell');
+
             // 根據欄位類型處理顯示
             if (col === 'path' || col.toLowerCase().includes('path')) {
-                // 路徑欄位處理
                 td.classList.add('path-cell');
                 
-                if (value && value.length > 50) {
-                    const truncated = value.substring(0, 25) + '...' + value.substring(value.length - 20);
-                    td.innerHTML = `<span class="truncated-content" title="${value}">${searchTerm ? highlightText(truncated, searchTerm) : truncated}</span>`;
+                if (value && value.length > 80) {  // 從 50 改為 80
+                    // 使用 tooltip 顯示完整路徑
+                    const truncated = value.substring(0, 40) + '...' + value.substring(value.length - 35);
+                    td.innerHTML = `
+                        <span class="truncated-content" title="${value}">
+                            ${searchTerm ? highlightText(truncated, searchTerm) : truncated}
+                        </span>
+                    `;
                 } else {
                     td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
                 }
@@ -486,15 +516,11 @@ function renderDataTable(sheetData) {
                 // 版本相關欄位
                 td.classList.add('highlight-hash');
                 td.innerHTML = searchTerm ? highlightText(value, searchTerm) : value;
+                td.classList.add('highlight-red');
             } else {
                 // 一般欄位
                 const textValue = value !== null && value !== undefined ? value : '';
                 td.innerHTML = searchTerm ? highlightText(textValue, searchTerm) : textValue;
-            }
-            
-            // 特殊樣式處理
-            if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col) && value) {
-                td.classList.add('highlight-red');
             }
             
             tr.appendChild(td);
@@ -507,7 +533,7 @@ function renderDataTable(sheetData) {
     if (filteredData.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="100%" style="padding: 0; border: none;">
+                <td colspan="${columns.length}" style="padding: 0; border: none;">
                     <div class="no-data-message">
                         <i class="fas fa-filter"></i>
                         <h3>沒有符合搜尋或篩選條件的資料</h3>
@@ -530,14 +556,77 @@ function renderDataTable(sheetData) {
 
     // 啟用表格功能（拖曳和調整寬度）
     setTimeout(() => {
-        enableTableFeatures();
-    }, 100);
+        try {
+            enableTableFeatures();
+            
+            // 同步標頭和內容的橫向捲動
+            const bodyContainer = document.querySelector('.table-body-container');
+            const headerContainer = document.querySelector('.table-header-container');
+            
+            if (bodyContainer && headerContainer) {
+                // 同步捲動
+                bodyContainer.addEventListener('scroll', function() {
+                    headerContainer.scrollLeft = bodyContainer.scrollLeft;
+                });
+                
+                // 同步欄位寬度
+                const headerTable = headerContainer.querySelector('table');
+                const bodyTable = bodyContainer.querySelector('table');
+                
+                if (headerTable && bodyTable) {
+                    const headerCells = headerTable.querySelectorAll('th');
+                    const firstBodyRow = bodyTable.querySelector('tr');
+                    
+                    if (firstBodyRow) {
+                        const bodyCells = firstBodyRow.querySelectorAll('td');
+                        
+                        // 確保兩個表格的總寬度一致
+                        let totalWidth = 0;
+                        headerCells.forEach((th, index) => {
+                            const width = th.offsetWidth;
+                            totalWidth += width;
+                            
+                            if (bodyCells[index]) {
+                                bodyCells[index].style.width = width + 'px';
+                                bodyCells[index].style.minWidth = width + 'px';
+                                bodyCells[index].style.maxWidth = width + 'px';
+                            }
+                        });
+                        
+                        // 設定表格總寬度
+                        headerTable.style.width = totalWidth + 'px';
+                        bodyTable.style.width = totalWidth + 'px';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('同步表格功能時發生錯誤:', error);
+        }
+    }, 200);
 }
 
 // 啟用表格功能（拖曳和調整寬度）
 function enableTableFeatures() {
-    const table = document.getElementById('dataTable');
-    const headers = table.querySelectorAll('th');
+    // 嘗試新結構
+    let headers;
+    const headerTable = document.querySelector('.table-header-container .data-table');
+    
+    if (headerTable) {
+        // 新結構 - 從 header-only 表格取得標頭
+        headers = headerTable.querySelectorAll('th');
+    } else {
+        // 舊結構（fallback）
+        const table = document.getElementById('dataTable');
+        if (table) {
+            headers = table.querySelectorAll('th');
+        }
+    }
+    
+    // 如果找不到標頭，直接返回
+    if (!headers || headers.length === 0) {
+        console.log('找不到表格標頭，跳過表格功能初始化');
+        return;
+    }
     
     headers.forEach((header, index) => {
         // 創建調整寬度的手柄
@@ -572,6 +661,18 @@ function doResize(e) {
         const width = startWidth + e.pageX - startX;
         resizingColumn.style.width = width + 'px';
         resizingColumn.style.minWidth = width + 'px';
+        
+        // 同步內容表格的欄寬（新結構）
+        const columnIndex = Array.from(resizingColumn.parentElement.children).indexOf(resizingColumn);
+        const bodyTable = document.querySelector('.table-body-container .data-table');
+        
+        if (bodyTable) {
+            const firstRow = bodyTable.querySelector('tbody tr');
+            if (firstRow && firstRow.cells[columnIndex]) {
+                firstRow.cells[columnIndex].style.width = width + 'px';
+                firstRow.cells[columnIndex].style.minWidth = width + 'px';
+            }
+        }
     }
 }
 
@@ -635,18 +736,38 @@ function getDragAfterElement(container, x) {
 }
 
 function reorderTableColumns() {
-    const table = document.getElementById('dataTable');
-    const headerCells = Array.from(table.querySelectorAll('thead th'));
+    // 嘗試新結構
+    const headerTable = document.querySelector('.table-header-container .data-table');
+    const bodyTable = document.querySelector('.table-body-container .data-table');
+    
+    let headerCells, rows;
+    
+    if (headerTable && bodyTable) {
+        // 新結構
+        headerCells = Array.from(headerTable.querySelectorAll('thead th'));
+        rows = bodyTable.querySelectorAll('tbody tr');
+    } else {
+        // 舊結構（fallback）
+        const table = document.getElementById('dataTable');
+        if (!table) return;
+        
+        headerCells = Array.from(table.querySelectorAll('thead th'));
+        rows = table.querySelectorAll('tbody tr');
+    }
+    
+    if (!headerCells || headerCells.length === 0) return;
+    
     const newOrder = headerCells.map((th, index) => parseInt(th.dataset.column));
     
     // 重新排序所有行的單元格
-    const rows = table.querySelectorAll('tbody tr');
     rows.forEach(row => {
         const cells = Array.from(row.cells);
         const reorderedCells = newOrder.map(oldIndex => cells[oldIndex]);
         
         row.innerHTML = '';
-        reorderedCells.forEach(cell => row.appendChild(cell));
+        reorderedCells.forEach(cell => {
+            if (cell) row.appendChild(cell);
+        });
     });
 }
 
@@ -1713,14 +1834,33 @@ async function exportCurrentView(format) {
         if (format === 'excel') {
             showExportLoading();
             
-            // 直接下載完整報表（保留格式）
-            // 後端會處理只保留當前頁籤的邏輯
-            window.location.href = `/api/export-excel/${taskId}?sheet=${encodeURIComponent(currentSheet)}`;
+            // 從後端獲取原始 Excel 檔案，只保留當前資料表
+            const response = await fetch(`/api/export-excel-single/${taskId}/${currentSheet}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
             
-            setTimeout(() => {
-                hideExportLoading();
-                showToast('Excel 檔案已匯出', 'success');
-            }, 2000);
+            if (!response.ok) {
+                throw new Error('無法獲取 Excel 檔案');
+            }
+            
+            // 獲取檔案 blob
+            const blob = await response.blob();
+            
+            // 下載檔案
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentSheet}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            hideExportLoading();
+            showToast('Excel 檔案已匯出', 'success');
         }
     } catch (error) {
         console.error('匯出錯誤:', error);
@@ -1766,7 +1906,7 @@ function hideExportLoading() {
     }
 }
 
-// 匯出整個頁面為 HTML（保留 JS/CSS）
+// 匯出整個頁面為 HTML（保留 JS/CSS）- 完整版本
 function exportPageAsHTML() {
     try {
         // 收集所有 CSS
@@ -1776,8 +1916,10 @@ function exportPageAsHTML() {
         for (let i = 0; i < styleSheets.length; i++) {
             try {
                 const rules = styleSheets[i].cssRules || styleSheets[i].rules;
-                for (let j = 0; j < rules.length; j++) {
-                    allCSS += rules[j].cssText + '\n';
+                if (rules) {
+                    for (let j = 0; j < rules.length; j++) {
+                        allCSS += rules[j].cssText + '\n';
+                    }
                 }
             } catch (e) {
                 // 跨域樣式表
@@ -1818,7 +1960,7 @@ function exportPageAsHTML() {
     
     <!-- 立即載入必要的函數定義 -->
     <script>
-        // 內嵌資料
+        // 內嵌資料 - 確保包含所有資料
         const exportedData = ${JSON.stringify(currentData)};
         const exportedTaskId = '${taskId}';
         const exportedSheet = '${currentSheet}';
@@ -1893,15 +2035,21 @@ function exportPageAsHTML() {
                 </div>
 
                 <div class="data-view-container">
+                    <!-- 一般表格檢視 -->
                     <div id="tableView" class="table-view">
-                        <div class="table-scroll-wrapper">
-                            <table id="dataTable" class="data-table">
+                        <div class="table-header-container">
+                            <table class="data-table header-only">
                                 <thead id="tableHead"></thead>
+                            </table>
+                        </div>
+                        <div class="table-body-container">
+                            <table class="data-table body-only">
                                 <tbody id="tableBody"></tbody>
                             </table>
                         </div>
                     </div>
                     
+                    <!-- 樞紐分析檢視 -->
                     <div id="pivotView" class="pivot-view hidden">
                         <div class="pivot-controls">
                             <div class="pivot-controls-left">
@@ -1941,6 +2089,30 @@ function exportPageAsHTML() {
                 </div>
             </div>
         </div>
+
+        <!-- 步驟 3：圖表分析 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h2 class="step-title">圖表分析</h2>
+                    <p class="step-subtitle">視覺化資料分析結果</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="charts-section">
+                    <div class="chart-container">
+                        <h3 class="chart-title">資料分布圖</h3>
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3 class="chart-title">趨勢分析圖</h3>
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 篩選器面板 -->
@@ -1962,6 +2134,7 @@ function exportPageAsHTML() {
         // 等待 DOM 載入完成後初始化
         $(document).ready(function() {
             console.log('DOM ready, 開始初始化...');
+            console.log('載入的資料:', exportedData);
             
             // 確認函數已載入
             if (typeof togglePivotMode === 'undefined') {
@@ -1978,34 +2151,70 @@ function exportPageAsHTML() {
             
             // 填充資料表選項
             const selector = document.getElementById('sheetSelector');
-            const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對'];
-            
-            sheetOrder.forEach(sheetName => {
-                if (exportedData[sheetName]) {
+            if (selector) {
+                // 定義所有可能的資料表名稱
+                const sheetOrder = [
+                    'revision_diff', 'branch_error', 'lost_project', 
+                    'version_diff', '無法比對', '摘要', '比對摘要',
+                    'summary', 'all_scenarios', 
+                    'master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'
+                ];
+                
+                const orderedSheets = [];
+                
+                // 先按照預定順序添加
+                sheetOrder.forEach(sheetName => {
+                    if (exportedData && exportedData[sheetName]) {
+                        orderedSheets.push(sheetName);
+                    }
+                });
+                
+                // 再添加其他未在預定順序中的資料表
+                if (exportedData) {
+                    Object.keys(exportedData).forEach(sheetName => {
+                        if (!orderedSheets.includes(sheetName)) {
+                            orderedSheets.push(sheetName);
+                        }
+                    });
+                }
+                
+                console.log('可用的資料表:', orderedSheets);
+                
+                // 生成選項
+                orderedSheets.forEach(sheetName => {
                     const option = document.createElement('option');
                     option.value = sheetName;
                     option.textContent = getSheetDisplayName(sheetName);
                     selector.appendChild(option);
+                });
+                
+                // 載入初始資料表
+                if (exportedSheet && exportedData && exportedData[exportedSheet]) {
+                    currentSheet = exportedSheet;
+                    loadSheet(exportedSheet);
+                } else if (orderedSheets.length > 0) {
+                    currentSheet = orderedSheets[0];
+                    loadSheet(orderedSheets[0]);
                 }
-            });
-            
-            // 載入初始資料表
-            if (exportedSheet && exportedData[exportedSheet]) {
-                loadSheet(exportedSheet);
             }
             
             // 初始化搜尋
             initializeSearch();
             
             // 綁定事件
-            document.getElementById('sheetSelector').addEventListener('change', (e) => {
-                if (e.target.value) {
-                    sortOrder = {};
-                    searchTerm = '';
-                    document.getElementById('quickSearchInput').value = '';
-                    loadSheet(e.target.value);
-                }
-            });
+            const sheetSelector = document.getElementById('sheetSelector');
+            if (sheetSelector) {
+                sheetSelector.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        sortOrder = {};
+                        searchTerm = '';
+                        const searchInput = document.getElementById('quickSearchInput');
+                        if (searchInput) searchInput.value = '';
+                        currentSheet = e.target.value;
+                        loadSheet(e.target.value);
+                    }
+                });
+            }
         });
     </script>
 </body>
@@ -2022,6 +2231,8 @@ function exportPageAsHTML() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        showToast('HTML 檔案已匯出', 'success');
         
     } catch (error) {
         console.error('匯出 HTML 錯誤:', error);
@@ -2417,6 +2628,29 @@ function togglePivotFullscreen() {
             icon.classList.remove('fa-expand');
             icon.classList.add('fa-compress');
             text.textContent = '退出全螢幕';
+            
+            // 全螢幕後重新調整樞紐分析表大小
+            setTimeout(() => {
+                // 觸發 window resize 事件
+                window.dispatchEvent(new Event('resize'));
+                
+                // 強制重新計算樞紐分析表大小
+                const pivotContainer = document.getElementById('pivotContainer');
+                if (pivotContainer) {
+                    // 暫時修改容器大小來觸發重繪
+                    const originalHeight = pivotContainer.style.height;
+                    pivotContainer.style.height = '99%';
+                    setTimeout(() => {
+                        pivotContainer.style.height = originalHeight || '';
+                    }, 10);
+                }
+                
+                // 如果有樞紐分析表實例，嘗試調用其方法
+                if (window.$ && window.$('.pvtTable').length > 0) {
+                    window.$('.pvtTable').trigger('resize');
+                }
+            }, 100);
+            
         }).catch(err => {
             console.error('無法進入全螢幕:', err);
             showAlertDialog('錯誤', '無法進入全螢幕模式', 'error');
@@ -2428,11 +2662,16 @@ function togglePivotFullscreen() {
             icon.classList.remove('fa-compress');
             icon.classList.add('fa-expand');
             text.textContent = '全螢幕';
+            
+            // 退出全螢幕後也觸發 resize
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+            }, 100);
         });
     }
 }
 
-// 監聽全螢幕變化
+// 監聽全螢幕變化事件（用戶按 ESC 退出時）
 document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement) {
         const pivotView = document.getElementById('pivotView');

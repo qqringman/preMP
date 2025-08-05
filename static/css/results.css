@@ -401,12 +401,102 @@ body {
   padding: 0;
 }
 
+/* 表格容器重構 - 修正重疊問題 */
 .table-view {
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+  overflow: hidden;
   position: relative;
+}
+
+/* 標頭容器 - 固定高度，無捲軸 */
+.table-header-container {
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  height: auto;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+}
+
+/* 內容容器 - 確保有捲軸 */
+.table-body-container {
+  background: white;
+  flex: 1;
+  min-height: 0;
+  overflow: auto !important;
+  position: relative;
+}
+
+/* 標頭專用表格 */
+.data-table.header-only {
+  background: transparent;
+  border-collapse: collapse;
+  margin: 0;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1200px;
+}
+
+.data-table.header-only thead {
+  background: #2196F3;
+}
+
+.data-table.header-only th {
+  background: #2196F3;
+  border-bottom: 2px solid #1976D2;
+  color: white;
+  font-weight: 600;
+  padding: 14px 20px;
+  position: relative;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* 內容專用表格 */
+.data-table.body-only {
+  background: transparent;
+  border-collapse: collapse;
+  margin: 0;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1200px;
+}
+
+.data-table.body-only td {
+  background: white;
+  border-bottom: 1px solid var(--border-light);
+  padding: 12px 20px;
+  vertical-align: middle;
+}
+
+/* 確保內容容器的捲軸樣式 */
+.table-body-container::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+.table-body-container::-webkit-scrollbar-track {
+  background: #F0F7FF;
+  border-radius: 0;
+}
+
+.table-body-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
+  border-radius: 6px;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.table-body-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
+}
+
+.table-body-container::-webkit-scrollbar-corner {
+  background: #F0F7FF;
 }
 
 .table-stats-bar {
@@ -444,50 +534,6 @@ body {
 .table-stat-value {
   color: var(--text-primary);
   font-weight: 600;
-}
-
-.table-container {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  position: relative;
-}
-
-.table-scroll-wrapper {
-  max-height: 600px;
-  overflow-x: auto;
-  overflow-y: auto;
-  position: relative;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar, /* 自定義捲軸樣式 */
-#pivotContainer::-webkit-scrollbar {
-  height: 12px;
-  width: 12px;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-track {
-  background: #F0F7FF;
-  border-radius: 6px;
-  margin: 4px;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border: 2px solid #F0F7FF;
-  border-radius: 6px;
-  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-#pivotContainer::-webkit-scrollbar-track, .table-scroll-wrapper::-webkit-scrollbar-corner {
-  background: #F0F7FF;
-  border-radius: 6px;
 }
 
 .data-table {
@@ -634,6 +680,21 @@ body {
   min-width: 300px;
 }
 
+/* 調整欄位寬度 */
+.data-table th,
+.data-table td {
+  white-space: nowrap;
+  padding: 12px 20px;
+}
+
+/* path 欄位特別處理 */
+.data-table th:last-child,
+.data-table td:last-child {
+  min-width: 400px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .data-table td.content-cell {
   font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
   font-size: 0.85rem;
@@ -644,9 +705,10 @@ body {
 }
 
 .data-table td.path-cell {
-  max-width: none;
+  max-width: 600px;
   white-space: normal;
   word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .highlight-git {
@@ -803,7 +865,7 @@ body {
 .pivot-view {
   background: white;
   border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
+  padding: 0;
 }
 
 .pivot-instructions {
@@ -812,9 +874,10 @@ body {
   border-radius: var(--radius-xl);
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.08);
   color: #1A237E;
-  margin-bottom: 40px;
+  margin: 20px;
+  margin-bottom: 20px;
   overflow: hidden;
-  padding: 32px;
+  padding: 24px;
   position: relative;
 }
 
@@ -834,24 +897,29 @@ body {
 }
 
 #pivotContainer {
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
-  max-height: 800px;
-  min-height: 500px;
-  overflow: visible;
+  background: #FAFBFD;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  height: 600px;
+  margin: 0;
+  max-height: 600px;
+  min-height: 400px;
   overflow-x: auto;
   overflow-y: auto;
   padding: 20px;
   position: relative;
+  width: 100%;
 }
 
 .pvtUi {
-  background: linear-gradient(135deg, #FAFBFD 0%, #F8FBFF 100%);
-  border-radius: var(--radius-xl);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
   font-family: inherit;
-  padding: 32px;
+  margin: 0;
+  padding: 20px;
+  width: 100%;
 }
 
 .pvtUi select,
@@ -869,12 +937,10 @@ body {
   outline: none;
 }
 
-.pvtTable, /* 樞紐分析表格基礎樣式 */
-.pvtTable, /* 樞紐分析表格配色優化 */
 .pvtTable {
   background: white;
   border: 1px solid #E3E7F3;
-  border-collapse: collapse;
+  border-collapse: separate;
   border-radius: var(--radius-lg);
   border-spacing: 0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -891,7 +957,6 @@ body {
   padding: 12px 16px;
 }
 
-.pvtTable th, /* 表頭樣式 */
 .pvtTable th {
   background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
   border: 1px solid #1976D2;
@@ -903,11 +968,8 @@ body {
   text-align: left;
 }
 
-.pvtTable tbody tr:hover td, /* 樞紐分析表格 hover 效果 - 改為更柔和的藍色 */
-.pvtTable tbody tr:hover td, /* 樞紐表格 hover 效果 - 使用北歐藍色系 */
 .pvtTable tbody tr:hover td {
-  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
-  transition: background 0.2s ease;
+  background: #F8FBFF !important;
 }
 
 .charts-section {
@@ -1310,9 +1372,7 @@ body {
   transform: translateY(-50%);
 }
 
-.hidden, .table-wrapper,
-.table-body-wrapper, /* 全螢幕下隱藏說明區域 */
-.pivot-view.fullscreen.hide-instructions .pivot-instructions {
+.hidden, .pivot-view.fullscreen.hide-instructions .pivot-instructions {
   display: none;
 }
 
@@ -1441,433 +1501,8 @@ body {
   transform: scale(1.1);
 }
 
-.pvtUnused {
-  /* 從 40px 改為 48px */
-  overflow-y: auto;
-  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
-  border: 2px dashed #B3D9FF;
-  border-radius: var(--radius-lg);
-  margin: 8px;
-  margin-bottom: 24px;
-  margin-top: 48px;
-  max-height: 300px;
-  min-height: 80px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 16px;
-  position: relative;
-}
-
-.pvtRows, .pvtCols {
-  background: linear-gradient(135deg, #F5F9FF 0%, #EEF6FF 100%);
-  border: 2px dashed #B3D9FF;
-  border-radius: var(--radius-lg);
-  margin: 12px 0;
-  min-height: 80px;
-  padding: 20px;
-  position: relative;
-}
-
-.pvtUnused::before {
-  /* 增加 padding */
-  white-space: nowrap;
-  /* 增加 z-index */
-  border-radius: 4px;
-  /* 從 -32px 改為 -28px */
-  left: 16px;
-  background: white;
-  color: #1976D2;
-  content: "📊 可用欄位 - 拖曳到下方區域";
-  font-size: 0.9375rem;
-  font-weight: 500;
-  left: 16px;
-  padding: 4px 8px;
-  position: absolute;
-  top: -28px;
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.pvtRows::before {
-  /* 從 -32px 改為 -28px */
-  left: 16px;
-  background: white;
-  border-radius: 4px;
-  color: #1976D2;
-  content: "↔️ 列區域 - 拖曳欄位到此";
-  font-size: 0.9375rem;
-  font-weight: 500;
-  left: 16px;
-  padding: 4px 8px;
-  position: absolute;
-  top: -28px;
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.pvtCols::before {
-  /* 從 -32px 改為 -28px */
-  left: 16px;
-  background: white;
-  border-radius: 4px;
-  color: #1976D2;
-  content: "↕️ 欄區域 - 拖曳欄位到此";
-  font-size: 0.9375rem;
-  font-weight: 500;
-  left: 16px;
-  padding: 4px 8px;
-  position: absolute;
-  top: -28px;
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.pvtUnused.pvtDragOver, 
-.pvtRows.pvtDragOver, 
-.pvtCols.pvtDragOver {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-  border-color: #2196F3;
-  box-shadow: 0 0 0 6px rgba(33, 150, 243, 0.08);
-  transform: scale(1.02);
-  transition: all 0.3s ease;
-}
-
-.pvtAxisContainer li, .pvtVals li {
-  background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
-  border: 1.5px solid #E3F2FD;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-  color: #1A237E;
-  cursor: move;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  margin: 6px;
-  padding: 10px 16px;
-  transition: all 0.2s ease;
-}
-
-.pvtAxisContainer li:hover, .pvtVals li:hover {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-  border-color: #64B5F6;
-  box-shadow: 0 6px 12px rgba(33, 150, 243, 0.15);
-  transform: translateY(-3px);
-}
-
-.pvtAxisContainer li.ui-sortable-helper,
-.pvtVals li.ui-sortable-helper {
-  box-shadow: 0 8px 24px rgba(33, 150, 243, 0.25);
-  opacity: 0.9;
-  transform: scale(1.08) rotate(2deg);
-}
-
-.pvtTable td {
-  background: white;
-  border: 1px solid #E8EAF6;
-  border-bottom: 1px solid #EEF6FF;
-  border-right: 1px solid #EEF6FF;
-  color: #424242;
-  font-size: 0.9375rem;
-  padding: 12px 20px;
-}
-
-.pvtTable tbody tr:nth-child(even) td {
-  background: #FAFBFD;
-}
-
-.pvtTotal, .pvtGrandTotal {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-  color: #1565C0;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.pvtGrandTotal {
-  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
-  color: white !important;
-  font-weight: 700;
-}
-
-.pvtUi select, .pvtUi input[type="text"] {
-  background: white;
-  border: 2px solid #E3F2FD;
-  border-radius: 10px;
-  color: #1A237E;
-  cursor: pointer;
-  font-size: 0.9375rem;
-  margin: 4px;
-  padding: 10px 16px;
-  transition: all 0.2s ease;
-}
-
-.pvtUi select:hover, .pvtUi input[type="text"]:hover {
-  background: #F8FBFF;
-  border-color: #90CAF9;
-}
-
-.pvtUi select:focus, .pvtUi input[type="text"]:focus {
-  background: white;
-  border-color: #2196F3;
-  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
-  outline: none;
-}
-
-.pivot-instructions::before {
-  background: radial-gradient(circle, #64B5F6 0%, transparent 60%);
-  content: "";
-  height: 300px;
-  opacity: 0.08;
-  position: absolute;
-  right: -100px;
-  top: -100px;
-  width: 300px;
-}
-
-.pivot-instructions::after {
-  background: radial-gradient(circle, #90CAF9 0%, transparent 60%);
-  bottom: -50px;
-  content: "";
-  height: 200px;
-  left: -50px;
-  opacity: 0.06;
-  position: absolute;
-  width: 200px;
-}
-
-.pivot-instructions p {
-  color: #1565C0;
-  font-size: 1.0625rem;
-  font-weight: 500;
-  margin-bottom: 16px;
-  position: relative;
-  z-index: 1;
-}
-
-.pivot-instructions ul li {
-  color: #424242;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  margin-bottom: 12px;
-  padding-left: 32px;
-  position: relative;
-}
-
-.pivot-instructions ul li::before {
-  color: #2196F3;
-  content: "✓";
-  font-size: 1.25rem;
-  font-weight: bold;
-  left: 0;
-  position: absolute;
-  top: -2px;
-}
-
-.pvtUi > table {
-  margin-top: 24px;
-  width: 100%;
-}
-
-.pvtUi td {
-  padding: 12px;
-  vertical-align: top;
-}
-
-.pvtVals {
-  background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
-  border: 2px dashed #42A5F5;
-  border-radius: var(--radius-lg);
-  margin: 8px;
-  margin-top: 60px !important;
-  max-height: 150px;
-  min-height: 60px;
-  max-width: 50%;  /* 新增：限制最大寬度為50% */
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 16px;
-  position: relative;
-}
-
-.pvtFilter {
-  background: white;
-  border: 1px solid #E3F2FD;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-  margin: 4px;
-  padding: 12px;
-}
-
-.pvtUi button {
-  background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
-  font-weight: 500;
-  margin: 4px;
-  padding: 8px 16px;
-  transition: all 0.2s ease;
-}
-
-.pvtUi button:hover {
-  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
-  transform: translateY(-2px);
-}
-
-.pvtUi table {
-  border-spacing: 16px;
-}
-
-.pvtRows {
-  background: linear-gradient(135deg, #F5F9FF 0%, #EEF6FF 100%);
-  border: 2px dashed #90CAF9;
-  border-radius: var(--radius-lg);
-  margin: 8px;
-  margin-top: 60px !important;
-  max-height: 200px;
-  min-height: 80px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 16px;
-  position: relative;
-}
-
-.pvtCols {
-  background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
-  border: 2px dashed #64B5F6;
-  border-radius: var(--radius-lg);
-  margin: 8px;
-  margin-top: 60px !important;
-  max-height: 200px;
-  min-height: 80px;
-  min-width: 100%;  /* 改為 100% 寬度 */
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 16px;
-  position: relative;
-}
-
-.pvtRendererArea {
-  margin-top: 24px;
-}
-
-.pvtUi .pvtOutput {
-  margin-top: 20px;
-}
-
-.pvtVals::before {
-  /* 從 -32px 改為 -28px */
-  left: 16px;
-  background: white;
-  border-radius: 4px;
-  color: #1976D2;
-  content: "📈 值區域 - 拖曳欄位到此";
-  font-size: 0.9375rem;
-  font-weight: 500;
-  left: 16px;
-  padding: 4px 8px;
-  position: absolute;
-  top: -28px;
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.pvtUi > table > tbody > tr:first-child > td {
-  padding-top: 20px;
-}
-
-/* 確保區域內部有足夠的頂部空間 */
-.pvtUnused ul,
-.pvtRows ul,
-.pvtCols ul,
-.pvtVals ul {
-  margin: 0 !important;
-  min-height: 40px;
-  padding: 8px !important;
-  padding-top: 16px !important;
-}
-
-/* 修正原有的黃綠色hover */
-.pvtTable tbody tr:hover td {
-  background: #E8F4FD !important;
-}
-
-/* 調整拖曳區域間距 */
-.pvtUnused {
-  margin-top: 60px !important;
-}
-
-/* 調整第一個區域的頂部間距 */
-.pvtUi > table > tbody > tr:first-child > td:first-child {
-  padding-top: 24px !important;
-}
-
-/* 樞紐分析表控制區域 */
-.pivot-controls {
-  align-items: center;
-  background: white;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding: 20px 24px;
-}
-
-.pivot-controls-left {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.pivot-controls-right {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-}
-
-.pivot-title {
-  align-items: center;
-  color: var(--text-primary);
-  display: flex;
-  font-size: 1.25rem;
-  font-weight: 600;
-  gap: 12px;
-  margin: 0;
-}
-
-.pivot-title i {
-  color: var(--nordic-blue);
-  font-size: 1.5rem;
-}
-
-/* 按鈕樣式調整 */
-.pivot-controls .btn {
-  white-space: nowrap;
-}
-
-.pivot-controls .btn-outline {
-  background: white;
-  border: 1.5px solid var(--nordic-blue-light);
-  color: var(--nordic-blue);
-}
-
-.pivot-controls .btn-outline:hover {
-  background: var(--nordic-sky);
-  border-color: var(--nordic-blue);
-}
-
-.pivot-controls .btn-primary {
-  background: var(--nordic-blue);
-  border: 1.5px solid var(--nordic-blue);
-  color: white;
-}
-
-.pivot-controls .btn-primary:hover {
-  background: var(--nordic-blue-dark);
-  border-color: var(--nordic-blue-dark);
-}
+/* 樞紐分析相關樣式... */
+/* ... 省略其餘樞紐分析樣式，保持原有設定 ... */
 
 /* Toast 提示訊息 */
 .toast {
@@ -1927,33 +1562,6 @@ body {
   color: var(--info);
 }
 
-#pivotContainer::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-  border: 2px solid #F0F7FF;
-  border-radius: 6px;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-}
-
-#pivotContainer::-webkit-scrollbar-corner {
-  background: #F0F7FF;
-}
-
-.pvtTotal, .pvtTotalLabel {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%) !important;
-  color: #1565C0;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.pvtRowTotalLabel, .pvtColTotalLabel {
-  background: linear-gradient(135deg, #E8F4FD 0%, #BBDEFB 100%) !important;
-  color: #1976D2;
-  font-weight: 600;
-}
-
 /* 自定義對話框樣式 */
 .custom-dialog-overlay {
   align-items: center;
@@ -1968,7 +1576,7 @@ body {
   right: 0;
   top: 0;
   transition: opacity 0.3s ease;
-  z-index: 10001;
+  z-index: 2147483647;
 }
 
 .custom-dialog {
@@ -2062,452 +1670,530 @@ body {
 /* 全螢幕樣式 */
 .pivot-view.fullscreen {
   background: white !important;
-  border-radius: 0 !important;
   bottom: 0 !important;
-  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
   left: 0 !important;
   margin: 0 !important;
-  max-width: 100% !important;
+  overflow: hidden !important;
   padding: 0 !important;
   position: fixed !important;
   right: 0 !important;
   top: 0 !important;
-  width: 100% !important;
+  width: 100vw !important;
   z-index: 9999 !important;
+}
+
+.pivot-view.fullscreen .step-section {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+.pivot-view.fullscreen .step-header {
+  flex-shrink: 0;
+}
+
+.pivot-view.fullscreen .section-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .pivot-view.fullscreen .pivot-controls {
   background: white;
-  border-radius: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
   margin: 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  padding: 16px 24px;
 }
 
 .pivot-view.fullscreen #pivotContainer {
   background: #F8FBFF;
   border-radius: 0;
-  height: calc(100vh - 100px);
-  margin: 20px;
-  margin-top: 10px;
-  max-height: calc(100vh - 100px);
-  padding: 30px;
+  flex: 1;
+  margin: 0;
+  min-height: 0;
+  overflow: auto !important;
+  padding: 20px;
 }
 
-/* 隱藏拖曳區域時的樣式 */
-#pivotContainer.areas-hidden {
-  padding-top: 40px;
+.pivot-view.fullscreen .pvtUi {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
 }
 
-#pivotContainer.areas-hidden .pvtRendererArea, #pivotContainer.areas-hidden .pvtTable {
-  margin-top: 0;
+.pivot-view.fullscreen .pvtTable {
+  min-width: 100%;
+  width: max-content !important;
 }
 
-/* 按鈕組響應式 */
+/* 動畫 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 響應式設計 */
 @media (max-width: 768px) {
   .pivot-controls {
     flex-direction: column;
-  gap: 16px;
+    gap: 16px;
+  }
+
+  .export-options {
+    grid-template-columns: 1fr;
+  }
 }
 
-.export-options {
-  grid-template-columns: 1fr;
+/* 找到並修改 data-table 相關樣式 */
+.data-table {
+  background: var(--bg-primary);
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  min-width: 100%;
+  table-layout: auto;  /* 改回 auto，讓表格自動調整 */
+  width: max-content;
 }
 
+/* 移除或註解掉所有固定寬度的設定 */
+/*
+.data-table th:nth-child(1),
+.data-table td:nth-child(1) {
+  min-width: 60px;
+  width: 60px;
+}
+*/
+
+/* 改為只設定最小寬度，不設定固定寬度 */
+.data-table th,
+.data-table td {
+  min-width: 100px;  /* 基本最小寬度 */
+  padding: 12px 20px;
+  white-space: nowrap;  /* 防止自動換行 */
 }
 
-.custom-dialog-overlay {
-  /* 從 10001 改為 100000，確保在全螢幕之上 */
-  opacity: 0;
-  align-items: center;
-  backdrop-filter: blur(4px);
-  background: rgba(0, 0, 0, 0.5);
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  position: fixed;
-  right: 0;
-  top: 0;
-  transition: opacity 0.3s ease;
-  z-index: 100000;
+/* 特定欄位的最小寬度 */
+.data-table th:nth-child(1),
+.data-table td:nth-child(1) {
+  min-width: 50px;  /* SN 欄位 */
 }
 
-/* 總計欄位樣式 - 使用更協調的藍色系 */
-.pvtTotal, .pvtTotalLabel {
-  background: linear-gradient(135deg, #BBDEFB 0%, #90CAF9 100%) !important;
-  border: 1px solid #64B5F6 !important;
-  color: #1565C0;
-  font-size: 0.9375rem;
-  font-weight: 600;
+/* path 和 name 欄位需要更多空間 */
+.data-table td.path-cell,
+.data-table td.name-cell {
+  min-width: 300px;
+  max-width: none;  /* 移除最大寬度限制 */
+  white-space: normal;  /* 允許換行 */
+  word-break: break-word;
 }
 
-/* 總計欄位 hover 效果 */
-.pvtTable tbody tr:hover td.pvtTotal {
-  background: linear-gradient(135deg, #90CAF9 0%, #64B5F6 100%) !important;
+/* location_path 欄位 */
+.data-table td.location-path-cell {
+  min-width: 250px;
+  white-space: normal;
+  word-break: break-word;
 }
 
-/* 總計標籤樣式 */
-.pvtRowTotalLabel, .pvtColTotalLabel {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%) !important;
-  border: 1px solid #90CAF9 !important;
-  color: #1976D2;
-  font-weight: 600;
+/* 修改表格容器 */
+.data-table.header-only,
+.data-table.body-only {
+  min-width: max-content;  /* 根據內容決定寬度 */
+  width: auto;  /* 自動寬度 */
 }
 
-/* 最終總計（Grand Total）樣式 */
-.pvtGrandTotal {
-  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
-  border: 2px solid #1565C0 !important;
-  color: white !important;
-  font-size: 1rem;
-  font-weight: 700;
+/* 確保內容容器有捲軸 */
+.table-body-container {
+  background: white;
+  flex: 1;
+  min-height: 0;
+  overflow-x: scroll !important;  /* 強制顯示橫向捲軸 */
+  overflow-y: auto !important;
   position: relative;
 }
 
-/* 最終總計 hover 效果 */
-.pvtTable tbody tr:hover td.pvtGrandTotal {
-  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%) !important;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
+/* ========================================
+   樞紐分析表專區 - Pivot Table Styles
+   ======================================== */
 
-/* 一般單元格樣式優化 */
-.pvtTable tbody td {
+/* 樞紐分析表主容器 */
+.pivot-view {
   background: white;
-  border: 1px solid #E8EAF6;
-  color: #424242;
-  font-size: 0.9375rem;
-  padding: 12px 16px;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-lg);
+  padding: 0;
 }
 
-/* 偶數行背景 */
-.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel), /* 偶數行背景 */
-.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(:first-child):not(:last-child), /* 偶數行背景 - 非常淡的灰色 */
-.pvtTable tbody tr:nth-child(even) td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #FAFBFC;
+.pivot-view .section-body {
+  background: var(--bg-primary);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  overflow: hidden;
+  padding: 0;
 }
 
-/* 偶數行 hover */
-.pvtTable tbody tr:nth-child(even):hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
-}
-
-/* 值欄位樣式（數字） */
-.pvtVal {
-  color: #1565C0;
-  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
-  text-align: right;
-}
-
-/* 屬性值欄位 */
-.pvtAttr {
-  color: #424242;
-  font-weight: 500;
-}
-
-/* 全螢幕樣式 - 修正 z-index */
-.pivot-view.fullscreen {
-  /* 降低 z-index */
-  background: white !important;
-  border-radius: 0 !important;
-  bottom: 0 !important;
-  height: 100% !important;
-  left: 0 !important;
-  margin: 0 !important;
-  max-width: 100% !important;
-  padding: 0 !important;
-  position: fixed !important;
-  right: 0 !important;
-  top: 0 !important;
-  width: 100% !important;
-  z-index: 9999 !important;
-}
-
-/* 確保對話框在最上層 */
-.custom-dialog-overlay {
-  /* 提高到最高層級 */
-  opacity: 0;
-  align-items: center;
-  backdrop-filter: blur(4px);
-  background: rgba(0, 0, 0, 0.5);
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  position: fixed;
-  right: 0;
-  top: 0;
-  transition: opacity 0.3s ease;
-  z-index: 999999;
-}
-
-/* 樞紐分析表格基礎樣式 */
-.pvtTable tbody td {
-  background: white;
-  border: 1px solid #E3E7F3;
-  color: #424242;
-  font-size: 0.9375rem;
-  padding: 12px 16px;
-  transition: all 0.2s ease;
-}
-
-/* 一般行 hover 效果 - 淡藍色背景 */
-.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #F0F7FF !important;
-}
-
-/* 小計樣式 - 使用淡灰藍色 */
-.pvtTotal {
-  background: #F5F7FA !important;
-  border: 1px solid #D5DAE1 !important;
+/* 樞紐分析表說明區域 */
+.pivot-instructions {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%);
+  border: 2px solid #B3D9FF;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.08);
   color: #1A237E;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-/* 小計 hover 效果 */
-.pvtTable tbody tr:hover td.pvtTotal {
-  background: #E1E8EE !important;
-  border-color: #B0BEC5 !important;
-}
-
-/* 行/列總計標籤 - 稍深的灰藍色 */
-.pvtRowTotalLabel, .pvtColTotalLabel {
-  background: #E8ECF0 !important;
-  border: 1px solid #CFD8DC !important;
-  color: #455A64;
-  font-weight: 600;
-  text-align: right;
-}
-
-/* 最終總計（Grand Total）- 使用深藍色突出 */
-.pvtGrandTotal {
-  background: #1976D2 !important;
-  border: 2px solid #1565C0 !important;
-  color: white !important;
-  font-size: 1rem;
-  font-weight: 700;
+  margin: 20px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  padding: 24px;
   position: relative;
 }
 
-/* 屬性值欄位（第一列）- 使用淡藍色背景 */
-.pvtTable tbody tr td:first-child {
-  background: #E8F4FD;
+.pivot-instructions::before {
+  background: radial-gradient(circle, #64B5F6 0%, transparent 60%);
+  content: "";
+  height: 300px;
+  opacity: 0.08;
+  position: absolute;
+  right: -100px;
+  top: -100px;
+  width: 300px;
+}
+
+.pivot-instructions::after {
+  background: radial-gradient(circle, #90CAF9 0%, transparent 60%);
+  bottom: -50px;
+  content: "";
+  height: 200px;
+  left: -50px;
+  opacity: 0.06;
+  position: absolute;
+  width: 200px;
+}
+
+.pivot-instructions i {
+  color: #2196F3;
+  font-size: 1.5rem;
+  margin-right: 12px;
+  vertical-align: middle;
+}
+
+.pivot-instructions p {
   color: #1565C0;
+  font-size: 1.0625rem;
   font-weight: 500;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
 }
 
-/* 屬性值欄位 hover */
-.pvtTable tbody tr:hover td:first-child, /* 屬性值欄位 hover */
-.pvtTable tbody tr:hover td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
-  background: #BBDEFB !important;
+.pivot-instructions ul {
+  list-style: none;
+  margin-left: 40px;
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
 }
 
-/* 值欄位樣式（數字）*/
-.pvtVal, /* 數值單元格對齊 */
-.pvtVal {
-  color: #37474F;
-  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
-  font-weight: 500;
-  text-align: right;
-}
-
-/* 空單元格 */
-.pvtTable tbody td.pvtEmpty {
-  background: #FAFAFA;
-  color: #E0E0E0;
-}
-
-/* 全螢幕模式下的特殊調整 */
-.pivot-view.fullscreen .pivot-instructions {
-  /* 給控制欄留空間 */
-  max-width: calc(100% - 40px);
-  margin: 20px;
-  margin-top: 80px;
-}
-
-/* 全螢幕下的控制欄調整 */
-.pivot-view.fullscreen .pivot-controls {
-  background: white;
-  border-radius: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin: 0;
-  padding: 20px 40px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.pivot-view.fullscreen.hide-instructions #pivotContainer {
-  height: calc(100vh - 120px);
-  margin-top: 80px;
-  max-height: calc(100vh - 120px);
-}
-
-.pvtTable tbody td, /* 一般單元格 */
-.pvtTable tbody td {
-  background: white;
-  border: 1px solid #EDF2FC;
+.pivot-instructions ul li {
   color: #424242;
   font-size: 0.9375rem;
-  padding: 12px 16px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+  padding-left: 32px;
+  position: relative;
+}
+
+.pivot-instructions ul li::before {
+  color: #2196F3;
+  content: "✓";
+  font-size: 1.25rem;
+  font-weight: bold;
+  left: 0;
+  position: absolute;
+  top: -2px;
+}
+
+/* 樞紐分析表容器 */
+#pivotContainer {
+  background: #FAFBFD;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  height: 600px;
+  margin: 0;
+  max-height: 600px;
+  min-height: 400px;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 20px;
+  position: relative;
+  width: 100%;
+}
+
+#pivotContainer::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+#pivotContainer::-webkit-scrollbar-track {
+  background: #F0F7FF;
+  border-radius: 0;
+  margin: 0;
+}
+
+#pivotContainer::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
+  border: none;
+  border-radius: 6px;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+#pivotContainer::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+#pivotContainer::-webkit-scrollbar-corner {
+  background: #F0F7FF;
+  border-radius: 0;
+}
+
+/* 樞紐分析表控制區 */
+.pivot-controls {
+  background: white;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 16px 24px;
+}
+
+.pivot-controls-left {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.pivot-controls-left:empty {
+  display: none;
+}
+
+.pivot-controls-right {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.pivot-controls .btn {
+  white-space: nowrap;
+}
+
+.pivot-controls .btn-outline {
+  background: white;
+  border: 1.5px solid var(--nordic-blue-light);
+  color: var(--nordic-blue);
+}
+
+.pivot-controls .btn-outline:hover {
+  background: var(--nordic-sky);
+  border-color: var(--nordic-blue);
+}
+
+.pivot-controls .btn-primary {
+  background: var(--nordic-blue);
+  border: 1.5px solid var(--nordic-blue);
+  color: white;
+}
+
+.pivot-controls .btn-primary:hover {
+  background: var(--nordic-blue-dark);
+  border-color: var(--nordic-blue-dark);
+}
+
+/* 樞紐分析表頭樣式 */
+.pivot-header {
+  align-items: center;
+  background: #2196F3;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  color: white;
+  display: flex;
+  gap: 24px;
+  overflow: hidden;
+  padding: 24px 32px;
+  position: relative;
+}
+
+.pivot-header::before {
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+  content: "";
+  height: 300%;
+  opacity: 0.5;
+  position: absolute;
+  right: -25%;
+  top: -100%;
+  transform: rotate(35deg);
+  width: 70%;
+}
+
+.pivot-number {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: white;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  height: 56px;
+  justify-content: center;
+  position: relative;
+  width: 56px;
+  z-index: 1;
+}
+
+.pivot-content {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.pivot-header-title {
+  color: white;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0 0 6px 0;
+}
+
+.pivot-header-subtitle {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.pivot-title {
+  align-items: center;
+  color: var(--text-primary);
+  display: flex;
+  font-size: 1.25rem;
+  font-weight: 600;
+  gap: 12px;
+  margin: 0;
+}
+
+.pivot-title i {
+  color: var(--nordic-blue);
+  font-size: 1.5rem;
+}
+
+/* PivotTable.js UI 樣式 */
+.pvtUi {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: inherit;
+  margin: 0;
+  padding: 20px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.pvtUi > table {
+  margin-top: 24px;
+  width: 100%;
+  table-layout: fixed;
+  border-spacing: 16px;
+}
+
+.pvtUi td {
+  padding: 12px;
+  vertical-align: top;
+}
+
+.pvtUi > table > tbody > tr:first-child > td {
+  padding-top: 20px;
+}
+
+.pvtUi > table > tbody > tr:first-child > td:first-child {
+  width: 200px;
+  padding-top: 24px !important;
+}
+
+.pvtUi > table > tbody > tr:first-child > td:nth-child(2) {
+  width: 200px;
+}
+
+.pvtUi > table > tbody > tr:nth-child(2) > td:first-child {
+  width: 200px;
+}
+
+.pvtUi > table > tbody > tr:nth-child(3) > td:first-child {
+  width: 65%;
+}
+
+.pvtUi > table > tbody > tr:nth-child(3) > td:nth-child(2) {
+  width: 35%;
+}
+
+.pvtUi select,
+.pvtUi input[type="text"] {
+  background: white;
+  border: 2px solid #E3F2FD;
+  border-radius: 10px;
+  color: #1A237E;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  margin: 4px;
+  padding: 10px 16px;
   transition: all 0.2s ease;
 }
 
-/* 一般行 hover 效果 - 非常淡的黃色 */
-.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #FFFEF7 !important;
+.pvtUi select:hover,
+.pvtUi input[type="text"]:hover {
+  background: #F8FBFF;
+  border-color: #90CAF9;
 }
 
-/* 小計樣式 - 淡綠色 */
-.pvtTotal {
-  background: #F1F8F4 !important;
-  border: 1px solid #C8E6C9 !important;
-  color: #2E7D32;
-  font-size: 0.9375rem;
-  font-weight: 600;
+.pvtUi select:focus,
+.pvtUi input[type="text"]:focus {
+  background: white;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+  outline: none;
 }
 
-/* 行總計標籤 - 淡橙色 */
-.pvtRowTotalLabel {
-  background: #FFF3E0 !important;
-  border: 1px solid #FFE0B2 !important;
-  color: #E65100;
-  font-weight: 600;
-  text-align: right;
-}
-
-/* 列總計標籤 - 淡紫色 */
-.pvtColTotalLabel {
-  background: #F3E5F5 !important;
-  border: 1px solid #E1BEE7 !important;
-  color: #6A1B9A;
-  font-weight: 600;
-  text-align: center;
-}
-
-/* 行/列總計標籤 hover */
-.pvtTable tbody tr:hover td.pvtRowTotalLabel {
-  background: #C5E7EE !important;
-}
-
-.pvtTable tbody tr:hover td.pvtColTotalLabel {
-  background: #DDD0E9 !important;
-}
-
-/* 最終總計（Grand Total）- 深紅色 */
-.pvtGrandTotal {
-  background: #D32F2F !important;
-  border: 2px solid #C62828 !important;
-  color: white !important;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  position: relative;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* 屬性值欄位（第一列）- 淡藍色背景 */
-.pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
-  background: #E8F4FD;
-  border-right: 2px solid #BBDEFB;
-  color: #1565C0;
+.pvtUi button {
+  background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
   font-weight: 500;
+  margin: 4px;
+  padding: 8px 16px;
+  transition: all 0.2s ease;
 }
 
-/* 確保對話框總是在最上層，即使在全螢幕模式下 */
-.custom-dialog-overlay {
-  /* 最大 z-index 值 */
-  opacity: 0;
-  align-items: center;
-  backdrop-filter: blur(4px);
-  background: rgba(0, 0, 0, 0.5);
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  position: fixed;
-  right: 0;
-  top: 0;
-  transition: opacity 0.3s ease;
-  z-index: 2147483647;
+.pvtUi button:hover {
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+  transform: translateY(-2px);
 }
 
-/* 一般行 hover 效果 */
-.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel), /* 一般行 hover 效果 - 非常淡的藍色 */
-.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
-  background: #F8FBFF !important;
-}
-
-/* 小計樣式 - 中等深度的灰藍色，深色文字 */
-.pvtTotal {
-  /* 深灰色文字 */
-  font-size: 0.9375rem;
-  background: #E1E8F0 !important;
-  border: 1px solid #CFD8DC !important;
-  color: #37474F !important;
-  font-weight: 600;
-}
-
-/* 行總計標籤 - 中等深度的青色，深色文字 */
-.pvtRowTotalLabel {
-  /* 深青色文字 */
-  font-weight: 600;
-  background: #D7EDF4 !important;
-  border: 1px solid #B2DFDB !important;
-  color: #00695C !important;
-  text-align: right;
-}
-
-/* 列總計標籤 - 中等深度的紫色，深色文字 */
-.pvtColTotalLabel {
-  /* 深紫色文字 */
-  font-weight: 600;
-  background: #E8DDF2 !important;
-  border: 1px solid #CE93D8 !important;
-  color: #5E35B1 !important;
-  text-align: center;
-}
-
-/* 最終總計（Grand Total）- 深藍色背景，白色文字 */
-.pvtGrandTotal {
-  background: #1E88E5 !important;
-  border: 2px solid #1976D2 !important;
-  color: white !important;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  position: relative;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* 屬性值欄位（第一列）- 淡藍色背景，深色文字 */
-.pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
-  /* 深藍色文字 */
-  border-right: 2px solid #BBDEFB;
-  background: #E8F4FD;
-  color: #0D47A1 !important;
-  font-weight: 500;
-}
-
-/* 表頭總計標籤特殊處理 */
-.pvtTable thead th.pvtTotalLabel,
-.pvtTable thead th.pvtColTotalLabel {
-  background: #455A64 !important;
-  border: 1px solid #37474F !important;
-  color: white !important;
-  font-weight: 600;
-}
-
-/* 確保所有總計相關的儲存格都有適當的文字顏色 */
-.pvtTotal,
-.pvtRowTotalLabel,
-.pvtColTotalLabel {
-  color: #263238 !important;
-}
-
-/* 調整選擇器和聚合器的樣式以配合新配色 */
+/* 選擇器和聚合器樣式 */
 .pvtRenderer,
 .pvtAggregator {
   background: white;
@@ -2524,60 +2210,256 @@ body {
   border-color: #90A4AE;
 }
 
-/* 小計樣式 - 使用淡藍灰色 */
-.pvtTotal {
-  background: #F0F4F8 !important;
-  border: 1px solid #CFD8DC !important;
-  color: #455A64 !important;
+/* 拖曳區域 - 可用欄位 */
+.pvtUnused {
+  background: linear-gradient(135deg, #F0F7FF 0%, #E8F4FD 100%);
+  border: 2px dashed #B3D9FF;
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  margin-bottom: 24px;
+  margin-top: 100px !important;
+  max-height: 300px;
+  min-height: 80px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+  max-width: 200px;
+  min-width: 200px;
+  width: 200px !important;
+}
+
+.pvtUnused::before {
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #1976D2;
+  content: "📊 可用欄位 - 拖曳到下方區域";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 8px 16px;
+  position: absolute;
+  top: -45px;
+  white-space: nowrap;
+  z-index: 100;
+}
+
+/* 拖曳區域 - 列區域 */
+.pvtRows {
+  background: linear-gradient(135deg, #F5F9FF 0%, #EEF6FF 100%);
+  border: 2px dashed #90CAF9;
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  margin-top: 100px !important;
+  max-height: 200px;
+  min-height: 80px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+  min-width: 300px;
+}
+
+.pvtRows::before {
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #1976D2;
+  content: "↔️ 列區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 8px 16px;
+  position: absolute;
+  top: -45px;
+  white-space: nowrap;
+  z-index: 100;
+}
+
+/* 拖曳區域 - 欄區域 */
+.pvtCols {
+  background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
+  border: 2px dashed #64B5F6;
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  margin-top: 100px !important;
+  max-height: 200px;
+  min-height: 80px;
+  min-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+  min-width: 300px;
+}
+
+.pvtCols::before {
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #1976D2;
+  content: "↕️ 欄區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 8px 16px;
+  position: absolute;
+  top: -45px;
+  white-space: nowrap;
+  z-index: 100;
+}
+
+/* 拖曳區域 - 值區域 */
+.pvtVals {
+  background: linear-gradient(135deg, #F8FBFF 0%, #F0F7FF 100%);
+  border: 2px dashed #42A5F5;
+  border-radius: var(--radius-lg);
+  margin: 8px;
+  margin-top: 100px !important;
+  max-height: 150px;
+  min-height: 60px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  max-width: none;
+  min-width: 400px;
+  width: auto;
+}
+
+.pvtVals::before {
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: #1976D2;
+  content: "📈 值區域 - 拖曳欄位到此";
+  font-size: 0.9375rem;
+  font-weight: 500;
+  left: 16px;
+  padding: 8px 16px;
+  position: absolute;
+  top: -45px;
+  white-space: nowrap;
+  z-index: 100;
+}
+
+/* 拖曳區域內部空間 */
+.pvtUnused ul,
+.pvtRows ul,
+.pvtCols ul,
+.pvtVals ul {
+  margin: 0 !important;
+  min-height: 40px;
+  padding: 8px !important;
+  padding-top: 35px !important;
+}
+
+/* 拖曳區域 hover 效果 */
+.pvtUnused.pvtDragOver,
+.pvtRows.pvtDragOver,
+.pvtCols.pvtDragOver {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border-color: #2196F3;
+  box-shadow: 0 0 0 6px rgba(33, 150, 243, 0.08);
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+}
+
+/* 拖曳項目樣式 */
+.pvtAxisContainer li,
+.pvtVals li {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
+  border: 1.5px solid #E3F2FD;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  color: #1A237E;
+  cursor: move;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin: 6px;
+  padding: 10px 16px;
+  transition: all 0.2s ease;
+}
+
+.pvtAxisContainer li:hover,
+.pvtVals li:hover {
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border-color: #64B5F6;
+  box-shadow: 0 6px 12px rgba(33, 150, 243, 0.15);
+  transform: translateY(-3px);
+}
+
+.pvtAxisContainer li.ui-sortable-helper,
+.pvtVals li.ui-sortable-helper {
+  box-shadow: 0 8px 24px rgba(33, 150, 243, 0.25);
+  opacity: 0.9;
+  transform: scale(1.08) rotate(2deg);
+}
+
+/* 樞紐分析表格樣式 */
+.pvtTable {
+  background: white;
+  border: 1px solid #E3E7F3;
+  border-collapse: separate;
+  border-radius: var(--radius-lg);
+  border-spacing: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  font-size: 0.9375rem;
+  margin-top: 24px;
+  overflow: hidden;
+  width: 100% !important;
+}
+
+.pvtTable th,
+.pvtTable td {
+  border: 1px solid #E3E7F3 !important;
+  font-size: 0.9375rem;
+  padding: 12px 16px;
+}
+
+.pvtTable th {
+  background: linear-gradient(135deg, #2196F3 0%, #1E88E5 100%);
+  border: 1px solid #1976D2;
+  color: white;
   font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: 0.025em;
+  padding: 14px 20px;
+  text-align: left;
 }
 
-/* 確保行總計標籤有正確的邊框 */
-.pvtRowTotalLabel, /* 行總計標籤 - 稍深的藍灰色 */
-.pvtRowTotalLabel {
-  background: #ECEFF1 !important;
-  border: 1px solid #B0BEC5 !important;
-  color: #37474F !important;
-  font-weight: 600;
-  text-align: right;
+.pvtTable tbody td {
+  background: white;
+  border: 1px solid #E2E8F0;
+  color: #424242;
+  font-size: 0.9375rem;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
 }
 
-/* 列總計標籤 - 稍深的藍灰色 */
-.pvtColTotalLabel {
-  background: #ECEFF1 !important;
-  border: 1px solid #B0BEC5 !important;
-  color: #37474F !important;
-  font-weight: 600;
-  text-align: center;
+.pvtTable tbody tr:nth-child(even) td {
+  background: #FAFBFD;
 }
 
-/* 最終總計儲存格確保邊框完整 */
-.pvtGrandTotal, /* 最終總計（Grand Total）- 使用漸層藍色，更有層次感 */
-.pvtGrandTotal {
-  background: linear-gradient(135deg, #42A5F5 0%, #2196F3 100%) !important;
-  border: 2px solid #1E88E5 !important;
-  color: white !important;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  position: relative;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+.pvtTable tbody tr:hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: #F8FBFF !important;
 }
 
-/* Totals 行的特殊樣式 - 淡紫色背景 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal) {
-  background: #F5F3FF !important;
-  border-top: 2px solid #B39DDB;
-  color: #4527A0 !important;
-  font-weight: 600;
+.pvtTable tbody tr:nth-child(even):hover td:not(.pvtTotal):not(.pvtGrandTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel) {
+  background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%) !important;
 }
 
-/* Totals 行 hover */
-.pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal) {
-  background: #EDE7F6 !important;
-}
-
-/* 屬性值欄位（第一列）*/
+/* 屬性值欄位（第一列） */
 .pvtTable tbody tr td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
   background: #E8F4FD;
   border-right: 2px solid #BBDEFB;
@@ -2585,83 +2467,11 @@ body {
   font-weight: 500;
 }
 
-/* 修正 Totals 行的邊框問題 */
-.pvtTable tbody tr:last-child td {
-  border: 1px solid #CFD8DC !important;
+.pvtTable tbody tr:hover td:first-child:not(.pvtTotal):not(.pvtGrandTotal) {
+  background: #BBDEFB !important;
 }
 
-/* Totals 標籤儲存格的特殊樣式 */
-.pvtTable tbody tr:last-child td:first-child {
-  /* 右邊加粗 */
-  text-align: right;
-  /* 確保有完整邊框 */
-  border-right: 2px solid #B39DDB !important;
-  background: #F5F3FF !important;
-  border: 1px solid #B39DDB !important;
-  color: #4527A0 !important;
-  font-weight: 600;
-  padding-right: 20px;
-}
-
-/* 修正可能的邊框重疊問題 */
-.pvtTable {
-  /* 改為 separate 以確保邊框正確顯示 */
-  border-spacing: 0;
-  background: white;
-  border: 1px solid #E3E7F3;
-  border-collapse: separate;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  font-size: 0.9375rem;
-  margin-top: 24px;
-  overflow: hidden;
-  width: 100%;
-}
-
-/* 確保所有單元格都有邊框 */
-.pvtTable td,
-.pvtTable th {
-  border: 1px solid #E3E7F3 !important;
-}
-
-/* 總計行的所有單元格 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal) {
-  background: #F5F3FF !important;
-  border: 1px solid #B39DDB !important;
-  border-top: 2px solid #B39DDB !important;
-  color: #4527A0 !important;
-  font-weight: 600;
-}
-
-/* 強制所有樞紐分析表的單元格都有邊框 */
-.pvtTable * {
-  box-sizing: border-box;
-}
-
-.pvtTable tbody td,
-.pvtTable thead th {
-  border: 1px solid #E3E7F3 !important;
-  border-collapse: collapse;
-}
-
-/* 特別確保 Totals 行的第一個單元格有左邊框 */
-.pvtTable tbody tr:last-child td:nth-child(1) {
-  border-left: 1px solid #B39DDB !important;
-}
-
-/* 統一所有總計的配色 - 使用深灰色系（如圖片）*/
-
-/* Totals 標籤（深灰背景白字）*/
-.pvtRowTotalLabel,
-.pvtColTotalLabel {
-  background: #4A5568 !important;
-  border: 1px solid #2D3748 !important;
-  color: white !important;
-  font-weight: 600;
-  text-align: center;
-}
-
-/* 一般總計值儲存格 */
+/* 總計樣式 */
 .pvtTotal {
   background: #F7FAFC !important;
   border: 1px solid #CBD5E0 !important;
@@ -2670,123 +2480,11 @@ body {
   font-weight: 600;
 }
 
-/* Totals 整行（最後一行）- 紫色樣式 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
-  background: #FAF5FF !important;
-  border: 1px solid #9F7AEA !important;
-  border-top: 0px solid #7C3AED !important;
-  color: #6B46C1 !important;
-  font-weight: 700;
-  position: relative;
-}
-
-/* Totals 整列（最右側）- 紫色樣式 */
-.pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
-  background: #FAF5FF !important;
-  border: 1px solid #9F7AEA !important;
-  border-left: 0px solid #7C3AED !important;
-  color: #6B46C1 !important;
-  font-weight: 700;
-  position: relative;
-}
-
-/* Totals 標籤儲存格（左上角的 "Totals" 文字）*/
-.pvtTable tbody tr:last-child td:first-child {
-  background: #4A5568 !important;
-  border: 2px solid #2D3748 !important;
-  color: white !important;
-  font-weight: 700;
-  padding-right: 20px;
-  text-align: right;
-}
-
-/* 最終總計（Grand Total）- 使用藍色突出 */
-.pvtGrandTotal {
-  background: #2196F3 !important;
-  border: 2px solid #1976D2 !important;
-  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
-  color: white !important;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  position: relative;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* 為紫色總計添加邊條效果 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child)::before {
-  background: linear-gradient(90deg, #7C3AED 0%, #9F7AEA 100%);
-  content: '';
-  height: 3px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-}
-
-.pvtTable tbody tr td:last-child:not(.pvtGrandTotal)::before {
-  background: linear-gradient(180deg, #7C3AED 0%, #9F7AEA 100%);
-  bottom: 0;
-  content: '';
-  left: 0;
-  position: absolute;
-  top: 0;
-  width: 3px;
-}
-
-/* hover 效果 */
 .pvtTable tbody tr:hover td.pvtTotal {
   background: #EDF2F7 !important;
 }
 
-.pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal):not(:first-child),
-.pvtTable tbody tr:hover td:last-child:not(.pvtGrandTotal) {
-  background: #EDE9FE !important;
-  border-color: #7C3AED !important;
-}
-
-.pvtTable tbody tr:hover td.pvtGrandTotal {
-  background: #1976D2 !important;
-}
-
-/* 表頭中的總計標籤 */
-.pvtTable thead th.pvtTotalLabel,
-.pvtTable thead th.pvtColTotalLabel,
-.pvtTable thead th.pvtRowTotalLabel {
-  background: #4A5568 !important;
-  border: 2px solid #2D3748 !important;
-  color: white !important;
-  font-weight: 600;
-}
-
-/* 確保邊框完整 */
-.pvtTable {
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-/* 加強總計區域的視覺區隔 */
-.pvtTable tbody tr:last-child {
-  box-shadow: 0 -2px 6px rgba(124, 58, 237, 0.15);
-}
-
-.pvtTable tbody tr td:last-child {
-  box-shadow: -2px 0 6px rgba(124, 58, 237, 0.15);
-}
-
-/* 調整一般單元格的邊框 */
-.pvtTable tbody td:not(.pvtTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(.pvtGrandTotal) {
-  border: 1px solid #E2E8F0;
-}
-
-/* 特別處理行列交叉點的樣式 */
-.pvtTable tbody tr:last-child td:last-child:not(.pvtGrandTotal) {
-  border-color: #7C3AED !important;
-  border-width: 1px !important;
-}
-
-/* 統一所有總計的配色 - 使用北歐藍色系 */
-
-/* Totals 標籤（深灰背景白字）- 保持不變 */
+/* 行/列總計標籤 */
 .pvtRowTotalLabel,
 .pvtColTotalLabel {
   background: #4A5568 !important;
@@ -2796,36 +2494,29 @@ body {
   text-align: center;
 }
 
-/* 一般總計值儲存格 */
-.pvtTotal {
-  background: #F7FAFC !important;
-  border: 1px solid #CBD5E0 !important;
-  color: #2D3748 !important;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-/* Totals 整行（最後一行）- 北歐藍色樣式 */
+/* Totals 整行（最後一行） */
 .pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
-  background: var(--nordic-sky) !important;  /* #E3F2FD */
-  border: 2px solid var(--nordic-blue-light) !important;  /* #64B5F6 */
-  border-top: 3px solid var(--nordic-blue) !important;  /* #2196F3 */
-  color: var(--nordic-blue-dark) !important;  /* #1976D2 */
+  background: var(--nordic-sky) !important;
+  border: 2px solid var(--nordic-blue-light) !important;
+  border-top: 3px solid var(--nordic-blue) !important;
+  color: var(--nordic-blue-dark) !important;
   font-weight: 700;
   position: relative;
+  box-shadow: inset 0 2px 4px rgba(33, 150, 243, 0.1);
 }
 
-/* Totals 整列（最右側）- 北歐藍色樣式 */
+/* Totals 整列（最右側） */
 .pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
-  background: var(--nordic-sky) !important;  /* #E3F2FD */
-  border: 2px solid var(--nordic-blue-light) !important;  /* #64B5F6 */
-  border-left: 3px solid var(--nordic-blue) !important;  /* #2196F3 */
-  color: var(--nordic-blue-dark) !important;  /* #1976D2 */
+  background: var(--nordic-sky) !important;
+  border: 2px solid var(--nordic-blue-light) !important;
+  border-left: 3px solid var(--nordic-blue) !important;
+  color: var(--nordic-blue-dark) !important;
   font-weight: 700;
   position: relative;
+  box-shadow: inset 2px 0 4px rgba(33, 150, 243, 0.1);
 }
 
-/* Totals 標籤儲存格（左上角的 "Totals" 文字）*/
+/* Totals 標籤儲存格 */
 .pvtTable tbody tr:last-child td:first-child {
   background: #4A5568 !important;
   border: 2px solid #2D3748 !important;
@@ -2835,10 +2526,10 @@ body {
   text-align: right;
 }
 
-/* 最終總計（Grand Total）- 使用深藍色突出 */
+/* 最終總計（Grand Total） */
 .pvtGrandTotal {
-  background: var(--nordic-blue) !important;  /* #2196F3 */
-  border: 3px solid var(--nordic-blue-dark) !important;  /* #1976D2 */
+  background: var(--nordic-blue) !important;
+  border: 3px solid var(--nordic-blue-dark) !important;
   box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
   color: white !important;
   font-size: 1.0625rem;
@@ -2847,41 +2538,23 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* 為藍色總計添加邊條效果 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child)::before {
-  background: linear-gradient(90deg, var(--nordic-blue) 0%, var(--nordic-blue-light) 100%);
-  content: '';
-  height: 0px;
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
+.pvtTable tbody tr:hover td.pvtGrandTotal {
+  background: var(--nordic-blue-dark) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.pvtTable tbody tr td:last-child:not(.pvtGrandTotal)::before {
-  background: linear-gradient(180deg, var(--nordic-blue) 0%, var(--nordic-blue-light) 100%);
-  bottom: 0;
-  content: '';
-  left: 0;
-  position: absolute;
-  top: 0;
-  width: 0px;
-}
-
-/* hover 效果 */
-.pvtTable tbody tr:hover td.pvtTotal {
-  background: #EDF2F7 !important;
-}
-
+/* Totals hover 效果 */
 .pvtTable tbody tr:last-child:hover td:not(.pvtGrandTotal):not(:first-child),
 .pvtTable tbody tr:hover td:last-child:not(.pvtGrandTotal) {
-  background: #BBDEFB !important;  /* 更深的藍色 hover */
+  background: #BBDEFB !important;
   border-color: var(--nordic-blue) !important;
 }
 
-.pvtTable tbody tr:hover td.pvtGrandTotal {
-  background: var(--nordic-blue-dark) !important;  /* #1976D2 */
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+/* 行列交叉點樣式 */
+.pvtTable tbody tr:last-child td:last-child:not(.pvtGrandTotal) {
+  border-color: var(--nordic-blue) !important;
+  border-width: 3px !important;
+  background: linear-gradient(135deg, var(--nordic-sky) 0%, #BBDEFB 100%) !important;
 }
 
 /* 表頭中的總計標籤 */
@@ -2894,7 +2567,7 @@ body {
   font-weight: 600;
 }
 
-/* 加強總計區域的視覺區隔 - 使用藍色陰影 */
+/* 視覺區隔 */
 .pvtTable tbody tr:last-child {
   box-shadow: 0 -2px 6px rgba(33, 150, 243, 0.15);
 }
@@ -2903,907 +2576,151 @@ body {
   box-shadow: -2px 0 6px rgba(33, 150, 243, 0.15);
 }
 
-/* 特別處理行列交叉點的樣式 */
-.pvtTable tbody tr:last-child td:last-child:not(.pvtGrandTotal) {
-  border-color: var(--nordic-blue) !important;
-  border-width: 3px !important;
-  background: linear-gradient(135deg, var(--nordic-sky) 0%, #BBDEFB 100%) !important;
+/* 值欄位樣式 */
+.pvtVal {
+  color: #37474F;
+  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  font-weight: 500;
+  text-align: right;
 }
 
-/* 確保視覺層次分明 */
-.pvtTable tbody td:not(.pvtTotal):not(.pvtRowTotalLabel):not(.pvtColTotalLabel):not(.pvtGrandTotal) {
-  border: 1px solid #E2E8F0;
+/* 屬性值欄位 */
+.pvtAttr {
+  color: #424242;
+  font-weight: 500;
 }
 
-/* 加強邊框的立體感 */
-.pvtTable tbody tr:last-child td:not(.pvtGrandTotal):not(:first-child) {
-  box-shadow: inset 0 2px 4px rgba(33, 150, 243, 0.1);
+/* 空單元格 */
+.pvtTable tbody td.pvtEmpty {
+  background: #FAFAFA;
+  color: #E0E0E0;
 }
 
-.pvtTable tbody tr td:last-child:not(.pvtGrandTotal) {
-  box-shadow: inset 2px 0 4px rgba(33, 150, 243, 0.1);
+/* 篩選器樣式 */
+.pvtFilter {
+  background: white;
+  border: 1px solid #E3F2FD;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  margin: 4px;
+  padding: 12px;
 }
 
-#pivotContainer {
-  background: #FFFFFF;  /* 改為純白背景 */
-  border: 1px solid #E3E7F3;  /* 添加邊框 */
-  border-radius: 12px;  /* 調整圓角 */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);  /* 添加陰影 */
-  max-height: 800px;
-  min-height: 500px;
-  overflow: visible;
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 0;  /* 移除內邊距 */
-  position: relative;
+/* 渲染區域 */
+.pvtRendererArea {
+  margin-top: 24px;
+  width: 100%;
 }
 
-/* 添加標頭樣式 */
-.pivot-controls {
-  background: #2196F3;  /* 藍色背景 */
-  border-radius: 12px 12px 0 0;  /* 只有上方圓角 */
-  color: white;
-  padding: 20px 24px;
-  position: relative;
+.pvtUi .pvtOutput {
+  margin-top: 20px;
+}
+
+/* 隱藏拖曳區域時的樣式 */
+#pivotContainer.areas-hidden {
+  padding-top: 40px;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea,
+#pivotContainer.areas-hidden .pvtTable {
+  margin-top: 0;
+}
+
+/* 全螢幕樣式 */
+.pivot-view.fullscreen {
+  background: white !important;
+  bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  left: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  top: 0 !important;
+  width: 100vw !important;
+  z-index: 9999 !important;
+}
+
+.pivot-view.fullscreen .step-section {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin: 0;
   overflow: hidden;
 }
 
-/* 內容區域 */
-.pvtUi {
-  background: #FFFFFF;  /* 純白背景 */
-  border-radius: 0;
-  box-shadow: none;
-  font-family: inherit;
-  padding: 24px;
-}
-
-/* 捲軸樣式 - 與執行日誌一致 */
-#pivotContainer::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-#pivotContainer::-webkit-scrollbar-track {
-  background: #F5F7FA;
-  border-radius: 5px;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb {
-  background: #CBD5E0;
-  border-radius: 5px;
-}
-
-#pivotContainer::-webkit-scrollbar-thumb:hover {
-  background: #A0AEC0;
-}
-
-/* 調整樞紐分析表的整體佈局 */
-.pvtUi > table {
-  margin-top: 24px;
-  width: 100%;
-  table-layout: fixed;  /* 固定表格佈局 */
-}
-
-.pvtUi td {
-  padding: 12px;
-  vertical-align: top;
-}
-
-/* 第一列（包含可用欄位） */
-.pvtUi > table > tbody > tr:first-child > td:first-child {
-  width: 100%;  /* 讓可用欄位佔滿寬度 */
-}
-
-/* 第二列（包含行區域） */
-.pvtUi > table > tbody > tr:nth-child(2) > td:first-child {
-  width: 100%;  /* 讓行區域佔滿寬度 */
-}
-
-/* 第三列（包含列區域和值區域） */
-.pvtUi > table > tbody > tr:nth-child(3) > td:first-child {
-  width: 65%;  /* 列區域佔 65% */
-}
-
-.pvtUi > table > tbody > tr:nth-child(3) > td:nth-child(2) {
-  width: 35%;  /* 值區域佔 35% */
-}
-
-/* 移除原本的 .pivot-controls 樣式，改為以下樣式 */
-.pivot-view {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 0;  /* 改為 0 */
-}
-
-/* 樞紐分析表容器 - 整合設計 */
-.pivot-container-wrapper {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
-    overflow: hidden;
-}
-
-/* 樞紐分析表控制區 - 移到容器內部 */
-.pivot-controls {
-    background: white;
-    border: none;
-    border-bottom: 1px solid var(--border-light);
-    border-radius: 0;
-    box-shadow: none;
-    display: flex;
-    justify-content: space-between;
-    margin: 0;
-    padding: 20px 24px;
-}
-
-#pivotContainer {
-    background: white;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    max-height: 800px;
-    min-height: 500px;
-    overflow: visible;
-    overflow-x: auto;
-    overflow-y: auto;
-    padding: 20px;
-    position: relative;
-}
-
-/* 樞紐分析表頭樣式 - 參考資料檢視的藍色漸層設計 */
-.pivot-header {
-    align-items: center;
-    background: #2196F3;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    color: white;
-    display: flex;
-    gap: 24px;
-    overflow: hidden;
-    padding: 24px 32px;
-    position: relative;
-}
-
-.pivot-header::before {
-    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
-    content: "";
-    height: 300%;
-    opacity: 0.5;
-    position: absolute;
-    right: -25%;
-    top: -100%;
-    transform: rotate(35deg);
-    width: 70%;
-}
-
-.pivot-number {
-    align-items: center;
-    background: rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    color: white;
-    display: flex;
-    flex-shrink: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-    height: 56px;
-    justify-content: center;
-    position: relative;
-    width: 56px;
-    z-index: 1;
-}
-
-.pivot-content {
-    flex: 1;
-    position: relative;
-    z-index: 1;
-}
-
-.pivot-header-title {
-    color: white;
-    font-size: 1.375rem;
-    font-weight: 600;
-    letter-spacing: -0.025em;
-    margin: 0 0 6px 0;
-}
-
-.pivot-header-subtitle {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 0.9375rem;
-    font-weight: 400;
-    margin: 0;
-    opacity: 0.9;
-}
-
-/* 增加所有拖曳區域的上方間距 */
-.pvtUnused {
-    margin-top: 80px !important;  /* 從 60px 增加到 80px */
-}
-
-.pvtRows {
-    margin-top: 80px !important;  /* 從 60px 增加到 80px */
-}
-
-.pvtCols {
-    margin-top: 80px !important;  /* 從 60px 增加到 80px */
-}
-
-.pvtVals {
-    margin-top: 80px !important;  /* 從 60px 增加到 80px */
-}
-
-/* 同時調整標籤位置 */
-.pvtUnused::before,
-.pvtRows::before,
-.pvtCols::before,
-.pvtVals::before {
-    top: -36px;  /* 從 -28px 改為 -36px */
-    padding: 6px 12px;  /* 增加內邊距 */
-    background: white;
-    border: 1px solid #E3E7F3;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-}
-
-/* 修改 section-body 樣式，移除內邊距 */
-.pivot-view .section-body {
-    background: var(--bg-primary);
-    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-    overflow: hidden;
-    padding: 0;  /* 移除內邊距 */
-}
-
-/* 修改 pivot-controls 樣式 */
-.pivot-controls {
-    background: white;
-    border: none;
-    border-bottom: 1px solid var(--border-light);
-    border-radius: 0;
-    box-shadow: none;
-    display: flex;
-    justify-content: space-between;
-    margin: 0;
-    padding: 16px 24px;  /* 調整內邊距 */
-}
-
-/* 修改 pivotContainer 樣式 - 與執行日誌一致 */
-#pivotContainer {
-    background: #FAFBFD;  /* 淡灰色背景 */
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    height: 600px;  /* 固定高度 */
-    margin: 0;  /* 移除外邊距 */
-    max-height: 600px;
-    min-height: 400px;
-    overflow-x: auto;
-    overflow-y: auto;
-    padding: 20px;
-    position: relative;
-    width: 100%;  /* 確保寬度 100% */
-}
-
-/* 捲軸樣式 - 與執行日誌完全一致 */
-#pivotContainer::-webkit-scrollbar {
-    height: 12px;
-    width: 12px;
-}
-
-#pivotContainer::-webkit-scrollbar-track {
-    background: #F0F7FF;
-    border-radius: 0;  /* 移除圓角 */
-    margin: 0;  /* 移除邊距 */
-}
-
-#pivotContainer::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-    border: none;  /* 移除邊框 */
-    border-radius: 6px;
-    box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-#pivotContainer::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-#pivotContainer::-webkit-scrollbar-corner {
-    background: #F0F7FF;
-    border-radius: 0;
-}
-
-/* 確保在沒有 controls-left 內容時，controls-right 靠右對齊 */
-.pivot-controls-left:empty {
-    display: none;
-}
-
-.pivot-controls-right {
-    margin-left: auto;  /* 自動靠右 */
-}
-
-/* 確保 pvtUi 填滿容器 */
-.pvtUi {
-    background: transparent;  /* 透明背景 */
-    border-radius: 0;
-    box-shadow: none;
-    font-family: inherit;
-    margin: 0;
-    padding: 20px;
-    width: 100%;
-}
-
-/* 確保表格填滿寬度 */
-.pvtTable {
-    width: 100% !important;
-}
-
-/* 修改說明文字區域，使其在容器內 */
-.pivot-instructions {
-    background: linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%);
-    border: 2px solid #B3D9FF;
-    border-radius: var(--radius-xl);
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.08);
-    color: #1A237E;
-    margin: 20px;  /* 調整邊距 */
-    margin-bottom: 20px;
-    overflow: hidden;
-    padding: 24px;  /* 減少內邊距 */
-    position: relative;
-}
-
-/* 全螢幕模式下的樞紐分析容器 */
-.pivot-view.fullscreen #pivotContainer {
-    background: #F8FBFF;
-    border-radius: 0;
-    height: calc(100vh - 140px);  /* 扣除控制欄高度 */
-    margin: 0;
-    max-height: calc(100vh - 140px);
-    overflow-x: auto;  /* 確保有捲軸 */
-    overflow-y: auto;  /* 確保有捲軸 */
-    padding: 30px;
-}
-
-/* 全螢幕下隱藏拖曳區域時的調整 */
-.pivot-view.fullscreen.hide-instructions #pivotContainer {
-    height: calc(100vh - 80px);  /* 調整高度計算 */
-    margin-top: 0;
-    max-height: calc(100vh - 80px);
-}
-
-/* 大幅增加所有拖曳區域的上方間距 */
-.pvtUnused {
-    margin-top: 100px !important;  /* 從 80px 增加到 100px */
-}
-
-.pvtRows {
-    margin-top: 100px !important;  /* 從 80px 增加到 100px */
-}
-
-.pvtCols {
-    margin-top: 100px !important;  /* 從 80px 增加到 100px */
-}
-
-.pvtVals {
-    margin-top: 100px !important;  /* 從 80px 增加到 100px */
-}
-
-/* 調整標籤位置，確保不被擋住 */
-.pvtUnused::before,
-.pvtRows::before,
-.pvtCols::before,
-.pvtVals::before {
-    top: -45px;  /* 從 -36px 改為 -45px */
-    padding: 8px 16px;  /* 增加內邊距 */
-    background: white;
-    border: 1px solid #E3E7F3;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    z-index: 100;  /* 確保在最上層 */
-}
-
-/* 確保拖曳區域內部有足夠的頂部空間 */
-.pvtUnused ul,
-.pvtRows ul,
-.pvtCols ul,
-.pvtVals ul {
-    margin: 0 !important;
-    min-height: 40px;
-    padding: 8px !important;
-    padding-top: 35px !important;  /* 增加頂部內邊距 */
-}
-
-/* 修改表格容器結構 */
-.table-view {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    overflow: hidden;  /* 隱藏溢出 */
-    position: relative;
-}
-
-/* 表格捲動區域 - 不包含標題 */
-.table-scroll-wrapper {
-    max-height: 600px;
-    overflow-x: auto;
-    overflow-y: auto;
-    position: relative;
-}
-
-/* 確保表格標題固定 */
-.data-table {
-    background: var(--bg-primary);
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    min-width: 100%;
-    table-layout: auto;
-    width: max-content;
-}
-
-.data-table thead {
-    background: #2196F3;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    position: sticky;
-    top: 0;
-    z-index: 20;
-}
-
-/* 調整表格主體，確保捲軸只影響內容 */
-.data-table tbody {
-    background: white;
-}
-
-/* 捲軸樣式保持不變，但只應用於 scroll-wrapper */
-.table-scroll-wrapper::-webkit-scrollbar {
-    height: 12px;
-    width: 12px;
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-track {
-    background: #F0F7FF;
-    border-radius: 6px;
-    margin: 0;  /* 移除邊距，讓捲軸貼邊 */
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-    border: 2px solid #F0F7FF;
-    border-radius: 6px;
-    box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
-}
-
-/* 垂直捲軸不需要邊距 */
-.table-scroll-wrapper::-webkit-scrollbar:vertical {
-    margin: 0;
-}
-
-/* 水平捲軸保持在底部 */
-.table-scroll-wrapper::-webkit-scrollbar:horizontal {
-    margin: 0;
-}
-
-/* 確保拖曳區域的容器有適當的 z-index */
-.pvtUi {
-    position: relative;
-    z-index: 1;
-}
-
-/* 確保每個拖曳區域都有適當的定位 */
-.pvtUnused,
-.pvtRows,
-.pvtCols,
-.pvtVals {
-    position: relative;
-    z-index: 2;
-}
-
-/* 表格容器 - 固定高度 */
-.table-view {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    display: flex;
-    flex-direction: column;
-    height: 600px;  /* 固定總高度 */
-    overflow: hidden;
-    position: relative;
-}
-
-/* 表格包裝器 - 分離標題和內容 */
-.table-container {
-    background: var(--bg-primary);
-    border: none;
-    border-radius: 0;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    overflow: hidden;
-    position: relative;
-}
-
-/* 標題包裝器 - 固定不動 */
-.table-header-wrapper {
-    background: var(--bg-primary);
-    border-bottom: 2px solid #1976D2;
-    flex-shrink: 0;
-    overflow: hidden;
-    position: relative;
-    z-index: 10;
-}
-
-/* 內容包裝器 - 只有這裡有捲軸 */
-.table-body-wrapper {
-    flex: 1;
-    overflow-x: auto;
-    overflow-y: auto;
-    position: relative;
-}
-
-/* 修改表格樣式 */
-.data-table {
-    background: var(--bg-primary);
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    min-width: 100%;
-    table-layout: auto;
-    width: max-content;
-}
-
-/* 標題表格 - 獨立的表格只包含標題 */
-.header-table {
-    background: var(--bg-primary);
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    min-width: 100%;
-    table-layout: auto;
-    width: max-content;
-}
-
-.header-table thead {
-    background: #2196F3;
-}
-
-.header-table th {
-    background: #2196F3;
-    border-bottom: 2px solid #1976D2;
-    color: white;
-    font-weight: 600;
-    padding: 14px 20px;
-    position: relative;
-    text-align: left;
-    white-space: nowrap;
-}
-
-/* 內容表格 - 只包含 tbody */
-.body-table {
-    background: var(--bg-primary);
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    min-width: 100%;
-    table-layout: auto;
-    width: max-content;
-}
-
-/* 只有內容區域的捲軸樣式 */
-.table-body-wrapper::-webkit-scrollbar {
-    height: 12px;
-    width: 12px;
-}
-
-.table-body-wrapper::-webkit-scrollbar-track {
-    background: #F0F7FF;
-    border-radius: 0;
-}
-
-.table-body-wrapper::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #64B5F6 0%, #2196F3 100%);
-    border-radius: 6px;
-    box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-body-wrapper::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #42A5F5 0%, #1976D2 100%);
-}
-
-/* 移除原本的 table-scroll-wrapper 樣式 */
-.table-scroll-wrapper {
-    display: none;
-}
-
-/* 全螢幕模式修正 */
-.pivot-view.fullscreen {
-    background: white !important;
-    bottom: 0 !important;
-    height: 100vh !important;
-    left: 0 !important;
-    margin: 0 !important;
-    overflow: hidden !important;  /* 防止外層捲軸 */
-    padding: 0 !important;
-    position: fixed !important;
-    right: 0 !important;
-    top: 0 !important;
-    width: 100vw !important;
-    z-index: 9999 !important;
-}
-
-/* 全螢幕下的樞紐分析容器 */
-.pivot-view.fullscreen #pivotContainer {
-    background: #F8FBFF;
-    border-radius: 0;
-    box-sizing: border-box;
-    height: calc(100vh - 140px);
-    margin: 0;
-    overflow: auto !important;  /* 確保有捲軸 */
-    overflow-x: auto !important;  /* 強制顯示橫向捲軸 */
-    overflow-y: auto !important;  /* 強制顯示縱向捲軸 */
-    padding: 30px;
-    width: 100%;
-}
-
-/* 確保樞紐分析表可以橫向擴展 */
-.pivot-view.fullscreen .pvtTable {
-    min-width: max-content;  /* 允許表格橫向擴展 */
-    width: auto !important;
-}
-
-/* 全螢幕下的 pvtUi 調整 */
-.pivot-view.fullscreen .pvtUi {
-    min-width: max-content;  /* 允許內容橫向擴展 */
-    width: auto;
-}
-
-/* 調整樞紐分析表的佈局比例 */
-.pvtUi > table {
-    margin-top: 24px;
-    table-layout: fixed;
-    width: 100%;
-}
-
-/* 調整各區域的寬度比例 */
-.pvtUi > table > tbody > tr > td {
-    padding: 8px;
-    vertical-align: top;
-}
-
-/* 第一列左側（Table 下拉選單）- 固定寬度 */
-.pvtUi > table > tbody > tr:first-child > td:first-child {
-    width: 200px;  /* 固定寬度 */
-}
-
-/* 第一列右側（聚合方式下拉選單）- 固定寬度 */
-.pvtUi > table > tbody > tr:first-child > td:nth-child(2) {
-    width: 200px;  /* 固定寬度 */
-}
-
-/* 第二列左側（可用欄位）- 固定寬度 */
-.pvtUi > table > tbody > tr:nth-child(2) > td:first-child {
-    width: 200px;  /* 與第一列左側相同寬度 */
-}
-
-/* 確保左側兩個區域寬度一致 */
-.pvtUnused {
-    max-width: 200px;
-    min-width: 200px;
-    width: 200px !important;
-}
-
-/* 調整行列區域的寬度 */
-.pvtRows,
-.pvtCols {
-    min-width: 300px;  /* 適中的寬度 */
-}
-
-/* 值區域（紅框部分）- 佔據剩餘空間 */
-.pvtVals {
-    flex: 1;
-    max-width: none;  /* 移除之前的 50% 限制 */
-    min-width: 400px;  /* 確保有足夠寬度 */
-    width: auto;  /* 自動填充剩餘空間 */
-}
-
-/* 樞紐分析表結果區域 - 佔據更多空間 */
-.pvtRendererArea {
-    margin-top: 24px;
-    width: 100%;
-}
-
-.pvtTable {
-    width: 100% !important;
-}
-
-/* 恢復原本的表格結構 */
-.table-view {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    overflow: visible;
-    position: relative;
-}
-
-/* 保持原有的 table-scroll-wrapper */
-.table-scroll-wrapper {
-    max-height: 600px;
-    overflow-x: auto;
-    overflow-y: auto;
-    position: relative;
-}
-
-/* 確保表格標題固定 */
-.data-table thead {
-    background: #2196F3;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    position: sticky;
-    top: 0;
-    z-index: 20;
-}
-
-/* 移除之前添加的複雜結構 */
-.table-container,
-.table-header-wrapper,
-.table-body-wrapper,
-.header-table,
-.body-table {
-    /* 移除這些樣式 */
-}
-
-/* 全螢幕模式 - 確保有捲軸 */
-.pivot-view.fullscreen {
-    background: white !important;
-    bottom: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    left: 0 !important;
-    margin: 0 !important;
-    overflow: hidden !important;
-    padding: 0 !important;
-    position: fixed !important;
-    right: 0 !important;
-    top: 0 !important;
-    width: 100vw !important;
-    z-index: 9999 !important;
-}
-
-/* 全螢幕下的 section-body */
-.pivot-view.fullscreen .section-body {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;  /* 重要：允許 flex 子元素縮小 */
-    overflow: hidden;
-}
-
-/* 全螢幕下的控制欄 */
-.pivot-view.fullscreen .pivot-controls {
-    flex-shrink: 0;
-}
-
-/* 全螢幕下的樞紐分析容器 - 修正捲軸 */
-.pivot-view.fullscreen #pivotContainer {
-    background: #F8FBFF;
-    border-radius: 0;
-    flex: 1;
-    margin: 0;
-    min-height: 0;  /* 重要：允許容器縮小 */
-    overflow: auto !important;  /* 強制顯示捲軸 */
-    padding: 30px;
-    position: relative;
-    width: 100%;
-}
-
-/* 確保樞紐分析表內容可以橫向擴展 */
-.pivot-view.fullscreen .pvtUi {
-    display: inline-block;  /* 允許內容決定寬度 */
-    min-width: 100%;  /* 至少填滿容器 */
-    width: auto;  /* 允許擴展 */
-}
-
-.pivot-view.fullscreen .pvtTable {
-    display: table;  /* 確保表格顯示正確 */
-    min-width: 100%;
-    width: auto !important;  /* 允許表格根據內容擴展 */
-}
-
-/* 強制顯示捲軸（調試用） */
-.pivot-view.fullscreen #pivotContainer::-webkit-scrollbar {
-    display: block !important;
-    height: 12px !important;
-    width: 12px !important;
-}
-
-/* 全螢幕模式 - 修正高度計算 */
-.pivot-view.fullscreen {
-    background: white !important;
-    bottom: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    left: 0 !important;
-    margin: 0 !important;
-    overflow: hidden !important;
-    padding: 0 !important;
-    position: fixed !important;
-    right: 0 !important;
-    top: 0 !important;
-    width: 100vw !important;
-    z-index: 9999 !important;
-}
-
-/* 全螢幕下的 step-section */
-.pivot-view.fullscreen .step-section {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    margin: 0;
-    overflow: hidden;
-}
-
-/* 全螢幕下的 step-header */
 .pivot-view.fullscreen .step-header {
-    flex-shrink: 0;  /* 固定高度，不壓縮 */
+  flex-shrink: 0;
 }
 
-/* 全螢幕下的 section-body */
 .pivot-view.fullscreen .section-body {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;  /* 重要：允許縮小 */
-    overflow: hidden;
-    padding: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
-/* 全螢幕下的控制欄 */
 .pivot-view.fullscreen .pivot-controls {
-    background: white;
-    border-bottom: 1px solid var(--border-light);
-    flex-shrink: 0;  /* 固定高度 */
-    margin: 0;
-    padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  margin: 0;
+  padding: 16px 24px;
 }
 
-/* 全螢幕下的樞紐分析容器 */
 .pivot-view.fullscreen #pivotContainer {
-    background: #F8FBFF;
-    border-radius: 0;
-    flex: 1;  /* 填充剩餘空間 */
-    margin: 0;
-    min-height: 0;  /* 允許縮小 */
-    overflow: auto !important;  /* 確保有捲軸 */
-    padding: 20px;
+  background: #F8FBFF;
+  border-radius: 0;
+  flex: 1;
+  margin: 0;
+  min-height: 0;
+  overflow: auto !important;
+  padding: 20px;
 }
 
-/* 確保內容可以橫向擴展 */
 .pivot-view.fullscreen .pvtUi {
-    display: inline-block;
-    min-width: 100%;
-    width: max-content;  /* 根據內容自動擴展 */
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
 }
 
 .pivot-view.fullscreen .pvtTable {
-    min-width: 100%;
-    width: max-content !important;
+  min-width: 100%;
+  width: max-content !important;
 }
 
-/* 確保表格可見 */
-#tableView {
-    display: block !important;
+.pivot-view.fullscreen .pivot-instructions {
+  max-width: calc(100% - 40px);
+  margin: 20px;
+  margin-top: 80px;
 }
 
-#tableView.hidden {
-    display: none !important;
+.pivot-view.fullscreen.hide-instructions .pivot-instructions {
+  display: none;
 }
 
-.table-scroll-wrapper {
-    display: block !important;
-    visibility: visible !important;
+.pivot-view.fullscreen.hide-instructions #pivotContainer {
+  height: calc(100vh - 80px);
+  margin-top: 0;
+  max-height: calc(100vh - 80px);
 }
 
-.data-table {
-    display: table !important;
-    visibility: visible !important;
+.pivot-view.fullscreen #pivotContainer::-webkit-scrollbar {
+  display: block !important;
+  height: 12px !important;
+  width: 12px !important;
 }
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+  .pivot-controls {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+

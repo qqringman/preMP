@@ -19,6 +19,9 @@ from zip_packager import ZipPackager
 import utils
 from flask import make_response
 import utils
+import openpyxl
+from copy import copy
+import io
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -2238,7 +2241,98 @@ def generate_table_html(sheet_data):
 def export_report_page():
     """匯出報表頁面"""
     return render_template('export_report.html')
-                    
+
+@app.route('/api/export-excel-single/<task_id>/<sheet_name>')
+def export_excel_single_sheet(task_id, sheet_name):
+    """
+    匯出原始 Excel 檔案中的單一資料表
+    保留原始格式，只移除其他資料表
+    """
+    try:
+        # 構建原始檔案路徑
+        excel_path = os.path.join(app.config['UPLOAD_FOLDER'], f'comparison_{task_id}.xlsx')
+        
+        if not os.path.exists(excel_path):
+            return jsonify({'error': '找不到檔案'}), 404
+        
+        # 讀取原始 Excel 檔案
+        wb = openpyxl.load_workbook(excel_path, data_only=False, keep_vba=False)
+        
+        # 檢查資料表是否存在
+        if sheet_name not in wb.sheetnames:
+            return jsonify({'error': f'找不到資料表: {sheet_name}'}), 404
+        
+        # 創建新的工作簿，只包含指定的資料表
+        new_wb = openpyxl.Workbook()
+        
+        # 移除預設的工作表
+        default_sheet = new_wb.active
+        new_wb.remove(default_sheet)
+        
+        # 複製指定的工作表（包含格式）
+        source_sheet = wb[sheet_name]
+        target_sheet = new_wb.create_sheet(title=sheet_name)
+        
+        # 複製儲存格資料和格式
+        for row in source_sheet.iter_rows():
+            for cell in row:
+                target_cell = target_sheet.cell(
+                    row=cell.row, 
+                    column=cell.column, 
+                    value=cell.value
+                )
+                
+                # 複製格式
+                if cell.has_style:
+                    target_cell.font = copy(cell.font)
+                    target_cell.fill = copy(cell.fill)
+                    target_cell.border = copy(cell.border)
+                    target_cell.alignment = copy(cell.alignment)
+                    target_cell.number_format = cell.number_format
+                    target_cell.protection = copy(cell.protection)
+        
+        # 複製列寬
+        for column_cells in source_sheet.columns:
+            column_letter = column_cells[0].column_letter
+            if source_sheet.column_dimensions[column_letter].width:
+                target_sheet.column_dimensions[column_letter].width = \
+                    source_sheet.column_dimensions[column_letter].width
+        
+        # 複製行高
+        for row_cells in source_sheet.rows:
+            row_number = row_cells[0].row
+            if source_sheet.row_dimensions[row_number].height:
+                target_sheet.row_dimensions[row_number].height = \
+                    source_sheet.row_dimensions[row_number].height
+        
+        # 複製合併儲存格
+        for merged_range in source_sheet.merged_cells.ranges:
+            target_sheet.merge_cells(str(merged_range))
+        
+        # 複製自動篩選
+        if source_sheet.auto_filter.ref:
+            target_sheet.auto_filter.ref = source_sheet.auto_filter.ref
+        
+        # 儲存到記憶體
+        output = io.BytesIO()
+        new_wb.save(output)
+        output.seek(0)
+        
+        # 生成檔案名稱
+        filename = f"{sheet_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        # 回傳檔案
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"匯出單一資料表錯誤: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
