@@ -695,30 +695,70 @@ async function executeOneStep() {
 
 // 更新進度
 function updateProgress(data) {
-    const { progress, status, message } = data;
+    const { progress, status, message, stats, files } = data;
     
     // 更新進度條
     document.getElementById('progressFill').style.width = `${progress}%`;
     document.getElementById('progressText').textContent = `${progress}%`;
     
-    // 更新階段狀態
-    if (status === 'downloading' || status === 'downloaded') {
-        updateStageStatus('download', status === 'downloaded' ? 'completed' : 'active');
-    } else if (status === 'comparing' || status === 'compared') {
+    // 更新階段狀態和添加詳細日誌
+    if (status === 'downloading') {
+        updateStageStatus('download', 'active');
+        addLog(message, 'downloading');
+        
+        // 如果有統計資料，顯示下載進度
+        if (stats) {
+            if (stats.downloaded > 0) {
+                addLog(`已下載 ${stats.downloaded} 個檔案`, 'success');
+            }
+            if (stats.skipped > 0) {
+                addLog(`已跳過 ${stats.skipped} 個檔案`, 'info');
+            }
+            if (stats.failed > 0) {
+                addLog(`${stats.failed} 個檔案下載失敗`, 'error');
+            }
+        }
+    } else if (status === 'downloaded') {
         updateStageStatus('download', 'completed');
-        updateStageStatus('compare', status === 'compared' ? 'completed' : 'active');
-    } else if (status === 'packaging' || status === 'completed') {
+        addLog('下載完成！', 'success');
+        
+        // 顯示最終統計
+        if (stats) {
+            addLog(`總計：${stats.total} 個檔案`, 'info');
+            addLog(`成功下載：${stats.downloaded} 個`, 'success');
+            if (stats.skipped > 0) {
+                addLog(`跳過：${stats.skipped} 個`, 'info');
+            }
+            if (stats.failed > 0) {
+                addLog(`失敗：${stats.failed} 個`, 'error');
+            }
+        }
+    } else if (status === 'comparing') {
+        updateStageStatus('download', 'completed');
+        updateStageStatus('compare', 'active');
+        addLog(message, 'info');
+    } else if (status === 'compared') {
+        updateStageStatus('compare', 'completed');
+        addLog('比對完成！', 'success');
+    } else if (status === 'packaging') {
         updateStageStatus('download', 'completed');
         updateStageStatus('compare', 'completed');
-        updateStageStatus('package', status === 'completed' ? 'completed' : 'active');
+        updateStageStatus('package', 'active');
+        addLog(message, 'info');
+    } else if (status === 'completed') {
+        updateStageStatus('package', 'completed');
+        addLog('打包完成！', 'success');
+        addLog('所有處理已完成！', 'completed');
+    } else if (status === 'error') {
+        addLog(message, 'error');
+    } else {
+        // 其他訊息
+        addLog(message, 'info');
     }
-    
-    // 添加日誌
-    addLog(message, 'info');
 
     // 處理完成或錯誤
     if (status === 'completed') {
-        handleComplete(data.results);
+        handleComplete(data.results || data);
     } else if (status === 'error') {
         handleError(message);
     }
@@ -786,7 +826,6 @@ function addLog(message, type = 'info') {
 
 // 處理完成
 function handleComplete(results) {
-
     // 更新步驟狀態
     updateStepIndicator('process', 'completed');
     updateStepIndicator('complete', 'completed');
@@ -795,9 +834,20 @@ function handleComplete(results) {
     document.getElementById('progressContainer').classList.add('hidden');
     document.getElementById('resultContainer').classList.remove('hidden');
     
-    // 生成結果摘要
+    // 生成結果摘要 - 確保調用正確
     const summaryHtml = generateResultSummary(results);
-    document.getElementById('resultSummary').innerHTML = summaryHtml;
+    const summaryElement = document.getElementById('resultSummary');
+    if (summaryElement) {
+        summaryElement.innerHTML = summaryHtml;
+    }
+    
+    // 保存任務結果供後續使用
+    if (currentTaskId && results) {
+        window.lastTaskResults = {
+            taskId: currentTaskId,
+            results: results
+        };
+    }
     
     utils.showNotification('所有處理已完成！', 'success');
 }
@@ -821,88 +871,122 @@ function handleError(message) {
 
 // 生成結果摘要
 function generateResultSummary(results) {
+    if (!results) {
+        return '<div class="no-data">無結果資料</div>';
+    }
+    
+    const stats = results.stats || {};
     const compareResults = results.compare_results || {};
     
-    let html = '<div class="summary-grid">';
+    let html = '';
     
-    // 下載統計
-    if (results.download_report) {
+    // 下載統計部分
+    if (stats && stats.total) {
         html += `
-            <div class="summary-item">
-                <div class="summary-icon">
-                    <i class="fas fa-download"></i>
+            <h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;">
+                <i class="fas fa-download"></i> 下載統計
+            </h3>
+            <div class="summary-grid" style="margin-bottom: 32px;">
+                <div class="summary-item" style="background: #E3F2FD; border: 2px solid #2196F3;">
+                    <i class="fas fa-file fa-3x" style="color: #2196F3;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${stats.total || 0}</div>
+                        <div class="summary-label">總檔案數</div>
+                    </div>
                 </div>
-                <div class="summary-content">
-                    <div class="summary-label">下載報表</div>
-                    <div class="summary-value">
-                        <a href="/api/download-file/${results.download_report}" class="link">
-                            查看報表
-                        </a>
+                
+                <div class="summary-item" style="background: #E8F5E9; border: 2px solid #4CAF50;">
+                    <i class="fas fa-check-circle fa-3x" style="color: #4CAF50;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${stats.downloaded || 0}</div>
+                        <div class="summary-label">已下載</div>
+                    </div>
+                </div>
+                
+                <div class="summary-item" style="background: #FFF3E0; border: 2px solid #FF9800;">
+                    <i class="fas fa-forward fa-3x" style="color: #FF9800;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${stats.skipped || 0}</div>
+                        <div class="summary-label">已跳過</div>
+                    </div>
+                </div>
+                
+                <div class="summary-item" style="background: #FFEBEE; border: 2px solid #F44336;">
+                    <i class="fas fa-times-circle fa-3x" style="color: #F44336;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${stats.failed || 0}</div>
+                        <div class="summary-label">失敗</div>
                     </div>
                 </div>
             </div>
         `;
     }
     
-    // 比對統計
-    if (compareResults.master_vs_premp) {
+    // 比對結果部分
+    if (compareResults && Object.keys(compareResults).length > 0) {
         html += `
-            <div class="summary-item">
-                <div class="summary-icon">
-                    <i class="fas fa-code-branch"></i>
+            <h3 style="margin: 32px 0 20px 0; color: #1A237E; text-align: center;">
+                <i class="fas fa-code-compare"></i> 比對結果
+            </h3>
+            <div class="summary-grid">
+        `;
+        
+        // Master vs PreMP
+        if (compareResults.master_vs_premp) {
+            const data = compareResults.master_vs_premp;
+            html += `
+                <div class="summary-item" style="background: #E8F4FD; border: 2px solid #64B5F6;">
+                    <i class="fas fa-code-branch fa-3x" style="color: #1976D2;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-label">Master vs PreMP</div>
+                    </div>
                 </div>
-                <div class="summary-content">
-                    <div class="summary-label">Master vs PreMP</div>
-                    <div class="summary-value">${compareResults.master_vs_premp.success} 個模組</div>
+            `;
+        }
+        
+        // PreMP vs Wave
+        if (compareResults.premp_vs_wave) {
+            const data = compareResults.premp_vs_wave;
+            html += `
+                <div class="summary-item" style="background: #E0F2F1; border: 2px solid #4DB6AC;">
+                    <i class="fas fa-water fa-3x" style="color: #00897B;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-label">PreMP vs Wave</div>
+                    </div>
                 </div>
+            `;
+        }
+        
+        // Wave vs Backup
+        if (compareResults.wave_vs_backup) {
+            const data = compareResults.wave_vs_backup;
+            html += `
+                <div class="summary-item" style="background: #F3E5F5; border: 2px solid #BA68C8;">
+                    <i class="fas fa-database fa-3x" style="color: #7B1FA2;"></i>
+                    <div class="summary-content">
+                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-label">Wave vs Backup</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+    }
+    
+    // 其他結果資訊
+    if (results.download_report || results.zip_file) {
+        html += `
+            <div style="margin-top: 32px; text-align: center; padding: 20px; background: #F5F9FF; border-radius: 12px;">
+                <i class="fas fa-check-circle" style="color: #4CAF50; font-size: 2rem; margin-bottom: 12px;"></i>
+                <h4 style="color: #1A237E; margin-bottom: 8px;">處理完成！</h4>
+                <p style="color: #5C6BC0;">所有檔案已下載、比對並打包完成</p>
             </div>
         `;
     }
     
-    if (compareResults.premp_vs_wave) {
-        html += `
-            <div class="summary-item">
-                <div class="summary-icon">
-                    <i class="fas fa-water"></i>
-                </div>
-                <div class="summary-content">
-                    <div class="summary-label">PreMP vs Wave</div>
-                    <div class="summary-value">${compareResults.premp_vs_wave.success} 個模組</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    if (compareResults.wave_vs_backup) {
-        html += `
-            <div class="summary-item">
-                <div class="summary-icon">
-                    <i class="fas fa-database"></i>
-                </div>
-                <div class="summary-content">
-                    <div class="summary-label">Wave vs Backup</div>
-                    <div class="summary-value">${compareResults.wave_vs_backup.success} 個模組</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // 無法比對
-    if (compareResults.failed > 0) {
-        html += `
-            <div class="summary-item error">
-                <div class="summary-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="summary-content">
-                    <div class="summary-label">無法比對</div>
-                    <div class="summary-value">${compareResults.failed} 個模組</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    html += '</div>';
     return html;
 }
 
@@ -910,6 +994,10 @@ function generateResultSummary(results) {
 function viewResults() {
     if (currentTaskId) {
         window.location.href = `/results/${currentTaskId}`;
+    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
+        window.location.href = `/results/${window.lastTaskResults.taskId}`;
+    } else {
+        utils.showNotification('無可查看的結果', 'error');
     }
 }
 
@@ -917,16 +1005,104 @@ function viewResults() {
 function downloadAll() {
     if (currentTaskId) {
         window.location.href = `/api/export-zip/${currentTaskId}`;
+    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
+        window.location.href = `/api/export-zip/${window.lastTaskResults.taskId}`;
+    } else {
+        utils.showNotification('無可下載的檔案', 'error');
     }
 }
-
 // 開始新的處理
 function startNew() {
-    resetToForm();
+    // 重置所有變數
     currentTaskId = null;
     selectedFile = null;
     selectedServerFiles = [];
-    removeLocalFile();
+    serverFilesLoaded = false;
+    
+    // 清除檔案輸入
+    const fileInput = document.getElementById('localFileInput');
+    if (fileInput) {
+        fileInput.value = '';
+    }
+    
+    // 隱藏所有容器
+    const resultContainer = document.getElementById('resultContainer');
+    if (resultContainer) {
+        resultContainer.classList.add('hidden');
+    }
+    
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        progressContainer.classList.add('hidden');
+    }
+    
+    // 顯示主表單
+    const mainForm = document.getElementById('mainForm');
+    if (mainForm) {
+        mainForm.classList.remove('hidden');
+    }
+    
+    // 重置步驟指示器
+    updateStepIndicator('upload', 'active');
+    updateStepIndicator('config', 'pending');
+    updateStepIndicator('process', 'pending');
+    updateStepIndicator('complete', 'pending');
+    
+    // 重置階段狀態
+    ['download', 'compare', 'package'].forEach(stage => {
+        const stageElement = document.getElementById(`stage-${stage}`);
+        if (stageElement) {
+            stageElement.classList.remove('active', 'completed');
+            const statusElement = stageElement.querySelector('.stage-status');
+            if (statusElement) {
+                statusElement.textContent = '等待中...';
+            }
+        }
+    });
+    
+    // 清除日誌
+    clearLog();
+    
+    // 重置進度條
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressText) progressText.textContent = '0%';
+    
+    // 隱藏檔案列表
+    const localFileList = document.getElementById('localFileList');
+    if (localFileList) {
+        localFileList.classList.add('hidden');
+        localFileList.innerHTML = '';
+    }
+    
+    const serverSelectedFiles = document.getElementById('serverSelectedFiles');
+    if (serverSelectedFiles) {
+        serverSelectedFiles.classList.add('hidden');
+        serverSelectedFiles.innerHTML = '';
+    }
+    
+    // 重置執行按鈕
+    const executeBtn = document.getElementById('executeBtn');
+    if (executeBtn) {
+        executeBtn.disabled = true;
+    }
+    
+    // 重置標籤到本地上傳
+    const localTab = document.querySelector('.tab-btn[onclick*="local"]');
+    const serverTab = document.querySelector('.tab-btn[onclick*="server"]');
+    if (localTab && serverTab) {
+        localTab.classList.add('active');
+        serverTab.classList.remove('active');
+        
+        const localContent = document.getElementById('local-tab');
+        const serverContent = document.getElementById('server-tab');
+        if (localContent) localContent.classList.add('active');
+        if (serverContent) serverContent.classList.remove('active');
+    }
+    
+    // 顯示成功訊息
+    utils.showNotification('已重置，可以開始新的處理', 'success');
 }
 
 // 重置到表單
