@@ -109,51 +109,61 @@ function showFilesList(type) {
     modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     modal.className = `modal ${modalClass}`;
     
-    // 生成檔案列表 HTML
+    // 生成檔案列表 HTML - 使用分離的 header 和 body 結構
     if (files.length === 0) {
-        modalBody.innerHTML = '<div class="empty-message">沒有檔案</div>';
+        modalBody.innerHTML = '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有檔案</p></div>';
     } else {
-        let html = '<div class="files-table-container"><table class="files-table">';
+        let html = '<div class="table-container-fixed">';
+        
+        // 固定的表頭
+        html += '<div class="table-header-fixed">';
+        html += '<table class="files-table-header">';
         html += '<thead><tr>';
-        html += '<th style="width: 50px">#</th>';
-        html += '<th>檔案名稱</th>';
-        html += '<th>FTP 路徑</th>';
-        html += '<th>本地路徑</th>';
+        html += '<th style="width: 50px; min-width: 50px;">#</th>';
+        html += '<th style="width: 250px; min-width: 250px;">檔案名稱</th>';
+        html += '<th style="width: 400px; min-width: 400px;">FTP 路徑</th>';
+        html += '<th style="width: 400px; min-width: 400px;">本地路徑</th>';
         
         if (type === 'total') {
-            html += '<th style="width: 100px">狀態</th>';
+            html += '<th style="width: 100px; min-width: 100px;">狀態</th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
-            html += '<th>原因</th>';
+            html += '<th style="width: 300px; min-width: 300px;">原因</th>';
         }
         
-        html += '<th style="width: 80px">操作</th>';
-        html += '</tr></thead><tbody>';
+        html += '<th style="width: 80px; min-width: 80px;">操作</th>';
+        html += '</tr></thead></table>';
+        html += '</div>';
+        
+        // 可捲動的表身
+        html += '<div class="table-body-scrollable">';
+        html += '<table class="files-table-body">';
+        html += '<tbody>';
         
         files.forEach((file, index) => {
             html += '<tr>';
-            html += `<td class="index-cell">${index + 1}</td>`;
-            html += `<td class="file-name-cell">
+            html += `<td style="width: 50px; min-width: 50px;" class="index-cell">${index + 1}</td>`;
+            html += `<td style="width: 250px; min-width: 250px;" class="file-name-cell">
                         <i class="fas fa-file-alt"></i> ${file.name}
                      </td>`;
-            html += `<td class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
-            html += `<td class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
+            html += `<td style="width: 400px; min-width: 400px;" class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
+            html += `<td style="width: 400px; min-width: 400px;" class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
             
             if (type === 'total') {
                 const statusClass = file.status === 'downloaded' ? 'success' : 
                                   file.status === 'skipped' ? 'info' : 'danger';
                 const statusText = file.status === 'downloaded' ? '已下載' : 
                                  file.status === 'skipped' ? '已跳過' : '失敗';
-                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+                html += `<td style="width: 100px; min-width: 100px;"><span class="status-badge ${statusClass}">${statusText}</span></td>`;
             }
             
             if (type === 'skipped' || type === 'failed') {
-                html += `<td>${file.reason || '-'}</td>`;
+                html += `<td style="width: 300px; min-width: 300px;">${file.reason || '-'}</td>`;
             }
             
             // 操作按鈕
-            html += '<td class="action-cell">';
+            html += '<td style="width: 80px; min-width: 80px;" class="action-cell">';
             if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
                 // 確保路徑格式正確
                 const cleanPath = file.path.replace(/\\/g, '/');
@@ -166,15 +176,18 @@ function showFilesList(type) {
             html += '</tr>';
         });
         
-        html += '</tbody></table></div>';
+        html += '</tbody></table>';
+        html += '</div>'; // 關閉 table-body-scrollable
         
-        // 添加統計摘要
-        if (files.length > 0) {
-            html += `<div class="files-summary">
-                        <i class="fas fa-chart-bar"></i>
-                        共 ${files.length} 個檔案
-                     </div>`;
-        }
+        // 統計摘要放在 table-container-fixed 內部
+        html += `
+            <div class="table-footer">
+                <i class="fas fa-chart-bar"></i>
+                共 ${files.length} 個檔案
+            </div>
+        `;
+        
+        html += '</div>'; // 關閉 table-container-fixed
         
         modalBody.innerHTML = html;
     }
