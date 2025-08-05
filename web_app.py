@@ -721,6 +721,13 @@ def list_directories():
     
     # 只檢查 downloads 目錄下的 task_ 開頭的資料夾
     download_base_dir = config.DEFAULT_OUTPUT_DIR  # 使用 config 中的預設目錄
+    item_path = download_base_dir
+    if os.path.isdir(item_path):
+        directories.append({
+            'path': item_path,
+            'name': f'{os.path.basename(download_base_dir)}',  # 顯示相對路徑
+            'type': 'download'
+        })
     if os.path.exists(download_base_dir):
         for item in os.listdir(download_base_dir):
             # 只列出 task_ 開頭的資料夾

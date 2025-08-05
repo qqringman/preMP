@@ -702,7 +702,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
-                    <button class="modal-close" onclick="closeCompareModal()">
+                    <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -725,7 +725,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
-                    <button class="modal-close" onclick="closeCompareModal()">
+                    <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -769,7 +769,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
-                    <button class="modal-close" onclick="closeCompareModal()">
+                    <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -796,10 +796,13 @@ function switchModalTab(sheetName, clickedBtn) {
     // 切換內容
     modal.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
+        content.style.display = 'none'; // 確保隱藏
     });
+    
     const targetContent = modal.querySelector(`#tab-${sheetName}`);
     if (targetContent) {
         targetContent.classList.add('active');
+        targetContent.style.display = 'flex'; // 確保顯示
     }
 }
 
@@ -1633,3 +1636,4 @@ window.closeCompareModal = closeCompareModal;
 window.switchModalTab = switchModalTab;
 window.previewCompareFile = previewCompareFile;
 window.previewFailedModule = previewFailedModule;
+window.closeCompareModal = closeCompareModal;
