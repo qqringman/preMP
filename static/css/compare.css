@@ -3004,9 +3004,12 @@ input.path-input::-webkit-contacts-auto-fill-button {
     cursor: pointer;
     padding: 8px;
     transition: all 0.2s ease;
+    z-index: 1;
 }
 
 .modal-close:hover {
-    transform: scale(1.1);
-    opacity: 0.8;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    transform: rotate(90deg);
 }
+  
