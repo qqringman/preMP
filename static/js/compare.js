@@ -434,7 +434,9 @@ async function executeCompare() {
             })
         });
         
+        // 確保保存完整的 task_id
         currentTaskId = response.task_id;
+        console.log('Current task_id:', currentTaskId); // 除錯用
         
         // 加入任務房間
         if (socket) {
@@ -453,7 +455,12 @@ async function executeCompare() {
 
 // 更新比對進度
 function updateCompareProgress(data) {
-    const { progress, status, message } = data;
+    const { progress, status, message, task_id } = data;
+    
+    // 如果資料中有 task_id，更新當前 task_id
+    if (task_id) {
+        currentTaskId = task_id;
+    }
     
     document.getElementById('compareProgressFill').style.width = `${progress}%`;
     document.getElementById('compareProgressText').textContent = `${progress}%`;
@@ -502,6 +509,11 @@ function showCompareResults(results) {
     document.getElementById('compareProgress').classList.add('hidden');
     document.getElementById('compareResults').classList.remove('hidden');
     
+    // 確保 results 中有 task_id
+    if (results.task_id) {
+        currentTaskId = results.task_id;
+    }
+    
     // 生成結果摘要
     const summaryHtml = generateCompareResultsSummary(results);
     document.getElementById('resultsSummary').innerHTML = summaryHtml;
@@ -509,10 +521,128 @@ function showCompareResults(results) {
     // 繪製圖表
     drawCharts(results);
     
-    // 重新載入最近記錄
-    loadRecentComparisons();
+    // 在時間軸頂部插入當前任務
+    insertCurrentTaskToTimeline(results);
     
     utils.showNotification('比對完成！', 'success');
+}
+
+function insertCurrentTaskToTimeline(results) {
+    const container = document.getElementById('comparisonTimeline');
+    if (!container) return;
+    
+    // 獲取當前選擇的情境
+    const scenarioInput = document.querySelector('input[name="scenario"]:checked');
+    const scenarioValue = scenarioInput ? scenarioInput.value : 'all';
+    const scenarioInfo = getScenarioInfo(scenarioValue);
+    
+    // 計算總模組數
+    const compareResults = results.compare_results || {};
+    let totalModules = 0;
+    Object.values(compareResults).forEach(data => {
+        if (typeof data === 'object' && data.success) {
+            totalModules += data.success;
+        }
+    });
+    
+    // 建立當前任務的 HTML
+    const currentTaskHtml = `
+        <div class="timeline-item current-task-highlight">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+                <div class="timeline-time">剛剛完成</div>
+                <div class="timeline-title">
+                    ${scenarioInfo.name}
+                    <span class="text-success ml-2">
+                        <i class="fas fa-check-circle"></i>
+                    </span>
+                    <span class="badge badge-current ml-2">當前任務</span>
+                </div>
+                <div class="timeline-desc">
+                    ${totalModules} 個模組 · 剛完成
+                </div>
+                <button class="btn btn-small btn-primary mt-2" 
+                        onclick="window.location.href='/results/${currentTaskId}'">
+                    查看結果
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // 檢查是否已有時間軸項目
+    const existingItems = container.querySelector('.timeline-item');
+    if (existingItems) {
+        // 在最前面插入
+        container.insertAdjacentHTML('afterbegin', currentTaskHtml);
+    } else {
+        // 如果沒有任何項目，替換整個內容
+        container.innerHTML = currentTaskHtml;
+    }
+    
+    // 之後再載入其他最近記錄（排除當前任務）
+    loadRecentComparisonsExcludingCurrent();
+}
+
+// 修改 loadRecentComparisons 函數，排除當前任務
+async function loadRecentComparisonsExcludingCurrent() {
+    try {
+        const comparisons = await utils.apiRequest('/api/recent-comparisons');
+        const container = document.getElementById('comparisonTimeline');
+        
+        if (!comparisons || comparisons.length === 0) {
+            // 如果沒有其他記錄，保持當前任務的顯示
+            return;
+        }
+        
+        // 取得現有的當前任務元素
+        const currentTaskElement = container.querySelector('.current-task-highlight');
+        let currentTaskHtml = '';
+        if (currentTaskElement) {
+            currentTaskHtml = currentTaskElement.outerHTML;
+        }
+        
+        // 生成時間軸（排除當前任務）
+        let html = currentTaskHtml; // 保持當前任務在最上方
+        
+        comparisons.forEach((comp, index) => {
+            const taskId = comp.task_id || comp.id || '';
+            
+            // 跳過當前任務
+            if (currentTaskId && taskId === currentTaskId) {
+                return;
+            }
+            
+            const statusIcon = comp.status === 'completed' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            const statusColor = comp.status === 'completed' ? 'text-success' : 'text-danger';
+            
+            html += `
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-time">${formatTimeAgo(comp.timestamp)}</div>
+                        <div class="timeline-title">
+                            ${comp.scenario}
+                            <span class="${statusColor} ml-2">
+                                <i class="fas ${statusIcon}"></i>
+                            </span>
+                        </div>
+                        <div class="timeline-desc">
+                            ${comp.modules} 個模組 · ${comp.duration || '< 1 分鐘'}
+                        </div>
+                        <button class="btn btn-small btn-primary mt-2" 
+                                onclick="window.location.href='/results/${taskId}'">
+                            查看結果
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Load recent comparisons error:', error);
+    }
 }
 
 // 生成比對結果摘要 - 使用與下載頁面相同的樣式
@@ -687,15 +817,6 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     
     modal.className = `modal ${modalClass}`;
     
-    // 計算總筆數
-    let totalRecords = 0;
-    sheets.forEach(sheet => {
-        const sheetData = pivotData[sheet.name];
-        if (sheetData && sheetData.data) {
-            totalRecords += sheetData.data.length;
-        }
-    });
-    
     // 如果沒有資料
     if (!sheets || sheets.length === 0) {
         modal.innerHTML = `
@@ -742,6 +863,10 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         let tabsHtml = '<div class="source-tabs" style="margin: 20px 20px 0 20px;">';
         let contentHtml = '<div class="tab-container">';
         
+        // 獲取第一個頁籤的筆數（預設顯示）
+        const firstSheetData = pivotData[sheets[0].name];
+        const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
+        
         sheets.forEach((sheet, index) => {
             const isActive = index === 0;
             const sheetData = pivotData[sheet.name];
@@ -769,13 +894,14 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         tabsHtml += '</div>';
         contentHtml += '</div>';
         
+        // 使用第一個頁籤的筆數而不是總筆數
         modal.innerHTML = `
             <div class="modal-content modal-large">
                 <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
-                    <span class="modal-count">共 ${totalRecords} 筆資料</span>
+                    <span class="modal-count">共 ${firstSheetCount} 筆資料</span>
                     <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
@@ -1377,7 +1503,10 @@ function getTotalSuccess(compareResults) {
 // 查看詳細結果
 function viewDetailedResults() {
     if (currentTaskId) {
+        console.log('Viewing detailed results for task_id:', currentTaskId); // 除錯用
         window.location.href = `/results/${currentTaskId}`;
+    } else {
+        utils.showNotification('無法取得任務 ID', 'error');
     }
 }
 
@@ -1528,9 +1657,7 @@ async function loadRecentComparisons() {
         comparisons.forEach((comp, index) => {
             const statusIcon = comp.status === 'completed' ? 'fa-check-circle' : 'fa-exclamation-circle';
             const statusColor = comp.status === 'completed' ? 'text-success' : 'text-danger';
-            
-            // 確保使用正確的 task_id
-            const taskId = comp.task_id || comp.id;
+            const taskId = comp.task_id || comp.id || '';
             
             html += `
                 <div class="timeline-item">
