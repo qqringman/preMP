@@ -694,14 +694,24 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     
     modal.className = `modal ${modalClass}`;
     
+    // 計算總筆數
+    let totalRecords = 0;
+    sheets.forEach(sheet => {
+        const sheetData = pivotData[sheet.name];
+        if (sheetData && sheetData.data) {
+            totalRecords += sheetData.data.length;
+        }
+    });
+    
     // 如果沒有資料
     if (!sheets || sheets.length === 0) {
         modal.innerHTML = `
-            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+            <div class="modal-content modal-large">
                 <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
+                    <span class="modal-count">共 0 筆資料</span>
                     <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
@@ -717,45 +727,51 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     } else if (sheets.length === 1) {
         // 只有一個資料表，不需要頁籤
         const sheetData = pivotData[sheets[0].name];
-        const tableHtml = sheetData ? generateCompareTable(sheetData, sheets[0].title, headerColor) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
+        const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
         
         modal.innerHTML = `
-            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+            <div class="modal-content modal-large">
                 <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
+                    <span class="modal-count">共 ${recordCount} 筆資料</span>
                     <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="modal-body" style="padding: 0; flex: 1; overflow: hidden;">
-                    ${tableHtml}
+                <div class="modal-body-wrapper">
+                    <div class="modal-data-area">
+                        ${sheetData ? generateCompareTableContent(sheetData, sheets[0].title) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>'}
+                    </div>
                 </div>
             </div>
         `;
     } else {
         // 多個資料表，顯示頁籤
         let tabsHtml = '<div class="source-tabs" style="margin: 20px 20px 0 20px;">';
-        let contentHtml = '<div class="tab-container" style="flex: 1; overflow: hidden;">';
+        let contentHtml = '<div class="tab-container">';
         
         sheets.forEach((sheet, index) => {
             const isActive = index === 0;
             const sheetData = pivotData[sheet.name];
+            const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
             
             // 頁籤按鈕
             tabsHtml += `
                 <button class="tab-btn ${isActive ? 'active' : ''}" 
-                        onclick="switchModalTab('${sheet.name}', this)">
+                        onclick="switchModalTab('${sheet.name}', this)"
+                        data-count="${recordCount}">
                     <i class="fas fa-file-alt"></i> ${sheet.title}
                 </button>
             `;
             
             // 頁籤內容
-            const tableHtml = sheetData ? generateCompareTable(sheetData, sheet.title, headerColor) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
             contentHtml += `
-                <div class="tab-content ${isActive ? 'active' : ''}" id="tab-${sheet.name}" style="height: 100%; display: ${isActive ? 'flex' : 'none'}; flex-direction: column;">
-                    ${tableHtml}
+                <div class="tab-content ${isActive ? 'active' : ''}" id="tab-${sheet.name}" style="display: ${isActive ? 'block' : 'none'};">
+                    <div class="modal-data-area">
+                        ${sheetData ? generateCompareTableContent(sheetData, sheet.title) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>'}
+                    </div>
                 </div>
             `;
         });
@@ -764,16 +780,17 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         contentHtml += '</div>';
         
         modal.innerHTML = `
-            <div class="modal-content modal-large" style="display: flex; flex-direction: column; max-height: 90vh;">
+            <div class="modal-content modal-large">
                 <div class="modal-header compare-modal-header" style="background: ${headerColor};">
                     <h3 class="modal-title">
                         <i class="fas fa-table"></i> ${title}
                     </h3>
+                    <span class="modal-count">共 ${totalRecords} 筆資料</span>
                     <button class="modal-close" onclick="window.closeCompareModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="modal-body" style="padding: 0; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                <div class="modal-body-wrapper">
                     ${tabsHtml}
                     ${contentHtml}
                 </div>
@@ -782,6 +799,99 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     }
     
     modal.classList.remove('hidden');
+}
+
+// 生成比對表格內容 - 只包含表格本身
+function generateCompareTableContent(sheetData, sheetTitle) {
+    if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
+        return '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
+    }
+    
+    let html = '<table class="files-table">';
+    
+    // 表頭
+    html += '<thead><tr>';
+    
+    // 動態生成欄位
+    sheetData.columns.forEach(col => {
+        let thText = col;
+        let minWidth = '150px';
+        
+        // 欄位名稱對應
+        const columnMap = {
+            'module': { text: '模組名稱', width: '200px' },
+            'location_path': { text: 'FTP 路徑', width: '400px' },
+            'path': { text: 'FTP 路徑', width: '400px' },
+            'base_folder': { text: '本地路徑', width: '300px' },
+            'compare_folder': { text: 'compare_folder', width: '200px' },
+            'file_type': { text: 'file_type', width: '150px' },
+            'base_content': { text: 'base_content', width: '300px' }
+        };
+        
+        if (columnMap[col]) {
+            thText = columnMap[col].text;
+            minWidth = columnMap[col].width;
+        } else if (col.length > 20) {
+            minWidth = '250px';
+        }
+        
+        html += `<th style="min-width: ${minWidth};">${thText}</th>`;
+    });
+    
+    html += '</tr></thead>';
+    
+    // 表身
+    html += '<tbody>';
+    
+    sheetData.data.forEach((row) => {
+        html += '<tr>';
+        
+        sheetData.columns.forEach(col => {
+            let value = row[col] || '';
+            let cellContent = value;
+            
+            // 處理不同類型的欄位
+            if (col === 'module' || col === '模組名稱') {
+                let icon = 'fa-file';
+                const fileName = value.toLowerCase();
+                
+                if (fileName.includes('manifest.xml')) {
+                    icon = 'fa-file-code';
+                } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
+                    icon = 'fa-file-alt';
+                } else if (fileName.includes('.txt')) {
+                    icon = 'fa-file-alt';
+                } else if (fileName.includes('dprx_quickshow')) {
+                    icon = 'fa-cube';
+                } else if (fileName.includes('bootcode')) {
+                    icon = 'fa-microchip';
+                }
+                
+                cellContent = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas ${icon}" style="color: #2196F3;"></i>
+                        <span>${value}</span>
+                    </div>
+                `;
+            } else if (col.includes('link') || col.includes('_link')) {
+                if (value && value.startsWith('http')) {
+                    cellContent = `<a href="${value}" target="_blank" class="table-link">
+                        <i class="fas fa-external-link-alt"></i> 查看
+                    </a>`;
+                }
+            } else if (col.includes('path') || col.includes('folder')) {
+                cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
+            }
+            
+            html += `<td>${cellContent}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    return html;
 }
 
 // 切換模態框內的頁籤 - 更新版本
@@ -793,16 +903,23 @@ function switchModalTab(sheetName, clickedBtn) {
     });
     clickedBtn.classList.add('active');
     
+    // 更新筆數顯示
+    const count = clickedBtn.getAttribute('data-count') || '0';
+    const modalCount = modal.querySelector('.modal-count');
+    if (modalCount) {
+        modalCount.textContent = `共 ${count} 筆資料`;
+    }
+    
     // 切換內容
     modal.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
-        content.style.display = 'none'; // 確保隱藏
+        content.style.display = 'none';
     });
     
     const targetContent = modal.querySelector(`#tab-${sheetName}`);
     if (targetContent) {
         targetContent.classList.add('active');
-        targetContent.style.display = 'flex'; // 確保顯示
+        targetContent.style.display = 'block';
     }
 }
 
