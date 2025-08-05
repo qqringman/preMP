@@ -4044,13 +4044,13 @@ to {
   table-layout: auto; /* 自動調整寬度 */
 }
 
-/* Sticky 表頭 */
+/*
 #filesListModal .files-table thead {
   position: sticky;
   top: 0;
   z-index: 10;
   background: #F8FBFF;
-}
+}*/
 
 #filesListModal .files-table th {
   padding: 16px 20px;
@@ -5052,4 +5052,432 @@ to {
   border-color: #2196F3;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+}
+
+/* 檔案列表模態框 - 固定標題實現 */
+#filesListModal .table-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 60px); /* 減去底部統計欄高度 */
+  position: relative;
+}
+
+/* 固定的表頭容器 */
+#filesListModal .table-header-wrapper {
+  flex-shrink: 0;
+  overflow: hidden;
+  background: white;
+  border-bottom: 2px solid #E3F2FD;
+}
+
+/* 可滾動的表身容器 */
+#filesListModal .table-body-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* 表格樣式 */
+#filesListModal .files-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* 表頭樣式 */
+#filesListModal .files-table.header-table {
+  margin-bottom: 0;
+}
+
+#filesListModal .files-table th {
+  padding: 16px 20px;
+  text-align: left;
+  font-weight: 600;
+  color: #424242;
+  background: #F8FBFF;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  border-right: 1px solid #E3F2FD;
+}
+
+/* 表身樣式 */
+#filesListModal .files-table.body-table {
+  margin-top: 0;
+}
+
+#filesListModal .files-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid #F5F5F5;
+  vertical-align: middle;
+}
+
+/* 確保只有表身有捲軸 */
+#filesListModal .table-body-wrapper {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #90CAF9 #F5F9FF;
+}
+
+/* 隱藏表頭容器的捲軸 */
+#filesListModal .table-header-wrapper {
+  overflow: hidden;
+}
+
+/* 確保表格寬度一致 */
+#filesListModal .files-table {
+  min-width: 1000px; /* 確保最小寬度 */
+}
+
+/* 修正模態框內容高度 */
+#filesListModal .modal-content {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 1400px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filesListModal .modal-body {
+  padding: 0 !important;
+  background: #FFFFFF;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%; /* 確保填滿 */
+}
+
+/* 表格容器填滿可用空間 */
+#filesListModal .table-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* 重要：填滿剩餘空間 */
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 可滾動的表身容器 */
+#filesListModal .table-body-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  background: white;
+}
+
+/* 底部統計固定高度並移到外面 */
+#filesListModal .table-footer {
+  flex-shrink: 0;
+  height: 60px;
+  text-align: center;
+  padding: 0 20px;
+  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
+  border-top: 2px solid #E3F2FD;
+  color: #78909C;
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 500;
+  margin: 0; /* 移除邊距 */
+}
+
+/* 完整的 flex 佈局結構 */
+#filesListModal.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+#filesListModal .modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 85vh;
+  max-height: 85vh;
+}
+
+#filesListModal .modal-header {
+  flex-shrink: 0;
+  height: 60px;
+}
+
+#filesListModal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filesListModal .table-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filesListModal .table-header-wrapper {
+  flex: 0 0 auto;
+}
+
+#filesListModal .table-body-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#filesListModal .table-footer {
+  flex: 0 0 auto;
+}
+
+/* 移除任何固定高度限制 */
+#filesListModal .table-body-wrapper {
+  /* 不要設定 max-height */
+  /* max-height: 500px; <- 刪除這類限制 */
+}
+
+#filesListModal .files-table {
+  /* 不要設定固定高度 */
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* 確保表格填滿整個寬度 */
+#filesListModal .modal-body {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#filesListModal .table-wrapper {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#filesListModal .table-header-wrapper,
+#filesListModal .table-body-wrapper {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#filesListModal .files-table {
+  width: 100% !important;
+  min-width: 100% !important;
+  margin: 0 !important;
+}
+
+/* 移除任何可能的邊距 */
+#filesListModal .table-footer {
+  width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
+/* 確保沒有內邊距影響寬度 */
+#filesListModal * {
+  box-sizing: border-box;
+}
+
+/* 如果需要水平捲軸，確保表格有最小寬度 */
+#filesListModal .files-table {
+  min-width: 1000px; /* 根據內容調整 */
+}
+
+#filesListModal .table-body-wrapper {
+  overflow-x: auto; /* 允許水平捲動 */
+  overflow-y: auto;
+}
+
+#filesListModal .table-header-wrapper {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+/* 同步 header 和 body 的捲動 */
+#filesListModal .table-body-wrapper {
+  overflow-x: auto;
+}
+
+#filesListModal .table-header-wrapper {
+  overflow-x: hidden;
+  margin-right: 10px; /* 預留捲軸空間 */
+}
+
+/* 統一 box-sizing 並修正寬度問題 */
+#filesListModal .table-wrapper {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#filesListModal .table-header-wrapper {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  /* 補償捲軸寬度 */
+  padding-right: 20px !important;
+}
+
+#filesListModal .table-body-wrapper {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow-y: scroll !important; /* 強制顯示捲軸 */
+  overflow-x: hidden !important;
+}
+
+/* 表格填滿容器 */
+#filesListModal .files-table {
+  width: 100% !important;
+  table-layout: auto !important;
+  border-collapse: collapse !important;
+  margin: 0 !important;
+}
+
+/* 移除可能存在的 10px 間隙 */
+#filesListModal .modal-body > * {
+  margin: 0 !important;
+}
+
+/* 確保所有子元素都是 border-box */
+#filesListModal .table-wrapper,
+#filesListModal .table-wrapper * {
+  box-sizing: border-box !important;
+}
+
+/* 如果還有問題，強制寬度 */
+#filesListModal .table-header-wrapper,
+#filesListModal .table-body-wrapper {
+  width: calc(100% - 0px) !important; /* 確保沒有額外減少 */
+}
+
+/* 修正模態框右上角的缺角問題 */
+#filesListModal .modal-content {
+  overflow: hidden !important; /* 確保圓角不會被內容破壞 */
+  position: relative;
+}
+
+/* 隱藏表頭右側可能的空白區域 */
+#filesListModal .table-header-wrapper {
+  background: #F8FBFF !important; /* 確保背景色一致 */
+  overflow: hidden !important;
+}
+
+/* 修正表格頭部的背景 */
+#filesListModal .files-table th {
+  background: #F8FBFF !important;
+}
+
+/* 確保最後一個 th 填滿空間 */
+#filesListModal .files-table th:last-child {
+  border-right: none !important;
+  padding-right: 30px !important; /* 增加右邊距以覆蓋空白區域 */
+}
+
+/* 處理捲軸造成的空白 */
+#filesListModal .table-body-wrapper {
+  background: white !important;
+}
+
+/* 如果黃色來自捲軸軌道 */
+#filesListModal .table-body-wrapper::-webkit-scrollbar-track {
+  background: #F5F9FF !important; /* 改為淺藍色而不是黃色 */
+}
+
+#filesListModal .table-body-wrapper::-webkit-scrollbar {
+  width: 10px !important;
+  background: #F5F9FF !important;
+}
+
+/* 確保捲軸角落的顏色正確 */
+#filesListModal .table-body-wrapper::-webkit-scrollbar-corner {
+  background: #F8FBFF !important;
+}
+
+/* 優化表頭右側的padding來對齊捲軸 */
+#filesListModal .table-header-wrapper {
+  /* 使用 CSS 變數來動態計算捲軸寬度 */
+  padding-right: 10px !important; /* 配合 10px 的捲軸寬度 */
+  background: #F8FBFF !important;
+}
+
+/* 或者讓整個表頭表格稍微寬一點 */
+#filesListModal .files-table.header-table {
+  width: calc(100% + 10px) !important;
+  margin-right: -10px !important;
+}
+
+/* 確保操作欄有足夠的寬度 */
+#filesListModal .files-table th:last-child {
+  min-width: 90px !important; /* 80px + 10px for scrollbar */
+}
+
+/* 統一整個表格區域的背景色 */
+#filesListModal .table-wrapper {
+  background: #F8FBFF !important;
+}
+
+#filesListModal .table-header-wrapper,
+#filesListModal .table-body-wrapper {
+  background: transparent !important;
+}
+
+/* 表身的背景改為白色 */
+#filesListModal .table-body-wrapper {
+  background: white !important;
+}
+
+#filesListModal .files-table tbody {
+  background: white !important;
+}
+
+/* 移除可能的黃色 highlight */
+#filesListModal * {
+  /* 移除可能的黃色選擇高亮 */
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+/* 如果黃色來自某個偽元素 */
+#filesListModal .table-wrapper::before,
+#filesListModal .table-wrapper::after,
+#filesListModal .table-header-wrapper::before,
+#filesListModal .table-header-wrapper::after {
+  display: none !important;
+}
+
+#filesListModal .table-body-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  /* 裁剪底部內容 */
+  margin-top: -4px;
+}
+
+#filesListModal .table-body-wrapper {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 2px; /* 補償裁剪 */
 }

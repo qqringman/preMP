@@ -113,29 +113,54 @@ function showFilesList(type) {
     } else {
         let html = '';
         
-        // 表格容器
+        // 主容器
         html += '<div class="table-wrapper">';
-        html += '<table class="files-table">';
         
-        // 表頭
+        // 表頭容器
+        html += '<div class="table-header-wrapper">';
+        html += '<table class="files-table header-table">';
         html += '<thead><tr>';
-        html += '<th>#</th>';
-        html += '<th>檔案名稱</th>';
-        html += '<th>FTP 路徑</th>';
-        html += '<th>本地路徑</th>';
+        html += '<th style="width: 60px">#</th>';
+        html += '<th style="min-width: 200px">檔案名稱</th>';
+        html += '<th style="min-width: 300px">FTP 路徑</th>';
+        html += '<th style="min-width: 300px">本地路徑</th>';
         
         if (type === 'total') {
-            html += '<th>狀態</th>';
+            html += '<th style="width: 100px">狀態</th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
-            html += '<th>原因</th>';
+            html += '<th style="min-width: 200px">原因</th>';
         }
         
-        html += '<th>操作</th>';
+        html += '<th style="width: 80px">操作</th>';
+        html += '</tr></thead>';
+        html += '</table>';
+        html += '</div>'; // 結束 table-header-wrapper
+        
+        // 表身容器
+        html += '<div class="table-body-container" style="flex: 1; overflow: hidden; position: relative;">';
+        html += '<div class="table-body-wrapper">';
+        html += '<table class="files-table body-table">';
+        
+        // 添加隱藏的表頭以保持列寬一致
+        html += '<thead style="visibility: hidden; height: 0;"><tr>';
+        html += '<th style="width: 60px; padding: 0; height: 0;"></th>';
+        html += '<th style="min-width: 200px; padding: 0; height: 0;"></th>';
+        html += '<th style="min-width: 300px; padding: 0; height: 0;"></th>';
+        html += '<th style="min-width: 300px; padding: 0; height: 0;"></th>';
+        
+        if (type === 'total') {
+            html += '<th style="width: 100px; padding: 0; height: 0;"></th>';
+        }
+        
+        if (type === 'skipped' || type === 'failed') {
+            html += '<th style="min-width: 200px; padding: 0; height: 0;"></th>';
+        }
+        
+        html += '<th style="width: 80px; padding: 0; height: 0;"></th>';
         html += '</tr></thead>';
         
-        // 表身
         html += '<tbody>';
         
         files.forEach((file, index) => {
@@ -172,7 +197,9 @@ function showFilesList(type) {
         
         html += '</tbody>';
         html += '</table>';
-        html += '</div>'; // 關閉 table-wrapper
+        html += '</div>'; // 結束 table-body-wrapper
+        html += '</div>'; // 結束 table-wrapper
+        html += '</div>'; // 結束 table-body-container
         
         // 統計摘要
         html += `
@@ -182,7 +209,7 @@ function showFilesList(type) {
             </div>
         `;
         
-        modalBody.innerHTML = html;
+        modalBody.innerHTML = html
     }
     
     modal.classList.remove('hidden');
@@ -1169,7 +1196,7 @@ function updateDownloadProgress(data) {
     
     // 更新統計 - 確保統計資料存在
     if (stats && typeof stats === 'object') {
-        console.log('Received stats:', stats); // 除錯用
+        //console.log('Received stats:', stats); // 除錯用
         updateStats(stats);
     } else {
         console.warn('No stats data in update'); // 除錯用
@@ -1217,7 +1244,7 @@ function updateStats(stats) {
         return;
     }
     
-    console.log('Updating stats:', stats); // 除錯用
+    // console.log('Updating stats:', stats); // 除錯用
     
     const elements = {
         totalFiles: stats.total || 0,
@@ -1230,7 +1257,7 @@ function updateStats(stats) {
         const element = document.getElementById(id);
         if (element) {
             element.textContent = value;
-            console.log(`Updated ${id} to ${value}`); // 除錯用
+            //console.log(`Updated ${id} to ${value}`); // 除錯用
             
             // 讓統計卡片可點擊
             const card = element.closest('.stat-card');
@@ -1881,3 +1908,4 @@ function selectSource(source) {
     updateSelectedHint();
     updateDownloadButton();
 }
+
