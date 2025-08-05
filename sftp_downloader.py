@@ -304,8 +304,8 @@ class SFTPDownloader:
                 ftp_path = row[ftp_column]
                 
                 # 檢查空值或 NotFound
-                if pd.isna(ftp_path) or str(ftp_path).strip() == '' or str(ftp_path).strip().lower() == 'notfound':
-                    self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空或 NotFound")
+                if pd.isna(ftp_path) or str(ftp_path).strip() == '' or str(ftp_path).strip().lower() == 'notfound' or str(ftp_path).strip().lower() == 'sftpnotfound':
+                    self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空或 NotFound 或 sftpNotFound")
                     
                     # 如果是 WebDownloader，更新統計
                     if hasattr(self, 'stats'):

@@ -2216,7 +2216,7 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 12px 16px;
     text-align: left;
     font-weight: 600;
-    color: #424242;
+    color: #FFFFFF;
     border-bottom: 1px solid #E0E0E0;
     font-size: 0.875rem;
 }
@@ -2295,8 +2295,8 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 16px 20px;
     text-align: left;
     font-weight: 600;
-    color: #424242;
-    background: white !important;
+    color: #FFFFFF;
+    background: #4A8FE7;
     border-bottom: 2px solid #E3F2FD;
     font-size: 0.9375rem;
     white-space: nowrap;
@@ -2434,7 +2434,7 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 18px 24px;
     text-align: left;
     font-weight: 600;
-    color: #37474F;
+    color: #FFFFFF;
     background: transparent;
     border-bottom: 3px solid #E3F2FD;
     font-size: 0.9375rem;
@@ -2475,7 +2475,7 @@ input.path-input::-webkit-contacts-auto-fill-button {
 #compareDetailsModal .files-table td:last-child {
     position: sticky;
     right: 0;
-    background: white;
+    background: #4A8FE7;
     box-shadow: -2px 0 5px rgba(0, 0, 0, 0.05);
 }
 
@@ -2669,8 +2669,8 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 18px 24px;
     text-align: left;
     font-weight: 600;
-    color: #37474F;
-    background: white;
+    color: #FFFFFF;
+    background: #4A8FE7;
     border-bottom: 3px solid #E3F2FD;
     font-size: 0.9375rem;
     white-space: nowrap;
@@ -2709,6 +2709,13 @@ input.path-input::-webkit-contacts-auto-fill-button {
 #compareDetailsModal .files-table td:last-child {
     position: static;
     background: transparent;
+    box-shadow: none;
+}
+
+/* 移除之前的操作欄位固定樣式 */
+#compareDetailsModal .files-table th:last-child {
+    position: static;
+    background: #4A8FE7;
     box-shadow: none;
 }
 
@@ -2867,8 +2874,7 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 16px 20px;
     text-align: left;
     font-weight: 600;
-    color: #424242;
-    background: white !important;
+    color: #FFFFFF;
     border-bottom: 2px solid #E3F2FD;
     font-size: 0.9375rem;
     white-space: nowrap;
@@ -3140,8 +3146,8 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 16px 20px;
     text-align: left;
     font-weight: 600;
-    color: #424242;
-    background: white;
+    color: #FFFFFF;
+    background: #4A8FE7;
     border-bottom: 2px solid #E3F2FD;
     font-size: 0.9375rem;
     white-space: nowrap;
@@ -3254,8 +3260,8 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 16px 20px;
     text-align: left;
     font-weight: 600;
-    color: #424242;
-    background: white !important; /* 確保背景色 */
+    color: #FFFFFF;
+    background: #4A8FE7;
     border-bottom: 2px solid #E3F2FD;
     font-size: 0.9375rem;
     white-space: nowrap;
@@ -3376,4 +3382,278 @@ input.path-input::-webkit-contacts-auto-fill-button {
     background: #F5F9FF;
 }
 
-/* 移除臨時測試樣式 */
+/* 在 compare.css 中找到並修改以下部分 */
+
+/* 加強表格標頭紅色背景的樣式 */
+.header-red-bg {
+    background: #C00000 !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* 文字顏色樣式 */
+.text-red {
+    color: #C00000 !important;
+    font-weight: 500;
+}
+
+.text-blue {
+    color: #0066CC !important;
+    font-weight: 500;
+}
+
+/* 修正捲軸容器 - 確保捲軸始終顯示 */
+.table-scroll-single {
+    overflow: auto !important;
+    max-height: 500px;
+    position: relative;
+    background: white;
+    border: 1px solid #E3E7F3;
+    border-radius: 0 0 8px 8px;
+}
+
+/* 確保表格有最小寬度以觸發橫向捲軸 */
+.table-scroll-single .files-table {
+    min-width: 100%;
+    width: max-content;
+}
+
+/* 強制顯示捲軸 */
+.table-scroll-single::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+    display: block !important;
+    visibility: visible !important;
+}
+
+.table-scroll-single::-webkit-scrollbar-track {
+    background: #F5F9FF !important;
+    border-radius: 6px;
+    border: 1px solid #E3E7F3;
+}
+
+.table-scroll-single::-webkit-scrollbar-thumb {
+    background: #90CAF9 !important;
+    border-radius: 6px;
+    border: 1px solid #64B5F6;
+}
+
+.table-scroll-single::-webkit-scrollbar-thumb:hover {
+    background: #64B5F6 !important;
+}
+
+.table-scroll-single::-webkit-scrollbar-corner {
+    background: #F5F9FF !important;
+}
+
+#compareDetailsModal .files-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #EDF2FC;
+    vertical-align: middle;
+    white-space: nowrap;
+    color: #424242;
+}
+
+/* 加強 hover 效果 */
+#compareDetailsModal .files-table tbody tr:hover {
+    background-color: #E3F2FD !important;
+}
+
+/* Badge 樣式 */
+.badge-yes {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #4CAF50;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-no {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #F44336;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* 差異文字標記樣式 */
+.diff-text {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.875rem;
+}
+
+.diff-text .diff-part {
+    color: #C00000;
+    font-weight: 600;
+    background: #FFEBEE;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+.diff-text .normal-part {
+    color: #424242;
+}
+
+/* 空狀態容器 */
+.empty-state-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 60px 40px;
+    text-align: center;
+}
+
+/* 空狀態圖標容器 */
+.empty-state-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 24px;
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 8px 32px rgba(33, 150, 243, 0.15);
+}
+
+.empty-state-icon::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+    border-radius: 50%;
+    opacity: 0.1;
+    transform: scale(1.2);
+}
+
+.empty-state-icon i {
+    font-size: 3rem;
+    color: #2196F3;
+    z-index: 1;
+}
+
+/* 空狀態標題 */
+.empty-state-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    letter-spacing: -0.025em;
+}
+
+/* 空狀態描述 */
+.empty-state-desc {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    max-width: 400px;
+    line-height: 1.6;
+}
+
+/* 重新載入按鈕 - 更優雅的設計 */
+.btn-reload-elegant {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 40px;
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+    color: white;
+    border: none;
+    border-radius: var(--radius-full);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-reload-elegant::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn-reload-elegant:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.btn-reload-elegant:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(33, 150, 243, 0.4);
+}
+
+.btn-reload-elegant i {
+    font-size: 1.125rem;
+    transition: transform 0.3s ease;
+}
+
+.btn-reload-elegant:hover i {
+    transform: rotate(180deg);
+}
+
+/* 額外的裝飾元素 */
+.empty-state-decoration {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.decoration-circle {
+    position: absolute;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #E3F2FD 0%, transparent 100%);
+}
+
+.decoration-circle.small {
+    width: 60px;
+    height: 60px;
+    top: 10%;
+    right: 15%;
+    animation: float 6s ease-in-out infinite;
+}
+
+.decoration-circle.medium {
+    width: 100px;
+    height: 100px;
+    bottom: 15%;
+    left: 10%;
+    animation: float 8s ease-in-out infinite reverse;
+}
+
+.decoration-circle.large {
+    width: 150px;
+    height: 150px;
+    top: 50%;
+    right: -75px;
+    opacity: 0.5;
+    animation: float 10s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-20px);
+    }
+}
