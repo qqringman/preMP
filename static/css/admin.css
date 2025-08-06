@@ -1541,3 +1541,100 @@ body {
     background: var(--danger-light);
     border-radius: var(--radius-sm);
 }
+
+/* Prebuild 檔案上傳卡片 - 恢復原本的配色 */
+.file-upload-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.file-upload-card:hover {
+    border-color: var(--nordic-blue-lighter);
+    box-shadow: var(--shadow-md);
+}
+
+/* 標題欄配色 - 使用漸層藍色 */
+.upload-card-header {
+    align-items: center;
+    background: var(--nordic-gradient);
+    display: flex;
+    justify-content: space-between;
+    padding: 16px 20px;
+}
+
+.upload-card-header h3 {
+    color: white;
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* 狀態圖標 */
+.upload-status {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.upload-status.success {
+    color: #4CAF50;  /* 綠色勾勾 */
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Excel 圖標 - 綠色 */
+.upload-area i.fa-file-excel {
+    color: #4CAF50;  /* Excel 綠色 */
+    opacity: 0.8;
+    transition: all 0.3s ease;
+}
+
+.upload-area:hover i.fa-file-excel {
+    color: #388E3C;
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* 已選擇檔案區域 */
+.selected-file {
+    background: #E8F5E9;  /* 淡綠色背景 */
+    border-top: 1px solid #C8E6C9;
+    color: #2E7D32;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+}
+
+.selected-file .file-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.btn-remove {
+    background: transparent;
+    border: none;
+    color: #F44336;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    margin-left: 10px;
+    transition: all 0.2s ease;
+}
+
+.btn-remove:hover {
+    background: #FFEBEE;
+    border-radius: var(--radius-sm);
+}

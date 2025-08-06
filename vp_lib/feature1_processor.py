@@ -199,103 +199,77 @@ class Feature1Processor:
         finally:
             self.sftp_manager.disconnect()
 
-    def track_changes(self, mappings: List[ChipMapping], comparison_type: str) -> Dict[str, List[Dict]]:
-        """追蹤比較過程中的變更"""
+    def track_changes(self, mappings: List[ChipMapping], filtered_mappings: List[ChipMapping], 
+                 comparison_type: str) -> Dict[str, List[Dict]]:
+        """
+        追蹤比對過程中的變更
+        
+        Args:
+            mappings: 原始映射列表
+            filtered_mappings: 過濾後的映射列表
+            comparison_type: 比較類型
+            
+        Returns:
+            包含變更記錄的字典
+        """
         changes = {
-            'added': [],        # 新增的項目（這次有但上次沒有）
-            'removed': [],      # 移除的項目（上次有但這次沒有）
-            'missing': [],      # 缺少配對的項目
-            'matched': 0        # 成功匹配的數量
+            'filtered_out': [],  # 被過濾掉的項目
+            'missing_pair': [],  # 缺少配對的項目
+            'summary': {
+                'total_original': len(mappings),
+                'total_filtered': len(filtered_mappings),
+                'total_compared': 0
+            }
         }
         
+        # 找出被過濾掉的項目
+        filtered_sns = {m.sn for m in filtered_mappings}
         for mapping in mappings:
-            issues = []
-            missing_info = {}
-            
-            # 檢查各種比較類型的完整性
-            if comparison_type == 'all' or comparison_type == 'master_vs_premp':
-                if mapping.master_db and not mapping.premp_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'PreMP DB',
-                        'Reason': '缺少 PreMP DB',
-                        'Master_DB': mapping.master_db.db_info if mapping.master_db else '',
-                        'Master_Path': mapping.master_db.sftp_path if mapping.master_db else ''
-                    }
-                    changes['removed'].append(missing_info)
-                elif not mapping.master_db and mapping.premp_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'Master DB',
-                        'Reason': '新增 Master DB（PreMP 存在但 Master 不存在）',
-                        'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
-                        'PreMP_Path': mapping.premp_db.sftp_path if mapping.premp_db else ''
-                    }
-                    changes['added'].append(missing_info)
-                elif mapping.master_db and mapping.premp_db:
-                    changes['matched'] += 1
-                    
-            if comparison_type == 'all' or comparison_type == 'premp_vs_mp':
-                if mapping.premp_db and not mapping.mp_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'MP DB',
-                        'Reason': '缺少 MP DB',
-                        'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
-                        'PreMP_Path': mapping.premp_db.sftp_path if mapping.premp_db else ''
-                    }
-                    changes['removed'].append(missing_info)
-                elif not mapping.premp_db and mapping.mp_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'PreMP DB',
-                        'Reason': '新增 PreMP DB（MP 存在但 PreMP 不存在）',
-                        'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
-                        'MP_Path': mapping.mp_db.sftp_path if mapping.mp_db else ''
-                    }
-                    changes['added'].append(missing_info)
-                elif mapping.premp_db and mapping.mp_db:
-                    changes['matched'] += 1
-                    
-            if comparison_type == 'all' or comparison_type == 'mp_vs_mpbackup':
-                if mapping.mp_db and not mapping.mpbackup_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'MP Backup DB',
-                        'Reason': '缺少 MP Backup DB',
-                        'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
-                        'MP_Path': mapping.mp_db.sftp_path if mapping.mp_db else ''
-                    }
-                    changes['removed'].append(missing_info)
-                elif not mapping.mp_db and mapping.mpbackup_db:
-                    missing_info = {
-                        'SN': mapping.sn,
-                        'Module': mapping.module,
-                        'Type': 'MP DB',
-                        'Reason': '新增 MP DB（MP Backup 存在但 MP 不存在）',
-                        'MPBackup_DB': mapping.mpbackup_db.db_info if mapping.mpbackup_db else '',
-                        'MPBackup_Path': mapping.mpbackup_db.sftp_path if mapping.mpbackup_db else ''
-                    }
-                    changes['added'].append(missing_info)
-                elif mapping.mp_db and mapping.mpbackup_db:
-                    changes['matched'] += 1
-            
-            # 記錄完全缺失的項目
-            if not any([mapping.master_db, mapping.premp_db, mapping.mp_db, mapping.mpbackup_db]):
-                changes['missing'].append({
+            if mapping.sn not in filtered_sns:
+                changes['filtered_out'].append({
                     'SN': mapping.sn,
                     'Module': mapping.module,
-                    'Type': 'All',
-                    'Reason': '所有 DB 資訊都缺失',
-                    'Master_DB': '',
-                    'PreMP_DB': '',
-                    'MP_DB': '',
-                    'MPBackup_DB': ''
+                    'Reason': '被過濾條件排除',
+                    'Master_DB': mapping.master_db.db_info if mapping.master_db else '',
+                    'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
+                    'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
+                    'MPBackup_DB': mapping.mpbackup_db.db_info if mapping.mpbackup_db else ''
+                })
+        
+        # 找出缺少配對的項目
+        for mapping in filtered_mappings:
+            missing_pairs = []
+            
+            if comparison_type in ['all', 'master_vs_premp']:
+                if bool(mapping.master_db) != bool(mapping.premp_db):
+                    if mapping.master_db and not mapping.premp_db:
+                        missing_pairs.append('缺少 PreMP')
+                    elif not mapping.master_db and mapping.premp_db:
+                        missing_pairs.append('缺少 Master')
+                        
+            if comparison_type in ['all', 'premp_vs_mp']:
+                if bool(mapping.premp_db) != bool(mapping.mp_db):
+                    if mapping.premp_db and not mapping.mp_db:
+                        missing_pairs.append('缺少 MP')
+                    elif not mapping.premp_db and mapping.mp_db:
+                        missing_pairs.append('缺少 PreMP')
+                        
+            if comparison_type in ['all', 'mp_vs_mpbackup']:
+                if bool(mapping.mp_db) != bool(mapping.mpbackup_db):
+                    if mapping.mp_db and not mapping.mpbackup_db:
+                        missing_pairs.append('缺少 MP Backup')
+                    elif not mapping.mp_db and mapping.mpbackup_db:
+                        missing_pairs.append('缺少 MP')
+            
+            if missing_pairs:
+                changes['missing_pair'].append({
+                    'SN': mapping.sn,
+                    'Module': mapping.module,
+                    'Missing': ', '.join(missing_pairs),
+                    'Master_DB': mapping.master_db.db_info if mapping.master_db else '',
+                    'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
+                    'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
+                    'MPBackup_DB': mapping.mpbackup_db.db_info if mapping.mpbackup_db else ''
                 })
         
         return changes
@@ -465,23 +439,13 @@ class Feature1Processor:
         return result
         
     def process(self, input_file: str, db_param: str = 'all', 
-                filter_param: str = 'all', output_dir: str = './output') -> str:
-        """
-        執行功能1處理
-        
-        Args:
-            input_file: 輸入檔案路徑
-            db_param: DB參數
-            filter_param: 過濾參數
-            output_dir: 輸出目錄
-            
-        Returns:
-            輸出檔案路徑
-        """
+            filter_param: str = 'all', output_dir: str = './output') -> str:
+        """執行功能1處理"""
         try:
             # 載入資料
             self.logger.info("載入映射表...")
             mappings = self.load_mapping_table(input_file)
+            original_count = len(mappings)
             
             # 處理 DB 參數
             db_dict = self.process_db_parameter(db_param)
@@ -504,54 +468,139 @@ class Feature1Processor:
             self.logger.info("從 SFTP 取得版本資訊...")
             self.update_version_info(filtered_mappings, db_dict)
             
-            # 產生比較資料
-            self.logger.info(f"產生比較資料 (類型: {comparison_type})...")
-            comparison_data = self.generate_comparison_data(filtered_mappings, comparison_type)
-
-            # 在產生比較資料之前追蹤變更
+            # 追蹤變更
             self.logger.info("追蹤資料變更...")
-            changes = self.track_changes(filtered_mappings, comparison_type)
-
+            changes = self.track_changes(mappings, filtered_mappings, comparison_type)
+            
             # 產生比較資料
             self.logger.info(f"產生比較資料 (類型: {comparison_type})...")
             comparison_data = self.generate_comparison_data(filtered_mappings, comparison_type)
+            
+            # 更新統計
+            changes['summary']['total_compared'] = len(comparison_data)
             
             if not comparison_data:
                 self.logger.warning("沒有產生任何比較資料")
                 raise ValueError("無法產生比較資料，請檢查資料是否完整")
             
-            # 輸出 Excel - 暫時只輸出單一頁籤
+            # 輸出 Excel with 兩個頁籤
             utils.create_directory(output_dir)
             output_file = f"{output_dir}/{config.DEFAULT_DAILYBUILD_OUTPUT}"
             
-            # 直接輸出 DataFrame，不使用 ExcelWriter
-            df = pd.DataFrame(comparison_data)
-            
-            # 確保欄位順序正確
-            expected_columns = [
-                'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
-                'DB_Folder', 'DB_Version', 'SftpPath',
-                'compare_DB_Type', 'compare_DB_Info', 
-                'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
-            ]
-            
-            # 重新排序欄位
-            existing_columns = [col for col in expected_columns if col in df.columns]
-            df = df[existing_columns]
-            
-            # 清理資料，移除可能的問題字元
-            for col in df.columns:
-                if df[col].dtype == 'object':
-                    df[col] = df[col].astype(str).str.strip()
-                    # 移除可能的公式字元
-                    df[col] = df[col].str.replace('=', '', regex=False)
-                    df[col] = df[col].str.replace('+', '', regex=False)
-                    df[col] = df[col].str.replace('@', '', regex=False)
-            
-            # 儲存
-            df.to_excel(output_file, index=False, engine='openpyxl')
+            # 使用 ExcelWriter 寫入多個頁籤
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 第一個頁籤：比較結果
+                df_comparison = pd.DataFrame(comparison_data)
+                
+                # 確保欄位順序正確
+                expected_columns = [
+                    'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+                    'DB_Folder', 'DB_Version', 'SftpPath',
+                    'compare_DB_Type', 'compare_DB_Info', 
+                    'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+                ]
+                existing_columns = [col for col in expected_columns if col in df_comparison.columns]
+                df_comparison = df_comparison[existing_columns]
+                
+                df_comparison.to_excel(writer, sheet_name='比較結果', index=False)
+                
+                # 第二個頁籤：變更記錄
+                change_records = []
+                
+                # 統計摘要
+                change_records.append({
+                    'Type': '統計摘要',
+                    'Count': '',
+                    'Description': '',
+                    'SN': '',
+                    'Module': '',
+                    'Details': ''
+                })
+                change_records.append({
+                    'Type': '原始資料筆數',
+                    'Count': str(changes['summary']['total_original']),
+                    'Description': '載入的原始資料總數',
+                    'SN': '',
+                    'Module': '',
+                    'Details': ''
+                })
+                change_records.append({
+                    'Type': '過濾後筆數',
+                    'Count': str(changes['summary']['total_filtered']),
+                    'Description': '套用過濾條件後的資料數',
+                    'SN': '',
+                    'Module': '',
+                    'Details': ''
+                })
+                change_records.append({
+                    'Type': '比較結果筆數',
+                    'Count': str(changes['summary']['total_compared']),
+                    'Description': '實際產生的比較資料數',
+                    'SN': '',
+                    'Module': '',
+                    'Details': ''
+                })
+                
+                # 空行
+                change_records.append({key: '' for key in change_records[0].keys()})
+                
+                # 被過濾掉的項目
+                if changes['filtered_out']:
+                    change_records.append({
+                        'Type': '被過濾項目',
+                        'Count': str(len(changes['filtered_out'])),
+                        'Description': '被過濾條件排除的項目',
+                        'SN': '',
+                        'Module': '',
+                        'Details': ''
+                    })
+                    for item in changes['filtered_out']:
+                        change_records.append({
+                            'Type': '',
+                            'Count': '',
+                            'Description': item['Reason'],
+                            'SN': item['SN'],
+                            'Module': item['Module'],
+                            'Details': f"Master:{item['Master_DB']}, PreMP:{item['PreMP_DB']}, MP:{item['MP_DB']}, MPBackup:{item['MPBackup_DB']}"
+                        })
+                
+                # 空行
+                if changes['filtered_out']:
+                    change_records.append({key: '' for key in change_records[0].keys()})
+                
+                # 缺少配對的項目
+                if changes['missing_pair']:
+                    change_records.append({
+                        'Type': '缺少配對',
+                        'Count': str(len(changes['missing_pair'])),
+                        'Description': '缺少配對無法比較的項目',
+                        'SN': '',
+                        'Module': '',
+                        'Details': ''
+                    })
+                    for item in changes['missing_pair']:
+                        change_records.append({
+                            'Type': '',
+                            'Count': '',
+                            'Description': item['Missing'],
+                            'SN': item['SN'],
+                            'Module': item['Module'],
+                            'Details': f"Master:{item['Master_DB']}, PreMP:{item['PreMP_DB']}, MP:{item['MP_DB']}, MPBackup:{item['MPBackup_DB']}"
+                        })
+                
+                # 寫入變更記錄
+                if change_records:
+                    df_changes = pd.DataFrame(change_records)
+                    df_changes.to_excel(writer, sheet_name='變更記錄', index=False)
+                    
+                    # 調整欄寬
+                    worksheet = writer.sheets['變更記錄']
+                    for idx, column in enumerate(df_changes.columns):
+                        worksheet.column_dimensions[chr(65 + idx)].width = 20
             
             self.logger.info(f"成功輸出 {len(comparison_data)} 筆資料到: {output_file}")
+            self.logger.info(f"變更記錄: 被過濾 {len(changes['filtered_out'])} 筆, 缺少配對 {len(changes['missing_pair'])} 筆")
+            
             return output_file
             
         except Exception as e:
