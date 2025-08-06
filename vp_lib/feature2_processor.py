@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from vp_libs.data_models import PrebuildSource
+from data_models import PrebuildSource
 import utils
 import config
 
