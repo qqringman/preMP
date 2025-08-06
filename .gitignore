@@ -38,6 +38,9 @@ env/
 downloads/
 compare_results/
 zip_output/
+uploads/
+logs/
+output/
 
 # 系統產生的檔案
 *.xlsx
