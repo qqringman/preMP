@@ -198,6 +198,107 @@ class Feature1Processor:
             self.logger.error(f"更新版本資訊失敗: {str(e)}")
         finally:
             self.sftp_manager.disconnect()
+
+    def track_changes(self, mappings: List[ChipMapping], comparison_type: str) -> Dict[str, List[Dict]]:
+        """追蹤比較過程中的變更"""
+        changes = {
+            'added': [],        # 新增的項目（這次有但上次沒有）
+            'removed': [],      # 移除的項目（上次有但這次沒有）
+            'missing': [],      # 缺少配對的項目
+            'matched': 0        # 成功匹配的數量
+        }
+        
+        for mapping in mappings:
+            issues = []
+            missing_info = {}
+            
+            # 檢查各種比較類型的完整性
+            if comparison_type == 'all' or comparison_type == 'master_vs_premp':
+                if mapping.master_db and not mapping.premp_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'PreMP DB',
+                        'Reason': '缺少 PreMP DB',
+                        'Master_DB': mapping.master_db.db_info if mapping.master_db else '',
+                        'Master_Path': mapping.master_db.sftp_path if mapping.master_db else ''
+                    }
+                    changes['removed'].append(missing_info)
+                elif not mapping.master_db and mapping.premp_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'Master DB',
+                        'Reason': '新增 Master DB（PreMP 存在但 Master 不存在）',
+                        'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
+                        'PreMP_Path': mapping.premp_db.sftp_path if mapping.premp_db else ''
+                    }
+                    changes['added'].append(missing_info)
+                elif mapping.master_db and mapping.premp_db:
+                    changes['matched'] += 1
+                    
+            if comparison_type == 'all' or comparison_type == 'premp_vs_mp':
+                if mapping.premp_db and not mapping.mp_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'MP DB',
+                        'Reason': '缺少 MP DB',
+                        'PreMP_DB': mapping.premp_db.db_info if mapping.premp_db else '',
+                        'PreMP_Path': mapping.premp_db.sftp_path if mapping.premp_db else ''
+                    }
+                    changes['removed'].append(missing_info)
+                elif not mapping.premp_db and mapping.mp_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'PreMP DB',
+                        'Reason': '新增 PreMP DB（MP 存在但 PreMP 不存在）',
+                        'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
+                        'MP_Path': mapping.mp_db.sftp_path if mapping.mp_db else ''
+                    }
+                    changes['added'].append(missing_info)
+                elif mapping.premp_db and mapping.mp_db:
+                    changes['matched'] += 1
+                    
+            if comparison_type == 'all' or comparison_type == 'mp_vs_mpbackup':
+                if mapping.mp_db and not mapping.mpbackup_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'MP Backup DB',
+                        'Reason': '缺少 MP Backup DB',
+                        'MP_DB': mapping.mp_db.db_info if mapping.mp_db else '',
+                        'MP_Path': mapping.mp_db.sftp_path if mapping.mp_db else ''
+                    }
+                    changes['removed'].append(missing_info)
+                elif not mapping.mp_db and mapping.mpbackup_db:
+                    missing_info = {
+                        'SN': mapping.sn,
+                        'Module': mapping.module,
+                        'Type': 'MP DB',
+                        'Reason': '新增 MP DB（MP Backup 存在但 MP 不存在）',
+                        'MPBackup_DB': mapping.mpbackup_db.db_info if mapping.mpbackup_db else '',
+                        'MPBackup_Path': mapping.mpbackup_db.sftp_path if mapping.mpbackup_db else ''
+                    }
+                    changes['added'].append(missing_info)
+                elif mapping.mp_db and mapping.mpbackup_db:
+                    changes['matched'] += 1
+            
+            # 記錄完全缺失的項目
+            if not any([mapping.master_db, mapping.premp_db, mapping.mp_db, mapping.mpbackup_db]):
+                changes['missing'].append({
+                    'SN': mapping.sn,
+                    'Module': mapping.module,
+                    'Type': 'All',
+                    'Reason': '所有 DB 資訊都缺失',
+                    'Master_DB': '',
+                    'PreMP_DB': '',
+                    'MP_DB': '',
+                    'MPBackup_DB': ''
+                })
+        
+        return changes
             
     def generate_comparison_data(self, mappings: List[ChipMapping], comparison_type: str) -> List[Dict]:
         """
@@ -309,19 +410,125 @@ class Feature1Processor:
             # 產生比較資料
             self.logger.info(f"產生比較資料 (類型: {comparison_type})...")
             comparison_data = self.generate_comparison_data(filtered_mappings, comparison_type)
-            
+
+            # 在產生比較資料之前追蹤變更
+            self.logger.info("追蹤資料變更...")
+            changes = self.track_changes(filtered_mappings, comparison_type)
+
+            # 產生比較資料
+            self.logger.info(f"產生比較資料 (類型: {comparison_type})...")
+            comparison_data = self.generate_comparison_data(filtered_mappings, comparison_type)
+
             if not comparison_data:
                 self.logger.warning("沒有產生任何比較資料")
                 raise ValueError("無法產生比較資料，請檢查資料是否完整")
-            
-            # 輸出 Excel
+
+            # 輸出 Excel with 兩個頁籤
             utils.create_directory(output_dir)
             output_file = f"{output_dir}/{config.DEFAULT_DAILYBUILD_OUTPUT}"
-            
-            df = pd.DataFrame(comparison_data)
-            df.to_excel(output_file, index=False)
-            
+
+            # 使用 ExcelWriter 寫入多個頁籤
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 第一個頁籤：比較結果
+                df_comparison = pd.DataFrame(comparison_data)
+                df_comparison.to_excel(writer, sheet_name='比較結果', index=False)
+                
+                # 第二個頁籤：變更記錄
+                all_changes = []
+                
+                # 總覽資訊
+                summary = {
+                    'SN': '',
+                    'Module': '=== 總覽 ===',
+                    'Type': f"成功匹配: {changes['matched']} 筆",
+                    'Reason': f"新增: {len(changes['added'])} 筆, 移除: {len(changes['removed'])} 筆, 完全缺失: {len(changes.get('missing', []))} 筆",
+                    'DB_Info': '',
+                    'Path': ''
+                }
+                all_changes.append(summary)
+                
+                # 空行
+                all_changes.append({key: '' for key in summary.keys()})
+                
+                # 新增的項目
+                if changes['added']:
+                    all_changes.append({
+                        'SN': '',
+                        'Module': '=== 新增項目 ===',
+                        'Type': '',
+                        'Reason': '',
+                        'DB_Info': '',
+                        'Path': ''
+                    })
+                    for item in changes['added']:
+                        all_changes.append({
+                            'SN': item.get('SN', ''),
+                            'Module': item.get('Module', ''),
+                            'Type': item.get('Type', ''),
+                            'Reason': item.get('Reason', ''),
+                            'DB_Info': item.get('PreMP_DB', '') or item.get('MP_DB', '') or item.get('MPBackup_DB', ''),
+                            'Path': item.get('PreMP_Path', '') or item.get('MP_Path', '') or item.get('MPBackup_Path', '')
+                        })
+                
+                # 空行
+                if changes['added']:
+                    all_changes.append({key: '' for key in summary.keys()})
+                
+                # 移除的項目
+                if changes['removed']:
+                    all_changes.append({
+                        'SN': '',
+                        'Module': '=== 移除項目 ===',
+                        'Type': '',
+                        'Reason': '',
+                        'DB_Info': '',
+                        'Path': ''
+                    })
+                    for item in changes['removed']:
+                        all_changes.append({
+                            'SN': item.get('SN', ''),
+                            'Module': item.get('Module', ''),
+                            'Type': item.get('Type', ''),
+                            'Reason': item.get('Reason', ''),
+                            'DB_Info': item.get('Master_DB', '') or item.get('PreMP_DB', '') or item.get('MP_DB', ''),
+                            'Path': item.get('Master_Path', '') or item.get('PreMP_Path', '') or item.get('MP_Path', '')
+                        })
+                
+                # 空行
+                if changes['removed']:
+                    all_changes.append({key: '' for key in summary.keys()})
+                
+                # 完全缺失的項目
+                if changes.get('missing', []):
+                    all_changes.append({
+                        'SN': '',
+                        'Module': '=== 完全缺失 ===',
+                        'Type': '',
+                        'Reason': '',
+                        'DB_Info': '',
+                        'Path': ''
+                    })
+                    for item in changes['missing']:
+                        all_changes.append({
+                            'SN': item.get('SN', ''),
+                            'Module': item.get('Module', ''),
+                            'Type': item.get('Type', ''),
+                            'Reason': item.get('Reason', ''),
+                            'DB_Info': '',
+                            'Path': ''
+                        })
+                
+                # 寫入變更記錄
+                if len(all_changes) > 1:
+                    df_changes = pd.DataFrame(all_changes)
+                    df_changes.to_excel(writer, sheet_name='變更記錄', index=False)
+                else:
+                    # 即使沒有變更也建立空白頁籤
+                    df_empty = pd.DataFrame({'說明': ['沒有檢測到變更']})
+                    df_empty.to_excel(writer, sheet_name='變更記錄', index=False)
+
             self.logger.info(f"成功輸出 {len(comparison_data)} 筆資料到: {output_file}")
+            self.logger.info(f"記錄了 {len(changes['added'])} 筆新增，{len(changes['removed'])} 筆移除，{len(changes.get('missing', []))} 筆完全缺失")
             return output_file
             
         except Exception as e:

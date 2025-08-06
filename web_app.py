@@ -2308,11 +2308,6 @@ def generate_table_html(sheet_data):
     html += '</table>'
     return html
 
-@app.route('/export-report')
-def export_report_page():
-    """匯出報表頁面"""
-    return render_template('export_report.html')
-
 @app.route('/api/export-excel-single/<task_id>/<sheet_name>')
 def export_excel_single_sheet(task_id, sheet_name):
     """

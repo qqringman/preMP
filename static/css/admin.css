@@ -34,7 +34,7 @@
     --radius-xl: 20px;
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
     --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
-    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);  
 }
 
 * {
@@ -541,14 +541,14 @@ body {
 }
 
 .upload-card-header h3 {
-    color: var(--text-primary);
+    color: var(--bg-card);
     font-size: 1.125rem;
     font-weight: 600;
     margin: 0;
 }
 
 .upload-status {
-    color: var(--text-muted);
+    color: var(--success-light);
     font-size: 1.25rem;
 }
 
@@ -1053,4 +1053,307 @@ body {
 @keyframes shine {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
+}
+
+/* 結果表格容器 - Nordic Blue 邊框 */
+.result-table-container {
+    background: var(--bg-primary);
+    border: 2px solid var(--nordic-blue-light);  /* 改為北歐藍邊框 */
+    border-radius: var(--radius-lg);
+    max-height: 600px;
+    overflow: auto;
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.1);  /* 北歐藍陰影 */
+}
+
+/* 結果區域邊框 */
+.result-section .step-section {
+    border: 2px solid var(--nordic-blue-lighter);  /* 北歐藍邊框 */
+    background: var(--bg-primary);
+}
+
+/* 表格標題行 */
+.result-table thead {
+    background: var(--nordic-gradient-soft);  /* 使用北歐藍漸層 */
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.result-table th {
+    border-bottom: 2px solid var(--nordic-blue-light);  /* 北歐藍邊框 */
+    color: var(--text-primary);
+    cursor: pointer;
+    font-weight: 600;
+    padding: 16px;
+    text-align: left;
+    user-select: none;
+    white-space: nowrap;
+}
+
+/* 表格行邊框 */
+.result-table td {
+    border-bottom: 1px solid rgba(33, 150, 243, 0.1);  /* 淡北歐藍邊框 */
+    padding: 12px 16px;
+}
+
+/* 滑鼠懸停效果 */
+.result-table tbody tr:hover {
+    background: var(--nordic-sky);  /* 北歐藍背景 */
+    box-shadow: inset 0 0 0 1px rgba(33, 150, 243, 0.1);
+}
+
+/* 排序圖示 */
+.result-table th.sorted-asc::after,
+.result-table th.sorted-desc::after {
+    color: var(--nordic-blue);
+}
+
+/* 分頁按鈕 */
+.pagination button {
+    border: 1px solid var(--nordic-blue-lighter);
+    color: var(--nordic-blue);
+}
+
+.pagination button:hover:not(:disabled) {
+    background: var(--nordic-sky);
+    border-color: var(--nordic-blue);
+}
+
+.pagination button.active {
+    background: var(--nordic-blue);
+    border-color: var(--nordic-blue);
+    color: white;
+}
+
+/* 結果統計卡片 */
+.stat-card {
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--nordic-blue-lighter);
+    box-shadow: 0 8px 24px rgba(33, 150, 243, 0.12);
+}
+
+/* 搜尋框 */
+.search-box {
+    border: 1px solid var(--nordic-blue-lighter);
+}
+
+.search-box:focus-within {
+    border-color: var(--nordic-blue);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+/* Prebuild Mapping 卡片漸層效果 - Nordic 系列 */
+.file-upload-card.master-premp {
+    background: linear-gradient(135deg, #F8FBFF 0%, #F8FBFF 70%, #E8F4FD 100%);
+}
+
+.file-upload-card.premp-mp {
+    background: linear-gradient(135deg, #E8F4FD 0%, #E8F4FD 70%, #E3F2FD 100%);
+}
+
+.file-upload-card.mp-mpbackup {
+    background: linear-gradient(135deg, #E3F2FD 0%, #E3F2FD 70%, #BBDEFB 100%);
+}
+
+/* 調整標題欄的漸層 - Nordic Blue 系列 */
+.file-upload-card.master-premp .upload-card-header {
+    background: linear-gradient(135deg, #2196F3 0%, #2196F3 70%, #2196F3 100%);
+}
+
+.file-upload-card.premp-mp .upload-card-header {
+    background: linear-gradient(135deg, #2196F3 0%, #2196F3 70%, #42A5F5 100%);
+}
+
+.file-upload-card.mp-mpbackup .upload-card-header {
+    background: linear-gradient(135deg, #42A5F5 0%, #42A5F5 70%, #64B5F6 100%);
+}
+
+/* 連接線效果 - Nordic 風格 */
+.file-upload-grid::before {
+    content: '';
+    position: absolute;
+    top: 35px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        #1976D2 0%, 
+        #1976D2 25%, 
+        #2196F3 25%, 
+        #2196F3 50%, 
+        #42A5F5 50%, 
+        #42A5F5 75%, 
+        #64B5F6 75%, 
+        #64B5F6 100%
+    );
+    opacity: 0.2;
+    z-index: 0;
+}
+
+/* 增強視覺層次 */
+.file-upload-card {
+    border: 1px solid rgba(33, 150, 243, 0.08);
+    transition: all 0.3s ease;
+}
+
+.file-upload-card:hover {
+    border-color: rgba(33, 150, 243, 0.2);
+    transform: translateY(-2px);
+}
+
+/* 結果統計卡片 - Nordic 風格 */
+.result-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
+    border: 2px solid transparent;
+    border-radius: var(--radius-xl);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    overflow: hidden;
+    padding: 24px 28px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--nordic-gradient);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--nordic-blue-lighter);
+    box-shadow: 0 8px 24px rgba(33, 150, 243, 0.15);
+    transform: translateY(-2px);
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+/* 統計圖標 */
+.stat-icon {
+    align-items: center;
+    background: var(--nordic-gradient);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+    color: white;
+    display: flex;
+    flex-shrink: 0;
+    font-size: 1.75rem;
+    height: 64px;
+    justify-content: center;
+    position: relative;
+    width: 64px;
+    overflow: hidden;
+}
+
+.stat-icon::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.3) 50%, transparent 60%);
+    animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+/* 統計內容 */
+.stat-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.stat-value {
+    background: var(--nordic-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    display: block;
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+}
+
+/* 特定統計卡片的配色 */
+.stat-card:nth-child(1) .stat-icon {
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+}
+
+.stat-card:nth-child(2) .stat-icon {
+    background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%);
+}
+
+/* 搜尋高亮樣式 */
+.search-highlight {
+    background: linear-gradient(135deg, #FFF59D 0%, #FFE082 100%);
+    border-radius: 3px;
+    box-shadow: 0 2px 4px rgba(251, 192, 45, 0.3);
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: 2px 4px;
+    text-decoration: none;
+}
+
+/* 搜尋框聚焦效果 */
+.search-box {
+    background: var(--bg-primary);
+    border: 2px solid var(--border-light);
+    border-radius: var(--radius-md);
+    transition: all 0.3s ease;
+}
+
+.search-box:focus-within {
+    background: var(--bg-primary);
+    border-color: var(--nordic-blue);
+    box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+    transform: translateY(-1px);
+}
+
+.search-input {
+    font-size: 0.9375rem;
+    padding: 4px 8px;
+}
+
+.search-box i {
+    color: var(--nordic-blue-light);
+    transition: color 0.3s ease;
+}
+
+.search-box:focus-within i {
+    color: var(--nordic-blue);
 }

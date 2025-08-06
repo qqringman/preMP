@@ -3,20 +3,62 @@ const utils = {
     // API 請求封裝
     async apiRequest(url, options = {}) {
         try {
+            // 只有在有 body 且不是 FormData 時才設定 Content-Type
+            let headers = { ...options.headers };
+            
+            if (options.body && !(options.body instanceof FormData)) {
+                headers['Content-Type'] = 'application/json';
+            }
+            
             const response = await fetch(url, {
                 ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                }
+                headers: headers
             });
             
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || `HTTP error! status: ${response.status}`);
+                const contentType = response.headers.get('content-type');
+                let errorMessage = `${response.status} ${response.statusText}`;
+                
+                try {
+                    // 在 apiRequest 函數中修改 JSON 解析部分
+                    if (contentType && contentType.includes('application/json')) {
+                        try {
+                            return await response.json();
+                        } catch (jsonError) {
+                            // 如果 JSON 解析失敗，嘗試處理特殊情況
+                            const text = await response.text();
+                            
+                            // 嘗試替換 NaN 值
+                            const sanitizedText = text.replace(/:\s*NaN/g, ':null');
+                            
+                            try {
+                                return JSON.parse(sanitizedText);
+                            } catch (e) {
+                                console.error('JSON 解析失敗:', text);
+                                throw new Error('伺服器返回無效的 JSON 格式');
+                            }
+                        }
+                    } else {
+                        const text = await response.text();
+                        if (text) {
+                            errorMessage = `${response.status} ${response.statusText}: ${text}`;
+                        }
+                    }
+                } catch (e) {
+                    // 保持原始錯誤訊息
+                }
+                
+                throw new Error(errorMessage);
             }
             
-            return await response.json();
+            // 檢查回應類型
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return await response.json();
+            } else {
+                // 如果不是 JSON，返回原始 response
+                return response;
+            }
         } catch (error) {
             console.error('API request failed:', error);
             throw error;
@@ -28,14 +70,22 @@ const utils = {
         const formData = new FormData();
         formData.append('file', file);
         
+        // 不要設定 Content-Type，讓瀏覽器自動設定
         const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData
+            // 移除 headers，讓瀏覽器自動處理
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '檔案上傳失敗');
+            let errorMessage = '檔案上傳失敗';
+            try {
+                const error = await response.json();
+                errorMessage = error.error || errorMessage;
+            } catch (e) {
+                errorMessage = `${response.status} ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
         }
         
         return await response.json();

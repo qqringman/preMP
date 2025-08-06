@@ -135,6 +135,76 @@ class Feature2Processor:
                     
         self.logger.info(f"Inner join 結果: {len(joined)} 筆配對")
         return joined
+
+    def track_join_changes(self, sources1: List[PrebuildSource], 
+                        sources2: List[PrebuildSource], 
+                        joined_data: List[Tuple[PrebuildSource, PrebuildSource]]) -> Dict[str, List[Dict]]:
+        """
+        追蹤 join 過程中未匹配的項目
+        
+        Args:
+            sources1: 第一個檔案的來源列表
+            sources2: 第二個檔案的來源列表
+            joined_data: join 後的配對結果
+            
+        Returns:
+            包含未匹配項目的字典
+        """
+        changes = {
+            'unmatched_source1': [],
+            'unmatched_source2': [],
+            'matched': len(joined_data)  # 記錄匹配數量
+        }
+        
+        # 建立已匹配的 key 集合
+        matched_keys_source1 = set()
+        matched_keys_source2 = set()
+        
+        for s1, s2 in joined_data:
+            matched_keys_source1.add(s1.key)
+            matched_keys_source2.add(s2.key)
+        
+        # 找出未匹配的 source1 項目
+        for source in sources1:
+            if source.key not in matched_keys_source1:
+                # 解析 SFTP 資訊以獲取更多細節
+                sftp_info = self.parse_sftp_info(source.sftp_url, source.master_jira)
+                
+                changes['unmatched_source1'].append({
+                    'Category': source.category,
+                    'Project': source.project,
+                    'LocalPath': source.local_path,
+                    'Master_JIRA': source.master_jira,
+                    'Module': sftp_info['module'],
+                    'DB_Info': sftp_info['db_info'],
+                    'SftpPath': source.sftp_url,
+                    'Source': 'File1',
+                    'Reason': '在 File2 中找不到匹配的記錄'
+                })
+        
+        # 找出未匹配的 source2 項目
+        for source in sources2:
+            if source.key not in matched_keys_source2:
+                # 解析 SFTP 資訊
+                sftp_info = self.parse_sftp_info(source.sftp_url, source.master_jira)
+                
+                changes['unmatched_source2'].append({
+                    'Category': source.category,
+                    'Project': source.project,
+                    'LocalPath': source.local_path,
+                    'Master_JIRA': source.master_jira,
+                    'Module': sftp_info['module'],
+                    'DB_Info': sftp_info['db_info'],
+                    'SftpPath': source.sftp_url,
+                    'Source': 'File2',
+                    'Reason': '在 File1 中找不到匹配的記錄'
+                })
+        
+        self.logger.info(f"Join 結果統計: 匹配 {len(joined_data)} 筆, "
+                        f"File1 未匹配 {len(changes['unmatched_source1'])} 筆, "
+                        f"File2 未匹配 {len(changes['unmatched_source2'])} 筆")
+        
+        return changes
         
     def clean_jira_id(self, jira_id: str) -> str:
         """
@@ -394,6 +464,9 @@ class Feature2Processor:
             self.logger.info("執行 inner join...")
             joined_data = self.inner_join_sources(sources1, sources2)
             
+            # 追蹤變更 - 在這裡調用！
+            changes = self.track_join_changes(sources1, sources2, joined_data)
+            
             if not joined_data:
                 self.logger.warning("沒有找到匹配的資料")
             
@@ -427,11 +500,93 @@ class Feature2Processor:
                 
             output_file = os.path.join(output_dir, output_filename)
             
-            # 輸出 Excel
-            df = pd.DataFrame(mapping_data)
-            df.to_excel(output_file, index=False)
+            # 輸出 Excel with 兩個頁籤
+            self.logger.info("寫入 Excel 檔案...")
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 第一個頁籤：映射結果
+                df_mapping = pd.DataFrame(mapping_data)
+                df_mapping.to_excel(writer, sheet_name='映射結果', index=False)
+                
+                # 第二個頁籤：變更記錄
+                all_changes = []
+                
+                # 新增總覽資訊
+                summary = {
+                    'Type': '總覽',
+                    'Category': f"總共匹配: {changes['matched']} 筆",
+                    'Project': f"File1 未匹配: {len(changes['unmatched_source1'])} 筆",
+                    'LocalPath': f"File2 未匹配: {len(changes['unmatched_source2'])} 筆",
+                    'Master_JIRA': '',
+                    'Module': '',
+                    'DB_Info': '',
+                    'SftpPath': '',
+                    'Source': '',
+                    'Reason': ''
+                }
+                all_changes.append(summary)
+                
+                # 加入空行分隔
+                all_changes.append({key: '' for key in summary.keys()})
+                
+                # File1 未匹配的項目
+                if changes['unmatched_source1']:
+                    all_changes.append({
+                        'Type': 'File1 未匹配項目',
+                        'Category': '=' * 20,
+                        'Project': '=' * 20,
+                        'LocalPath': '=' * 20,
+                        'Master_JIRA': '=' * 20,
+                        'Module': '',
+                        'DB_Info': '',
+                        'SftpPath': '',
+                        'Source': '',
+                        'Reason': ''
+                    })
+                    all_changes.extend(changes['unmatched_source1'])
+                
+                # 加入空行分隔
+                all_changes.append({key: '' for key in summary.keys()})
+                
+                # File2 未匹配的項目
+                if changes['unmatched_source2']:
+                    all_changes.append({
+                        'Type': 'File2 未匹配項目',
+                        'Category': '=' * 20,
+                        'Project': '=' * 20,
+                        'LocalPath': '=' * 20,
+                        'Master_JIRA': '=' * 20,
+                        'Module': '',
+                        'DB_Info': '',
+                        'SftpPath': '',
+                        'Source': '',
+                        'Reason': ''
+                    })
+                    all_changes.extend(changes['unmatched_source2'])
+                
+                # 寫入變更記錄頁籤
+                if len(all_changes) > 2:  # 有實際的變更記錄
+                    df_changes = pd.DataFrame(all_changes)
+                    df_changes.to_excel(writer, sheet_name='變更記錄', index=False)
+                    
+                    # 調整欄寬
+                    worksheet = writer.sheets['變更記錄']
+                    for column in df_changes:
+                        column_width = max(df_changes[column].astype(str).map(len).max(), len(column))
+                        col_idx = df_changes.columns.get_loc(column)
+                        worksheet.column_dimensions[chr(65 + col_idx)].width = min(column_width + 2, 50)
+                else:
+                    # 沒有變更記錄
+                    df_empty = pd.DataFrame({
+                        '說明': ['所有項目都成功匹配，沒有新增或移除的記錄']
+                    })
+                    df_empty.to_excel(writer, sheet_name='變更記錄', index=False)
             
             self.logger.info(f"成功輸出: {output_file}")
+            self.logger.info(f"- 映射結果: {len(mapping_data)} 筆")
+            self.logger.info(f"- 變更記錄: File1 未匹配 {len(changes['unmatched_source1'])} 筆, "
+                            f"File2 未匹配 {len(changes['unmatched_source2'])} 筆")
+            
             return output_file
             
         except Exception as e:

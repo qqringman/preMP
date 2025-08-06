@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadQuickPaths();
     initializeSearch();
     setupDBSelectors();
+    setupQuickPathListeners();
 });
 
 // 設定 DB 選擇器
@@ -127,7 +128,7 @@ async function handleMappingFile(file) {
     try {
         showLoading('上傳檔案中...');
         
-        // 上傳檔案
+        // 使用 utils.uploadFile 上傳檔案
         const uploadResult = await utils.uploadFile(file);
         selectedMappingFile = uploadResult.filepath;
         
@@ -146,15 +147,21 @@ async function handleMappingFile(file) {
         
     } catch (error) {
         hideLoading();
+        console.error('檔案上傳錯誤:', error);
         utils.showNotification('檔案上傳失敗: ' + error.message, 'error');
     }
 }
 
 // 分析 Mapping Table
 async function analyzeMapping(filepath) {
+    console.log('分析檔案路徑:', filepath);
+    
+    const requestBody = JSON.stringify({ file_path: filepath });
+    console.log('請求內容:', requestBody);
+    
     const response = await utils.apiRequest('/api/admin/analyze-mapping-table', {
         method: 'POST',
-        body: JSON.stringify({ file_path: filepath })
+        body: requestBody
     });
     
     return response;
@@ -326,7 +333,7 @@ async function handlePrebuildFile(type, file) {
         selectedPrebuildFiles[type] = uploadResult.filepath;
         
         // 更新狀態
-        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle"></i>';
+        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle" style="color:white"></i>';
         document.getElementById(`${type}Status`).classList.add('success');
         
         // 顯示已選擇的檔案
@@ -375,7 +382,7 @@ function displaySelectedFile(containerId, filename) {
         <div class="file-list-container">
             <div class="file-list-header">
                 <h4 class="file-list-title">
-                    <i class="fas fa-check-circle"></i>
+                    <i class="fas fa-check-circle" style="color:white"></i>
                     已選擇的檔案
                 </h4>
             </div>
@@ -594,7 +601,15 @@ function updateTableData() {
         const tr = document.createElement('tr');
         Object.values(row).forEach(value => {
             const td = document.createElement('td');
-            td.textContent = value || '';
+            const textValue = value || '';
+            
+            // 如果有搜尋文字，進行高亮
+            if (filterText) {
+                td.innerHTML = highlightText(textValue, filterText);
+            } else {
+                td.textContent = textValue;
+            }
+            
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -602,6 +617,13 @@ function updateTableData() {
     
     // 更新分頁
     updatePagination(filteredData.length);
+}
+
+function highlightText(text, searchTerm) {
+    if (!searchTerm || !text) return text;
+    
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    return text.toString().replace(regex, '<mark class="search-highlight">$1</mark>');
 }
 
 // 排序表格
@@ -694,8 +716,12 @@ async function exportResult() {
         
         const columns = Array.from(document.querySelectorAll('#resultTableHead th')).map(th => th.textContent);
         
-        const response = await utils.apiRequest('/api/admin/export-result', {
+        // 直接使用 fetch 而不是 apiRequest
+        const response = await fetch('/api/admin/export-result', {
             method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 data: resultData,
                 columns: columns,
@@ -705,13 +731,19 @@ async function exportResult() {
         
         hideLoading();
         
+        if (!response.ok) {
+            throw new Error('匯出失敗');
+        }
+        
         // 下載檔案
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `${currentFunction}_result.xlsx`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
         utils.showNotification('匯出成功', 'success');
@@ -871,13 +903,57 @@ function updateQuickPathSelect(selectId, directories) {
 function selectQuickPath(type) {
     const select = document.getElementById(`${type}QuickPath`);
     const input = document.getElementById(`${type}OutputPath`);
+    const browseBtn = input.nextElementSibling; // 取得旁邊的瀏覽按鈕
     
     if (select.value) {
         input.value = select.value;
+        // 停用手動輸入和瀏覽按鈕
+        input.disabled = true;
+        input.style.backgroundColor = '#f5f5f5';
+        input.style.cursor = 'not-allowed';
+        if (browseBtn) {
+            browseBtn.disabled = true;
+            browseBtn.style.opacity = '0.6';
+            browseBtn.style.cursor = 'not-allowed';
+        }
         utils.showNotification('已選擇路徑: ' + select.value, 'success');
     } else {
+        // 恢復輸入和瀏覽按鈕
+        input.disabled = false;
+        input.style.backgroundColor = '';
+        input.style.cursor = '';
+        if (browseBtn) {
+            browseBtn.disabled = false;
+            browseBtn.style.opacity = '';
+            browseBtn.style.cursor = '';
+        }
         utils.showNotification('請選擇一個目錄', 'warning');
     }
+}
+
+// 監聽快速路徑選擇的變化
+function setupQuickPathListeners() {
+    ['chip', 'prebuild'].forEach(type => {
+        const select = document.getElementById(`${type}QuickPath`);
+        if (select) {
+            select.addEventListener('change', () => {
+                const input = document.getElementById(`${type}OutputPath`);
+                const browseBtn = input.nextElementSibling;
+                
+                if (select.value === '') {
+                    // 清空選擇時，恢復輸入框
+                    input.disabled = false;
+                    input.style.backgroundColor = '';
+                    input.style.cursor = '';
+                    if (browseBtn) {
+                        browseBtn.disabled = false;
+                        browseBtn.style.opacity = '';
+                        browseBtn.style.cursor = '';
+                    }
+                }
+            });
+        }
+    });
 }
 
 // 瀏覽輸出路徑（暫時實作）
@@ -1008,7 +1084,7 @@ async function selectMappingServerFile(path, name) {
         <div class="file-list-container">
             <div class="file-list-header">
                 <h4 class="file-list-title">
-                    <i class="fas fa-check-circle"></i>
+                    <i class="fas fa-check-circle" style="color:white"></i>
                     已選擇的檔案
                 </h4>
             </div>

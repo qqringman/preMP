@@ -246,6 +246,10 @@ def run_chip_mapping():
             # 讀取最新的檔案
             latest_file = max(output_files, key=os.path.getctime)
             df = pd.read_excel(latest_file)
+            
+            # 處理 NaN 值
+            df = df.fillna('')  # 將 NaN 替換為空字串
+            
             result_data = df.to_dict('records')
             columns = list(df.columns)
         
@@ -332,6 +336,13 @@ def run_prebuild_mapping():
             # 讀取最新的檔案
             latest_file = max(output_files, key=os.path.getctime)
             df = pd.read_excel(latest_file)
+            
+            # 處理 NaN 值 - 重要！
+            df = df.fillna('')  # 將 NaN 替換為空字串
+            
+            # 或者使用更細緻的處理
+            # df = df.where(pd.notnull(df), None)  # 將 NaN 替換為 None
+            
             result_data = df.to_dict('records')
             columns = list(df.columns)
         
@@ -366,11 +377,19 @@ def export_result():
             df.to_excel(tmp.name, index=False)
             tmp_path = tmp.name
         
-        return send_file(
-            tmp_path,
+        # 讀取檔案並刪除臨時檔案
+        with open(tmp_path, 'rb') as f:
+            file_data = f.read()
+        os.unlink(tmp_path)
+        
+        # 返回檔案
+        from flask import Response
+        return Response(
+            file_data,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=filename
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"'
+            }
         )
         
     except Exception as e:
@@ -471,3 +490,38 @@ def format_file_size(size_bytes):
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.1f} TB"
+
+# 確保有這個路由
+@admin_bp.route('/api/upload', methods=['POST'])
+def upload_file():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '沒有檔案'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '沒有選擇檔案'}), 400
+        
+        # 檢查檔案類型
+        allowed_extensions = {'xlsx', 'xls', 'csv'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'error': '不支援的檔案格式'}), 400
+        
+        # 儲存檔案
+        filename = secure_filename(file.filename)
+        upload_path = os.path.join('uploads', filename)
+        
+        # 確保目錄存在
+        os.makedirs('uploads', exist_ok=True)
+        
+        file.save(upload_path)
+        
+        return jsonify({
+            'success': True,
+            'filepath': upload_path,
+            'filename': filename
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

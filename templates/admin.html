@@ -194,7 +194,7 @@
             <div class="section-body">
                 <div class="file-upload-grid">
                     <!-- Master 檔案 -->
-                    <div class="file-upload-card">
+                    <div class="file-upload-card master-premp">
                         <div class="upload-card-header">
                             <h3>Master</h3>
                             <span class="upload-status" id="masterStatus">
@@ -203,7 +203,7 @@
                         </div>
                         <div class="upload-area" id="masterUploadArea">
                             <input type="file" id="masterFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x"></i>
+                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('masterFileInput').click()">
                                 選擇檔案
@@ -213,7 +213,7 @@
                     </div>
 
                     <!-- PreMP 檔案 -->
-                    <div class="file-upload-card">
+                    <div class="file-upload-card master-premp premp-mp">
                         <div class="upload-card-header">
                             <h3>PreMP</h3>
                             <span class="upload-status" id="prempStatus">
@@ -222,7 +222,7 @@
                         </div>
                         <div class="upload-area" id="prempUploadArea">
                             <input type="file" id="prempFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x"></i>
+                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('prempFileInput').click()">
                                 選擇檔案
@@ -232,7 +232,7 @@
                     </div>
 
                     <!-- MP 檔案 -->
-                    <div class="file-upload-card">
+                    <div class="file-upload-card premp-mp mp-mpbackup">
                         <div class="upload-card-header">
                             <h3>MP</h3>
                             <span class="upload-status" id="mpStatus">
@@ -241,7 +241,7 @@
                         </div>
                         <div class="upload-area" id="mpUploadArea">
                             <input type="file" id="mpFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x"></i>
+                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('mpFileInput').click()">
                                 選擇檔案
@@ -251,7 +251,7 @@
                     </div>
 
                     <!-- MP Backup 檔案 -->
-                    <div class="file-upload-card">
+                    <div class="file-upload-card mp-mpbackup">
                         <div class="upload-card-header">
                             <h3>MP Backup</h3>
                             <span class="upload-status" id="mpbackupStatus">
@@ -260,7 +260,7 @@
                         </div>
                         <div class="upload-area" id="mpbackupUploadArea">
                             <input type="file" id="mpbackupFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x"></i>
+                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('mpbackupFileInput').click()">
                                 選擇檔案
@@ -352,7 +352,7 @@
                 <div class="result-stats" id="resultStats">
                     <div class="stat-card">
                         <div class="stat-icon">
-                            <i class="fas fa-file"></i>
+                            <i class="fas fa-database"></i>
                         </div>
                         <div class="stat-content">
                             <div class="stat-value" id="totalRows">0</div>
