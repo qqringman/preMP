@@ -45,10 +45,10 @@ class Feature1Processor:
             
             mappings = []
             
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 mapping = ChipMapping(
-                    sn=row['SN'],
-                    module=row['Module'],
+                    sn=str(idx + 1),  # 使用行號作為 SN
+                    module=str(row.get('Module', '')),
                     master_db=DBInfo(
                         db_type='master',
                         db_info=row.get('DB_Info', ''),
@@ -301,13 +301,7 @@ class Feature1Processor:
         return changes
             
     def generate_comparison_data(self, mappings: List[ChipMapping], comparison_type: str) -> List[Dict]:
-        """
-        產生比較資料
-        
-        Args:
-            mappings: 映射列表
-            comparison_type: 比較類型 (all, master_vs_premp, premp_vs_mp, mp_vs_mpbackup)
-        """
+        """產生比較資料"""
         result = []
         sn = 1
         
@@ -318,7 +312,7 @@ class Feature1Processor:
                 if mapping.master_db and mapping.premp_db:
                     row = mapping.to_comparison_dict('master', 'premp')
                     if row:
-                        row['SN'] = sn
+                        row['SN'] = int(sn)
                         result.append(row)
                         sn += 1
                 
@@ -326,7 +320,7 @@ class Feature1Processor:
                 if mapping.premp_db and mapping.mp_db:
                     row = mapping.to_comparison_dict('premp', 'mp')
                     if row:
-                        row['SN'] = sn
+                        row['SN'] = int(sn)
                         result.append(row)
                         sn += 1
                 
@@ -334,7 +328,7 @@ class Feature1Processor:
                 if mapping.mp_db and mapping.mpbackup_db:
                     row = mapping.to_comparison_dict('mp', 'mpbackup')
                     if row:
-                        row['SN'] = sn
+                        row['SN'] = int(sn)
                         result.append(row)
                         sn += 1
         else:
@@ -344,7 +338,7 @@ class Feature1Processor:
                     if mapping.master_db and mapping.premp_db:
                         row = mapping.to_comparison_dict('master', 'premp')
                         if row:
-                            row['SN'] = sn
+                            row['SN'] = int(sn)
                             result.append(row)
                             sn += 1
             elif comparison_type == 'premp_vs_mp':
@@ -352,7 +346,7 @@ class Feature1Processor:
                     if mapping.premp_db and mapping.mp_db:
                         row = mapping.to_comparison_dict('premp', 'mp')
                         if row:
-                            row['SN'] = sn
+                            row['SN'] = int(sn)
                             result.append(row)
                             sn += 1
             elif comparison_type == 'mp_vs_mpbackup':
@@ -360,10 +354,10 @@ class Feature1Processor:
                     if mapping.mp_db and mapping.mpbackup_db:
                         row = mapping.to_comparison_dict('mp', 'mpbackup')
                         if row:
-                            row['SN'] = sn
+                            row['SN'] = int(sn)
                             result.append(row)
                             sn += 1
-                        
+        
         self.logger.info(f"產生 {len(result)} 筆比較資料")
         return result
         

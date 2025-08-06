@@ -7,13 +7,53 @@ let selectedPrebuildFiles = {
     mp: null,
     mpbackup: null
 };
-let resultData = [];
+
+// 改為分開儲存兩個功能的結果
+let chipMappingResult = {
+    data: [],
+    columns: [],
+    totalRows: 0
+};
+
+let prebuildMappingResult = {
+    data: [],
+    columns: [],
+    totalRows: 0
+};
+
+// 指向當前顯示的結果
+let currentResult = null;
+
 let currentPage = 1;
 let pageSize = 50;
 let sortColumn = null;
 let sortDirection = 'asc';
 let filterText = '';
 let dbVersionsCache = {}; // 快取 DB 版本資訊
+let currentResultSource = null
+
+// 在檔案開頭加入
+let resultCache = {
+    'chip-mapping': null,
+    'prebuild-mapping': null
+};
+
+// 定義標準欄位順序
+const STANDARD_COLUMNS = [
+    'SN',
+    'RootFolder',
+    'Module',
+    'DB_Type',
+    'DB_Info',
+    'DB_Folder',
+    'DB_Version',
+    'SftpPath',
+    'compare_DB_Type',
+    'compare_DB_Info',
+    'compare_DB_Folder',
+    'compare_DB_Version',
+    'compare_SftpPath'
+];
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -64,11 +104,50 @@ function switchFunction(func) {
     });
     document.getElementById(`${func}-content`).classList.add('active');
     
-    // 隱藏結果區域
+    // 顯示對應功能的結果
     const resultSection = document.getElementById('resultSection');
-    if (resultSection) {
+    
+    if (func === 'chip-mapping' && chipMappingResult.data.length > 0) {
+        currentResult = chipMappingResult;
+        resultSection.classList.remove('hidden');
+        document.getElementById('totalRows').textContent = chipMappingResult.totalRows;
+        document.getElementById('filteredRows').textContent = chipMappingResult.totalRows;
+        buildResultTable(chipMappingResult.columns);
+    } else if (func === 'prebuild-mapping' && prebuildMappingResult.data.length > 0) {
+        currentResult = prebuildMappingResult;
+        resultSection.classList.remove('hidden');
+        document.getElementById('totalRows').textContent = prebuildMappingResult.totalRows;
+        document.getElementById('filteredRows').textContent = prebuildMappingResult.totalRows;
+        buildResultTable(prebuildMappingResult.columns);
+    } else {
+        // 如果該功能沒有結果，隱藏結果區域
         resultSection.classList.add('hidden');
+        currentResult = null;
     }
+}
+
+// 顯示結果來源提示
+function showResultSourceHint() {
+    const resultHeader = document.querySelector('#resultSection .step-header');
+    if (!resultHeader) return;
+    
+    // 移除舊的提示
+    const oldHint = resultHeader.querySelector('.result-source-hint');
+    if (oldHint) {
+        oldHint.remove();
+    }
+    
+    // 新增提示
+    const hint = document.createElement('div');
+    hint.className = 'result-source-hint';
+    
+    const sourceName = currentResultSource === 'chip-mapping' ? 'Chip Mapping' : 'Prebuild Mapping';
+    hint.innerHTML = `
+        <i class="fas fa-info-circle"></i>
+        <span>此結果來自 ${sourceName}</span>
+    `;
+    
+    resultHeader.appendChild(hint);
 }
 
 // 初始化檔案上傳
@@ -475,6 +554,7 @@ async function runChipMapping() {
         hideLoading();
         
         if (response.success) {
+            currentResultSource = 'chip-mapping';  // 記錄結果來源
             displayResults(response);
             utils.showNotification('執行成功', 'success');
         } else {
@@ -487,51 +567,35 @@ async function runChipMapping() {
     }
 }
 
-// 執行 Prebuild Mapping
-async function runPrebuildMapping() {
-    // 檢查至少有兩個檔案
-    const fileCount = Object.values(selectedPrebuildFiles).filter(f => f !== null).length;
-    if (fileCount < 2) {
-        utils.showNotification('請至少選擇兩個檔案', 'error');
-        return;
-    }
-    
-    try {
-        showLoading('執行 Prebuild Mapping 中...');
-        
-        const params = {
-            files: selectedPrebuildFiles,
-            output_path: document.getElementById('prebuildOutputPath').value
-        };
-        
-        const response = await utils.apiRequest('/api/admin/run-prebuild-mapping', {
-            method: 'POST',
-            body: JSON.stringify(params)
-        });
-        
-        hideLoading();
-        
-        if (response.success) {
-            displayResults(response);
-            utils.showNotification('執行成功', 'success');
-        }
-        
-    } catch (error) {
-        hideLoading();
-        utils.showNotification('執行失敗: ' + error.message, 'error');
-    }
-}
-
-// 顯示結果
+// 修改 displayResults 函數
 function displayResults(response) {
-    resultData = response.data || [];
+    const resultData = response.data || [];
     const columns = response.columns || [];
+    const totalRows = response.total_rows || resultData.length;
+    
+    // 根據來源儲存結果
+    if (currentFunction === 'chip-mapping') {
+        chipMappingResult = {
+            data: resultData,
+            columns: columns,
+            totalRows: totalRows
+        };
+        currentResult = chipMappingResult;
+    } else if (currentFunction === 'prebuild-mapping') {
+        prebuildMappingResult = {
+            data: resultData,
+            columns: columns,
+            totalRows: totalRows
+        };
+        currentResult = prebuildMappingResult;
+    }
     
     // 顯示結果區域
     document.getElementById('resultSection').classList.remove('hidden');
     
     // 更新統計
-    document.getElementById('totalRows').textContent = response.total_rows || resultData.length;
+    document.getElementById('totalRows').textContent = totalRows;
+    document.getElementById('filteredRows').textContent = totalRows;
     
     // 建立表格
     buildResultTable(columns);
@@ -559,15 +623,18 @@ function buildResultTable(columns) {
     updateTableData();
 }
 
-// 更新表格資料
 function updateTableData() {
     const tbody = document.getElementById('resultTableBody');
     tbody.innerHTML = '';
     
+    // 使用當前結果的資料
+    if (!currentResult) return;
+    
+    let filteredData = currentResult.data;
+    
     // 篩選資料
-    let filteredData = resultData;
     if (filterText) {
-        filteredData = resultData.filter(row => {
+        filteredData = currentResult.data.filter(row => {
             return Object.values(row).some(value => 
                 String(value).toLowerCase().includes(filterText.toLowerCase())
             );
@@ -706,7 +773,7 @@ function initializeSearch() {
 
 // 匯出結果
 async function exportResult() {
-    if (resultData.length === 0) {
+    if (!currentResult || currentResult.data.length === 0) {
         utils.showNotification('沒有資料可匯出', 'warning');
         return;
     }
@@ -714,7 +781,7 @@ async function exportResult() {
     try {
         showLoading('準備匯出...');
         
-        const columns = Array.from(document.querySelectorAll('#resultTableHead th')).map(th => th.textContent);
+        const columns = currentResult.columns;
         
         // 直接使用 fetch 而不是 apiRequest
         const response = await fetch('/api/admin/export-result', {
@@ -723,7 +790,7 @@ async function exportResult() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                data: resultData,
+                data: currentResult.data,
                 columns: columns,
                 filename: `${currentFunction}_${new Date().getTime()}.xlsx`
             })
@@ -757,7 +824,15 @@ async function exportResult() {
 // 清除結果
 function clearResult() {
     document.getElementById('resultSection').classList.add('hidden');
-    resultData = [];
+    
+    // 清除當前功能的結果
+    if (currentFunction === 'chip-mapping') {
+        chipMappingResult = { data: [], columns: [], totalRows: 0 };
+    } else if (currentFunction === 'prebuild-mapping') {
+        prebuildMappingResult = { data: [], columns: [], totalRows: 0 };
+    }
+    
+    currentResult = null;
     currentPage = 1;
     sortColumn = null;
     sortDirection = 'asc';
@@ -1145,4 +1220,101 @@ function closeFolderBrowser() {
 function selectFolder() {
     // 實作資料夾選擇邏輯
     closeFolderBrowser();
+}
+
+// 切換快速路徑開關
+function toggleQuickPath(type) {
+    const toggle = document.getElementById(`${type}UseQuickPath`);
+    const quickPathGroup = document.getElementById(`${type}QuickPathGroup`);
+    const quickSelect = quickPathGroup.parentElement;
+    const outputPath = document.getElementById(`${type}OutputPath`);
+    const browseBtn = outputPath.nextElementSibling;
+    const quickPathSelect = document.getElementById(`${type}QuickPath`);
+    
+    if (toggle.checked) {
+        // 開啟快速路徑
+        quickPathGroup.style.display = 'block';
+        quickSelect.classList.add('active');
+        
+        // 如果已選擇路徑，套用到輸入框
+        if (quickPathSelect.value) {
+            outputPath.value = quickPathSelect.value;
+        }
+        
+        // 停用手動輸入
+        outputPath.disabled = true;
+        browseBtn.disabled = true;
+    } else {
+        // 關閉快速路徑
+        quickPathGroup.style.display = 'none';
+        quickSelect.classList.remove('active');
+        
+        // 恢復手動輸入
+        outputPath.disabled = false;
+        browseBtn.disabled = false;
+    }
+}
+
+// 更新快速路徑選擇
+function updateQuickPath(type) {
+    const toggle = document.getElementById(`${type}UseQuickPath`);
+    const quickPathSelect = document.getElementById(`${type}QuickPath`);
+    const outputPath = document.getElementById(`${type}OutputPath`);
+    
+    // 只有在開關開啟時才更新
+    if (toggle.checked && quickPathSelect.value) {
+        outputPath.value = quickPathSelect.value;
+        utils.showNotification('已選擇路徑: ' + quickPathSelect.value, 'success');
+    }
+}
+
+// 執行 Prebuild Mapping
+async function runPrebuildMapping() {
+    // 檢查至少有兩個檔案
+    const validFiles = {};
+    let fileCount = 0;
+    
+    for (const [type, path] of Object.entries(selectedPrebuildFiles)) {
+        if (path && path !== null && path !== 'null') {
+            validFiles[type] = path;
+            fileCount++;
+        }
+    }
+    
+    if (fileCount < 2) {
+        utils.showNotification('請至少選擇兩個檔案', 'error');
+        return;
+    }
+    
+    try {
+        showLoading('執行 Prebuild Mapping 中...');
+        
+        const params = {
+            files: validFiles,  // 只傳遞有效的檔案
+            output_path: document.getElementById('prebuildOutputPath').value
+        };
+        
+        console.log('執行參數:', params);
+        
+        const response = await utils.apiRequest('/api/admin/run-prebuild-mapping', {
+            method: 'POST',
+            body: JSON.stringify(params)
+        });
+        
+        hideLoading();
+        
+        if (response.success) {
+            currentResultSource = 'prebuild-mapping';  // 記錄結果來源
+            displayResults(response);
+            utils.showNotification('執行成功', 'success');
+        } else {
+            console.error('執行失敗:', response);
+            utils.showNotification('執行失敗: ' + (response.error || '未知錯誤'), 'error');
+        }
+        
+    } catch (error) {
+        hideLoading();
+        console.error('執行錯誤:', error);
+        utils.showNotification('執行失敗: ' + error.message, 'error');
+    }
 }

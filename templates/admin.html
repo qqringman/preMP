@@ -142,10 +142,10 @@
                         </label>
                         <div class="path-input-group">
                             <input type="text" 
-                                   class="form-input" 
-                                   id="chipOutputPath" 
-                                   placeholder="輸入路徑或選擇目錄..."
-                                   value="./output/chip_mapping">
+                                class="form-input" 
+                                id="chipOutputPath" 
+                                placeholder="輸入路徑或選擇目錄..."
+                                value="./output/chip_mapping">
                             <button class="btn btn-secondary" onclick="browseOutputPath('chip')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
@@ -153,18 +153,20 @@
                     </div>
                     
                     <div class="quick-select">
-                        <label class="form-label">
-                            <i class="fas fa-history"></i> 或選擇已下載的目錄
-                        </label>
-                        <div class="quick-path-select">
-                            <div class="form-group">
-                                <select class="form-select" id="chipQuickPath">
-                                    <option value="">-- 選擇目錄 --</option>
-                                </select>
-                            </div>
-                            <button class="btn btn-secondary" onclick="selectQuickPath('chip')">
-                                <i class="fas fa-check"></i> 使用
-                            </button>
+                        <div class="quick-select-header">
+                            <label class="form-label">
+                                <i class="fas fa-history"></i> 使用已下載的目錄
+                            </label>
+                            <!-- 切換開關 -->
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="chipUseQuickPath" onchange="toggleQuickPath('chip')">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="quick-path-select" id="chipQuickPathGroup" style="display: none;">
+                            <select class="form-select" id="chipQuickPath" onchange="updateQuickPath('chip')">
+                                <option value="">-- 選擇目錄 --</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -297,10 +299,10 @@
                         </label>
                         <div class="path-input-group">
                             <input type="text" 
-                                   class="form-input" 
-                                   id="prebuildOutputPath" 
-                                   placeholder="輸入路徑或選擇目錄..."
-                                   value="./output/prebuild_mapping">
+                                class="form-input" 
+                                id="prebuildOutputPath" 
+                                placeholder="輸入路徑或選擇目錄..."
+                                value="./output/prebuild_mapping">
                             <button class="btn btn-secondary" onclick="browseOutputPath('prebuild')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
@@ -308,18 +310,20 @@
                     </div>
                     
                     <div class="quick-select">
-                        <label class="form-label">
-                            <i class="fas fa-history"></i> 或選擇已下載的目錄
-                        </label>
-                        <div class="quick-path-select">
-                            <div class="form-group">
-                                <select class="form-select" id="prebuildQuickPath">
-                                    <option value="">-- 選擇目錄 --</option>
-                                </select>
-                            </div>
-                            <button class="btn btn-secondary" onclick="selectQuickPath('prebuild')">
-                                <i class="fas fa-check"></i> 使用
-                            </button>
+                        <div class="quick-select-header">
+                            <label class="form-label">
+                                <i class="fas fa-history"></i> 或選擇已下載的目錄
+                            </label>
+                            <!-- 切換開關 -->
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="prebuildUseQuickPath" onchange="toggleQuickPath('prebuild')">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="quick-path-select" id="prebuildQuickPathGroup" style="display: none;">
+                            <select class="form-select" id="prebuildQuickPath" onchange="updateQuickPath('prebuild')">
+                                <option value="">-- 選擇目錄 --</option>
+                            </select>
                         </div>
                     </div>
                 </div>

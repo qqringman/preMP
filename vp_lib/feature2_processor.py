@@ -225,35 +225,26 @@ class Feature2Processor:
         return cleaned
         
     def parse_sftp_info(self, sftp_url: str, master_jira: str = '') -> Dict[str, str]:
-        """
-        解析 SFTP URL 資訊
-        
-        Args:
-            sftp_url: SFTP URL
-            master_jira: Master JIRA ID（用於 NotFound 情況）
-            
-        Returns:
-            包含 module, db_info, db_folder, db_version 的字典
-        """
+        """解析 SFTP URL 資訊"""
         try:
             # 檢查是否為 NotFound 或空值
-            sftp_url_lower = str(sftp_url).lower().strip()
+            sftp_url_str = str(sftp_url) if sftp_url else ''
+            sftp_url_lower = sftp_url_str.lower().strip()
+            
+            # 處理 NotFound 情況
             if (not sftp_url or 
                 pd.isna(sftp_url) or 
-                sftp_url_lower == 'notfound_sftp_src_path' or 
-                sftp_url_lower == 'sftpnotfound' or
-                sftp_url_lower == 'notfound' or
-                sftp_url_lower == 'nan'):
+                sftp_url_lower in ['notfound_sftp_src_path', 'sftpnotfound', 'notfound', 'nan', '']):
                 
                 # 清理 JIRA ID
                 cleaned_jira = self.clean_jira_id(master_jira)
                 
                 return {
                     'module': 'Unknown',
-                    'db_info': cleaned_jira if cleaned_jira else '',
+                    'db_info': cleaned_jira if cleaned_jira else 'Unknown',
                     'db_folder': '',
                     'db_version': '',
-                    'sftp_path': sftp_url if sftp_url and not pd.isna(sftp_url) else 'NotFound'
+                    'sftp_path': 'NotFound'
                 }
             
             # 進行路徑替換
@@ -377,7 +368,7 @@ class Feature2Processor:
             }
             
     def generate_mapping_data(self, joined_data: List[Tuple[PrebuildSource, PrebuildSource]], 
-                             compare_type: str) -> List[Dict]:
+                         compare_type: str) -> List[Dict]:
         """產生映射資料"""
         result = []
         sn = 1
@@ -389,28 +380,35 @@ class Feature2Processor:
             type1, type2 = 'master', 'premp'  # 預設
         
         for source1, source2 in joined_data:
-            # 解析兩個來源的 SFTP 資訊，同時傳入 master_jira
+            # 解析兩個來源的 SFTP 資訊
             info1 = self.parse_sftp_info(source1.sftp_url, source1.master_jira)
             info2 = self.parse_sftp_info(source2.sftp_url, source2.master_jira)
             
+            # 確保 Module 有值
+            module = info1['module'] if info1['module'] != 'Unknown' else info2['module']
+            if module == 'Unknown':
+                # 嘗試從 Category 或 Project 推斷
+                module = source1.category or source1.project or 'Unknown'
+            
             row = {
-                'SN': sn,
+                'SN': int(sn),  # 序號，而不是其他值
                 'RootFolder': '/DailyBuild/PrebuildFW',
-                'Module': info1['module'],
+                'Module': module,
                 'DB_Type': type1,
-                'DB_Info': info1['db_info'],
+                'DB_Info': info1['db_info'] or source1.master_jira,  # 如果沒有 DB 資訊，使用 JIRA ID
                 'DB_Folder': info1['db_folder'],
                 'DB_Version': info1['db_version'],
                 'SftpPath': info1['sftp_path'],
                 'compare_DB_Type': type2,
-                'compare_DB_Info': info2['db_info'],
+                'compare_DB_Info': info2['db_info'] or source2.master_jira,
                 'compare_DB_Folder': info2['db_folder'],
                 'compare_DB_Version': info2['db_version'],
                 'compare_SftpPath': info2['sftp_path']
             }
             result.append(row)
             sn += 1
-            
+        
+        self.logger.info(f"產生 {len(result)} 筆映射資料")
         return result
         
     def process(self, input_files: str, filter_param: str = 'all', 

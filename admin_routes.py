@@ -105,6 +105,7 @@ def analyze_mapping_table():
                 'paths': details['paths'][:5]  # 限制路徑數量
             }
         
+        # 在返回前，確保資料格式正確
         return jsonify({
             'success': True,
             'db_list': db_list,
@@ -275,10 +276,24 @@ def run_prebuild_mapping():
         files = data.get('files', {})
         output_path = data.get('output_path', './output')
         
+        logger.info(f"收到的檔案: {files}")
+        logger.info(f"輸出路徑: {output_path}")
+        
         # 檢查至少有兩個檔案
-        valid_files = {k: v for k, v in files.items() if v and os.path.exists(v)}
+        valid_files = {}
+        for k, v in files.items():
+            if v and v != 'null' and v != 'None':  # 過濾無效值
+                if os.path.exists(v):
+                    valid_files[k] = v
+                else:
+                    logger.warning(f"檔案不存在: {v}")
+        
         if len(valid_files) < 2:
-            return jsonify({'error': '至少需要選擇兩個檔案'}), 400
+            return jsonify({
+                'error': '至少需要選擇兩個檔案',
+                'received_files': files,
+                'valid_files': valid_files
+            }), 400
         
         # 建立輸出目錄
         if not os.path.exists(output_path):
@@ -357,8 +372,14 @@ def run_prebuild_mapping():
     except Exception as e:
         logger.error(f"執行 prebuild-mapping 失敗: {str(e)}")
         import traceback
-        logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        error_trace = traceback.format_exc()
+        logger.error(error_trace)
+        
+        return jsonify({
+            'error': str(e),
+            'traceback': error_trace,
+            'received_data': data if 'data' in locals() else None
+        }), 500
 
 @admin_bp.route('/api/admin/export-result', methods=['POST'])
 def export_result():
