@@ -105,7 +105,6 @@ def analyze_mapping_table():
                 'paths': details['paths'][:5]  # 限制路徑數量
             }
         
-        # 在返回前，確保資料格式正確
         return jsonify({
             'success': True,
             'db_list': db_list,
@@ -246,13 +245,48 @@ def run_chip_mapping():
         if output_files:
             # 讀取最新的檔案
             latest_file = max(output_files, key=os.path.getctime)
-            df = pd.read_excel(latest_file)
+            logger.info(f"讀取輸出檔案: {latest_file}")
+            
+            # 使用 pandas 讀取，指定 dtype 為 str 避免類型轉換問題
+            df = pd.read_excel(latest_file, dtype=str)
             
             # 處理 NaN 值
-            df = df.fillna('')  # 將 NaN 替換為空字串
+            df = df.fillna('')
             
-            result_data = df.to_dict('records')
+            # 確保 SN 是數字字串
+            if 'SN' in df.columns:
+                df['SN'] = df['SN'].astype(str)
+            
+            # 除錯：印出資料結構
+            logger.info(f"原始欄位: {list(df.columns)}")
+            logger.info(f"資料筆數: {len(df)}")
+            
+            # 預期的欄位順序
+            expected_columns = [
+                'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+                'DB_Folder', 'DB_Version', 'SftpPath',
+                'compare_DB_Type', 'compare_DB_Info', 
+                'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+            ]
+            
+            # 確保欄位存在且順序正確
+            available_columns = [col for col in expected_columns if col in df.columns]
+            
+            # 如果缺少預期的欄位，記錄警告
+            missing_columns = [col for col in expected_columns if col not in df.columns]
+            if missing_columns:
+                logger.warning(f"缺少欄位: {missing_columns}")
+            
+            # 按正確順序選擇欄位
+            if available_columns:
+                df = df[available_columns]
+            
+            # 轉換為字典列表前，再次確保沒有 NaN
+            result_data = df.replace({pd.NA: '', pd.NaT: '', float('nan'): ''}).to_dict('records')
             columns = list(df.columns)
+            
+            # 除錯：印出前3筆資料
+            logger.info(f"前3筆資料: {result_data[:3] if result_data else '無資料'}")
         
         return jsonify({
             'success': True,
@@ -276,24 +310,10 @@ def run_prebuild_mapping():
         files = data.get('files', {})
         output_path = data.get('output_path', './output')
         
-        logger.info(f"收到的檔案: {files}")
-        logger.info(f"輸出路徑: {output_path}")
-        
         # 檢查至少有兩個檔案
-        valid_files = {}
-        for k, v in files.items():
-            if v and v != 'null' and v != 'None':  # 過濾無效值
-                if os.path.exists(v):
-                    valid_files[k] = v
-                else:
-                    logger.warning(f"檔案不存在: {v}")
-        
+        valid_files = {k: v for k, v in files.items() if v and os.path.exists(v)}
         if len(valid_files) < 2:
-            return jsonify({
-                'error': '至少需要選擇兩個檔案',
-                'received_files': files,
-                'valid_files': valid_files
-            }), 400
+            return jsonify({'error': '至少需要選擇兩個檔案'}), 400
         
         # 建立輸出目錄
         if not os.path.exists(output_path):

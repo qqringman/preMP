@@ -412,13 +412,23 @@ async function handlePrebuildFile(type, file) {
         selectedPrebuildFiles[type] = uploadResult.filepath;
         
         // 更新狀態
-        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle" style="color:white"></i>';
+        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle"></i>';
         document.getElementById(`${type}Status`).classList.add('success');
         
-        // 顯示已選擇的檔案
+        // 顯示已選擇的檔案（修正這裡）
         const selectedDiv = document.getElementById(`${type}Selected`);
-        selectedDiv.textContent = file.name;
-        selectedDiv.style.display = 'block';
+        selectedDiv.innerHTML = `
+            <div class="file-name">${file.name}</div>
+            <button class="btn-remove" onclick="removePrebuildFile('${type}')">
+                <i class="fas fa-times"></i> 移除
+            </button>
+        `;
+        selectedDiv.style.display = 'flex';
+        selectedDiv.style.justifyContent = 'space-between';
+        selectedDiv.style.alignItems = 'center';
+        selectedDiv.style.padding = '10px 15px';
+        selectedDiv.style.background = 'var(--success-light)';
+        selectedDiv.style.borderTop = '1px solid var(--border-light)';
         
         // 更新篩選預覽
         updateFilterPreview();
@@ -430,6 +440,22 @@ async function handlePrebuildFile(type, file) {
         hideLoading();
         utils.showNotification('檔案上傳失敗: ' + error.message, 'error');
     }
+}
+
+function removePrebuildFile(type) {
+    // 清除檔案
+    selectedPrebuildFiles[type] = null;
+    
+    // 更新 UI
+    document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-cloud-upload-alt"></i>';
+    document.getElementById(`${type}Status`).classList.remove('success');
+    document.getElementById(`${type}Selected`).style.display = 'none';
+    document.getElementById(`${type}Selected`).innerHTML = '';
+    
+    // 更新篩選預覽
+    updateFilterPreview();
+    
+    utils.showNotification(`已移除 ${type.toUpperCase()} 檔案`, 'info');
 }
 
 // 驗證檔案
@@ -569,6 +595,11 @@ async function runChipMapping() {
 
 // 修改 displayResults 函數
 function displayResults(response) {
+
+    console.log('收到的回應:', response);
+    console.log('欄位:', response.columns);
+    console.log('資料範例:', response.data ? response.data[0] : '無資料');
+        
     const resultData = response.data || [];
     const columns = response.columns || [];
     const totalRows = response.total_rows || resultData.length;
@@ -606,12 +637,38 @@ function displayResults(response) {
 
 // 建立結果表格
 function buildResultTable(columns) {
+    // 確保欄位順序正確
+    const expectedOrder = [
+        'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+        'DB_Folder', 'DB_Version', 'SftpPath',
+        'compare_DB_Type', 'compare_DB_Info', 
+        'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+    ];
+    
+    // 重新排序欄位
+    const orderedColumns = [];
+    expectedOrder.forEach(col => {
+        if (columns.includes(col)) {
+            orderedColumns.push(col);
+        }
+    });
+    
+    // 加入任何未預期的欄位
+    columns.forEach(col => {
+        if (!orderedColumns.includes(col)) {
+            orderedColumns.push(col);
+        }
+    });
+    
+    // 使用排序後的欄位
+    const finalColumns = orderedColumns.length > 0 ? orderedColumns : columns;
+    
     // 建立表頭
     const thead = document.getElementById('resultTableHead');
     thead.innerHTML = '';
     
     const headerRow = document.createElement('tr');
-    columns.forEach(column => {
+    finalColumns.forEach(column => {
         const th = document.createElement('th');
         th.textContent = column;
         th.onclick = () => sortTable(column);
@@ -623,12 +680,15 @@ function buildResultTable(columns) {
     updateTableData();
 }
 
+// 更新表格資料（確保資料正確對應）
 function updateTableData() {
     const tbody = document.getElementById('resultTableBody');
     tbody.innerHTML = '';
     
-    // 使用當前結果的資料
     if (!currentResult) return;
+    
+    // 取得欄位順序
+    const headers = Array.from(document.querySelectorAll('#resultTableHead th')).map(th => th.textContent);
     
     let filteredData = currentResult.data;
     
@@ -647,8 +707,8 @@ function updateTableData() {
     // 排序
     if (sortColumn) {
         filteredData.sort((a, b) => {
-            const aVal = a[sortColumn];
-            const bVal = b[sortColumn];
+            const aVal = a[sortColumn] || '';
+            const bVal = b[sortColumn] || '';
             
             if (sortDirection === 'asc') {
                 return aVal > bVal ? 1 : -1;
@@ -663,22 +723,25 @@ function updateTableData() {
     const endIndex = startIndex + pageSize;
     const pageData = filteredData.slice(startIndex, endIndex);
     
-    // 顯示資料
-    pageData.forEach(row => {
+    // 顯示資料（按照表頭順序）
+    pageData.forEach((row, rowIndex) => {
         const tr = document.createElement('tr');
-        Object.values(row).forEach(value => {
+        
+        // 按照表頭順序取值
+        headers.forEach(header => {
             const td = document.createElement('td');
-            const textValue = value || '';
+            const value = row[header] || '';
             
             // 如果有搜尋文字，進行高亮
-            if (filterText) {
-                td.innerHTML = highlightText(textValue, filterText);
+            if (filterText && value) {
+                td.innerHTML = highlightText(value, filterText);
             } else {
-                td.textContent = textValue;
+                td.textContent = value;
             }
             
             tr.appendChild(td);
         });
+        
         tbody.appendChild(tr);
     });
     
@@ -1316,5 +1379,55 @@ async function runPrebuildMapping() {
         hideLoading();
         console.error('執行錯誤:', error);
         utils.showNotification('執行失敗: ' + error.message, 'error');
+    }
+}
+
+// 顯示已選擇的檔案（加入刪除功能）
+function displaySelectedFile(containerId, filename) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h4 class="file-list-title">
+                    <i class="fas fa-check-circle"></i>
+                    已選擇的檔案
+                </h4>
+                <button class="btn btn-small btn-danger" onclick="removeFile('${containerId}')">
+                    <i class="fas fa-trash"></i> 刪除
+                </button>
+            </div>
+            <div class="file-items">
+                <div class="file-item-card">
+                    <div class="file-icon-wrapper">
+                        <i class="fas fa-file-excel"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">${filename}</div>
+                        <div class="file-meta">準備就緒</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 新增刪除檔案函數
+function removeFile(containerId) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = '';
+    }
+    
+    // 清除相關的檔案變數
+    if (containerId === 'mappingFileList') {
+        selectedMappingFile = null;
+        // 清空 DB 選項
+        const dbSelect = document.getElementById('dbFilter');
+        dbSelect.innerHTML = '<option value="all">All</option>';
+        const chipFilter = document.getElementById('chipFilter');
+        chipFilter.innerHTML = '<option value="all">All Chips</option>';
+        utils.showNotification('已移除 Mapping Table 檔案', 'info');
     }
 }

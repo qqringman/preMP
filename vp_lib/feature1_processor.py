@@ -301,7 +301,13 @@ class Feature1Processor:
         return changes
             
     def generate_comparison_data(self, mappings: List[ChipMapping], comparison_type: str) -> List[Dict]:
-        """產生比較資料"""
+        """
+        產生比較資料
+        
+        Args:
+            mappings: 映射列表
+            comparison_type: 比較類型 (all, master_vs_premp, premp_vs_mp, mp_vs_mpbackup)
+        """
         result = []
         sn = 1
         
@@ -312,7 +318,21 @@ class Feature1Processor:
                 if mapping.master_db and mapping.premp_db:
                     row = mapping.to_comparison_dict('master', 'premp')
                     if row:
-                        row['SN'] = int(sn)
+                        # 確保所有必要欄位都有值
+                        row['SN'] = sn
+                        row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                        row['Module'] = row.get('Module', '')
+                        row['DB_Type'] = row.get('DB_Type', 'master')
+                        row['DB_Info'] = row.get('DB_Info', '')
+                        row['DB_Folder'] = row.get('DB_Folder', '')
+                        row['DB_Version'] = row.get('DB_Version', '')
+                        row['SftpPath'] = row.get('SftpPath', '')
+                        row['compare_DB_Type'] = row.get('compare_DB_Type', 'premp')
+                        row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                        row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                        row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                        row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                        
                         result.append(row)
                         sn += 1
                 
@@ -320,7 +340,20 @@ class Feature1Processor:
                 if mapping.premp_db and mapping.mp_db:
                     row = mapping.to_comparison_dict('premp', 'mp')
                     if row:
-                        row['SN'] = int(sn)
+                        row['SN'] = sn
+                        row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                        row['Module'] = row.get('Module', '')
+                        row['DB_Type'] = row.get('DB_Type', 'premp')
+                        row['DB_Info'] = row.get('DB_Info', '')
+                        row['DB_Folder'] = row.get('DB_Folder', '')
+                        row['DB_Version'] = row.get('DB_Version', '')
+                        row['SftpPath'] = row.get('SftpPath', '')
+                        row['compare_DB_Type'] = row.get('compare_DB_Type', 'mp')
+                        row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                        row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                        row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                        row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                        
                         result.append(row)
                         sn += 1
                 
@@ -328,7 +361,20 @@ class Feature1Processor:
                 if mapping.mp_db and mapping.mpbackup_db:
                     row = mapping.to_comparison_dict('mp', 'mpbackup')
                     if row:
-                        row['SN'] = int(sn)
+                        row['SN'] = sn
+                        row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                        row['Module'] = row.get('Module', '')
+                        row['DB_Type'] = row.get('DB_Type', 'mp')
+                        row['DB_Info'] = row.get('DB_Info', '')
+                        row['DB_Folder'] = row.get('DB_Folder', '')
+                        row['DB_Version'] = row.get('DB_Version', '')
+                        row['SftpPath'] = row.get('SftpPath', '')
+                        row['compare_DB_Type'] = row.get('compare_DB_Type', 'mpbackup')
+                        row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                        row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                        row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                        row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                        
                         result.append(row)
                         sn += 1
         else:
@@ -338,26 +384,83 @@ class Feature1Processor:
                     if mapping.master_db and mapping.premp_db:
                         row = mapping.to_comparison_dict('master', 'premp')
                         if row:
-                            row['SN'] = int(sn)
+                            row['SN'] = sn
+                            row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                            row['Module'] = row.get('Module', '')
+                            row['DB_Type'] = row.get('DB_Type', 'master')
+                            row['DB_Info'] = row.get('DB_Info', '')
+                            row['DB_Folder'] = row.get('DB_Folder', '')
+                            row['DB_Version'] = row.get('DB_Version', '')
+                            row['SftpPath'] = row.get('SftpPath', '')
+                            row['compare_DB_Type'] = row.get('compare_DB_Type', 'premp')
+                            row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                            row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                            row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                            row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                            
                             result.append(row)
                             sn += 1
+                            
             elif comparison_type == 'premp_vs_mp':
                 for mapping in mappings:
                     if mapping.premp_db and mapping.mp_db:
                         row = mapping.to_comparison_dict('premp', 'mp')
                         if row:
-                            row['SN'] = int(sn)
+                            row['SN'] = sn
+                            row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                            row['Module'] = row.get('Module', '')
+                            row['DB_Type'] = row.get('DB_Type', 'premp')
+                            row['DB_Info'] = row.get('DB_Info', '')
+                            row['DB_Folder'] = row.get('DB_Folder', '')
+                            row['DB_Version'] = row.get('DB_Version', '')
+                            row['SftpPath'] = row.get('SftpPath', '')
+                            row['compare_DB_Type'] = row.get('compare_DB_Type', 'mp')
+                            row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                            row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                            row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                            row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                            
                             result.append(row)
                             sn += 1
+                            
             elif comparison_type == 'mp_vs_mpbackup':
                 for mapping in mappings:
                     if mapping.mp_db and mapping.mpbackup_db:
                         row = mapping.to_comparison_dict('mp', 'mpbackup')
                         if row:
-                            row['SN'] = int(sn)
+                            row['SN'] = sn
+                            row['RootFolder'] = row.get('RootFolder', '/DailyBuild')
+                            row['Module'] = row.get('Module', '')
+                            row['DB_Type'] = row.get('DB_Type', 'mp')
+                            row['DB_Info'] = row.get('DB_Info', '')
+                            row['DB_Folder'] = row.get('DB_Folder', '')
+                            row['DB_Version'] = row.get('DB_Version', '')
+                            row['SftpPath'] = row.get('SftpPath', '')
+                            row['compare_DB_Type'] = row.get('compare_DB_Type', 'mpbackup')
+                            row['compare_DB_Info'] = row.get('compare_DB_Info', '')
+                            row['compare_DB_Folder'] = row.get('compare_DB_Folder', '')
+                            row['compare_DB_Version'] = row.get('compare_DB_Version', '')
+                            row['compare_SftpPath'] = row.get('compare_SftpPath', '')
+                            
                             result.append(row)
                             sn += 1
         
+        # 最終檢查：確保所有資料都有正確的欄位
+        required_fields = [
+            'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+            'DB_Folder', 'DB_Version', 'SftpPath',
+            'compare_DB_Type', 'compare_DB_Info', 
+            'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+        ]
+        
+        for row in result:
+            for field in required_fields:
+                if field not in row or row[field] is None:
+                    row[field] = ''
+                # 將所有值轉為字串，除了 SN
+                if field != 'SN':
+                    row[field] = str(row[field])
+                            
         self.logger.info(f"產生 {len(result)} 筆比較資料")
         return result
         
@@ -412,117 +515,43 @@ class Feature1Processor:
             # 產生比較資料
             self.logger.info(f"產生比較資料 (類型: {comparison_type})...")
             comparison_data = self.generate_comparison_data(filtered_mappings, comparison_type)
-
+            
             if not comparison_data:
                 self.logger.warning("沒有產生任何比較資料")
                 raise ValueError("無法產生比較資料，請檢查資料是否完整")
-
-            # 輸出 Excel with 兩個頁籤
+            
+            # 輸出 Excel - 暫時只輸出單一頁籤
             utils.create_directory(output_dir)
             output_file = f"{output_dir}/{config.DEFAULT_DAILYBUILD_OUTPUT}"
-
-            # 使用 ExcelWriter 寫入多個頁籤
-            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-                # 第一個頁籤：比較結果
-                df_comparison = pd.DataFrame(comparison_data)
-                df_comparison.to_excel(writer, sheet_name='比較結果', index=False)
-                
-                # 第二個頁籤：變更記錄
-                all_changes = []
-                
-                # 總覽資訊
-                summary = {
-                    'SN': '',
-                    'Module': '=== 總覽 ===',
-                    'Type': f"成功匹配: {changes['matched']} 筆",
-                    'Reason': f"新增: {len(changes['added'])} 筆, 移除: {len(changes['removed'])} 筆, 完全缺失: {len(changes.get('missing', []))} 筆",
-                    'DB_Info': '',
-                    'Path': ''
-                }
-                all_changes.append(summary)
-                
-                # 空行
-                all_changes.append({key: '' for key in summary.keys()})
-                
-                # 新增的項目
-                if changes['added']:
-                    all_changes.append({
-                        'SN': '',
-                        'Module': '=== 新增項目 ===',
-                        'Type': '',
-                        'Reason': '',
-                        'DB_Info': '',
-                        'Path': ''
-                    })
-                    for item in changes['added']:
-                        all_changes.append({
-                            'SN': item.get('SN', ''),
-                            'Module': item.get('Module', ''),
-                            'Type': item.get('Type', ''),
-                            'Reason': item.get('Reason', ''),
-                            'DB_Info': item.get('PreMP_DB', '') or item.get('MP_DB', '') or item.get('MPBackup_DB', ''),
-                            'Path': item.get('PreMP_Path', '') or item.get('MP_Path', '') or item.get('MPBackup_Path', '')
-                        })
-                
-                # 空行
-                if changes['added']:
-                    all_changes.append({key: '' for key in summary.keys()})
-                
-                # 移除的項目
-                if changes['removed']:
-                    all_changes.append({
-                        'SN': '',
-                        'Module': '=== 移除項目 ===',
-                        'Type': '',
-                        'Reason': '',
-                        'DB_Info': '',
-                        'Path': ''
-                    })
-                    for item in changes['removed']:
-                        all_changes.append({
-                            'SN': item.get('SN', ''),
-                            'Module': item.get('Module', ''),
-                            'Type': item.get('Type', ''),
-                            'Reason': item.get('Reason', ''),
-                            'DB_Info': item.get('Master_DB', '') or item.get('PreMP_DB', '') or item.get('MP_DB', ''),
-                            'Path': item.get('Master_Path', '') or item.get('PreMP_Path', '') or item.get('MP_Path', '')
-                        })
-                
-                # 空行
-                if changes['removed']:
-                    all_changes.append({key: '' for key in summary.keys()})
-                
-                # 完全缺失的項目
-                if changes.get('missing', []):
-                    all_changes.append({
-                        'SN': '',
-                        'Module': '=== 完全缺失 ===',
-                        'Type': '',
-                        'Reason': '',
-                        'DB_Info': '',
-                        'Path': ''
-                    })
-                    for item in changes['missing']:
-                        all_changes.append({
-                            'SN': item.get('SN', ''),
-                            'Module': item.get('Module', ''),
-                            'Type': item.get('Type', ''),
-                            'Reason': item.get('Reason', ''),
-                            'DB_Info': '',
-                            'Path': ''
-                        })
-                
-                # 寫入變更記錄
-                if len(all_changes) > 1:
-                    df_changes = pd.DataFrame(all_changes)
-                    df_changes.to_excel(writer, sheet_name='變更記錄', index=False)
-                else:
-                    # 即使沒有變更也建立空白頁籤
-                    df_empty = pd.DataFrame({'說明': ['沒有檢測到變更']})
-                    df_empty.to_excel(writer, sheet_name='變更記錄', index=False)
-
+            
+            # 直接輸出 DataFrame，不使用 ExcelWriter
+            df = pd.DataFrame(comparison_data)
+            
+            # 確保欄位順序正確
+            expected_columns = [
+                'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+                'DB_Folder', 'DB_Version', 'SftpPath',
+                'compare_DB_Type', 'compare_DB_Info', 
+                'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+            ]
+            
+            # 重新排序欄位
+            existing_columns = [col for col in expected_columns if col in df.columns]
+            df = df[existing_columns]
+            
+            # 清理資料，移除可能的問題字元
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    df[col] = df[col].astype(str).str.strip()
+                    # 移除可能的公式字元
+                    df[col] = df[col].str.replace('=', '', regex=False)
+                    df[col] = df[col].str.replace('+', '', regex=False)
+                    df[col] = df[col].str.replace('@', '', regex=False)
+            
+            # 儲存
+            df.to_excel(output_file, index=False, engine='openpyxl')
+            
             self.logger.info(f"成功輸出 {len(comparison_data)} 筆資料到: {output_file}")
-            self.logger.info(f"記錄了 {len(changes['added'])} 筆新增，{len(changes['removed'])} 筆移除，{len(changes.get('missing', []))} 筆完全缺失")
             return output_file
             
         except Exception as e:

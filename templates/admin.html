@@ -196,7 +196,7 @@
             <div class="section-body">
                 <div class="file-upload-grid">
                     <!-- Master 檔案 -->
-                    <div class="file-upload-card master-premp">
+                    <div class="file-upload-card">
                         <div class="upload-card-header">
                             <h3>Master</h3>
                             <span class="upload-status" id="masterStatus">
@@ -205,17 +205,17 @@
                         </div>
                         <div class="upload-area" id="masterUploadArea">
                             <input type="file" id="masterFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
+                            <i class="fas fa-file-excel fa-3x"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('masterFileInput').click()">
                                 選擇檔案
                             </button>
                         </div>
-                        <div class="selected-file hidden" id="masterSelected"></div>
+                        <div class="selected-file" id="masterSelected" style="display: none;"></div>
                     </div>
 
                     <!-- PreMP 檔案 -->
-                    <div class="file-upload-card master-premp premp-mp">
+                    <div class="file-upload-card">
                         <div class="upload-card-header">
                             <h3>PreMP</h3>
                             <span class="upload-status" id="prempStatus">
@@ -224,17 +224,17 @@
                         </div>
                         <div class="upload-area" id="prempUploadArea">
                             <input type="file" id="prempFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
+                            <i class="fas fa-file-excel fa-3x"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('prempFileInput').click()">
                                 選擇檔案
                             </button>
                         </div>
-                        <div class="selected-file hidden" id="prempSelected"></div>
+                        <div class="selected-file" id="prempSelected" style="display: none;"></div>
                     </div>
 
                     <!-- MP 檔案 -->
-                    <div class="file-upload-card premp-mp mp-mpbackup">
+                    <div class="file-upload-card">
                         <div class="upload-card-header">
                             <h3>MP</h3>
                             <span class="upload-status" id="mpStatus">
@@ -243,17 +243,17 @@
                         </div>
                         <div class="upload-area" id="mpUploadArea">
                             <input type="file" id="mpFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
+                            <i class="fas fa-file-excel fa-3x"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('mpFileInput').click()">
                                 選擇檔案
                             </button>
                         </div>
-                        <div class="selected-file hidden" id="mpSelected"></div>
+                        <div class="selected-file" id="mpSelected" style="display: none;"></div>
                     </div>
 
                     <!-- MP Backup 檔案 -->
-                    <div class="file-upload-card mp-mpbackup">
+                    <div class="file-upload-card">
                         <div class="upload-card-header">
                             <h3>MP Backup</h3>
                             <span class="upload-status" id="mpbackupStatus">
@@ -262,13 +262,13 @@
                         </div>
                         <div class="upload-area" id="mpbackupUploadArea">
                             <input type="file" id="mpbackupFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-                            <i class="fas fa-file-excel fa-3x" style="color: var(--success);"></i>
+                            <i class="fas fa-file-excel fa-3x"></i>
                             <p>拖曳檔案或點擊上傳</p>
                             <button class="btn btn-small btn-primary" onclick="document.getElementById('mpbackupFileInput').click()">
                                 選擇檔案
                             </button>
                         </div>
-                        <div class="selected-file hidden" id="mpbackupSelected"></div>
+                        <div class="selected-file" id="mpbackupSelected" style="display: none;"></div>
                     </div>
                 </div>
 
@@ -312,7 +312,7 @@
                     <div class="quick-select">
                         <div class="quick-select-header">
                             <label class="form-label">
-                                <i class="fas fa-history"></i> 或選擇已下載的目錄
+                                <i class="fas fa-history"></i> 使用已下載的目錄
                             </label>
                             <!-- 切換開關 -->
                             <label class="toggle-switch">

@@ -1496,3 +1496,48 @@ body {
         transform: translateY(0);
     }
 }
+
+/* 刪除按鈕樣式 */
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #D32F2F;
+    transform: translateY(-1px);
+}
+
+/* Prebuild 檔案資訊樣式 */
+.file-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--success-light);
+    border-radius: var(--radius-sm);
+}
+
+.file-info span {
+    color: var(--success);
+    font-size: 0.875rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-remove {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    transition: all 0.2s ease;
+}
+
+.btn-remove:hover {
+    background: var(--danger-light);
+    border-radius: var(--radius-sm);
+}
