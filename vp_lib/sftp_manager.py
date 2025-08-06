@@ -49,7 +49,7 @@ class SFTPManager:
             
     def get_latest_version(self, sftp_path: str) -> Tuple[str, str, str]:
         """
-        取得最新版本資訊
+        取得最新版本資訊（版號最大的）
         
         Args:
             sftp_path: SFTP 路徑
@@ -69,23 +69,25 @@ class SFTPManager:
                 self.logger.warning(f"無法列出目錄: {sftp_path}")
                 return db_folder, '', sftp_path
             
-            # 過濾並排序版本資料夾
+            # 過濾版本資料夾（格式: 數字開頭，如 536_all_202507312300）
             version_folders = []
             for item in items:
-                # 檢查是否為版本資料夾格式 (例如: 196_all_202508060105)
-                if re.match(r'^\d+', item):
-                    version_folders.append(item)
+                # 檢查是否為版本資料夾格式
+                match = re.match(r'^(\d+)', item)
+                if match:
+                    version_num = int(match.group(1))
+                    version_folders.append((version_num, item))
             
             if not version_folders:
                 self.logger.warning(f"找不到版本資料夾: {sftp_path}")
                 return db_folder, '', sftp_path
             
-            # 排序取得最新版本
-            version_folders.sort(reverse=config.VERSION_SORT_REVERSE)
-            latest_version = version_folders[0]
+            # 按版本號排序，取最大的（最新的）
+            version_folders.sort(key=lambda x: x[0], reverse=True)
+            latest_version = version_folders[0][1]
             full_path = f"{sftp_path}/{latest_version}"
             
-            self.logger.info(f"找到最新版本: {latest_version} in {sftp_path}")
+            self.logger.info(f"找到最新版本: {latest_version} (版號: {version_folders[0][0]}) in {sftp_path}")
             return db_folder, latest_version, full_path
             
         except Exception as e:
