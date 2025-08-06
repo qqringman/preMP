@@ -7,6 +7,11 @@ let currentServerPath = '/home/vince_lin/ai/preMP';
 let serverFilesLoaded = false;
 let pathInputTimer = null;
 
+// 加入這三行（新增的全域變數）
+let downloadedFilesList = [];
+let skippedFilesList = [];
+let failedFilesList = [];
+
 // 初始化頁面
 document.addEventListener('DOMContentLoaded', () => {
     initializeUpload();
@@ -662,6 +667,14 @@ async function executeOneStep() {
         }
     }
     
+    // 決定使用哪個檔案（本地或伺服器）
+    let excelFile = selectedFile;
+    if (!excelFile && selectedServerFiles.length > 0) {
+        excelFile = selectedServerFiles[0].path;
+    }
+    
+    console.log('Using Excel file:', excelFile);
+    
     // 隱藏表單，顯示進度
     document.getElementById('mainForm').classList.add('hidden');
     document.getElementById('progressContainer').classList.remove('hidden');
@@ -671,15 +684,17 @@ async function executeOneStep() {
         const response = await utils.apiRequest('/api/one-step', {
             method: 'POST',
             body: JSON.stringify({
-                excel_file: selectedFile,
+                excel_file: excelFile,
                 sftp_config: sftpConfig
             })
         });
         
+        console.log('One-step API response:', response);
+        
         currentTaskId = response.task_id;
         
         // 加入任務房間
-        if (socket) {
+        if (window.socket && socket.connected) {
             socket.emit('join_task', { task_id: currentTaskId });
         }
         
@@ -695,18 +710,53 @@ async function executeOneStep() {
 
 // 更新進度
 function updateProgress(data) {
-    const { progress, status, message, stats, files } = data;
+    console.log('=== updateProgress called ===');
+    console.log('Input data:', data);
+    
+    const { progress, status, message, stats, files, results } = data;
     
     // 更新進度條
     document.getElementById('progressFill').style.width = `${progress}%`;
     document.getElementById('progressText').textContent = `${progress}%`;
+    
+    // 保存檔案列表資料 - 檢查多個可能的位置
+    let filesUpdated = false;
+    
+    if (files) {
+        downloadedFilesList = files.downloaded || [];
+        skippedFilesList = files.skipped || [];
+        failedFilesList = files.failed || [];
+        filesUpdated = true;
+        console.log('Files updated from data.files');
+    } else if (results && results.files) {
+        downloadedFilesList = results.files.downloaded || [];
+        skippedFilesList = results.files.skipped || [];
+        failedFilesList = results.files.failed || [];
+        filesUpdated = true;
+        console.log('Files updated from data.results.files');
+    } else if (results && results.download_results && results.download_results.files) {
+        downloadedFilesList = results.download_results.files.downloaded || [];
+        skippedFilesList = results.download_results.files.skipped || [];
+        failedFilesList = results.download_results.files.failed || [];
+        filesUpdated = true;
+        console.log('Files updated from data.results.download_results.files');
+    }
+    
+    if (filesUpdated) {
+        console.log('Files updated in updateProgress:', {
+            downloaded: downloadedFilesList.length,
+            skipped: skippedFilesList.length,
+            failed: failedFilesList.length
+        });
+    } else {
+        console.log('No files data found in updateProgress');
+    }
     
     // 更新階段狀態和添加詳細日誌
     if (status === 'downloading') {
         updateStageStatus('download', 'active');
         addLog(message, 'downloading');
         
-        // 如果有統計資料，顯示下載進度
         if (stats) {
             if (stats.downloaded > 0) {
                 addLog(`已下載 ${stats.downloaded} 個檔案`, 'success');
@@ -722,7 +772,6 @@ function updateProgress(data) {
         updateStageStatus('download', 'completed');
         addLog('下載完成！', 'success');
         
-        // 顯示最終統計
         if (stats) {
             addLog(`總計：${stats.total} 個檔案`, 'info');
             addLog(`成功下載：${stats.downloaded} 個`, 'success');
@@ -749,16 +798,27 @@ function updateProgress(data) {
         updateStageStatus('package', 'completed');
         addLog('打包完成！', 'success');
         addLog('所有處理已完成！', 'completed');
+        
+        // 完成時再次嘗試保存檔案列表
+        if (!filesUpdated) {
+            console.log('Attempting to save files on completion...');
+            if (results && results.files) {
+                downloadedFilesList = results.files.downloaded || [];
+                skippedFilesList = results.files.skipped || [];
+                failedFilesList = results.files.failed || [];
+                console.log('Files saved from results on completion');
+            }
+        }
     } else if (status === 'error') {
         addLog(message, 'error');
     } else {
-        // 其他訊息
         addLog(message, 'info');
     }
 
     // 處理完成或錯誤
     if (status === 'completed') {
-        handleComplete(data.results || data);
+        console.log('Calling handleComplete with:', results || data);
+        handleComplete(results || data);
     } else if (status === 'error') {
         handleError(message);
     }
@@ -826,15 +886,37 @@ function addLog(message, type = 'info') {
 
 // 處理完成
 function handleComplete(results) {
+    // 保存檔案列表 - 確保從正確的位置取得資料
+    if (results) {
+        // 優先從 results.files 取得
+        if (results.files) {
+            downloadedFilesList = results.files.downloaded || [];
+            skippedFilesList = results.files.skipped || [];
+            failedFilesList = results.files.failed || [];
+        }
+        // 如果沒有 files，嘗試從 download_results 取得
+        else if (results.download_results && results.download_results.files) {
+            downloadedFilesList = results.download_results.files.downloaded || [];
+            skippedFilesList = results.download_results.files.skipped || [];
+            failedFilesList = results.download_results.files.failed || [];
+        }
+        
+        console.log('Files saved in handleComplete:', {
+            downloaded: downloadedFilesList.length,
+            skipped: skippedFilesList.length,
+            failed: failedFilesList.length
+        });
+    }
+    
     // 更新步驟狀態
     updateStepIndicator('process', 'completed');
     updateStepIndicator('complete', 'completed');
-        
+    
     // 顯示結果
     document.getElementById('progressContainer').classList.add('hidden');
     document.getElementById('resultContainer').classList.remove('hidden');
     
-    // 生成結果摘要 - 確保調用正確
+    // 生成結果摘要
     const summaryHtml = generateResultSummary(results);
     const summaryElement = document.getElementById('resultSummary');
     if (summaryElement) {
@@ -875,70 +957,100 @@ function generateResultSummary(results) {
         return '<div class="no-data">無結果資料</div>';
     }
     
-    const stats = results.stats || {};
+    // 調試訊息
+    console.log('generateResultSummary - results:', results);
+    
+    // 確保檔案列表有被保存
+    if (results.files) {
+        downloadedFilesList = results.files.downloaded || [];
+        skippedFilesList = results.files.skipped || [];
+        failedFilesList = results.files.failed || [];
+    } else if (results.download_results && results.download_results.files) {
+        downloadedFilesList = results.download_results.files.downloaded || [];
+        skippedFilesList = results.download_results.files.skipped || [];
+        failedFilesList = results.download_results.files.failed || [];
+    }
+    
+    console.log('Files in generateResultSummary:', {
+        downloaded: downloadedFilesList,
+        skipped: skippedFilesList,
+        failed: failedFilesList
+    });
+    
+    const stats = results.stats || (results.download_results && results.download_results.stats) || {};
     const compareResults = results.compare_results || {};
     
     let html = '';
     
-    // 下載統計部分
-    if (stats && stats.total) {
+    // 建立兩列容器
+    html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;">';
+    
+    // 左邊：下載統計
+    html += '<div>';
+    html += '<h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;"><i class="fas fa-download"></i> 下載統計</h3>';
+    
+    if (stats && Object.keys(stats).length > 0) {
         html += `
-            <h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;">
-                <i class="fas fa-download"></i> 下載統計
-            </h3>
-            <div class="summary-grid" style="margin-bottom: 32px;">
-                <div class="summary-item" style="background: #E3F2FD; border: 2px solid #2196F3;">
-                    <i class="fas fa-file fa-3x" style="color: #2196F3;"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${stats.total || 0}</div>
-                        <div class="summary-label">總檔案數</div>
+            <div class="progress-stats" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="stat-card blue" onclick="showFilesList('total')" title="點擊查看所有檔案" style="cursor: pointer;">
+                    <div class="stat-icon">
+                        <i class="fas fa-file"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.total || 0}</div>
+                        <div class="stat-label">總檔案數</div>
                     </div>
                 </div>
                 
-                <div class="summary-item" style="background: #E8F5E9; border: 2px solid #4CAF50;">
-                    <i class="fas fa-check-circle fa-3x" style="color: #4CAF50;"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${stats.downloaded || 0}</div>
-                        <div class="summary-label">已下載</div>
+                <div class="stat-card success" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案" style="cursor: pointer;">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.downloaded || 0}</div>
+                        <div class="stat-label">已下載</div>
                     </div>
                 </div>
                 
-                <div class="summary-item" style="background: #FFF3E0; border: 2px solid #FF9800;">
-                    <i class="fas fa-forward fa-3x" style="color: #FF9800;"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${stats.skipped || 0}</div>
-                        <div class="summary-label">已跳過</div>
+                <div class="stat-card warning" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案" style="cursor: pointer;">
+                    <div class="stat-icon">
+                        <i class="fas fa-forward"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.skipped || 0}</div>
+                        <div class="stat-label">已跳過</div>
                     </div>
                 </div>
                 
-                <div class="summary-item" style="background: #FFEBEE; border: 2px solid #F44336;">
-                    <i class="fas fa-times-circle fa-3x" style="color: #F44336;"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${stats.failed || 0}</div>
-                        <div class="summary-label">失敗</div>
+                <div class="stat-card danger" onclick="showFilesList('failed')" title="點擊查看失敗的檔案" style="cursor: pointer;">
+                    <div class="stat-icon">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.failed || 0}</div>
+                        <div class="stat-label">失敗</div>
                     </div>
                 </div>
             </div>
         `;
     }
+    html += '</div>';
     
-    // 比對結果部分
+    // 右邊：比對結果
+    html += '<div>';
+    html += '<h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;"><i class="fas fa-code-compare"></i> 比對結果</h3>';
+    
     if (compareResults && Object.keys(compareResults).length > 0) {
-        html += `
-            <h3 style="margin: 32px 0 20px 0; color: #1A237E; text-align: center;">
-                <i class="fas fa-code-compare"></i> 比對結果
-            </h3>
-            <div class="summary-grid">
-        `;
+        html += '<div class="summary-grid">';
         
         // Master vs PreMP
         if (compareResults.master_vs_premp) {
             const data = compareResults.master_vs_premp;
             html += `
-                <div class="summary-item" style="background: #E8F4FD; border: 2px solid #64B5F6;">
-                    <i class="fas fa-code-branch fa-3x" style="color: #1976D2;"></i>
+                <div class="summary-item clickable" style="cursor: pointer;">
+                    <i class="fas fa-code-branch text-info"></i>
                     <div class="summary-content">
-                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-value">${data.total || data.success || 0}</div>
                         <div class="summary-label">Master vs PreMP</div>
                     </div>
                 </div>
@@ -949,10 +1061,10 @@ function generateResultSummary(results) {
         if (compareResults.premp_vs_wave) {
             const data = compareResults.premp_vs_wave;
             html += `
-                <div class="summary-item" style="background: #E0F2F1; border: 2px solid #4DB6AC;">
-                    <i class="fas fa-water fa-3x" style="color: #00897B;"></i>
+                <div class="summary-item clickable" style="cursor: pointer;">
+                    <i class="fas fa-water text-info"></i>
                     <div class="summary-content">
-                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-value">${data.total || data.success || 0}</div>
                         <div class="summary-label">PreMP vs Wave</div>
                     </div>
                 </div>
@@ -963,10 +1075,10 @@ function generateResultSummary(results) {
         if (compareResults.wave_vs_backup) {
             const data = compareResults.wave_vs_backup;
             html += `
-                <div class="summary-item" style="background: #F3E5F5; border: 2px solid #BA68C8;">
-                    <i class="fas fa-database fa-3x" style="color: #7B1FA2;"></i>
+                <div class="summary-item clickable" style="cursor: pointer;">
+                    <i class="fas fa-database text-info"></i>
                     <div class="summary-content">
-                        <div class="summary-value">${data.success || 0}</div>
+                        <div class="summary-value">${data.total || data.success || 0}</div>
                         <div class="summary-label">Wave vs Backup</div>
                     </div>
                 </div>
@@ -974,18 +1086,20 @@ function generateResultSummary(results) {
         }
         
         html += '</div>';
+    } else {
+        html += '<div class="empty-message"><p>尚無比對結果</p></div>';
     }
+    html += '</div>';
     
-    // 其他結果資訊
-    if (results.download_report || results.zip_file) {
-        html += `
-            <div style="margin-top: 32px; text-align: center; padding: 20px; background: #F5F9FF; border-radius: 12px;">
-                <i class="fas fa-check-circle" style="color: #4CAF50; font-size: 2rem; margin-bottom: 12px;"></i>
-                <h4 style="color: #1A237E; margin-bottom: 8px;">處理完成！</h4>
-                <p style="color: #5C6BC0;">所有檔案已下載、比對並打包完成</p>
-            </div>
-        `;
-    }
+    html += '</div>'; // 結束兩列容器
+    
+    // 提示文字
+    html += `
+        <div class="stats-hint">
+            <i class="fas fa-info-circle"></i>
+            <span>提示：點擊上方統計卡片可查看詳細的檔案列表</span>
+        </div>
+    `;
     
     return html;
 }
@@ -1162,7 +1276,30 @@ async function pollTaskStatus() {
     try {
         const status = await utils.apiRequest(`/api/status/${currentTaskId}`);
         
+        console.log('Poll status response:', status);
+        
         if (status.status !== 'not_found') {
+            // 確保檔案資料有傳遞
+            if (status.files) {
+                downloadedFilesList = status.files.downloaded || [];
+                skippedFilesList = status.files.skipped || [];
+                failedFilesList = status.files.failed || [];
+            }
+            
+            // 如果有 results，也要處理
+            if (status.results) {
+                if (status.results.files) {
+                    downloadedFilesList = status.results.files.downloaded || [];
+                    skippedFilesList = status.results.files.skipped || [];
+                    failedFilesList = status.results.files.failed || [];
+                }
+                if (status.results.download_results && status.results.download_results.files) {
+                    downloadedFilesList = status.results.download_results.files.downloaded || [];
+                    skippedFilesList = status.results.download_results.files.skipped || [];
+                    failedFilesList = status.results.download_results.files.failed || [];
+                }
+            }
+            
             updateProgress(status);
         }
         
@@ -1172,6 +1309,129 @@ async function pollTaskStatus() {
         }
     } catch (error) {
         console.error('Poll status error:', error);
+    }
+}
+
+function showFilesList(type) {
+    console.log('showFilesList called:', type, {
+        downloaded: downloadedFilesList.length,
+        skipped: skippedFilesList.length,
+        failed: failedFilesList.length
+    });
+    
+    let files = [];
+    let title = '';
+    let modalClass = '';
+    
+    switch(type) {
+        case 'downloaded':
+            files = downloadedFilesList;
+            title = '已下載的檔案';
+            modalClass = 'success';
+            break;
+        case 'skipped':
+            files = skippedFilesList;
+            title = '已跳過的檔案';
+            modalClass = 'info';
+            break;
+        case 'failed':
+            files = failedFilesList;
+            title = '下載失敗的檔案';
+            modalClass = 'danger';
+            break;
+        case 'total':
+            files = [
+                ...downloadedFilesList.map(f => ({...f, status: 'downloaded'})),
+                ...skippedFilesList.map(f => ({...f, status: 'skipped'})),
+                ...failedFilesList.map(f => ({...f, status: 'failed'}))
+            ];
+            title = '所有檔案';
+            break;
+    }
+    
+    const modal = document.getElementById('filesListModal');
+    const modalTitle = document.getElementById('filesModalTitle');
+    const modalBody = document.getElementById('filesModalBody');
+    
+    if (!modal || !modalTitle || !modalBody) {
+        console.error('Files list modal elements not found');
+        return;
+    }
+    
+    modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
+    modal.className = `modal ${modalClass}`;
+    
+    // 生成檔案列表 HTML - 使用與 download.js 完全相同的結構
+    if (files.length === 0) {
+        modalBody.innerHTML = '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有檔案</p></div>';
+    } else {
+        let html = '<div class="table-wrapper">';
+        html += '<table class="files-table">';
+        html += '<thead><tr>';
+        html += '<th style="width: 60px">#</th>';
+        html += '<th style="min-width: 200px">檔案名稱</th>';
+        html += '<th style="min-width: 300px">FTP 路徑</th>';
+        html += '<th style="min-width: 300px">本地路徑</th>';
+        
+        if (type === 'total') {
+            html += '<th style="width: 100px">狀態</th>';
+        }
+        
+        if (type === 'skipped' || type === 'failed') {
+            html += '<th style="min-width: 200px">原因</th>';
+        }
+        
+        html += '<th style="width: 80px">操作</th>';
+        html += '</tr></thead>';
+        html += '<tbody>';
+        
+        files.forEach((file, index) => {
+            html += '<tr>';
+            html += `<td class="index-cell">${index + 1}</td>`;
+            html += `<td class="file-name-cell">
+                        <i class="fas fa-file-alt"></i> ${file.name || '未知'}
+                     </td>`;
+            html += `<td class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
+            html += `<td class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
+            
+            if (type === 'total') {
+                const statusClass = file.status === 'downloaded' ? 'success' : 
+                                  file.status === 'skipped' ? 'info' : 'danger';
+                const statusText = file.status === 'downloaded' ? '已下載' : 
+                                 file.status === 'skipped' ? '已跳過' : '失敗';
+                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+            }
+            
+            if (type === 'skipped' || type === 'failed') {
+                html += `<td>${file.reason || '-'}</td>`;
+            }
+            
+            html += '<td class="action-cell">-</td>';
+            html += '</tr>';
+        });
+        
+        html += '</tbody>';
+        html += '</table>';
+        html += '</div>';
+        
+        // 統計摘要
+        html += `
+            <div class="table-footer">
+                <i class="fas fa-chart-bar"></i>
+                共 ${files.length} 個檔案
+            </div>
+        `;
+        
+        modalBody.innerHTML = html;
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+function closeFilesModal() {
+    const modal = document.getElementById('filesListModal');
+    if (modal) {
+        modal.classList.add('hidden');
     }
 }
 
@@ -1191,3 +1451,5 @@ window.startNew = startNew;
 window.resetToForm = resetToForm;
 window.hideSuggestions = hideSuggestions;
 window.selectSuggestion = selectSuggestion;
+window.showFilesList = showFilesList;
+window.closeFilesModal = closeFilesModal;

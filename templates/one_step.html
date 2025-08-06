@@ -3,6 +3,7 @@
 {% block title %}一步到位 - SFTP 下載與比較系統{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/download.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/one-step.css') }}">
 {% endblock %}
 
@@ -387,6 +388,22 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+<!-- 檔案列表模態框 -->
+<div class="modal hidden" id="filesListModal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 class="modal-title" id="filesModalTitle">
+                <i class="fas fa-list"></i> 檔案列表
+            </h3>
+            <button class="modal-close" onclick="closeFilesModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="filesModalBody">
+            <!-- 動態生成的檔案列表 -->
         </div>
     </div>
 </div>
