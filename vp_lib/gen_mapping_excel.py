@@ -3,10 +3,16 @@ Gen Mapping Excel 主程式
 整合功能1和功能2的主要介面
 """
 import os
+import sys
 import shutil
 from typing import Optional
-from feature1_processor import Feature1Processor
-from feature2_processor import Feature2Processor
+
+# 加入父目錄到路徑
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+from vp_libs.feature1_processor import Feature1Processor
+from vp_libs.feature2_processor import Feature2Processor
 import utils
 import config
 
@@ -70,14 +76,14 @@ class GenMappingExcel:
             
     def process_prebuild_mapping(self,
                                 input_files: str,
-                                compare_type: str = 'master_vs_premp',
+                                filter_param: str = 'all',  # 改用 filter_param
                                 output_dir: str = './output') -> str:
         """
         功能2: 處理 Prebuild 映射
         
         Args:
             input_files: 輸入檔案路徑（逗號分隔的兩個檔案）
-            compare_type: 比較類型（master_vs_premp, premp_vs_mp, mp_vs_mpbackup）
+            filter_param: 過濾參數（例如: master_vs_premp, mac7p）
             output_dir: 輸出目錄
             
         Returns:
@@ -87,14 +93,14 @@ class GenMappingExcel:
             self.logger.info("=" * 50)
             self.logger.info("執行功能2: 處理 Prebuild 映射")
             self.logger.info(f"輸入檔案: {input_files}")
-            self.logger.info(f"比較類型: {compare_type}")
+            self.logger.info(f"過濾參數: {filter_param}")
             self.logger.info(f"輸出目錄: {output_dir}")
             self.logger.info("=" * 50)
             
             # 執行處理
             output_file = self.feature2_processor.process(
                 input_files=input_files,
-                compare_type=compare_type,
+                filter_param=filter_param,  # 傳遞 filter_param
                 output_dir=output_dir
             )
             
@@ -124,18 +130,6 @@ class GenMappingExcel:
                     self.logger.error(f"輸入檔案不存在: {input_file}")
                     return False
                     
-                # 驗證 filter 參數
-                filter_param = kwargs.get('filter_param', 'all')
-                valid_filters = ['all', 'master_vs_premp', 'premp_vs_mp', 
-                               'mp_vs_mpbackup', 'mac7p', 'mac8p', 
-                               'merlin7', 'merlin8']
-                
-                if filter_param != 'all':
-                    filters = filter_param.split(',')
-                    for f in filters:
-                        if f not in valid_filters and '_vs_' not in f:
-                            self.logger.warning(f"未知的過濾參數: {f}")
-                            
             elif mode == 'feature2':
                 # 驗證功能2的輸入
                 input_files = kwargs.get('input_files', '')
@@ -153,14 +147,6 @@ class GenMappingExcel:
                     if not os.path.exists(file):
                         self.logger.error(f"輸入檔案不存在: {file}")
                         return False
-                        
-                # 驗證比較類型
-                compare_type = kwargs.get('compare_type', 'master_vs_premp')
-                valid_types = ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']
-                if compare_type not in valid_types:
-                    self.logger.error(f"無效的比較類型: {compare_type}")
-                    self.logger.info(f"有效的類型: {', '.join(valid_types)}")
-                    return False
                     
             return True
             

@@ -29,6 +29,12 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'  # 請更改為安全的密鑰
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 最大檔案大小
 
+# 在檔案開頭的 import 區段加入
+from admin_routes import admin_bp
+
+# 在建立 app 之後，註冊 blueprint
+app.register_blueprint(admin_bp)
+
 # 初始化 SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 

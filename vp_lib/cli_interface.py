@@ -4,6 +4,12 @@
 """
 import argparse
 import sys
+import os
+
+# 加入父目錄到路徑
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
 from gen_mapping_excel import GenMappingExcel
 import utils
 
@@ -68,11 +74,16 @@ class CLIInterface:
             required=True
         )
         parser_feature2.add_argument(
-            '-type', '--type',
+            '-filter', '--filter',  # 改用 -filter 取代 -type
+            dest='filter_param',
+            help='過濾參數 (例如: master_vs_premp, premp_vs_mp, mp_vs_mpbackup, mac7p, merlin7)',
+            default='all'
+        )
+        parser_feature2.add_argument(
+            '-type', '--type',  # 保留向後相容，但標記為 deprecated
             dest='compare_type',
-            help='比較類型 (master_vs_premp, premp_vs_mp, mp_vs_mpbackup)',
-            choices=['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup'],
-            default='master_vs_premp'
+            help='(已棄用，請使用 -filter) 比較類型',
+            default=None
         )
         parser_feature2.add_argument(
             '-o', '--output',
@@ -118,18 +129,24 @@ class CLIInterface:
     def run_feature2(self, args):
         """執行功能2"""
         try:
+            # 處理向後相容：如果使用了 -type 參數，顯示警告
+            filter_param = args.filter_param
+            if args.compare_type and args.filter_param == 'all':
+                self.logger.warning("參數 -type 已棄用，請使用 -filter。為了相容性，將使用 -type 的值")
+                filter_param = args.compare_type
+            
             # 驗證輸入
             if not self.gen_mapping.validate_inputs(
                 mode='feature2',
                 input_files=args.input_files,
-                compare_type=args.compare_type
+                filter_param=filter_param
             ):
                 return False
                 
             # 執行處理
             output_file = self.gen_mapping.process_prebuild_mapping(
                 input_files=args.input_files,
-                compare_type=args.compare_type,
+                filter_param=filter_param,
                 output_dir=args.output_dir
             )
             
@@ -143,7 +160,7 @@ class CLIInterface:
     def test_connection(self):
         """測試 SFTP 連線"""
         try:
-            from sftp_manager import SFTPManager
+            from vp_libs.sftp_manager import SFTPManager
             
             print("測試 SFTP 連線...")
             manager = SFTPManager()

@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+
+{% block title %}後台管理 - SFTP 下載與比較系統{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1 class="page-title">
+            <i class="fas fa-cog"></i> 後台管理
+        </h1>
+        <p class="page-subtitle">Chip Mapping 與 Prebuild Mapping 管理工具</p>
+    </div>
+
+    <!-- 功能選擇標籤 -->
+    <div class="function-tabs">
+        <button class="tab-btn active" onclick="switchFunction('chip-mapping')">
+            <i class="fas fa-microchip"></i> Chip Mapping
+        </button>
+        <button class="tab-btn" onclick="switchFunction('prebuild-mapping')">
+            <i class="fas fa-layer-group"></i> Prebuild Mapping
+        </button>
+    </div>
+
+    <!-- Chip Mapping 功能 -->
+    <div class="function-content active" id="chip-mapping-content">
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h2 class="step-title">選擇 Mapping Table</h2>
+                    <p class="step-subtitle">上傳 all_chip_mapping_table.xlsx 檔案</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="source-tabs">
+                    <button class="tab-btn active" onclick="switchMappingSource('local')">
+                        <i class="fas fa-upload"></i> 本地檔案
+                    </button>
+                    <button class="tab-btn" onclick="switchMappingSource('server')">
+                        <i class="fas fa-server"></i> 伺服器檔案
+                    </button>
+                </div>
+
+                <div class="tab-container">
+                    <!-- 本地上傳 -->
+                    <div class="tab-content active" id="mapping-local-tab">
+                        <div class="upload-container" id="mappingUploadArea">
+                            <input type="file" id="mappingFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <div class="upload-icon-wrapper">
+                                <i class="fas fa-file-excel fa-4x"></i>
+                            </div>
+                            <div class="upload-text">拖曳 Mapping Table 檔案到這裡</div>
+                            <div class="upload-hint">或點擊選擇檔案</div>
+                            <div class="hint-card">
+                                <i class="fas fa-info-circle"></i>
+                                <span>支援 .xlsx、.xls、.csv 格式</span>
+                            </div>
+                            <p></p>
+                            <button class="btn btn-primary" onclick="document.getElementById('mappingFileInput').click()">
+                                <i class="fas fa-folder-open"></i> 選擇檔案
+                            </button>
+                        </div>
+                        
+                        <div class="file-list mt-4" id="mappingFileList">
+                            <!-- 顯示已選擇的檔案 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 伺服器瀏覽 -->
+                    <div class="tab-content" id="mapping-server-tab">
+                        <div class="server-browser">
+                            <div class="browser-header">
+                                <div class="path-input-container">
+                                    <input type="text" 
+                                           class="path-input" 
+                                           id="mappingServerPath" 
+                                           placeholder="輸入或貼上路徑..."
+                                           value="/home/vince_lin/ai/preMP">
+                                    <div class="path-suggestions" id="mappingPathSuggestions"></div>
+                                </div>
+                                <button class="btn-go" onclick="goToMappingPath()">
+                                    <i class="fas fa-arrow-right"></i> 前往
+                                </button>
+                                <button class="btn-refresh" onclick="refreshMappingFiles()">
+                                    <i class="fas fa-sync"></i>
+                                </button>
+                            </div>
+                            <div class="browser-content" id="mappingServerBrowser">
+                                <div class="empty-message">
+                                    <i class="fas fa-folder-open fa-3x"></i>
+                                    <p>切換到此標籤時將載入檔案列表</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="selected-server-files" id="mappingServerSelected">
+                            <!-- 顯示已選擇的伺服器檔案 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 參數設定 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h2 class="step-title">設定參數</h2>
+                    <p class="step-subtitle">選擇 Filter 類型和 DB 版本</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="params-grid">
+                    <div class="param-group">
+                        <label class="form-label">
+                            <i class="fas fa-filter"></i> Filter 類型
+                        </label>
+                        <select class="form-select" id="filterType">
+                            <option value="all">All</option>
+                            <option value="master_vs_premp">Master vs PreMP</option>
+                            <option value="premp_vs_mp">PreMP vs MP</option>
+                            <option value="mp_vs_mpbackup">MP vs MP Backup</option>
+                        </select>
+                    </div>
+                    
+                    <div class="param-group">
+                        <label class="form-label">
+                            <i class="fas fa-database"></i> DB 選擇
+                        </label>
+                        <select class="form-select" id="dbFilter">
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                    
+                    <div class="param-group" id="dbVersionGroup" style="display: none;">
+                        <label class="form-label">
+                            <i class="fas fa-code-branch"></i> DB 版本
+                        </label>
+                        <select class="form-select" id="dbVersion">
+                            <option value="">載入中...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 輸出路徑 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h2 class="step-title">輸出設定</h2>
+                    <p class="step-subtitle">選擇結果儲存位置</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="output-selector">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-folder"></i> 輸出路徑
+                        </label>
+                        <div class="path-input-group">
+                            <input type="text" 
+                                   class="form-input" 
+                                   id="chipOutputPath" 
+                                   placeholder="輸入路徑或選擇目錄..."
+                                   value="./output/chip_mapping">
+                            <button class="btn btn-secondary" onclick="browseOutputPath('chip')">
+                                <i class="fas fa-folder-open"></i> 瀏覽
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-select">
+                        <label class="form-label">
+                            <i class="fas fa-history"></i> 或選擇已下載的目錄
+                        </label>
+                        <select class="form-select" id="chipQuickPath" onchange="selectQuickPath('chip')">
+                            <option value="">-- 選擇目錄 --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 執行按鈕 -->
+        <div class="action-container">
+            <button class="btn btn-primary btn-large" onclick="runChipMapping()">
+                <i class="fas fa-play"></i> 執行 Chip Mapping
+            </button>
+        </div>
+    </div>
+
+    <!-- Prebuild Mapping 功能 -->
+    <div class="function-content" id="prebuild-mapping-content">
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h2 class="step-title">選擇比對檔案</h2>
+                    <p class="step-subtitle">上傳需要比對的 Excel 檔案</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="file-upload-grid">
+                    <!-- Master 檔案 -->
+                    <div class="file-upload-card">
+                        <div class="upload-card-header">
+                            <h3>Master</h3>
+                            <span class="upload-status" id="masterStatus">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </span>
+                        </div>
+                        <div class="upload-area" id="masterUploadArea">
+                            <input type="file" id="masterFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <i class="fas fa-file-excel fa-3x"></i>
+                            <p>拖曳檔案或點擊上傳</p>
+                            <button class="btn btn-small btn-primary" onclick="document.getElementById('masterFileInput').click()">
+                                選擇檔案
+                            </button>
+                        </div>
+                        <div class="selected-file" id="masterSelected"></div>
+                    </div>
+
+                    <!-- PreMP 檔案 -->
+                    <div class="file-upload-card">
+                        <div class="upload-card-header">
+                            <h3>PreMP</h3>
+                            <span class="upload-status" id="prempStatus">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </span>
+                        </div>
+                        <div class="upload-area" id="prempUploadArea">
+                            <input type="file" id="prempFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <i class="fas fa-file-excel fa-3x"></i>
+                            <p>拖曳檔案或點擊上傳</p>
+                            <button class="btn btn-small btn-primary" onclick="document.getElementById('prempFileInput').click()">
+                                選擇檔案
+                            </button>
+                        </div>
+                        <div class="selected-file" id="prempSelected"></div>
+                    </div>
+
+                    <!-- MP 檔案 -->
+                    <div class="file-upload-card">
+                        <div class="upload-card-header">
+                            <h3>MP</h3>
+                            <span class="upload-status" id="mpStatus">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </span>
+                        </div>
+                        <div class="upload-area" id="mpUploadArea">
+                            <input type="file" id="mpFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <i class="fas fa-file-excel fa-3x"></i>
+                            <p>拖曳檔案或點擊上傳</p>
+                            <button class="btn btn-small btn-primary" onclick="document.getElementById('mpFileInput').click()">
+                                選擇檔案
+                            </button>
+                        </div>
+                        <div class="selected-file" id="mpSelected"></div>
+                    </div>
+
+                    <!-- MP Backup 檔案 -->
+                    <div class="file-upload-card">
+                        <div class="upload-card-header">
+                            <h3>MP Backup</h3>
+                            <span class="upload-status" id="mpbackupStatus">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </span>
+                        </div>
+                        <div class="upload-area" id="mpbackupUploadArea">
+                            <input type="file" id="mpbackupFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                            <i class="fas fa-file-excel fa-3x"></i>
+                            <p>拖曳檔案或點擊上傳</p>
+                            <button class="btn btn-small btn-primary" onclick="document.getElementById('mpbackupFileInput').click()">
+                                選擇檔案
+                            </button>
+                        </div>
+                        <div class="selected-file" id="mpbackupSelected"></div>
+                    </div>
+                </div>
+
+                <!-- 比對類型提示 -->
+                <div class="filter-hint mt-4">
+                    <i class="fas fa-info-circle"></i>
+                    <span>系統將根據您選擇的檔案自動決定比對類型</span>
+                    <div class="filter-preview" id="filterPreview"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 輸出路徑 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h2 class="step-title">輸出設定</h2>
+                    <p class="step-subtitle">選擇結果儲存位置</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="output-selector">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-folder"></i> 輸出路徑
+                        </label>
+                        <div class="path-input-group">
+                            <input type="text" 
+                                   class="form-input" 
+                                   id="prebuildOutputPath" 
+                                   placeholder="輸入路徑或選擇目錄..."
+                                   value="./output/prebuild_mapping">
+                            <button class="btn btn-secondary" onclick="browseOutputPath('prebuild')">
+                                <i class="fas fa-folder-open"></i> 瀏覽
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-select">
+                        <label class="form-label">
+                            <i class="fas fa-history"></i> 或選擇已下載的目錄
+                        </label>
+                        <select class="form-select" id="prebuildQuickPath" onchange="selectQuickPath('prebuild')">
+                            <option value="">-- 選擇目錄 --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 執行按鈕 -->
+        <div class="action-container">
+            <button class="btn btn-primary btn-large" onclick="runPrebuildMapping()">
+                <i class="fas fa-play"></i> 執行 Prebuild Mapping
+            </button>
+        </div>
+    </div>
+
+    <!-- 結果顯示區域 -->
+    <div class="result-section hidden" id="resultSection">
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="step-content">
+                    <h2 class="step-title">執行結果</h2>
+                    <p class="step-subtitle">查看和匯出結果資料</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <!-- 結果統計 -->
+                <div class="result-stats" id="resultStats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalRows">0</div>
+                        <div class="stat-label">總筆數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="filteredRows">0</div>
+                        <div class="stat-label">篩選結果</div>
+                    </div>
+                </div>
+
+                <!-- 工具列 -->
+                <div class="result-toolbar">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" 
+                               class="search-input" 
+                               id="searchInput" 
+                               placeholder="搜尋資料...">
+                    </div>
+                    
+                    <div class="toolbar-actions">
+                        <button class="btn btn-secondary" onclick="exportResult()">
+                            <i class="fas fa-file-excel"></i> 匯出 Excel
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearResult()">
+                            <i class="fas fa-times"></i> 清除結果
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 結果表格 -->
+                <div class="result-table-container">
+                    <table class="result-table" id="resultTable">
+                        <thead id="resultTableHead">
+                            <!-- 動態生成表頭 -->
+                        </thead>
+                        <tbody id="resultTableBody">
+                            <!-- 動態生成資料 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分頁 -->
+                <div class="pagination" id="pagination">
+                    <!-- 動態生成分頁 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 載入中遮罩 -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <p id="loadingText">處理中...</p>
+    </div>
+</div>
+
+<!-- 瀏覽資料夾模態框 -->
+<div class="modal hidden" id="folderBrowserModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i class="fas fa-folder-open"></i> 選擇資料夾
+            </h3>
+            <button class="modal-close" onclick="closeFolderBrowser()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="folder-browser" id="folderBrowser">
+                <!-- 動態生成資料夾結構 -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeFolderBrowser()">取消</button>
+            <button class="btn btn-primary" onclick="selectFolder()">選擇</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

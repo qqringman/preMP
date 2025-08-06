@@ -49,6 +49,12 @@
                         <i class="fas fa-rocket"></i> 一步到位
                     </a>
                 </li>
+                <!-- 新增後台管理連結 -->
+                <li class="nav-item">
+                    <a href="{{ url_for('admin.admin_page') }}" class="nav-link {% if request.endpoint == 'admin.admin_page' %}active{% endif %}">
+                        <i class="fas fa-cog"></i> 後台管理
+                    </a>
+                </li>
             </ul>
         </div>
     </nav>

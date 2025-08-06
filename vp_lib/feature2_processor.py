@@ -343,14 +343,14 @@ class Feature2Processor:
             
         return result
         
-    def process(self, input_files: str, compare_type: str = 'master_vs_premp', 
-                output_dir: str = './output') -> str:
+    def process(self, input_files: str, filter_param: str = 'all', 
+            output_dir: str = './output') -> str:
         """
         執行功能2處理
         
         Args:
             input_files: 輸入檔案路徑（逗號分隔）
-            compare_type: 比較類型
+            filter_param: 過濾參數（例如: master_vs_premp, mac7p）
             output_dir: 輸出目錄
             
         Returns:
@@ -377,23 +377,53 @@ class Feature2Processor:
             self.logger.info(f"載入第二個檔案: {file2}")
             sources2 = self.load_prebuild_source(file2)
             
+            # 解析 filter 參數
+            filter_lower = filter_param.lower() if filter_param else 'all'
+            compare_type = 'master_vs_premp'  # 預設比較類型
+            module_filter = None
+            
+            # 判斷 filter 類型
+            if '_vs_' in filter_lower:
+                # 這是比較類型
+                compare_type = filter_lower
+            elif filter_lower != 'all':
+                # 這是模組過濾
+                module_filter = filter_lower
+            
             # 進行 inner join
             self.logger.info("執行 inner join...")
             joined_data = self.inner_join_sources(sources1, sources2)
             
             if not joined_data:
                 self.logger.warning("沒有找到匹配的資料")
-                
+            
+            # 如果有模組過濾，先過濾資料
+            if module_filter:
+                self.logger.info(f"套用模組過濾: {module_filter}")
+                filtered_data = []
+                for source1, source2 in joined_data:
+                    # 從 SFTP URL 解析模組
+                    info1 = self.parse_sftp_info(source1.sftp_url, source1.master_jira)
+                    if info1['module'].lower() == module_filter or module_filter in info1['module'].lower():
+                        filtered_data.append((source1, source2))
+                joined_data = filtered_data
+                self.logger.info(f"過濾後剩餘 {len(joined_data)} 筆資料")
+            
             # 產生映射資料
             self.logger.info("產生映射資料...")
             mapping_data = self.generate_mapping_data(joined_data, compare_type)
             
             # 決定輸出檔名
             utils.create_directory(output_dir)
-            if compare_type and compare_type != 'all':
-                output_filename = f"PrebuildFW_{compare_type}_mapping.xlsx"
+            
+            # 根據 filter 參數決定檔名
+            if filter_param and filter_param.lower() != 'all':
+                # 使用 filter 參數作為檔名的一部分
+                filter_name = filter_param.lower().replace(',', '_')
+                output_filename = f"PrebuildFW_{filter_name}_mapping.xlsx"
             else:
-                output_filename = config.DEFAULT_PREBUILD_OUTPUT
+                # 使用預設檔名
+                output_filename = config.DEFAULT_PREBUILD_OUTPUT  # PrebuildFW_mapping.xlsx
                 
             output_file = os.path.join(output_dir, output_filename)
             
