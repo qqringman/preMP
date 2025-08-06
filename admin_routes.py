@@ -212,7 +212,7 @@ def run_chip_mapping():
         
         # 組合命令
         cmd = [
-            'python3', 'vp_lib/cli_interface.py', 'chip-mapping',
+            'python3.12', 'vp_lib/cli_interface.py', 'chip-mapping',
             '-i', mapping_file,
             '-filter', filter_type,
             '-o', output_path

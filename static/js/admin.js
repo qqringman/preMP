@@ -314,24 +314,15 @@ function displayVersionOptions(versions) {
     }
 }
 
-// 處理 Prebuild 檔案
+// 處理 Prebuild 檔案 - 修正版本，使用 utils.uploadFile
 async function handlePrebuildFile(type, file) {
     if (!validateFile(file)) return;
     
     try {
         showLoading('上傳檔案中...');
         
-        // 上傳檔案
-        const uploadResult = await utils.apiRequest('/api/upload', {
-            method: 'POST',
-            body: (() => {
-                const formData = new FormData();
-                formData.append('file', file);
-                return formData;
-            })(),
-            headers: {} // 不設定 Content-Type，讓瀏覽器自動設定
-        });
-        
+        // 使用 utils.uploadFile 上傳檔案
+        const uploadResult = await utils.uploadFile(file);
         selectedPrebuildFiles[type] = uploadResult.filepath;
         
         // 更新狀態
@@ -742,22 +733,53 @@ function clearResult() {
     document.getElementById('searchInput').value = '';
 }
 
-// 載入快速路徑
+// 載入快速路徑 - 修正版本，包含 DEFAULT_OUTPUT_DIR
 async function loadQuickPaths() {
     try {
         const response = await utils.apiRequest('/api/admin/get-download-dirs');
         
-        if (response.success && response.directories) {
+        if (response.success) {
+            const directories = response.directories || [];
+            const downloadPath = response.download_path;
+            
+            // 添加 DEFAULT_OUTPUT_DIR 本身到目錄列表
+            if (downloadPath) {
+                // 檢查是否已經存在
+                const exists = directories.some(dir => dir.path === downloadPath);
+                
+                if (!exists) {
+                    // 計算 downloads 目錄的資訊
+                    let fileCount = 0;
+                    let totalSize = 0;
+                    
+                    // 統計所有子目錄的檔案數和大小
+                    directories.filter(d => d.type === 'download').forEach(dir => {
+                        fileCount += dir.file_count || 0;
+                        totalSize += dir.size || 0;
+                    });
+                    
+                    // 將 DEFAULT_OUTPUT_DIR 加入到目錄列表的開頭
+                    directories.unshift({
+                        name: 'downloads (根目錄)',
+                        path: downloadPath,
+                        file_count: fileCount,
+                        size: totalSize,
+                        size_formatted: formatFileSize(totalSize),
+                        type: 'download-root'
+                    });
+                }
+            }
+            
             // 更新 Chip Mapping 的快速路徑
-            updateQuickPathSelect('chipQuickPath', response.directories);
+            updateQuickPathSelect('chipQuickPath', directories);
             
             // 更新 Prebuild Mapping 的快速路徑
-            updateQuickPathSelect('prebuildQuickPath', response.directories);
+            updateQuickPathSelect('prebuildQuickPath', directories);
             
             // 顯示路徑資訊
             console.log('基礎路徑:', response.base_path);
-            console.log('下載路徑:', response.download_path);
-            console.log('找到的目錄:', response.directories.length);
+            console.log('下載路徑:', downloadPath);
+            console.log('找到的目錄:', directories.length);
         }
         
     } catch (error) {
@@ -765,7 +787,18 @@ async function loadQuickPaths() {
     }
 }
 
-// 更新快速路徑下拉選單
+// 格式化檔案大小 - 本地函數
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 更新快速路徑下拉選單 - 修正版本
 function updateQuickPathSelect(selectId, directories) {
     const select = document.getElementById(selectId);
     if (!select) return;
@@ -775,8 +808,25 @@ function updateQuickPathSelect(selectId, directories) {
     
     if (directories && directories.length > 0) {
         // 分組顯示目錄
+        const rootDir = directories.filter(d => d.type === 'download-root');
         const taskDirs = directories.filter(d => d.type === 'task');
         const downloadDirs = directories.filter(d => d.type === 'download');
+        
+        // 添加 downloads 根目錄
+        if (rootDir.length > 0) {
+            const rootGroup = document.createElement('optgroup');
+            rootGroup.label = 'Downloads 根目錄';
+            
+            rootDir.forEach(dir => {
+                const option = document.createElement('option');
+                option.value = dir.path;
+                option.textContent = `${dir.name} (${dir.file_count} 檔案, ${dir.size_formatted})`;
+                option.style.fontWeight = '600';
+                rootGroup.appendChild(option);
+            });
+            
+            select.appendChild(rootGroup);
+        }
         
         // 添加 task 目錄
         if (taskDirs.length > 0) {
@@ -793,10 +843,10 @@ function updateQuickPathSelect(selectId, directories) {
             select.appendChild(taskGroup);
         }
         
-        // 添加 download 目錄
+        // 添加 download 子目錄
         if (downloadDirs.length > 0) {
             const downloadGroup = document.createElement('optgroup');
-            downloadGroup.label = 'Downloads 目錄';
+            downloadGroup.label = 'Downloads 子目錄';
             
             downloadDirs.forEach(dir => {
                 const option = document.createElement('option');

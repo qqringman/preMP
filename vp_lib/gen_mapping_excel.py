@@ -11,8 +11,8 @@ from typing import Optional
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
 
-from vp_libs.feature1_processor import Feature1Processor
-from vp_libs.feature2_processor import Feature2Processor
+from vp_lib.feature1_processor import Feature1Processor
+from vp_lib.feature2_processor import Feature2Processor
 import utils
 import config
 

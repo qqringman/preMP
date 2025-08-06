@@ -160,7 +160,7 @@ class CLIInterface:
     def test_connection(self):
         """測試 SFTP 連線"""
         try:
-            from vp_libs.sftp_manager import SFTPManager
+            from vp_lib.sftp_manager import SFTPManager
             
             print("測試 SFTP 連線...")
             manager = SFTPManager()
