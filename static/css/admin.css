@@ -1,6 +1,6 @@
-/* 後台管理樣式 - 繼承 download.css 的風格 */
+/* 後台管理樣式 - Nordic Blue 主題 */
 :root {
-    /* 使用與 download.css 相同的變數 */
+    /* Nordic Blue 色彩系統 - 與 download.css 一致 */
     --bg-card: #FFFFFF;
     --bg-hover: #E8F4FD;
     --bg-input: #F5F9FF;
@@ -20,6 +20,7 @@
     --nordic-blue-lighter: #90CAF9;
     --nordic-gradient: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
     --nordic-gradient-soft: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    --nordic-sky: #E3F2FD;
     --success: #4CAF50;
     --success-light: #E8F5E9;
     --text-primary: #1A237E;
@@ -30,9 +31,72 @@
     --radius-lg: 16px;
     --radius-md: 12px;
     --radius-sm: 8px;
+    --radius-xl: 20px;
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
     --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(180deg, #FAFBFD 0%, #FFFFFF 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+/* 頁面標題 - 與 download.css 風格一致 */
+.page-header {
+    margin-bottom: 48px;
+    padding: 48px 0;
+    position: relative;
+    text-align: center;
+}
+
+.page-header::before {
+    background: radial-gradient(ellipse at center, rgba(33, 150, 243, 0.03) 0%, transparent 70%);
+    content: "";
+    height: 100%;
+    left: 50%;
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    width: 120%;
+    z-index: -1;
+}
+
+.page-title {
+    align-items: center;
+    color: var(--text-primary);
+    display: flex;
+    font-size: 2.75rem;
+    font-weight: 600;
+    gap: 16px;
+    justify-content: center;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 4px rgba(0, 33, 71, 0.05);
+}
+
+.page-title i {
+    color: var(--nordic-blue);
+    filter: drop-shadow(0 2px 4px rgba(33, 150, 243, 0.15));
+    font-size: 2.5rem;
+}
+
+.page-subtitle {
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+    font-weight: 400;
 }
 
 /* 功能選擇標籤 */
@@ -46,7 +110,7 @@
     padding: 6px;
 }
 
-.function-tabs .tab-btn {
+.tab-btn {
     align-items: center;
     background: transparent;
     border: none;
@@ -60,19 +124,24 @@
     gap: 10px;
     justify-content: center;
     padding: 12px 24px;
+    position: relative;
     transition: all 0.2s ease;
 }
 
-.function-tabs .tab-btn:hover {
+.tab-btn:hover {
     background: rgba(33, 150, 243, 0.08);
     color: var(--nordic-blue);
 }
 
-.function-tabs .tab-btn.active {
+.tab-btn.active {
     background: var(--nordic-blue);
     box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
     color: white;
     font-weight: 600;
+}
+
+.tab-btn i {
+    font-size: 1.125rem;
 }
 
 /* 功能內容區域 */
@@ -84,16 +153,310 @@
     display: block;
 }
 
-/* 參數設定區域 */
+/* 步驟區塊 - 與 download.css 一致 */
+.step-section {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 28px;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.step-section::before {
+    background: var(--nordic-gradient);
+    content: "";
+    height: 3px;
+    left: 0;
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: opacity 0.3s ease;
+}
+
+.step-section:hover::before {
+    opacity: 1;
+}
+
+.step-section:hover {
+    border-color: var(--nordic-blue-lighter);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.step-header {
+    align-items: center;
+    background: #2196F3;
+    color: white;
+    display: flex;
+    gap: 24px;
+    overflow: hidden;
+    padding: 24px 32px;
+    position: relative;
+}
+
+.step-header::before {
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    content: "";
+    height: 300%;
+    opacity: 0.5;
+    position: absolute;
+    right: -25%;
+    top: -100%;
+    transform: rotate(35deg);
+    width: 70%;
+}
+
+.step-number {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    color: white;
+    display: flex;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    height: 56px;
+    justify-content: center;
+    position: relative;
+    width: 56px;
+    z-index: 1;
+}
+
+.step-content {
+    flex: 1;
+    position: relative;
+    z-index: 1;
+}
+
+.step-title {
+    color: white;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    margin: 0 0 6px 0;
+}
+
+.step-subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9375rem;
+    font-weight: 400;
+    margin: 0;
+    opacity: 0.9;
+}
+
+.section-body {
+    background: var(--bg-primary);
+    padding: 36px 32px;
+}
+
+/* 上傳區域 */
+.upload-container {
+    background: #FAFBFD;
+    border: 2px dashed #C5CAE9;
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    overflow: hidden;
+    padding: 80px 60px;
+    position: relative;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.upload-container::before {
+    background: radial-gradient(circle, rgba(158, 158, 158, 0.03) 0%, transparent 70%);
+    content: "";
+    height: 300px;
+    position: absolute;
+    right: -120px;
+    top: -120px;
+    width: 300px;
+}
+
+.upload-container:hover {
+    background: var(--nordic-sky);
+    border-color: var(--nordic-blue-light);
+    box-shadow: 0 4px 16px rgba(33, 150, 243, 0.1);
+    transform: translateY(-1px);
+}
+
+.upload-container.dragging {
+    background: var(--nordic-sky);
+    border-color: var(--nordic-blue);
+    border-style: solid;
+    box-shadow: 0 12px 40px rgba(25, 118, 210, 0.2);
+}
+
+.upload-icon-wrapper {
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.upload-icon-wrapper i {
+    color: var(--success);
+    filter: drop-shadow(0 2px 8px rgba(33, 150, 243, 0.15));
+    font-size: 4.5rem;
+    transition: all 0.3s ease;
+}
+
+.upload-container:hover .upload-icon-wrapper i {
+    color: var(--success);
+    transform: scale(1.05);
+}
+
+.upload-text {
+    color: var(--text-primary);
+    font-size: 1.375rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.upload-hint {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.hint-card {
+    align-items: center;
+    background: var(--nordic-sky);
+    border: 1px solid var(--nordic-blue-lighter);
+    border-radius: 9999px;
+    color: var(--nordic-blue);
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 500;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 12px 24px;
+    position: relative;
+    z-index: 1;
+}
+
+/* 檔案列表 */
+.file-list-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-top: 1.5rem;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
+.file-list-header {
+    align-items: center;
+    background: #2196F3;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    padding: 18px 24px;
+}
+
+.file-list-title {
+    align-items: center;
+    color: white;
+    display: flex;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    gap: 10px;
+    margin: 0;
+}
+
+.file-items {
+    background: var(--bg-secondary);
+}
+
+.file-item-card {
+    align-items: center;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    gap: 18px;
+    padding: 18px 24px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.file-item-card:hover {
+    background: var(--bg-hover);
+}
+
+.file-icon-wrapper {
+    align-items: center;
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    border-radius: var(--radius-md);
+    color: #2196F3;
+    display: flex;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    height: 48px;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.3s ease;
+    width: 48px;
+}
+
+.file-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-meta {
+    align-items: center;
+    color: var(--text-muted);
+    display: flex;
+    font-size: 0.8125rem;
+    gap: 1rem;
+}
+
+/* 參數網格 */
 .params-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 24px;
 }
 
 .param-group {
     display: flex;
     flex-direction: column;
+}
+
+.form-label {
+    align-items: center;
+    color: var(--text-secondary);
+    display: flex;
+    font-size: 0.875rem;
+    font-weight: 500;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.form-label i {
+    color: var(--nordic-blue);
+    font-size: 0.875rem;
 }
 
 .form-select {
@@ -104,13 +467,48 @@
     font-size: 0.9375rem;
     padding: 10px 14px;
     transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234A5568' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    padding-right: 2.5rem;
 }
 
 .form-select:focus {
+    background-color: var(--bg-primary);
+    border-color: var(--nordic-blue);
+    box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
+    outline: none;
+}
+
+.form-input {
+    background: var(--bg-input);
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    padding: 10px 14px;
+    transition: all 0.2s ease;
+}
+
+.form-input:focus {
     background: var(--bg-primary);
     border-color: var(--nordic-blue);
     box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.1);
     outline: none;
+}
+
+.form-hint {
+    font-size: 0.875rem;
+    color: var(--nordic-blue);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-hint i {
+    color: var(--nordic-blue-light);
+    font-size: 0.875rem;
 }
 
 /* 檔案上傳網格 */
@@ -206,27 +604,28 @@
     word-break: break-all;
 }
 
-/* 篩選提示 */
-.filter-hint {
-    background: var(--info-light);
-    border: 1px solid var(--nordic-blue-lighter);
-    border-radius: var(--radius-md);
-    color: var(--nordic-blue);
-    padding: 16px;
-}
-
-.filter-preview {
-    background: var(--bg-primary);
-    border-radius: var(--radius-sm);
-    font-family: monospace;
-    margin-top: 12px;
-    padding: 12px;
-}
-
-/* 輸出路徑選擇 */
+/* 快速選擇 */
 .output-selector {
     display: grid;
     gap: 24px;
+}
+
+.quick-select {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+
+.quick-path-select {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    margin-top: 12px;
+}
+
+.quick-path-select .form-group {
+    flex: 1;
+    margin-bottom: 0;
 }
 
 .path-input-group {
@@ -238,10 +637,107 @@
     flex: 1;
 }
 
-.quick-select {
-    background: var(--bg-tertiary);
+/* 過濾提示 */
+.filter-hint {
+    background: var(--info-light);
+    border: 1px solid var(--nordic-blue-lighter);
     border-radius: var(--radius-md);
-    padding: 20px;
+    color: var(--nordic-blue);
+    padding: 16px;
+    margin-top: 24px;
+}
+
+.filter-preview {
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    font-family: monospace;
+    margin-top: 12px;
+    padding: 12px;
+    display: none;
+}
+
+/* 按鈕樣式 */
+.btn {
+    align-items: center;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    gap: 10px;
+    overflow: hidden;
+    padding: 12px 28px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: var(--nordic-blue);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--nordic-blue-dark);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: var(--bg-primary);
+    border: 1.5px solid var(--nordic-blue);
+    color: var(--nordic-blue);
+}
+
+.btn-secondary:hover {
+    background: var(--nordic-sky);
+    border-color: #1976D2;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+    color: #1976D2;
+    transform: translateY(-1px);
+}
+
+.btn-small {
+    font-size: 0.875rem;
+    padding: 8px 16px;
+}
+
+.btn-large {
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 16px rgba(33, 150, 243, 0.2);
+    font-size: 1.125rem;
+    font-weight: 600;
+    overflow: hidden;
+    padding: 18px 48px;
+    position: relative;
+}
+
+.btn-large::after {
+    animation: shine 3s ease-in-out infinite;
+    background: linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.3) 50%, transparent 60%);
+    content: "";
+    height: 200%;
+    position: absolute;
+    right: -50%;
+    top: -50%;
+    width: 200%;
+}
+
+.btn-large:hover {
+    background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    box-shadow: 0 12px 35px rgba(25, 118, 210, 0.3);
+    transform: translateY(-3px);
+}
+
+/* 執行按鈕區域 */
+.action-container {
+    border-radius: 2rem;
+    margin-top: 20px;
+    overflow: hidden;
+    position: relative;
+    text-align: center;
 }
 
 /* 結果顯示區域 */
@@ -251,39 +747,62 @@
 
 .result-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
     margin-bottom: 32px;
 }
 
 .stat-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
+    align-items: center;
+    background: #FFFFFF;
+    border: 2px solid transparent;
     border-radius: var(--radius-lg);
-    padding: 24px;
-    text-align: center;
-    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    gap: 16px;
+    overflow: hidden;
+    padding: 20px;
+    position: relative;
+    transition: all 0.3s ease;
 }
 
 .stat-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transform: translateY(-3px);
+}
+
+.stat-icon {
+    align-items: center;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    display: flex;
+    font-size: 1.5rem;
+    height: 52px;
+    justify-content: center;
+    width: 52px;
+}
+
+.stat-content {
+    flex: 1;
 }
 
 .stat-value {
-    color: var(--nordic-blue);
-    font-size: 2.5rem;
-    font-weight: 700;
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
     line-height: 1;
+    margin-bottom: 4px;
+    display: block;
 }
 
 .stat-label {
-    color: var(--text-muted);
-    font-size: 0.875rem;
-    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
 }
 
-/* 結果工具列 */
+/* 工具列 */
 .result-toolbar {
     align-items: center;
     background: var(--bg-secondary);
@@ -425,11 +944,13 @@
 /* 載入遮罩 */
 .loading-overlay {
     align-items: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
     display: flex;
     inset: 0;
     justify-content: center;
     position: fixed;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
     z-index: 9999;
 }
 
@@ -438,9 +959,10 @@
 }
 
 .loading-content {
-    background: var(--bg-primary);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+    animation: modalSlideIn 0.3s ease-out;
+    background: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
     padding: 48px;
     text-align: center;
 }
@@ -466,57 +988,39 @@
     font-weight: 500;
 }
 
-/* 資料夾瀏覽模態框 */
-.folder-browser {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    max-height: 400px;
-    overflow-y: auto;
-    padding: 16px;
+/* 工具類 */
+.hidden {
+    display: none !important;
 }
 
-.folder-item {
-    align-items: center;
-    cursor: pointer;
-    display: flex;
-    gap: 12px;
-    padding: 12px;
-    transition: all 0.2s ease;
+.mt-2 {
+    margin-top: 0.5rem;
 }
 
-.folder-item:hover {
-    background: var(--bg-hover);
-    border-radius: var(--radius-sm);
-}
-
-.folder-item.selected {
-    background: var(--nordic-sky);
-    border-radius: var(--radius-sm);
-}
-
-.folder-item i {
-    color: var(--nordic-blue);
-    width: 20px;
-}
-
-.modal-footer {
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-light);
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    padding: 20px 24px;
+.mt-4 {
+    margin-top: 2rem;
 }
 
 /* 響應式設計 */
 @media (max-width: 768px) {
-    .file-upload-grid {
-        grid-template-columns: 1fr;
+    .container {
+        padding: 0 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
     }
     
     .params-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .file-upload-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .function-tabs {
+        flex-direction: column;
     }
     
     .result-toolbar {
@@ -527,4 +1031,26 @@
     .search-box {
         width: 100%;
     }
+}
+
+/* 動畫 */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes shine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }

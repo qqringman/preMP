@@ -13,13 +13,39 @@ let pageSize = 50;
 let sortColumn = null;
 let sortDirection = 'asc';
 let filterText = '';
+let dbVersionsCache = {}; // 快取 DB 版本資訊
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     initializeFileUploads();
     loadQuickPaths();
     initializeSearch();
+    setupDBSelectors();
 });
+
+// 設定 DB 選擇器
+function setupDBSelectors() {
+    const dbSelect = document.getElementById('dbFilter');
+    const versionSelect = document.getElementById('dbVersion');
+    const versionGroup = document.getElementById('dbVersionGroup');
+    
+    // 監聽 DB 選擇變化
+    dbSelect.addEventListener('change', async (e) => {
+        const selectedDB = e.target.value;
+        
+        if (selectedDB && selectedDB !== 'all') {
+            // 顯示版本選擇器
+            versionGroup.style.display = 'block';
+            
+            // 載入版本
+            await loadDBVersions(selectedDB);
+        } else {
+            // 隱藏版本選擇器
+            versionGroup.style.display = 'none';
+            versionSelect.innerHTML = '<option value="">選擇版本...</option>';
+        }
+    });
+}
 
 // 切換功能
 function switchFunction(func) {
@@ -38,7 +64,10 @@ function switchFunction(func) {
     document.getElementById(`${func}-content`).classList.add('active');
     
     // 隱藏結果區域
-    document.getElementById('resultSection').classList.add('hidden');
+    const resultSection = document.getElementById('resultSection');
+    if (resultSection) {
+        resultSection.classList.add('hidden');
+    }
 }
 
 // 初始化檔案上傳
@@ -106,6 +135,7 @@ async function handleMappingFile(file) {
         displaySelectedFile('mappingFileList', file.name);
         
         // 分析檔案內容
+        showLoading('分析檔案內容...');
         const analysis = await analyzeMapping(uploadResult.filepath);
         
         // 更新 DB 選項
@@ -133,34 +163,89 @@ async function analyzeMapping(filepath) {
 // 更新 DB 選項
 function updateDBOptions(analysis) {
     const dbSelect = document.getElementById('dbFilter');
+    const versionGroup = document.getElementById('dbVersionGroup');
+    const chipFilter = document.getElementById('chipFilter');
     
     // 清空現有選項
     dbSelect.innerHTML = '<option value="all">All</option>';
     
-    // 添加 DB 選項
-    if (analysis.db_list) {
-        analysis.db_list.forEach(db => {
+    // 更新 Chip Filter
+    if (chipFilter && analysis.modules) {
+        chipFilter.innerHTML = '<option value="all">All Chips</option>';
+        analysis.modules.forEach(module => {
             const option = document.createElement('option');
-            option.value = db;
-            option.textContent = db;
-            dbSelect.appendChild(option);
+            option.value = module.toLowerCase();
+            option.textContent = module;
+            chipFilter.appendChild(option);
         });
     }
     
-    // 監聽 DB 選擇變化
-    dbSelect.addEventListener('change', async (e) => {
-        if (e.target.value !== 'all') {
-            document.getElementById('dbVersionGroup').style.display = 'block';
-            await loadDBVersions(e.target.value);
-        } else {
-            document.getElementById('dbVersionGroup').style.display = 'none';
+    // 清空版本快取
+    dbVersionsCache = {};
+    
+    // 添加 DB 選項
+    if (analysis.db_list && analysis.db_list.length > 0) {
+        analysis.db_list.forEach(db => {
+            const option = document.createElement('option');
+            option.value = db;
+            
+            // 建立顯示文字
+            let displayText = db;
+            if (analysis.db_info && analysis.db_info[db]) {
+                const info = analysis.db_info[db];
+                
+                // 顯示 DB 類型
+                if (info.types && info.types.length > 0) {
+                    displayText = `${db} (${info.types.join('/')})`;
+                }
+            }
+            
+            option.textContent = displayText;
+            dbSelect.appendChild(option);
+        });
+        
+        // 顯示 DB 選擇提示
+        const dbGroup = document.querySelector('.param-group:has(#dbFilter)');
+        if (dbGroup) {
+            let hint = dbGroup.querySelector('.form-hint');
+            if (!hint) {
+                hint = document.createElement('div');
+                hint.className = 'form-hint';
+                dbGroup.appendChild(hint);
+            }
+            hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${analysis.db_list.length} 個 DB`;
         }
-    });
+    } else {
+        // 沒有找到 DB
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '(未找到 DB 資訊)';
+        option.disabled = true;
+        dbSelect.appendChild(option);
+    }
+    
+    // 確保版本選擇器隱藏
+    if (versionGroup) {
+        versionGroup.style.display = 'none';
+    }
 }
 
 // 載入 DB 版本
 async function loadDBVersions(dbName) {
     try {
+        const versionSelect = document.getElementById('dbVersion');
+        
+        // 顯示載入中
+        versionSelect.innerHTML = '<option value="">載入版本中...</option>';
+        versionSelect.disabled = true;
+        
+        // 檢查快取
+        if (dbVersionsCache[dbName]) {
+            displayVersionOptions(dbVersionsCache[dbName]);
+            return;
+        }
+        
+        // 從伺服器獲取版本
         const response = await utils.apiRequest('/api/admin/get-db-versions', {
             method: 'POST',
             body: JSON.stringify({
@@ -169,20 +254,63 @@ async function loadDBVersions(dbName) {
             })
         });
         
-        const versionSelect = document.getElementById('dbVersion');
-        versionSelect.innerHTML = '<option value="">選擇版本...</option>';
-        
-        if (response.versions) {
-            response.versions.forEach(version => {
-                const option = document.createElement('option');
-                option.value = version;
-                option.textContent = version;
-                versionSelect.appendChild(option);
-            });
+        if (response.success && response.versions) {
+            // 快取結果
+            dbVersionsCache[dbName] = response.versions;
+            displayVersionOptions(response.versions);
+        } else {
+            versionSelect.innerHTML = '<option value="">無可用版本</option>';
         }
         
     } catch (error) {
+        console.error('載入版本失敗:', error);
+        const versionSelect = document.getElementById('dbVersion');
+        versionSelect.innerHTML = '<option value="">載入失敗</option>';
         utils.showNotification('載入版本失敗: ' + error.message, 'error');
+    } finally {
+        const versionSelect = document.getElementById('dbVersion');
+        versionSelect.disabled = false;
+    }
+}
+
+// 顯示版本選項
+function displayVersionOptions(versions) {
+    const versionSelect = document.getElementById('dbVersion');
+    
+    // 清空並添加預設選項
+    versionSelect.innerHTML = '<option value="">選擇版本 (可選)</option>';
+    versionSelect.innerHTML += '<option value="latest">最新版本</option>';
+    
+    if (versions && versions.length > 0) {
+        // 添加分隔線
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '─────────────';
+        versionSelect.appendChild(separator);
+        
+        // 添加版本選項
+        versions.forEach((version, index) => {
+            const option = document.createElement('option');
+            option.value = version;
+            option.textContent = version;
+            
+            // 標記第一個（最新）版本
+            if (index === 0) {
+                option.textContent += ' (最新)';
+            }
+            
+            versionSelect.appendChild(option);
+        });
+        
+        // 顯示版本數量提示
+        const versionGroup = document.getElementById('dbVersionGroup');
+        const hint = versionGroup.querySelector('.form-hint');
+        if (!hint) {
+            const hintDiv = document.createElement('div');
+            hintDiv.className = 'form-hint';
+            hintDiv.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${versions.length} 個版本`;
+            versionGroup.appendChild(hintDiv);
+        }
     }
 }
 
@@ -194,13 +322,26 @@ async function handlePrebuildFile(type, file) {
         showLoading('上傳檔案中...');
         
         // 上傳檔案
-        const uploadResult = await utils.uploadFile(file);
+        const uploadResult = await utils.apiRequest('/api/upload', {
+            method: 'POST',
+            body: (() => {
+                const formData = new FormData();
+                formData.append('file', file);
+                return formData;
+            })(),
+            headers: {} // 不設定 Content-Type，讓瀏覽器自動設定
+        });
+        
         selectedPrebuildFiles[type] = uploadResult.filepath;
         
         // 更新狀態
         document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle"></i>';
         document.getElementById(`${type}Status`).classList.add('success');
-        document.getElementById(`${type}Selected`).textContent = file.name;
+        
+        // 顯示已選擇的檔案
+        const selectedDiv = document.getElementById(`${type}Selected`);
+        selectedDiv.textContent = file.name;
+        selectedDiv.style.display = 'block';
         
         // 更新篩選預覽
         updateFilterPreview();
@@ -224,12 +365,21 @@ function validateFile(file) {
         return false;
     }
     
+    // 檢查檔案大小（最大 50MB）
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+        utils.showNotification('檔案太大，請選擇小於 50MB 的檔案', 'error');
+        return false;
+    }
+    
     return true;
 }
 
 // 顯示已選擇的檔案
 function displaySelectedFile(containerId, filename) {
     const container = document.getElementById(containerId);
+    if (!container) return;
+    
     container.innerHTML = `
         <div class="file-list-container">
             <div class="file-list-header">
@@ -245,6 +395,7 @@ function displaySelectedFile(containerId, filename) {
                     </div>
                     <div class="file-details">
                         <div class="file-name">${filename}</div>
+                        <div class="file-meta">準備就緒</div>
                     </div>
                 </div>
             </div>
@@ -275,7 +426,7 @@ function updateFilterPreview() {
     }
 }
 
-// 執行 Chip Mapping
+// 執行 Chip Mapping 時組合 filter 參數
 async function runChipMapping() {
     if (!selectedMappingFile) {
         utils.showNotification('請先選擇 Mapping Table 檔案', 'error');
@@ -285,20 +436,38 @@ async function runChipMapping() {
     try {
         showLoading('執行 Chip Mapping 中...');
         
+        // 組合 filter 參數
+        const filterType = document.getElementById('filterType').value;
+        const chipFilter = document.getElementById('chipFilter').value;
+        
+        let filterParam = filterType;
+        if (chipFilter !== 'all') {
+            if (filterType !== 'all') {
+                filterParam = `${chipFilter},${filterType}`;
+            } else {
+                filterParam = chipFilter;
+            }
+        }
+        
+        // 收集參數
         const params = {
             mapping_file: selectedMappingFile,
-            filter_type: document.getElementById('filterType').value,
+            filter_type: filterParam,
             db_filter: document.getElementById('dbFilter').value,
             output_path: document.getElementById('chipOutputPath').value
         };
         
-        // 如果選擇了特定 DB，加入版本資訊
+        // 處理 DB 版本參數
         if (params.db_filter !== 'all') {
-            const version = document.getElementById('dbVersion').value;
-            if (version) {
-                params.db_version = version;
+            const dbVersion = document.getElementById('dbVersion').value;
+            
+            if (dbVersion && dbVersion !== 'latest') {
+                // 如果選擇了特定版本，使用 DB#版本 格式
+                params.db_filter = `${params.db_filter}#${dbVersion}`;
             }
         }
+        
+        console.log('執行參數:', params);
         
         const response = await utils.apiRequest('/api/admin/run-chip-mapping', {
             method: 'POST',
@@ -310,6 +479,8 @@ async function runChipMapping() {
         if (response.success) {
             displayResults(response);
             utils.showNotification('執行成功', 'success');
+        } else {
+            utils.showNotification('執行失敗: ' + (response.error || '未知錯誤'), 'error');
         }
         
     } catch (error) {
@@ -576,22 +747,73 @@ async function loadQuickPaths() {
     try {
         const response = await utils.apiRequest('/api/admin/get-download-dirs');
         
-        if (response.directories) {
-            ['chip', 'prebuild'].forEach(type => {
-                const select = document.getElementById(`${type}QuickPath`);
-                select.innerHTML = '<option value="">-- 選擇目錄 --</option>';
-                
-                response.directories.forEach(dir => {
-                    const option = document.createElement('option');
-                    option.value = dir.path;
-                    option.textContent = dir.name;
-                    select.appendChild(option);
-                });
-            });
+        if (response.success && response.directories) {
+            // 更新 Chip Mapping 的快速路徑
+            updateQuickPathSelect('chipQuickPath', response.directories);
+            
+            // 更新 Prebuild Mapping 的快速路徑
+            updateQuickPathSelect('prebuildQuickPath', response.directories);
+            
+            // 顯示路徑資訊
+            console.log('基礎路徑:', response.base_path);
+            console.log('下載路徑:', response.download_path);
+            console.log('找到的目錄:', response.directories.length);
         }
         
     } catch (error) {
         console.error('載入快速路徑失敗:', error);
+    }
+}
+
+// 更新快速路徑下拉選單
+function updateQuickPathSelect(selectId, directories) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // 清空現有選項
+    select.innerHTML = '<option value="">-- 選擇目錄 --</option>';
+    
+    if (directories && directories.length > 0) {
+        // 分組顯示目錄
+        const taskDirs = directories.filter(d => d.type === 'task');
+        const downloadDirs = directories.filter(d => d.type === 'download');
+        
+        // 添加 task 目錄
+        if (taskDirs.length > 0) {
+            const taskGroup = document.createElement('optgroup');
+            taskGroup.label = 'Task 目錄';
+            
+            taskDirs.forEach(dir => {
+                const option = document.createElement('option');
+                option.value = dir.path;
+                option.textContent = `${dir.name} (${dir.file_count} 檔案, ${dir.size_formatted})`;
+                taskGroup.appendChild(option);
+            });
+            
+            select.appendChild(taskGroup);
+        }
+        
+        // 添加 download 目錄
+        if (downloadDirs.length > 0) {
+            const downloadGroup = document.createElement('optgroup');
+            downloadGroup.label = 'Downloads 目錄';
+            
+            downloadDirs.forEach(dir => {
+                const option = document.createElement('option');
+                option.value = dir.path;
+                option.textContent = `${dir.name} (${dir.file_count} 檔案, ${dir.size_formatted})`;
+                downloadGroup.appendChild(option);
+            });
+            
+            select.appendChild(downloadGroup);
+        }
+    } else {
+        // 沒有找到目錄
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '(尚無下載目錄)';
+        option.disabled = true;
+        select.appendChild(option);
     }
 }
 
@@ -602,14 +824,22 @@ function selectQuickPath(type) {
     
     if (select.value) {
         input.value = select.value;
+        utils.showNotification('已選擇路徑: ' + select.value, 'success');
+    } else {
+        utils.showNotification('請選擇一個目錄', 'warning');
     }
 }
 
-// 瀏覽輸出路徑
+// 瀏覽輸出路徑（暫時實作）
 function browseOutputPath(type) {
-    // 這裡可以實作資料夾瀏覽功能
-    // 暫時使用簡單的提示
-    utils.showNotification('資料夾瀏覽功能開發中', 'info');
+    // 顯示提示訊息
+    const currentPath = document.getElementById(`${type}OutputPath`).value;
+    const newPath = prompt('請輸入輸出路徑:', currentPath);
+    
+    if (newPath && newPath !== currentPath) {
+        document.getElementById(`${type}OutputPath`).value = newPath;
+        utils.showNotification('已更新輸出路徑', 'success');
+    }
 }
 
 // 切換 Mapping 來源
@@ -766,13 +996,18 @@ function showLoading(text = '處理中...') {
     const overlay = document.getElementById('loadingOverlay');
     const loadingText = document.getElementById('loadingText');
     
-    loadingText.textContent = text;
-    overlay.classList.remove('hidden');
+    if (overlay && loadingText) {
+        loadingText.textContent = text;
+        overlay.classList.remove('hidden');
+    }
 }
 
 // 隱藏載入中
 function hideLoading() {
-    document.getElementById('loadingOverlay').classList.add('hidden');
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
 }
 
 // 關閉資料夾瀏覽器
