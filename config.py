@@ -63,3 +63,28 @@ GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 # 日誌設定
 LOG_LEVEL = 'INFO'  # 可選：DEBUG, INFO, WARNING, ERROR
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# ======================================
+# ===== gen_mapping_excel 相關設定 =====
+# ======================================
+
+# 輸入檔案設定
+ALL_CHIP_MAPPING_TABLE = 'all_chip_mapping_table.xlsx'  # 預設的 mapping table 檔案名稱
+
+# 輸出檔案設定
+DEFAULT_DAILYBUILD_OUTPUT = 'DailyBuild_mapping.xlsx'  # 功能1預設輸出檔名
+DEFAULT_PREBUILD_OUTPUT = 'PrebuildFW_mapping.xlsx'    # 功能2預設輸出檔名
+
+# DB Type 對應關係
+DB_TYPE_PAIRS = [
+    ('master', 'premp'),
+    ('premp', 'mp'),
+    ('mp', 'mpbackup')
+]
+
+# 預設參數
+DEFAULT_DB_FILTER = 'all'  # 預設抓取所有 DB
+DEFAULT_FILTER = 'all'     # 預設處理所有資料
+
+# SFTP 版本排序設定
+VERSION_SORT_REVERSE = True  # True = 最新版本優先
