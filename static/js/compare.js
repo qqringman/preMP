@@ -1007,6 +1007,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
 
 // 生成比對表格內容 - 完整版本，包含版本差異顏色標註
 function generateCompareTableContent(sheetData, sheetName) {
+    console.log('generateCompareTableContent - sheetName:', sheetName);
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return generateEmptyState('此資料表沒有內容', false);
     }
@@ -1197,7 +1198,12 @@ function generateCompareTableContent(sheetData, sheetName) {
                 }
             } else if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
                 // 版本差異內容的特殊處理 - 關鍵部分！
+                console.log(`Processing version_diff for row ${rowIndex}, column ${col}`);
                 cellContent = formatVersionDiffContentWithColors(row, col);
+                // 直接在這裡也嘗試加入樣式
+                if (cellContent.includes('diff-highlight')) {
+                    console.log('diff-highlight class found in content!');
+                }                
             } else if (col.includes('link') || col.includes('_link')) {
                 // 連結欄位
                 if (value && value.startsWith('http')) {
@@ -1230,12 +1236,20 @@ function generateCompareTableContent(sheetData, sheetName) {
     return html;
 }
 
-// 新增專門處理版本差異內容並標註顏色的函數
+// 修改 formatVersionDiffContentWithColors 函數，加入 debug 訊息
 function formatVersionDiffContentWithColors(row, column) {
     const fileType = row['file_type'] || '';
     const baseContent = row['base_content'] || '';
     const compareContent = row['compare_content'] || '';
     const currentValue = row[column] || '';
+    
+    // DEBUG: 輸出原始資料
+    console.log('=== formatVersionDiffContentWithColors DEBUG ===');
+    console.log('Column:', column);
+    console.log('File Type:', fileType);
+    console.log('Current Value:', currentValue);
+    console.log('Base Content:', baseContent);
+    console.log('Compare Content:', compareContent);
     
     // 處理檔案不存在的情況
     if (currentValue === '(檔案不存在)') {
@@ -1248,23 +1262,27 @@ function formatVersionDiffContentWithColors(row, column) {
     
     // 處理多行差異（用換行符號分隔）
     if (currentValue.includes('\n')) {
+        console.log('Multi-line detected, splitting...');
         const currentLines = currentValue.split('\n');
         const otherContent = column === 'base_content' ? compareContent : baseContent;
         const otherLines = otherContent ? otherContent.split('\n') : [];
+        
+        console.log('Current Lines:', currentLines);
+        console.log('Other Lines:', otherLines);
         
         let formattedHtml = '<div class="version-diff-container">';
         
         currentLines.forEach((line, index) => {
             const otherLine = otherLines[index] || '';
+            console.log(`Line ${index}: "${line}" vs "${otherLine}"`);
             
-            // 格式化每一行
             formattedHtml += '<div class="version-diff-line">';
             
             if (line.startsWith('P_GIT_')) {
-                // F_Version.txt 格式
+                console.log('Processing P_GIT line...');
                 formattedHtml += formatPGitLine(line, otherLine);
             } else if (line.includes(':')) {
-                // Version.txt 格式
+                console.log('Processing key:value line...');
                 formattedHtml += formatKeyValueLine(line, otherLine);
             } else {
                 formattedHtml += line;
@@ -1274,10 +1292,12 @@ function formatVersionDiffContentWithColors(row, column) {
         });
         
         formattedHtml += '</div>';
+        console.log('Final HTML:', formattedHtml);
         return formattedHtml;
     }
     
     // 單行處理
+    console.log('Single line processing...');
     if (currentValue.startsWith('P_GIT_')) {
         return formatPGitLine(currentValue, column === 'base_content' ? compareContent : baseContent);
     } else if (currentValue.includes(':')) {
@@ -1287,12 +1307,18 @@ function formatVersionDiffContentWithColors(row, column) {
     return currentValue;
 }
 
-// 格式化 P_GIT 行（F_Version.txt 格式）
+// 修改 formatPGitLine 函數，加入 debug
 function formatPGitLine(currentLine, otherLine) {
+    console.log('formatPGitLine - Current:', currentLine);
+    console.log('formatPGitLine - Other:', otherLine);
+    
     if (!currentLine || !currentLine.startsWith('P_GIT_')) return currentLine;
     
     const currentParts = currentLine.split(';');
     const otherParts = otherLine ? otherLine.split(';') : [];
+    
+    console.log('Current Parts:', currentParts);
+    console.log('Other Parts:', otherParts);
     
     let formatted = '';
     
@@ -1302,8 +1328,10 @@ function formatPGitLine(currentLine, otherLine) {
         // 索引 3 是 git hash，索引 4 是 revision number
         if (index === 3 || index === 4) {
             const isDifferent = otherParts[index] && part !== otherParts[index];
+            console.log(`Part ${index}: "${part}" vs "${otherParts[index]}" - Different: ${isDifferent}`);
+            
             if (isDifferent) {
-                formatted += `<span class="diff-highlight">${part}</span>`;
+                formatted += `<span class="diff-highlight" style="color: red; font-weight: bold;">${part}</span>`;
             } else {
                 formatted += part;
             }
@@ -1312,6 +1340,7 @@ function formatPGitLine(currentLine, otherLine) {
         }
     });
     
+    console.log('Formatted result:', formatted);
     return formatted;
 }
 

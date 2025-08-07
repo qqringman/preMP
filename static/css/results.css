@@ -2879,3 +2879,29 @@ body {
 .btn-refresh:hover i {
   transform: rotate(180deg);
 }
+
+/* 確保 highlight-red 類別有效 */
+.highlight-red,
+.data-table td .highlight-red,
+.data-table td.content-cell .highlight-red {
+    color: #dc3545 !important;
+    font-weight: 600 !important;
+    background-color: rgba(220, 53, 69, 0.1);
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+/* 內容單元格的樣式 */
+.data-table td.content-cell {
+    font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 12px 20px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 確保 span 內的樣式優先級最高 */
+.data-table td.content-cell span[style*="color"] {
+    /* inline style 已經有最高優先級 */
+}

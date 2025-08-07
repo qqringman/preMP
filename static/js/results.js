@@ -457,21 +457,24 @@ function renderDataTable(sheetData) {
                         const fileType = row['file_type'] || '';
                         let formattedValue = String(value);
                         
-                        if (value.includes('F_HASH:')) {
-                            if (compareValue) {
-                                formattedValue = formatFHashContent(value, compareValue);
-                            } else {
-                                if (value.includes('(not found)')) {
-                                    formattedValue = value.replace('(not found)', '<span class="highlight-red">(not found)</span>');
+                        // 檢查是否包含多行（換行符）
+                        if (value.includes('\n')) {
+                            // 處理多行內容
+                            formattedValue = formatMultiLineContent(value, compareValue, fileType);
+                        } else {
+                            // 單行處理（原有邏輯）
+                            if (value.includes('F_HASH:')) {
+                                if (compareValue) {
+                                    formattedValue = formatFHashContent(value, compareValue);
                                 }
-                            }
-                        } else if (fileType.toLowerCase() === 'f_version.txt' && value.startsWith('P_GIT_')) {
-                            if (compareValue && compareValue.startsWith('P_GIT_')) {
-                                formattedValue = formatFVersionContent(value, compareValue);
-                            }
-                        } else if (value.includes(':') && !value.includes('F_HASH:')) {
-                            if (compareValue && compareValue.includes(':')) {
-                                formattedValue = formatColonContent(value, compareValue);
+                            } else if (fileType.toLowerCase() === 'f_version.txt' && value.startsWith('P_GIT_')) {
+                                if (compareValue && compareValue.startsWith('P_GIT_')) {
+                                    formattedValue = formatFVersionContent(value, compareValue);
+                                }
+                            } else if (value.includes(':') && !value.includes('F_HASH:')) {
+                                if (compareValue && compareValue.includes(':')) {
+                                    formattedValue = formatColonContent(value, compareValue);
+                                }
                             }
                         }
                         
@@ -603,6 +606,34 @@ function renderDataTable(sheetData) {
             console.error('同步表格功能時發生錯誤:', error);
         }
     }, 200);
+}
+
+function formatMultiLineContent(value, compareValue, fileType) {
+    const lines = value.split('\n');
+    const compareLines = compareValue ? compareValue.split('\n') : [];
+    
+    let formattedLines = [];
+    
+    lines.forEach((line, index) => {
+        const compareLine = compareLines[index] || '';
+        let formattedLine = line;
+        
+        if (line.startsWith('P_GIT_')) {
+            // F_Version.txt 格式
+            formattedLine = formatFVersionContent(line, compareLine);
+        } else if (line.includes('F_HASH:')) {
+            // F_HASH 格式
+            formattedLine = formatFHashContent(line, compareLine);
+        } else if (line.includes(':')) {
+            // key:value 格式
+            formattedLine = formatColonContent(line, compareLine);
+        }
+        
+        formattedLines.push(formattedLine);
+    });
+    
+    // 用 <br> 連接所有行
+    return formattedLines.join('<br>');
 }
 
 // 啟用表格功能（拖曳和調整寬度）
@@ -2437,23 +2468,29 @@ window.addEventListener('resize', debounce(() => {
     // 不需要同步欄寬，因為表格現在會自動適應
 }, 200));
 
-// 格式化 F_Version.txt 內容 - 只標記不同的部分
+// 修正 formatFVersionContent 函數 - 確保索引正確
 function formatFVersionContent(value1, value2) {
+    if (!value1 || !value1.startsWith('P_GIT_')) return value1;
+    if (!value2) return value1;  // 如果沒有比較值，返回原值
+    
     const parts1 = value1.split(';');
     const parts2 = value2.split(';');
     
-    if (parts1.length < 5 || parts2.length < 5) {
-        return value1;
-    }
+    // P_GIT_001;realtek/bootcode;realtek/mac7p_64/master;2ef5076;1005445
+    // 索引: 0=P_GIT_001, 1=repo, 2=branch, 3=hash, 4=revision
+    
+    if (parts1.length < 5) return value1;
     
     let result = '';
     for (let i = 0; i < parts1.length; i++) {
         if (i > 0) result += ';';
         
-        // 只有第3、4部分（索引2和3，即git hash 和 svn number）需要比較
+        // 索引 3 是 git hash，索引 4 是 revision number
         if (i === 3 || i === 4) {
+            // 確保比較的部分存在且不同
             if (parts2[i] && parts1[i] !== parts2[i]) {
-                result += `<span class="highlight-red">${parts1[i]}</span>`;
+                // 使用 inline style 確保顏色顯示
+                result += `<span style="color: #dc3545; font-weight: 600; background-color: rgba(220, 53, 69, 0.1); padding: 0 2px; border-radius: 2px;">${parts1[i]}</span>`;
             } else {
                 result += parts1[i];
             }
