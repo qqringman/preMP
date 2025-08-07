@@ -455,29 +455,38 @@ function renderDataTable(sheetData) {
                         
                         // 根據檔案類型處理
                         const fileType = row['file_type'] || '';
-                        let formattedValue = String(value);
+                        let formattedValue = value;
                         
-                        // 檢查是否包含多行（換行符）
-                        if (value.includes('\n')) {
-                            // 處理多行內容
-                            formattedValue = formatMultiLineContent(value, compareValue, fileType);
-                        } else {
-                            // 單行處理（原有邏輯）
-                            if (value.includes('F_HASH:')) {
-                                if (compareValue) {
-                                    formattedValue = formatFHashContent(value, compareValue);
-                                }
-                            } else if (fileType.toLowerCase() === 'f_version.txt' && value.startsWith('P_GIT_')) {
-                                if (compareValue && compareValue.startsWith('P_GIT_')) {
-                                    formattedValue = formatFVersionContent(value, compareValue);
-                                }
-                            } else if (value.includes(':') && !value.includes('F_HASH:')) {
-                                if (compareValue && compareValue.includes(':')) {
-                                    formattedValue = formatColonContent(value, compareValue);
+                        // 特別處理 F_Version.txt 檔案
+                        if (fileType.toLowerCase() === 'f_version.txt' || 
+                            fileType.toLowerCase().includes('version')) {
+                            // 處理 P_GIT_ 開頭的內容
+                            if (value.startsWith('P_GIT_') && compareValue && compareValue.startsWith('P_GIT_')) {
+                                formattedValue = formatFVersionContent(value, compareValue);
+                            }
+                        } 
+                        // 處理 F_HASH 內容
+                        else if (value.includes('F_HASH:')) {
+                            if (compareValue && compareValue.includes('F_HASH:')) {
+                                formattedValue = formatFHashContent(value, compareValue);
+                            }
+                        }
+                        // 處理一般的 key:value 格式（包括版本號）
+                        else if (value.includes(':') && !value.includes('F_HASH:')) {
+                            if (compareValue && compareValue.includes(':')) {
+                                formattedValue = formatColonContent(value, compareValue);
+                            }
+                        }
+                        // 處理純數字版本號（如 0007093）
+                        else if (/^\d+$/.test(value.trim())) {
+                            if (compareValue && /^\d+$/.test(compareValue.trim())) {
+                                if (value.trim() !== compareValue.trim()) {
+                                    formattedValue = `<span class="highlight-red">${value}</span>`;
                                 }
                             }
                         }
                         
+                        // 如果有搜尋詞，進行高亮
                         if (searchTerm) {
                             formattedValue = highlightText(formattedValue, searchTerm);
                         }
@@ -2507,26 +2516,25 @@ window.addEventListener('resize', debounce(() => {
 // 修正 formatFVersionContent 函數 - 確保索引正確
 function formatFVersionContent(value1, value2) {
     if (!value1 || !value1.startsWith('P_GIT_')) return value1;
-    if (!value2) return value1;  // 如果沒有比較值，返回原值
+    if (!value2 || !value2.startsWith('P_GIT_')) return value1;
     
     const parts1 = value1.split(';');
     const parts2 = value2.split(';');
     
-    // P_GIT_001;realtek/bootcode;realtek/mac7p_64/master;2ef5076;1005445
+    // P_GIT_001;realtek/bootcode;realtek/mac9q/master;72bbd9b;0007093
     // 索引: 0=P_GIT_001, 1=repo, 2=branch, 3=hash, 4=revision
     
-    if (parts1.length < 5) return value1;
+    if (parts1.length < 5 || parts2.length < 5) return value1;
     
     let result = '';
     for (let i = 0; i < parts1.length; i++) {
         if (i > 0) result += ';';
         
-        // 索引 3 是 git hash，索引 4 是 revision number
+        // 檢查 hash (索引3) 或 revision (索引4) 是否不同
         if (i === 3 || i === 4) {
-            // 確保比較的部分存在且不同
             if (parts2[i] && parts1[i] !== parts2[i]) {
-                // 使用 inline style 確保顏色顯示
-                result += `<span style="color: #dc3545; font-weight: 600; background-color: rgba(220, 53, 69, 0.1); padding: 0 2px; border-radius: 2px;">${parts1[i]}</span>`;
+                // 使用內聯樣式和 class 確保紅色顯示
+                result += `<span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${parts1[i]}</span>`;
             } else {
                 result += parts1[i];
             }
@@ -2540,29 +2548,25 @@ function formatFVersionContent(value1, value2) {
 
 // 格式化 F_HASH 內容 - 只標記不同的 hash 值
 function formatFHashContent(value1, value2) {
+    if (!value1 || !value2) return value1;
+    
     // 處理 F_HASH: (not found) 的情況
     const notFoundPattern = /F_HASH:\s*\(not found\)/i;
     const hashPattern = /F_HASH:\s*([a-f0-9]+)/i;
     
-    // 檢查是否包含 (not found)
     const hasNotFound1 = notFoundPattern.test(value1);
     const hasNotFound2 = notFoundPattern.test(value2);
     
-    // 如果其中一個是 (not found)，另一個不是，則標記紅色
     if (hasNotFound1 || hasNotFound2) {
         if (hasNotFound1 && !hasNotFound2) {
-            // value1 是 (not found)，標記為紅色
-            return value1.replace('(not found)', '<span class="highlight-red">(not found)</span>');
+            return value1.replace('(not found)', '<span class="highlight-red" style="color: #dc3545 !important;">(not found)</span>');
         } else if (!hasNotFound1 && hasNotFound2) {
-            // value2 是 (not found)，value1 有 hash 值，標記 hash 為紅色
             const match1 = value1.match(hashPattern);
             if (match1) {
-                return value1.replace(match1[1], `<span class="highlight-red">${match1[1]}</span>`);
+                return value1.replace(match1[1], `<span class="highlight-red" style="color: #dc3545 !important;">${match1[1]}</span>`);
             }
-        } else if (hasNotFound1 && hasNotFound2) {
-            // 兩個都是 (not found)，不標記
-            return value1;
         }
+        return value1;
     }
     
     // 正常的 hash 比較
@@ -2574,7 +2578,7 @@ function formatFHashContent(value1, value2) {
         const hash2 = match2[1];
         
         if (hash1 !== hash2) {
-            return value1.replace(hash1, `<span class="highlight-red">${hash1}</span>`);
+            return value1.replace(hash1, `<span class="highlight-red" style="color: #dc3545 !important;">${hash1}</span>`);
         }
     }
     
@@ -2583,6 +2587,13 @@ function formatFHashContent(value1, value2) {
 
 // 格式化包含冒號的內容 - 只標記不同的值
 function formatColonContent(value1, value2) {
+    if (!value1 || !value2) return value1;
+    
+    // 特別處理 P_GIT_ 格式
+    if (value1.startsWith('P_GIT_')) {
+        return formatFVersionContent(value1, value2);
+    }
+    
     const colonIndex1 = value1.indexOf(':');
     const colonIndex2 = value2.indexOf(':');
     
@@ -2601,7 +2612,8 @@ function formatColonContent(value1, value2) {
     const val2 = value2.substring(colonIndex2 + 1).trim();
     
     if (val1 !== val2) {
-        return `${key1}: <span class="highlight-red">${val1}</span>`;
+        // 使用內聯樣式確保紅色顯示
+        return `${key1}: <span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${val1}</span>`;
     }
     
     return value1;
