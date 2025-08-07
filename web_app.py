@@ -385,6 +385,11 @@ class WebProcessor:
             
             compare_dir = os.path.join('compare_results', self.task_id)
             
+            # 確保比對目錄存在（重要修正）
+            if not os.path.exists(compare_dir):
+                os.makedirs(compare_dir, exist_ok=True)
+                self.logger.info(f"建立比對目錄: {compare_dir}")
+            
             if scenarios == 'all':
                 # 執行所有比對情境
                 self.update_progress(30, 'comparing', '正在執行所有比對情境...')

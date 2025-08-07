@@ -1,8 +1,8 @@
 """
-檔案比較模組（增強版）
+檔案比較模組（增強版 - 支援 Mapping Table）
 處理 manifest.xml, F_Version.txt, Version.txt 的差異比較
 支援一次執行所有比對情境
-支援 Mapping Table 進行比對
+支援 Mapping Table 機制進行精確比對
 """
 import os
 import re
@@ -24,7 +24,7 @@ class FileComparator:
         self.excel_handler = ExcelHandler()
         self.base_url_prebuilt = config.GERRIT_BASE_URL_PREBUILT
         self.base_url_normal = config.GERRIT_BASE_URL_NORMAL
-        self.mapping_table = None  # 儲存 mapping table
+        self.mapping_tables = {}  # 儲存載入的 mapping tables
         
     def _shorten_hash(self, hash_str: str) -> str:
         """將 hash code 縮短為前 7 個字元"""
@@ -65,255 +65,6 @@ class FileComparator:
         if '/' in full_module:
             return full_module.split('/')[-1]
         return full_module
-    
-    def _load_mapping_table(self, source_dir: str) -> Optional[pd.DataFrame]:
-        """
-        載入 mapping table
-        
-        Args:
-            source_dir: 來源目錄
-            
-        Returns:
-            Mapping table DataFrame 或 None
-        """
-        # 尋找 mapping table 檔案
-        mapping_patterns = [
-            'DailyBuild_mapping.xlsx',
-            'PrebuildFW_mapping.xlsx',
-            'DailyBuild_*_mapping.xlsx',
-            'PrebuildFW_*_mapping.xlsx',
-            '*_mapping.xlsx'
-        ]
-        
-        mapping_files = []
-        for pattern in mapping_patterns:
-            files = glob.glob(os.path.join(source_dir, pattern))
-            mapping_files.extend(files)
-        
-        if mapping_files:
-            # 選擇第一個找到的 mapping table
-            mapping_file = mapping_files[0]
-            self.logger.info(f"找到 mapping table: {mapping_file}")
-            
-            try:
-                df = self.excel_handler.read_excel(mapping_file)
-                
-                # 檢查必要欄位
-                required_cols = ['DB_Type', 'DB_Info', 'SftpPath', 
-                               'compare_DB_Type', 'compare_DB_Info', 'compare_SftpPath']
-                
-                # 檢查是否有足夠的欄位
-                missing_cols = [col for col in required_cols if col not in df.columns]
-                if missing_cols:
-                    self.logger.warning(f"Mapping table 缺少欄位: {missing_cols}")
-                    return None
-                
-                self.logger.info(f"成功載入 mapping table，共 {len(df)} 筆資料")
-                self.mapping_table = df
-                return df
-                
-            except Exception as e:
-                self.logger.error(f"讀取 mapping table 失敗: {str(e)}")
-                return None
-        
-        self.logger.info("未找到 mapping table，使用預設比對邏輯")
-        return None
-    
-    def _get_mapping_pairs(self, mapping_df: pd.DataFrame, compare_mode: str) -> List[Dict[str, Any]]:
-        """
-        從 mapping table 取得比對配對
-        
-        Args:
-            mapping_df: Mapping table DataFrame
-            compare_mode: 比對模式 (master_vs_premp, premp_vs_wave, wave_vs_backup)
-            
-        Returns:
-            比對配對列表
-        """
-        pairs = []
-        
-        # 根據比對模式過濾資料
-        for idx, row in mapping_df.iterrows():
-            db_type = str(row.get('DB_Type', '')).lower()
-            compare_db_type = str(row.get('compare_DB_Type', '')).lower()
-            
-            # 檢查是否符合比對模式
-            match = False
-            if compare_mode == 'master_vs_premp':
-                match = (db_type == 'master' and compare_db_type == 'premp')
-            elif compare_mode == 'premp_vs_wave':
-                match = (db_type == 'premp' and compare_db_type in ['mp', 'wave'])
-            elif compare_mode == 'wave_vs_backup':
-                match = (db_type in ['mp', 'wave'] and compare_db_type in ['mpbackup', 'wave.backup'])
-            
-            if match:
-                # 從路徑提取資料夾名稱
-                sftp_path = row.get('SftpPath', '')
-                compare_sftp_path = row.get('compare_SftpPath', '')
-                
-                # 解析路徑以取得本地資料夾名稱
-                base_folder = self._extract_folder_from_path(sftp_path, row.get('DB_Folder', ''))
-                compare_folder = self._extract_folder_from_path(compare_sftp_path, row.get('compare_DB_Folder', ''))
-                
-                # 如果有 Module 欄位，使用它；否則從路徑提取
-                module = row.get('Module', '')
-                if not module:
-                    # 從路徑提取模組名稱
-                    module = self._extract_module_from_path(sftp_path)
-                
-                pairs.append({
-                    'module': module,
-                    'base_type': row.get('DB_Type', ''),
-                    'base_info': row.get('DB_Info', ''),
-                    'base_path': sftp_path,
-                    'base_folder': base_folder,
-                    'compare_type': row.get('compare_DB_Type', ''),
-                    'compare_info': row.get('compare_DB_Info', ''),
-                    'compare_path': compare_sftp_path,
-                    'compare_folder': compare_folder
-                })
-        
-        return pairs
-    
-    def _extract_module_from_path(self, sftp_path: str) -> str:
-        """
-        從 SFTP 路徑提取模組名稱
-        
-        Args:
-            sftp_path: SFTP 路徑
-            
-        Returns:
-            模組名稱
-        """
-        # 例如：/DailyBuild/Merlin7/DB2302_xxx -> Merlin7
-        # 例如：/home/vince_lin/ai/PrebuildFW/bootcode/RDDB-531 -> bootcode
-        parts = sftp_path.split('/')
-        
-        # DailyBuild 格式
-        if 'DailyBuild' in parts:
-            idx = parts.index('DailyBuild')
-            if idx + 1 < len(parts):
-                return parts[idx + 1]
-        
-        # PrebuildFW 格式
-        if 'PrebuildFW' in parts:
-            idx = parts.index('PrebuildFW')
-            if idx + 1 < len(parts):
-                return parts[idx + 1]
-        
-        return ''
-    
-    def _extract_folder_from_path(self, sftp_path: str, db_folder: str = '') -> str:
-        """
-        從 SFTP 路徑提取資料夾名稱
-        
-        Args:
-            sftp_path: SFTP 路徑
-            db_folder: DB_Folder 欄位值（如果有）
-            
-        Returns:
-            資料夾名稱
-        """
-        if db_folder:
-            return db_folder
-        
-        # 從路徑提取資料夾名稱
-        # 例如：/DailyBuild/Merlin7/DB2302_xxx/540_all_202508060105 -> DB2302_xxx
-        parts = sftp_path.rstrip('/').split('/')
-        
-        # 尋找包含 DB 或 RDDB 的部分
-        for i, part in enumerate(parts):
-            if part.startswith('DB') or part.startswith('RDDB-'):
-                # 返回該部分（不包含後面的版本號路徑）
-                return part
-        
-        # 如果找不到 DB 開頭的，返回倒數第二個部分（假設最後一個是版本號）
-        if len(parts) >= 2:
-            # 檢查最後一個部分是否像版本號（包含數字和底線）
-            last_part = parts[-1]
-            if '_' in last_part or last_part.isdigit():
-                # 返回倒數第二個部分
-                return parts[-2] if len(parts) >= 2 else parts[-1]
-        
-        return os.path.basename(sftp_path.rstrip('/'))
-    
-    def _find_local_folder_from_mapping(self, source_dir: str, module: str, sftp_path: str) -> Tuple[Optional[str], Optional[str]]:
-        """
-        根據 mapping table 的 SFTP 路徑，在本地尋找對應的資料夾
-        
-        Args:
-            source_dir: 來源目錄
-            module: 模組名稱
-            sftp_path: SFTP 路徑
-            
-        Returns:
-            (module_path, folder_name) 或 (None, None)
-        """
-        # 從 SFTP 路徑提取資料夾名稱特徵
-        # 例如：/DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14_Ref_Plus_GoogleGMS/540_all_202508060105
-        # 提取 DB2302 作為關鍵字
-        
-        db_number = None
-        folder_keywords = []
-        
-        parts = sftp_path.split('/')
-        for part in parts:
-            if part.startswith('DB'):
-                # 提取 DB 編號
-                db_match = re.match(r'(DB\d+)', part)
-                if db_match:
-                    db_number = db_match.group(1)
-                    # 從完整資料夾名稱提取關鍵字
-                    if '_' in part:
-                        folder_keywords = part.split('_')
-                    break
-            elif part.startswith('RDDB-'):
-                # 提取 RDDB 編號
-                rddb_match = re.match(r'(RDDB-\d+)', part)
-                if rddb_match:
-                    db_number = rddb_match.group(1)
-                    folder_keywords = [db_number]
-                    break
-        
-        if not db_number:
-            self.logger.warning(f"無法從路徑提取 DB 編號: {sftp_path}")
-            return None, None
-        
-        # 可能的模組路徑
-        possible_module_paths = [
-            os.path.join(source_dir, module),
-            os.path.join(source_dir, 'DailyBuild', module),
-            os.path.join(source_dir, 'PrebuildFW', module),
-            os.path.join(source_dir, module.split('/')[-1]) if '/' in module else None
-        ]
-        
-        # 過濾掉 None
-        possible_module_paths = [p for p in possible_module_paths if p]
-        
-        # 在每個可能的路徑中尋找
-        for module_path in possible_module_paths:
-            if not os.path.exists(module_path):
-                continue
-                
-            # 列出該模組下的所有資料夾
-            folders = [f for f in os.listdir(module_path) 
-                      if os.path.isdir(os.path.join(module_path, f))]
-            
-            # 尋找匹配的資料夾
-            for folder in folders:
-                # 檢查是否包含 DB 編號
-                if db_number in folder:
-                    # 額外檢查：如果有更多關鍵字，確認是否匹配
-                    if 'PREMP' in sftp_path.upper() and 'PREMP' not in folder.upper():
-                        continue
-                    if 'WAVE' in sftp_path.upper() and 'WAVE' not in folder.upper():
-                        continue
-                    
-                    self.logger.info(f"找到匹配的資料夾: {folder} (根據 {db_number})")
-                    return module_path, folder
-        
-        self.logger.warning(f"找不到本地資料夾對應: {sftp_path}")
-        return None, None
         
     def _parse_manifest_xml(self, file_path: str) -> Dict[str, Dict[str, str]]:
         """
@@ -550,1052 +301,262 @@ class FileComparator:
             
             if file_type.lower() == 'f_version.txt':
                 # F_Version.txt 比較規則：只比較 P_GIT_xxx 行
-                git_lines1 = {}
-                git_lines2 = {}
+                differences = self._compare_f_version_format(lines1, lines2, content1, content2)
                 
-                # 提取 P_GIT_xxx 行
-                for line in lines1:
-                    line = line.strip()
-                    if line.startswith('P_GIT_'):
-                        parts = line.split(';')
-                        if len(parts) >= 5:
-                            git_id = parts[0]
-                            git_lines1[git_id] = line
+            elif file_type.lower() == 'version.txt':
+                # Version.txt 可能有多種格式，需要智能判斷
                 
-                for line in lines2:
-                    line = line.strip()
-                    if line.startswith('P_GIT_'):
-                        parts = line.split(';')
-                        if len(parts) >= 5:
-                            git_id = parts[0]
-                            git_lines2[git_id] = line
+                # 檢查是否包含 P_GIT 格式（類似 F_Version.txt）
+                has_p_git = any('P_GIT_' in line for line in lines1 + lines2)
                 
-                # 比較差異
-                all_git_ids = set(git_lines1.keys()) | set(git_lines2.keys())
-                for git_id in sorted(all_git_ids):
-                    line1 = git_lines1.get(git_id, '')
-                    line2 = git_lines2.get(git_id, '')
-                    if line1 != line2:
-                        differences.append({
-                            'line': git_id,
-                            'file1': line1,
-                            'file2': line2,
-                            'content1': content1,
-                            'content2': content2
-                        })
-                        
-            else:  # Version.txt
-                # 檢查是否是特殊格式（有 F_HASH）
-                has_f_hash = any('F_HASH:' in line for line in lines1 + lines2)
-                
-                if has_f_hash:
-                    # Version.txt with F_HASH format
-                    hash1 = None
-                    hash2 = None
-                    
-                    for line in lines1:
-                        if 'F_HASH:' in line:
-                            parts = line.split('F_HASH:')
-                            if len(parts) > 1:
-                                hash1 = parts[1].strip()
-                                hash_line1 = line.strip()
-                                break
-                    
-                    for line in lines2:
-                        if 'F_HASH:' in line:
-                            parts = line.split('F_HASH:')
-                            if len(parts) > 1:
-                                hash2 = parts[1].strip()
-                                hash_line2 = line.strip()
-                                break
-                    
-                    if hash1 != hash2:
-                        differences.append({
-                            'line': 'F_HASH',
-                            'file1': hash_line1 if 'hash_line1' in locals() else f'F_HASH: {hash1}' if hash1 else 'F_HASH: (not found)',
-                            'file2': hash_line2 if 'hash_line2' in locals() else f'F_HASH: {hash2}' if hash2 else 'F_HASH: (not found)',
-                            'content1': content1,
-                            'content2': content2
-                        })
+                if has_p_git:
+                    # 如果有 P_GIT 格式，使用 F_Version 的比較方式
+                    differences = self._compare_f_version_format(lines1, lines2, content1, content2)
                 else:
-                    # Other Version.txt format: 比較所有包含 ":" 的行
-                    colon_lines1 = {}
-                    colon_lines2 = {}
+                    # 使用一般的 key:value 格式比較
+                    differences = self._compare_key_value_format(lines1, lines2, content1, content2)
                     
-                    # 提取包含 ":" 的行
-                    for line in lines1:
-                        line = line.strip()
-                        if ':' in line and not line.startswith('#') and not line.startswith('//'):
-                            # 使用冒號前的部分作為鍵
-                            key = line.split(':')[0].strip()
-                            colon_lines1[key] = line
-                    
-                    for line in lines2:
-                        line = line.strip()
-                        if ':' in line and not line.startswith('#') and not line.startswith('//'):
-                            key = line.split(':')[0].strip()
-                            colon_lines2[key] = line
-                    
-                    # 比較差異
-                    all_keys = set(colon_lines1.keys()) | set(colon_lines2.keys())
-                    for key in sorted(all_keys):
-                        line1 = colon_lines1.get(key, '')
-                        line2 = colon_lines2.get(key, '')
-                        if line1 != line2:
-                            differences.append({
-                                'line': key,
-                                'file1': line1,
-                                'file2': line2,
-                                'content1': content1,
-                                'content2': content2
-                            })
-                        
         except Exception as e:
             self.logger.error(f"比較文字檔案失敗: {str(e)}")
             
         return differences
 
-    def _extract_module_name_fixed(self, path, source_dir):
+    def _compare_key_value_format(self, lines1: List[str], lines2: List[str],
+                                content1: str, content2: str) -> List[Dict[str, Any]]:
         """
-        修正版：從路徑中提取模組名稱，支援新舊兩種目錄結構
+        比較 key:value 格式（Version.txt 的一般格式）
         
-        新結構：downloads/task_xxx/Merlin8/DB2858_xxx -> 模組名稱是 Merlin8
-        舊結構：downloads/task_xxx/PrebuildFW/bootcode/RDDB-531 -> 模組名稱是 bootcode
-                downloads/task_xxx/DailyBuild/Merlin7/DB2302 -> 模組名稱是 Merlin7
-        """
-        # 移除 source_dir 前綴，得到相對路徑
-        rel_path = os.path.relpath(path, source_dir)
-        path_parts = rel_path.split(os.sep)
-        
-        # 檢查是否為舊的目錄結構
-        if len(path_parts) >= 2:
-            # 檢查是否有 PrebuildFW 或 DailyBuild
-            if path_parts[0] in ['PrebuildFW', 'DailyBuild']:
-                if len(path_parts) >= 3:
-                    # 舊結構：第二層是模組名稱
-                    # 例如：PrebuildFW/bootcode/RDDB-531 -> bootcode
-                    # 或：DailyBuild/Merlin7/DB2302 -> Merlin7
-                    return path_parts[1]
-            else:
-                # 新結構：第一層就是模組名稱
-                # 例如：Merlin8/DB2858_xxx -> Merlin8
-                module_name = path_parts[0]
-                if not module_name.startswith('task_'):
-                    return module_name
-        
-        return None
-
-    def _get_module_locations(self, source_dir):
-        """
-        收集所有模組及其位置，支援新舊兩種目錄結構
-        """
-        module_locations = {}
-        
-        # 掃描目錄結構
-        for root, dirs, files in os.walk(source_dir):
-            # 判斷版本類型
-            version_type = None
-            folder_name = os.path.basename(root).lower()
+        Args:
+            lines1: 第一個檔案的行列表
+            lines2: 第二個檔案的行列表
+            content1: 第一個檔案的完整內容
+            content2: 第二個檔案的完整內容
             
-            # 從資料夾名稱判斷版本類型
-            if 'master' in folder_name:
-                version_type = 'master'
-            elif 'premp' in folder_name or 'pre_mp' in folder_name or 'pre-mp' in folder_name:
-                version_type = 'premp'
-            elif 'wave' in folder_name:
-                if 'backup' not in folder_name:
-                    version_type = 'wave'
-            elif 'backup' in folder_name:
-                version_type = 'backup'
-            else:
-                # 沒有版本標識的視為 master（舊結構）
-                # 例如 RDDB-300, DB2302 等
-                if any(f in files for f in ['manifest.xml', 'F_Version.txt', 'Version.txt']):
-                    # 檢查是否為 RDDB 或 DB 開頭的資料夾
-                    if folder_name.startswith('rddb-') or folder_name.startswith('db'):
-                        # 如果沒有版本後綴，視為 master
-                        if not any(suffix in folder_name for suffix in ['-premp', '-wave', '-backup']):
-                            version_type = 'master'
-            
-            # 收集模組資訊
-            for file in files:
-                if file in ['manifest.xml', 'F_Version.txt', 'Version.txt']:
-                    # 提取模組名稱
-                    module_name = self._extract_module_name_fixed(root, source_dir)
-                    
-                    if module_name and version_type:
-                        if module_name not in module_locations:
-                            module_locations[module_name] = {}
-                        
-                        # 儲存完整路徑和資料夾名稱
-                        module_locations[module_name][version_type] = {
-                            'path': root,
-                            'folder': os.path.basename(root)
-                        }
-                        break  # 找到一個檔案就夠了
-        
-        return module_locations
-
-    def compare_single_scenario(self, source_dir, output_dir, scenario):
+        Returns:
+            差異列表
         """
-        執行單一比對情境 - 優先使用 mapping table
-        """
-        results = {}
-        all_data = {}
+        differences = []
         
-        # 確保輸出目錄存在
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # 優先嘗試載入 mapping table
-        mapping_df = self._load_mapping_table(source_dir)
-        
-        if mapping_df is not None:
-            # 使用 mapping table 進行比對
-            self.logger.info(f"使用 mapping table 進行 {scenario} 比對")
-            module_locations = self._process_mapping_table_for_scenario(mapping_df, source_dir, scenario)
-        else:
-            # 使用資料夾結構進行比對
-            self.logger.info(f"使用資料夾結構進行 {scenario} 比對")
-            module_locations = self._get_module_locations(source_dir)
-        
-        self.logger.info(f"Found {len(module_locations)} modules for single scenario: {scenario}")
-        
-        # 定義情境配置
-        scenario_config = None
-        if scenario == 'master_vs_premp':
-            scenario_config = {
-                'base': 'master',
-                'compare': 'premp',
-                'name': 'master_vs_premp',
-                'display_name': 'Master vs PreMP'
-            }
-        elif scenario == 'premp_vs_wave':
-            scenario_config = {
-                'base': 'premp',
-                'compare': 'wave',
-                'name': 'premp_vs_wave',
-                'display_name': 'PreMP vs Wave'
-            }
-        elif scenario == 'wave_vs_backup':
-            scenario_config = {
-                'base': 'wave',
-                'compare': 'backup',
-                'name': 'wave_vs_backup',
-                'display_name': 'Wave vs Backup'
-            }
-        
-        if not scenario_config:
-            self.logger.error(f"Unknown scenario: {scenario}")
-            return results
-        
-        # 使用與 compare_all_scenarios 完全相同的比對邏輯
-        base_version = scenario_config['base']
-        compare_version = scenario_config['compare']
-        scenario_name = scenario_config['name']
-        display_name = scenario_config['display_name']
-        
-        self.logger.info(f"\n===== Starting {display_name} comparison (single) =====")
-        
-        scenario_results = {
-            'success': 0,
-            'failed': 0,
-            'modules': [],
-            'failed_modules': []
-        }
-        
-        # 收集此情境的所有資料
-        revision_diff_data = []
-        lost_project_data = []
-        version_diff_data = []
-        branch_error_data = []
-        
-        # SN 計數器
-        revision_sn = 1
-        lost_project_sn = 1
-        version_diff_sn = 1
-        branch_error_sn = 1
-        
-        for module_name, locations in module_locations.items():
-            if base_version in locations and compare_version in locations:
-                try:
-                    self.logger.info(f"Comparing {module_name} for {display_name}")
-                    
-                    base_info = locations[base_version]
-                    compare_info = locations[compare_version]
-                    base_path = base_info['path']
-                    compare_path = compare_info['path']
-                    
-                    # ===== 1. 比對 manifest.xml =====
-                    base_manifest = os.path.join(base_path, 'manifest.xml')
-                    compare_manifest = os.path.join(compare_path, 'manifest.xml')
-                    
-                    if os.path.exists(base_manifest) and os.path.exists(compare_manifest):
-                        try:
-                            import xml.etree.ElementTree as ET
-                            
-                            base_tree = ET.parse(base_manifest)
-                            compare_tree = ET.parse(compare_manifest)
-                            
-                            base_root = base_tree.getroot()
-                            compare_root = compare_tree.getroot()
-                            
-                            # 建立專案字典
-                            base_projects = {}
-                            compare_projects = {}
-                            
-                            for project in base_root.findall('.//project'):
-                                name = project.get('name')
-                                if name:
-                                    base_projects[name] = {
-                                        'path': project.get('path', ''),
-                                        'revision': project.get('revision', ''),
-                                        'upstream': project.get('upstream', ''),
-                                        'dest-branch': project.get('dest-branch', '')
-                                    }
-                            
-                            for project in compare_root.findall('.//project'):
-                                name = project.get('name')
-                                if name:
-                                    compare_projects[name] = {
-                                        'path': project.get('path', ''),
-                                        'revision': project.get('revision', ''),
-                                        'upstream': project.get('upstream', ''),
-                                        'dest-branch': project.get('dest-branch', '')
-                                    }
-                            
-                            # 比對 revision 差異
-                            for name, base_proj in base_projects.items():
-                                if name in compare_projects:
-                                    compare_proj = compare_projects[name]
-                                    
-                                    if base_proj['revision'] != compare_proj['revision']:
-                                        revision_diff_data.append({
-                                            'SN': revision_sn,
-                                            'module': module_name,
-                                            'location_path': f"{base_info['folder']} vs {compare_info['folder']}",
-                                            'base_folder': base_info['folder'],
-                                            'compare_folder': compare_info['folder'],
-                                            'name': name,
-                                            'path': base_proj['path'],
-                                            'base_short': base_proj['revision'][:7] if base_proj['revision'] else '',
-                                            'base_revision': base_proj['revision'],
-                                            'compare_short': compare_proj['revision'][:7] if compare_proj['revision'] else '',
-                                            'compare_revision': compare_proj['revision'],
-                                            'base_upstream': base_proj['upstream'],
-                                            'compare_upstream': compare_proj['upstream'],
-                                            'base_dest-branch': base_proj['dest-branch'],
-                                            'compare_dest-branch': compare_proj['dest-branch'],
-                                            'base_link': '',
-                                            'compare_link': ''
-                                        })
-                                        revision_sn += 1
-                                    
-                                    # 檢查分支錯誤
-                                    expected_branch = ''
-                                    if scenario_name == 'master_vs_premp':
-                                        expected_branch = 'premp'
-                                    elif scenario_name == 'premp_vs_wave':
-                                        expected_branch = 'wave'
-                                    elif scenario_name == 'wave_vs_backup':
-                                        expected_branch = 'backup'
-                                    
-                                    if expected_branch and expected_branch not in compare_proj.get('dest-branch', '').lower():
-                                        branch_error_data.append({
-                                            'SN': branch_error_sn,
-                                            'module': module_name,
-                                            'name': name,
-                                            'problem': f'沒改成 {expected_branch}',
-                                            'dest-branch': compare_proj.get('dest-branch', ''),
-                                            'has_wave': 'N'
-                                        })
-                                        branch_error_sn += 1
-                                else:
-                                    # 專案被刪除
-                                    lost_project_data.append({
-                                        'SN': lost_project_sn,
-                                        'Base folder': base_info['folder'],
-                                        '狀態': '刪除',
-                                        'module': module_name,
-                                        'location_path': base_info['folder'],
-                                        'folder': base_info['folder'],
-                                        'name': name,
-                                        'path': base_proj['path'],
-                                        'upstream': base_proj['upstream'],
-                                        'dest-branch': base_proj['dest-branch'],
-                                        'revision': base_proj['revision'],
-                                        'link': ''
-                                    })
-                                    lost_project_sn += 1
-                            
-                            # 檢查新增的專案
-                            for name, compare_proj in compare_projects.items():
-                                if name not in base_projects:
-                                    lost_project_data.append({
-                                        'SN': lost_project_sn,
-                                        'Base folder': compare_info['folder'],
-                                        '狀態': '新增',
-                                        'module': module_name,
-                                        'location_path': compare_info['folder'],
-                                        'folder': compare_info['folder'],
-                                        'name': name,
-                                        'path': compare_proj['path'],
-                                        'upstream': compare_proj['upstream'],
-                                        'dest-branch': compare_proj['dest-branch'],
-                                        'revision': compare_proj['revision'],
-                                        'link': ''
-                                    })
-                                    lost_project_sn += 1
-                                    
-                        except Exception as e:
-                            self.logger.error(f"Error parsing manifest.xml for {module_name}: {e}")
-                    
-                    # ===== 2. 比對版本檔案 =====
-                    for version_file in ['F_Version.txt', 'Version.txt']:
-                        base_version_file = os.path.join(base_path, version_file)
-                        compare_version_file = os.path.join(compare_path, version_file)
-                        
-                        base_exists = os.path.exists(base_version_file)
-                        compare_exists = os.path.exists(compare_version_file)
-                        
-                        if base_exists or compare_exists:
-                            base_content = ''
-                            compare_content = ''
-                            
-                            if base_exists:
-                                try:
-                                    with open(base_version_file, 'r', encoding='utf-8', errors='ignore') as f:
-                                        base_content = f.read().strip()
-                                except:
-                                    base_content = '(讀取錯誤)'
-                            else:
-                                base_content = '(檔案不存在)'
-                            
-                            if compare_exists:
-                                try:
-                                    with open(compare_version_file, 'r', encoding='utf-8', errors='ignore') as f:
-                                        compare_content = f.read().strip()
-                                except:
-                                    compare_content = '(讀取錯誤)'
-                            else:
-                                compare_content = '(檔案不存在)'
-                            
-                            if base_content != compare_content:
-                                version_diff_data.append({
-                                    'SN': version_diff_sn,
-                                    'module': module_name,
-                                    'location_path': f"{base_info['folder']} vs {compare_info['folder']}",
-                                    'base_folder': base_info['folder'],
-                                    'compare_folder': compare_info['folder'],
-                                    'file_type': version_file,
-                                    'base_content': base_content[:200] if len(base_content) > 200 else base_content,
-                                    'compare_content': compare_content[:200] if len(compare_content) > 200 else compare_content,
-                                    'org_content': ''
-                                })
-                                version_diff_sn += 1
-                    
-                    # 標記成功
-                    scenario_results['success'] += 1
-                    scenario_results['modules'].append(module_name)
-                    
-                except Exception as e:
-                    self.logger.error(f"Error comparing {module_name} ({scenario_name}): {e}")
-                    scenario_results['failed'] += 1
-                    scenario_results['failed_modules'].append(module_name)
-        
-        results[scenario_name] = scenario_results
-        
-        # ===== 使用與 compare_all_scenarios 相同的命名規則 =====
-        if revision_diff_data:
-            sheet_name = f'{scenario_name}_revision'
-            all_data[sheet_name] = pd.DataFrame(revision_diff_data)
-            self.logger.info(f"Created sheet: {sheet_name} with {len(revision_diff_data)} rows")
-        
-        if lost_project_data:
-            sheet_name = f'{scenario_name}_lost_project'
-            all_data[sheet_name] = pd.DataFrame(lost_project_data)
-            self.logger.info(f"Created sheet: {sheet_name} with {len(lost_project_data)} rows")
-        
-        if version_diff_data:
-            sheet_name = f'{scenario_name}_version'
-            all_data[sheet_name] = pd.DataFrame(version_diff_data)
-            self.logger.info(f"Created sheet: {sheet_name} with {len(version_diff_data)} rows")
-        
-        if branch_error_data:
-            sheet_name = f'{scenario_name}_branch'
-            all_data[sheet_name] = pd.DataFrame(branch_error_data)
-            self.logger.info(f"Created sheet: {sheet_name} with {len(branch_error_data)} rows")
-        
-        # 如果沒有資料，建立空的資料表
-        if not revision_diff_data and not lost_project_data and not version_diff_data and not branch_error_data:
-            sheet_name = f'{scenario_name}_summary'
-            all_data[sheet_name] = pd.DataFrame([{
-                'SN': 1,
-                'module': '無資料',
-                'status': '沒有找到需要比對的模組',
-                'details': f'{base_version} 和 {compare_version} 沒有共同的模組'
-            }])
-            self.logger.info(f"Created empty sheet: {sheet_name}")
-        
-        # 建立摘要
-        summary_data = [{
-            '比對情境': scenario_name.replace('_', ' ').title(),
-            '成功模組數': scenario_results['success'],
-            '失敗模組數': scenario_results['failed'],
-            '成功模組清單': ', '.join(scenario_results['modules'][:10]) + 
-                        ('...' if len(scenario_results['modules']) > 10 else ''),
-            '失敗模組清單': ', '.join(scenario_results['failed_modules'][:10]) + 
-                        ('...' if len(scenario_results['failed_modules']) > 10 else '')
-        }]
-        
-        # 將摘要加入 all_data
-        all_data_with_summary = {'摘要': pd.DataFrame(summary_data)}
-        all_data_with_summary.update(all_data)
-        
-        # 儲存到 Excel
-        summary_path = os.path.join(output_dir, f'{scenario_name}_compare.xlsx')
-        self.logger.info(f"Saving single scenario Excel with sheets: {list(all_data_with_summary.keys())}")
-        
-        with pd.ExcelWriter(summary_path, engine='openpyxl') as writer:
-            for sheet_name, df in all_data_with_summary.items():
-                self.logger.info(f"Writing sheet '{sheet_name}' with {len(df)} rows")
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-        
-        results['summary_report'] = summary_path
-        
-        self.logger.info(f"Single scenario comparison completed: {scenario}")
-        return results
-            
-    def compare_all_scenarios(self, source_dir, output_dir):
-        """
-        執行所有比對情境 - 優先使用 mapping table
-        """
-        results = {}
-        all_data = {}
-        
-        # 確保輸出目錄存在
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # 優先嘗試載入 mapping table
-        mapping_df = self._load_mapping_table(source_dir)
-        
-        if mapping_df is not None:
-            # 使用 mapping table 進行比對
-            self.logger.info("使用 mapping table 進行所有情境比對")
-            module_locations = self._process_mapping_table_for_all_scenarios(mapping_df, source_dir)
-        else:
-            # 使用資料夾結構進行比對
-            self.logger.info("使用資料夾結構進行所有情境比對")
-            module_locations = self._get_module_locations(source_dir)
-        
-        self.logger.info(f"Found {len(module_locations)} modules")
-        for module, locations in module_locations.items():
-            self.logger.info(f"  {module}: {list(locations.keys())}")
-            for version, info in locations.items():
-                self.logger.info(f"    {version}: {info['folder']}")
-        
-        # 定義所有比對情境
-        comparison_scenarios = [
-            {
-                'base': 'master',
-                'compare': 'premp',
-                'name': 'master_vs_premp',
-                'display_name': 'Master vs PreMP'
-            },
-            {
-                'base': 'premp',
-                'compare': 'wave',
-                'name': 'premp_vs_wave',
-                'display_name': 'PreMP vs Wave'
-            },
-            {
-                'base': 'wave',
-                'compare': 'backup',
-                'name': 'wave_vs_backup',
-                'display_name': 'Wave vs Backup'
-            }
+        # 定義需要比對的關鍵字
+        important_keys = [
+            'GIT_HASH', 'CommitHash', 'CommitCount', 
+            'F_HASH', 'P_JIRA_ID', 'P_JIRA_URL',
+            'P_CATEGORY', 'P_JKS_BUILD_URL', 'P_REPO_INIT',
+            'P_DAILY_BUILD'
         ]
         
-        # 對每個情境使用相同的深度比對邏輯
-        for scenario in comparison_scenarios:
-            base_version = scenario['base']
-            compare_version = scenario['compare']
-            scenario_name = scenario['name']
-            display_name = scenario['display_name']
-            
-            self.logger.info(f"\n===== Starting {display_name} comparison =====")
-            
-            scenario_results = {
-                'success': 0,
-                'failed': 0,
-                'modules': [],
-                'failed_modules': []
-            }
-            
-            # 收集此情境的所有資料
-            revision_diff_data = []
-            lost_project_data = []
-            version_diff_data = []
-            branch_error_data = []
-            
-            # SN 計數器
-            revision_sn = 1
-            lost_project_sn = 1
-            version_diff_sn = 1
-            branch_error_sn = 1
-            
-            for module_name, locations in module_locations.items():
-                if base_version in locations and compare_version in locations:
-                    try:
-                        self.logger.info(f"Comparing {module_name} for {display_name}")
-                        
-                        base_info = locations[base_version]
-                        compare_info = locations[compare_version]
-                        base_path = base_info['path']
-                        compare_path = compare_info['path']
-                        
-                        # ===== 1. 比對 manifest.xml =====
-                        base_manifest = os.path.join(base_path, 'manifest.xml')
-                        compare_manifest = os.path.join(compare_path, 'manifest.xml')
-                        
-                        if os.path.exists(base_manifest) and os.path.exists(compare_manifest):
-                            try:
-                                # 解析 XML
-                                import xml.etree.ElementTree as ET
-                                
-                                base_tree = ET.parse(base_manifest)
-                                compare_tree = ET.parse(compare_manifest)
-                                
-                                base_root = base_tree.getroot()
-                                compare_root = compare_tree.getroot()
-                                
-                                # 建立專案字典
-                                base_projects = {}
-                                compare_projects = {}
-                                
-                                for project in base_root.findall('.//project'):
-                                    name = project.get('name')
-                                    if name:
-                                        base_projects[name] = {
-                                            'path': project.get('path', ''),
-                                            'revision': project.get('revision', ''),
-                                            'upstream': project.get('upstream', ''),
-                                            'dest-branch': project.get('dest-branch', '')
-                                        }
-                                
-                                for project in compare_root.findall('.//project'):
-                                    name = project.get('name')
-                                    if name:
-                                        compare_projects[name] = {
-                                            'path': project.get('path', ''),
-                                            'revision': project.get('revision', ''),
-                                            'upstream': project.get('upstream', ''),
-                                            'dest-branch': project.get('dest-branch', '')
-                                        }
-                                
-                                # 比對 revision 差異
-                                for name, base_proj in base_projects.items():
-                                    if name in compare_projects:
-                                        compare_proj = compare_projects[name]
-                                        
-                                        # 檢查 revision 差異
-                                        if base_proj['revision'] != compare_proj['revision']:
-                                            revision_diff_data.append({
-                                                'SN': revision_sn,
-                                                'module': module_name,
-                                                'location_path': f"{base_info['folder']} vs {compare_info['folder']}",
-                                                'base_folder': base_info['folder'],
-                                                'compare_folder': compare_info['folder'],
-                                                'name': name,
-                                                'path': base_proj['path'],
-                                                'base_short': base_proj['revision'][:7] if base_proj['revision'] else '',
-                                                'base_revision': base_proj['revision'],
-                                                'compare_short': compare_proj['revision'][:7] if compare_proj['revision'] else '',
-                                                'compare_revision': compare_proj['revision'],
-                                                'base_upstream': base_proj['upstream'],
-                                                'compare_upstream': compare_proj['upstream'],
-                                                'base_dest-branch': base_proj['dest-branch'],
-                                                'compare_dest-branch': compare_proj['dest-branch'],
-                                                'base_link': '',
-                                                'compare_link': ''
-                                            })
-                                            revision_sn += 1
-                                        
-                                        # 檢查分支錯誤
-                                        expected_branch = ''
-                                        if scenario_name == 'master_vs_premp':
-                                            expected_branch = 'premp'
-                                        elif scenario_name == 'premp_vs_wave':
-                                            expected_branch = 'wave'
-                                        elif scenario_name == 'wave_vs_backup':
-                                            expected_branch = 'backup'
-                                        
-                                        if expected_branch and expected_branch not in compare_proj.get('dest-branch', '').lower():
-                                            branch_error_data.append({
-                                                'SN': branch_error_sn,
-                                                'module': module_name,
-                                                'name': name,
-                                                'problem': f'沒改成 {expected_branch}',
-                                                'dest-branch': compare_proj.get('dest-branch', ''),
-                                                'has_wave': 'N'
-                                            })
-                                            branch_error_sn += 1
-                                    else:
-                                        # 專案被刪除
-                                        lost_project_data.append({
-                                            'SN': lost_project_sn,
-                                            'Base folder': base_info['folder'],
-                                            '狀態': '刪除',
-                                            'module': module_name,
-                                            'location_path': base_info['folder'],
-                                            'folder': base_info['folder'],
-                                            'name': name,
-                                            'path': base_proj['path'],
-                                            'upstream': base_proj['upstream'],
-                                            'dest-branch': base_proj['dest-branch'],
-                                            'revision': base_proj['revision'],
-                                            'link': ''
-                                        })
-                                        lost_project_sn += 1
-                                
-                                # 檢查新增的專案
-                                for name, compare_proj in compare_projects.items():
-                                    if name not in base_projects:
-                                        lost_project_data.append({
-                                            'SN': lost_project_sn,
-                                            'Base folder': compare_info['folder'],
-                                            '狀態': '新增',
-                                            'module': module_name,
-                                            'location_path': compare_info['folder'],
-                                            'folder': compare_info['folder'],
-                                            'name': name,
-                                            'path': compare_proj['path'],
-                                            'upstream': compare_proj['upstream'],
-                                            'dest-branch': compare_proj['dest-branch'],
-                                            'revision': compare_proj['revision'],
-                                            'link': ''
-                                        })
-                                        lost_project_sn += 1
-                                        
-                            except Exception as e:
-                                self.logger.error(f"Error parsing manifest.xml for {module_name}: {e}")
-                        
-                        # ===== 2. 比對版本檔案 =====
-                        for version_file in ['F_Version.txt', 'Version.txt']:
-                            base_version_file = os.path.join(base_path, version_file)
-                            compare_version_file = os.path.join(compare_path, version_file)
-                            
-                            base_exists = os.path.exists(base_version_file)
-                            compare_exists = os.path.exists(compare_version_file)
-                            
-                            if base_exists or compare_exists:
-                                base_content = ''
-                                compare_content = ''
-                                
-                                if base_exists:
-                                    try:
-                                        with open(base_version_file, 'r', encoding='utf-8', errors='ignore') as f:
-                                            base_content = f.read().strip()
-                                    except:
-                                        base_content = '(讀取錯誤)'
-                                else:
-                                    base_content = '(檔案不存在)'
-                                
-                                if compare_exists:
-                                    try:
-                                        with open(compare_version_file, 'r', encoding='utf-8', errors='ignore') as f:
-                                            compare_content = f.read().strip()
-                                    except:
-                                        compare_content = '(讀取錯誤)'
-                                else:
-                                    compare_content = '(檔案不存在)'
-                                
-                                # 只記錄有差異的
-                                if base_content != compare_content:
-                                    version_diff_data.append({
-                                        'SN': version_diff_sn,
-                                        'module': module_name,
-                                        'location_path': f"{base_info['folder']} vs {compare_info['folder']}",
-                                        'base_folder': base_info['folder'],
-                                        'compare_folder': compare_info['folder'],
-                                        'file_type': version_file,
-                                        'base_content': base_content[:200] if len(base_content) > 200 else base_content,
-                                        'compare_content': compare_content[:200] if len(compare_content) > 200 else compare_content,
-                                        'org_content': ''
-                                    })
-                                    version_diff_sn += 1
-                        
-                        # 標記成功
-                        scenario_results['success'] += 1
-                        scenario_results['modules'].append(module_name)
-                        
-                    except Exception as e:
-                        self.logger.error(f"Error comparing {module_name} ({scenario_name}): {e}")
-                        scenario_results['failed'] += 1
-                        scenario_results['failed_modules'].append(module_name)
-            
-            results[scenario_name] = scenario_results
-            
-            # ===== 統一使用帶前綴的命名 =====
-            if revision_diff_data:
-                sheet_name = f'{scenario_name}_revision'
-                all_data[sheet_name] = pd.DataFrame(revision_diff_data)
-                self.logger.info(f"Created sheet: {sheet_name} with {len(revision_diff_data)} rows")
-            
-            if lost_project_data:
-                sheet_name = f'{scenario_name}_lost_project'
-                all_data[sheet_name] = pd.DataFrame(lost_project_data)
-                self.logger.info(f"Created sheet: {sheet_name} with {len(lost_project_data)} rows")
-            
-            if version_diff_data:
-                sheet_name = f'{scenario_name}_version'
-                all_data[sheet_name] = pd.DataFrame(version_diff_data)
-                self.logger.info(f"Created sheet: {sheet_name} with {len(version_diff_data)} rows")
-            
-            if branch_error_data:
-                sheet_name = f'{scenario_name}_branch'
-                all_data[sheet_name] = pd.DataFrame(branch_error_data)
-                self.logger.info(f"Created sheet: {sheet_name} with {len(branch_error_data)} rows")
-            
-            # 如果沒有資料，建立空的資料表
-            if not revision_diff_data and not lost_project_data and not version_diff_data and not branch_error_data:
-                # 至少建立一個空的資料表表示此情境已執行
-                sheet_name = f'{scenario_name}_summary'
-                all_data[sheet_name] = pd.DataFrame([{
-                    'SN': 1,
-                    'module': '無資料',
-                    'status': '沒有找到需要比對的模組',
-                    'details': f'{base_version} 和 {compare_version} 沒有共同的模組'
-                }])
-                self.logger.info(f"Created empty sheet: {sheet_name}")
-            
-            self.logger.info(f"Completed {display_name}: {scenario_results['success']} success, {scenario_results['failed']} failed")
+        # 提取包含關鍵字的行
+        key_lines1 = {}
+        key_lines2 = {}
         
-        # ===== 建立摘要資料 =====
-        summary_data = []
-        total_success = 0
-        total_failed = 0
-        
-        for scenario_name, scenario_results in results.items():
-            total_success += scenario_results['success']
-            total_failed += scenario_results['failed']
-            
-            summary_data.append({
-                '比對情境': scenario_name.replace('_', ' ').title(),
-                '成功模組數': scenario_results['success'],
-                '失敗模組數': scenario_results['failed'],
-                '成功模組清單': ', '.join(scenario_results['modules'][:10]) + 
-                            ('...' if len(scenario_results['modules']) > 10 else ''),
-                '失敗模組清單': ', '.join(scenario_results['failed_modules'][:10]) + 
-                            ('...' if len(scenario_results['failed_modules']) > 10 else '')
-            })
-        
-        # 加入總計
-        summary_data.append({
-            '比對情境': '總計',
-            '成功模組數': total_success,
-            '失敗模組數': total_failed,
-            '成功模組清單': str(total_success),
-            '失敗模組清單': str(total_failed)
-        })
-        
-        # 將摘要加入 all_data（放在最前面）
-        all_data_with_summary = {'摘要': pd.DataFrame(summary_data)}
-        all_data_with_summary.update(all_data)
-        
-        # ===== 儲存所有資料到 Excel =====
-        summary_path = os.path.join(output_dir, 'all_scenarios_compare.xlsx')
-        self.logger.info(f"Saving Excel file with sheets: {list(all_data_with_summary.keys())}")
-        
-        with pd.ExcelWriter(summary_path, engine='openpyxl') as writer:
-            for sheet_name, df in all_data_with_summary.items():
-                self.logger.info(f"Writing sheet '{sheet_name}' with {len(df)} rows")
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+        for line in lines1:
+            line = line.strip()
+            if not line or line.startswith('#') or line.startswith('//'):
+                continue
                 
-                # 調整欄寬
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
+            # 尋找包含重要關鍵字的行
+            for key in important_keys:
+                if key in line:
+                    # 嘗試解析 key:value 格式
+                    if ':' in line:
+                        parts = line.split(':', 1)
+                        key_part = parts[0].strip()
+                        value_part = parts[1].strip() if len(parts) > 1 else ''
+                        
+                        # 使用較寬鬆的 key 匹配
+                        if key in key_part:
+                            key_lines1[key_part] = line
+                            break
+                    elif ';' in line:
+                        # 處理用分號分隔的格式
+                        key_lines1[key] = line
+                        break
         
-        # 加入摘要報告路徑到結果
-        results['summary_report'] = summary_path
+        for line in lines2:
+            line = line.strip()
+            if not line or line.startswith('#') or line.startswith('//'):
+                continue
+                
+            for key in important_keys:
+                if key in line:
+                    if ':' in line:
+                        parts = line.split(':', 1)
+                        key_part = parts[0].strip()
+                        value_part = parts[1].strip() if len(parts) > 1 else ''
+                        
+                        if key in key_part:
+                            key_lines2[key_part] = line
+                            break
+                    elif ';' in line:
+                        key_lines2[key] = line
+                        break
         
-        self.logger.info(f"All scenarios comparison completed. Results saved to {summary_path}")
-        return results
+        # 比較差異
+        all_keys = set(key_lines1.keys()) | set(key_lines2.keys())
+        for key in sorted(all_keys):
+            line1 = key_lines1.get(key, '')
+            line2 = key_lines2.get(key, '')
+            
+            # 提取值進行比較
+            value1 = self._extract_value_from_line(line1)
+            value2 = self._extract_value_from_line(line2)
+            
+            if value1 != value2:
+                differences.append({
+                    'line': key,
+                    'file1': line1 if line1 else '(不存在)',
+                    'file2': line2 if line2 else '(不存在)',
+                    'content1': content1,
+                    'content2': content2
+                })
+        
+        return differences
 
-    def _process_mapping_table_for_scenario(self, mapping_df, source_dir, scenario):
+    def _extract_value_from_line(self, line: str) -> str:
         """
-        根據 mapping table 處理單一情境的模組位置
+        從行中提取值部分
+        
+        Args:
+            line: 包含 key:value 或其他格式的行
+            
+        Returns:
+            提取的值
         """
-        module_locations = {}
+        if not line:
+            return ''
         
-        # 根據 scenario 過濾 mapping table
-        pairs = self._get_mapping_pairs(mapping_df, scenario)
+        # 處理 key:value 格式
+        if ':' in line:
+            parts = line.split(':', 1)
+            if len(parts) > 1:
+                return parts[1].strip()
         
-        for pair in pairs:
-            module = pair['module']
-            base_path = pair['base_path']
-            compare_path = pair['compare_path']
-            
-            # 尋找本地資料夾
-            base_module_path, base_folder = self._find_local_folder_from_mapping(source_dir, module, base_path)
-            compare_module_path, compare_folder = self._find_local_folder_from_mapping(source_dir, module, compare_path)
-            
-            if base_module_path and base_folder and compare_module_path and compare_folder:
-                if module not in module_locations:
-                    module_locations[module] = {}
+        # 處理 key=value 格式
+        if '=' in line:
+            parts = line.split('=', 1)
+            if len(parts) > 1:
+                return parts[1].strip()
+        
+        return line
                 
-                # 根據 scenario 設定版本類型
-                if scenario == 'master_vs_premp':
-                    module_locations[module]['master'] = {
-                        'path': os.path.join(base_module_path, base_folder),
-                        'folder': base_folder
-                    }
-                    module_locations[module]['premp'] = {
-                        'path': os.path.join(compare_module_path, compare_folder),
-                        'folder': compare_folder
-                    }
-                elif scenario == 'premp_vs_wave':
-                    module_locations[module]['premp'] = {
-                        'path': os.path.join(base_module_path, base_folder),
-                        'folder': base_folder
-                    }
-                    module_locations[module]['wave'] = {
-                        'path': os.path.join(compare_module_path, compare_folder),
-                        'folder': compare_folder
-                    }
-                elif scenario == 'wave_vs_backup':
-                    module_locations[module]['wave'] = {
-                        'path': os.path.join(base_module_path, base_folder),
-                        'folder': base_folder
-                    }
-                    module_locations[module]['backup'] = {
-                        'path': os.path.join(compare_module_path, compare_folder),
-                        'folder': compare_folder
+    def _compare_f_version_format(self, lines1: List[str], lines2: List[str], 
+                                content1: str, content2: str) -> List[Dict[str, Any]]:
+        """
+        比較 F_Version.txt 格式（P_GIT_xxx 行）
+        
+        Args:
+            lines1: 第一個檔案的行列表
+            lines2: 第二個檔案的行列表
+            content1: 第一個檔案的完整內容
+            content2: 第二個檔案的完整內容
+            
+        Returns:
+            差異列表
+        """
+        differences = []
+        git_lines1 = {}
+        git_lines2 = {}
+        
+        # 提取 P_GIT_xxx 行
+        for line in lines1:
+            line = line.strip()
+            if line.startswith('P_GIT_'):
+                # P_GIT_001;realtek/bootcode;realtek/mac7p_64/master;2ef5076;1005445
+                parts = line.split(';')
+                if len(parts) >= 5:
+                    git_id = parts[0]
+                    git_lines1[git_id] = {
+                        'full_line': line,
+                        'parts': parts,
+                        'repo': parts[1] if len(parts) > 1 else '',
+                        'branch': parts[2] if len(parts) > 2 else '',
+                        'commit': parts[3] if len(parts) > 3 else '',  # 這是需要比對的
+                        'count': parts[4] if len(parts) > 4 else ''    # 這也需要比對
                     }
         
-        # 如果 mapping table 沒有找到配對，使用資料夾結構
-        if not module_locations:
-            self.logger.warning(f"Mapping table 沒有找到 {scenario} 的配對，改用資料夾結構")
-            module_locations = self._get_module_locations(source_dir)
+        for line in lines2:
+            line = line.strip()
+            if line.startswith('P_GIT_'):
+                parts = line.split(';')
+                if len(parts) >= 5:
+                    git_id = parts[0]
+                    git_lines2[git_id] = {
+                        'full_line': line,
+                        'parts': parts,
+                        'repo': parts[1] if len(parts) > 1 else '',
+                        'branch': parts[2] if len(parts) > 2 else '',
+                        'commit': parts[3] if len(parts) > 3 else '',
+                        'count': parts[4] if len(parts) > 4 else ''
+                    }
         
-        return module_locations
+        # 比較差異
+        all_git_ids = set(git_lines1.keys()) | set(git_lines2.keys())
+        for git_id in sorted(all_git_ids):
+            line1_data = git_lines1.get(git_id, {})
+            line2_data = git_lines2.get(git_id, {})
+            
+            line1 = line1_data.get('full_line', '')
+            line2 = line2_data.get('full_line', '')
+            
+            # 比較 commit hash (第4個欄位) 和 count (第5個欄位)
+            if line1 and line2:
+                commit1 = line1_data.get('commit', '')
+                commit2 = line2_data.get('commit', '')
+                count1 = line1_data.get('count', '')
+                count2 = line2_data.get('count', '')
+                
+                if commit1 != commit2 or count1 != count2:
+                    differences.append({
+                        'line': git_id,
+                        'file1': line1,
+                        'file2': line2,
+                        'content1': content1,
+                        'content2': content2
+                    })
+            elif line1 or line2:
+                # 只有一邊有這個 GIT ID
+                differences.append({
+                    'line': git_id,
+                    'file1': line1,
+                    'file2': line2,
+                    'content1': content1,
+                    'content2': content2
+                })
+        
+        return differences
+            
+    def compare_all_scenarios(self, source_dir: str, output_dir: str = None) -> Dict[str, Any]:
+        """
+        執行所有比對情境（支援 mapping table）
+        
+        Args:
+            source_dir: 來源目錄
+            output_dir: 輸出目錄
+            
+        Returns:
+            所有比對結果的摘要
+        """
+        output_dir = output_dir or source_dir
 
-    def _process_mapping_table_for_all_scenarios(self, mapping_df, source_dir):
-        """
-        根據 mapping table 處理所有情境的模組位置
-        """
-        module_locations = {}
-        
-        # 處理所有情境
-        scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
-        
-        for scenario in scenarios:
-            pairs = self._get_mapping_pairs(mapping_df, scenario)
-            
-            for pair in pairs:
-                module = pair['module']
-                base_path = pair['base_path']
-                compare_path = pair['compare_path']
-                
-                # 尋找本地資料夾
-                base_module_path, base_folder = self._find_local_folder_from_mapping(source_dir, module, base_path)
-                compare_module_path, compare_folder = self._find_local_folder_from_mapping(source_dir, module, compare_path)
-                
-                if base_module_path and base_folder and compare_module_path and compare_folder:
-                    if module not in module_locations:
-                        module_locations[module] = {}
+        # 確保輸出目錄存在（重要修正）
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+            self.logger.info(f"建立輸出目錄: {output_dir}")
                     
-                    # 根據 scenario 設定版本類型
-                    if scenario == 'master_vs_premp':
-                        module_locations[module]['master'] = {
-                            'path': os.path.join(base_module_path, base_folder),
-                            'folder': base_folder
-                        }
-                        module_locations[module]['premp'] = {
-                            'path': os.path.join(compare_module_path, compare_folder),
-                            'folder': compare_folder
-                        }
-                    elif scenario == 'premp_vs_wave':
-                        module_locations[module]['premp'] = {
-                            'path': os.path.join(base_module_path, base_folder),
-                            'folder': base_folder
-                        }
-                        module_locations[module]['wave'] = {
-                            'path': os.path.join(compare_module_path, compare_folder),
-                            'folder': compare_folder
-                        }
-                    elif scenario == 'wave_vs_backup':
-                        module_locations[module]['wave'] = {
-                            'path': os.path.join(base_module_path, base_folder),
-                            'folder': base_folder
-                        }
-                        module_locations[module]['backup'] = {
-                            'path': os.path.join(compare_module_path, compare_folder),
-                            'folder': compare_folder
-                        }
+        # 載入 mapping tables
+        self.mapping_tables = self._load_mapping_tables(source_dir)
         
-        # 如果 mapping table 沒有找到任何配對，使用資料夾結構
-        if not module_locations:
-            self.logger.warning("Mapping table 沒有找到任何配對，改用資料夾結構")
-            module_locations = self._get_module_locations(source_dir)
-        
-        return module_locations
+        # 如果有 mapping table，優先使用
+        if self.mapping_tables:
+            self.logger.info(f"找到 {len(self.mapping_tables)} 個 mapping tables，將優先使用")
+            return self._compare_with_mapping(source_dir, output_dir)
+        else:
+            self.logger.info("未找到 mapping tables，使用原有邏輯")
+            return self._compare_without_mapping(source_dir, output_dir)
 
-    def _compare_files(self, file1_path, file2_path, file_type):
+    def _compare_with_mapping(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
         """
-        比對兩個檔案的內容
-        """
-        try:
-            # 檢查檔案是否存在
-            if not os.path.exists(file1_path) or not os.path.exists(file2_path):
-                return None
-                
-            # 讀取檔案內容
-            with open(file1_path, 'r', encoding='utf-8', errors='ignore') as f1:
-                content1 = f1.read()
-            with open(file2_path, 'r', encoding='utf-8', errors='ignore') as f2:
-                content2 = f2.read()
-                
-            # 比對內容
-            if content1 != content2:
-                return {
-                    'file_type': file_type,
-                    'has_diff': True,
-                    'size_diff': len(content2) - len(content1)
-                }
-            return None
-            
-        except Exception as e:
-            self.logger.error(f"Error comparing files: {e}")
-            return None
-    
-    # 以下是原始檔案中的其他方法，保持不變
-    
-    def _compare_with_mapping_table(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
-        """
-        使用 mapping table 進行比對
+        使用 mapping table 執行比對
         
         Args:
             source_dir: 來源目錄
@@ -1604,6 +565,12 @@ class FileComparator:
         Returns:
             比對結果
         """
+
+        # 確保輸出目錄存在（重要修正）
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+            self.logger.info(f"建立輸出目錄: {output_dir}")
+            
         # 初始化結果
         all_results = {
             'master_vs_premp': {
@@ -1640,158 +607,76 @@ class FileComparator:
         cannot_compare_modules = []
         
         try:
-            # 處理每個比對情境
-            scenarios = [
-                ('master_vs_premp', 'Master vs PreMP'),
-                ('premp_vs_wave', 'PreMP vs Wave'),
-                ('wave_vs_backup', 'Wave vs Wave.backup')
-            ]
+            # 處理每個情境
+            scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
             
-            for scenario_key, scenario_name in scenarios:
-                # 取得該情境的比對配對
-                pairs = self._get_mapping_pairs(self.mapping_table, scenario_key)
+            for scenario in scenarios:
+                self.logger.info(f"處理情境: {scenario}")
                 
-                self.logger.info(f"處理 {scenario_name}，找到 {len(pairs)} 個比對配對")
+                # 尋找適用的 mapping table
+                mapping_df = None
+                if scenario in self.mapping_tables:
+                    mapping_df = self.mapping_tables[scenario]
+                elif 'general' in self.mapping_tables:
+                    mapping_df = self.mapping_tables['general']
+                elif 'dailybuild' in self.mapping_tables:
+                    mapping_df = self.mapping_tables['dailybuild']
+                elif 'prebuild' in self.mapping_tables:
+                    mapping_df = self.mapping_tables['prebuild']
                 
-                for pair in pairs:
-                    module = pair['module']
-                    base_sftp_path = pair['base_path']
-                    compare_sftp_path = pair['compare_path']
-                    
-                    # 使用新方法尋找本地資料夾
-                    base_module_path, base_folder = self._find_local_folder_from_mapping(
-                        source_dir, module, base_sftp_path
+                if mapping_df is not None:
+                    # 根據 mapping table 找出比對對
+                    comparison_pairs = self._find_comparison_pairs_from_mapping(
+                        mapping_df, source_dir, scenario
                     )
-                    compare_module_path, compare_folder = self._find_local_folder_from_mapping(
-                        source_dir, module, compare_sftp_path
-                    )
-                    
-                    # 確保在同一個模組路徑下
-                    if base_module_path and compare_module_path:
-                        # 優先使用找到的路徑
-                        module_path = base_module_path
-                    else:
-                        module_path = base_module_path or compare_module_path
-                    
-                    if not module_path:
-                        self.logger.warning(f"找不到模組路徑: {module}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
-                        cannot_compare_modules.append({
-                            'SN': len(cannot_compare_modules) + 1,
-                            'module': module,
-                            'location_path': '',
-                            'folder_count': 0,
-                            'folders': '找不到模組路徑',
-                            'path': '',
-                            'reason': f'{scenario_name}: 找不到模組路徑'
-                        })
-                        continue
-                    
-                    if not base_folder:
-                        self.logger.warning(f"找不到 base 資料夾對應: {base_sftp_path}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
-                        cannot_compare_modules.append({
-                            'SN': len(cannot_compare_modules) + 1,
-                            'module': module,
-                            'location_path': module_path,
-                            'folder_count': 0,
-                            'folders': f'找不到對應的 base 資料夾',
-                            'path': base_sftp_path,
-                            'reason': f'{scenario_name}: 找不到 base 資料夾 (SFTP: {base_sftp_path})'
-                        })
-                        continue
-                    
-                    if not compare_folder:
-                        self.logger.warning(f"找不到 compare 資料夾對應: {compare_sftp_path}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
-                        cannot_compare_modules.append({
-                            'SN': len(cannot_compare_modules) + 1,
-                            'module': module,
-                            'location_path': module_path,
-                            'folder_count': 0,
-                            'folders': f'找不到對應的 compare 資料夾',
-                            'path': compare_sftp_path,
-                            'reason': f'{scenario_name}: 找不到 compare 資料夾 (SFTP: {compare_sftp_path})'
-                        })
-                        continue
-                    
-                    # 確認兩個資料夾都存在
-                    base_path = os.path.join(module_path, base_folder)
-                    compare_path = os.path.join(module_path, compare_folder)
-                    
-                    if not os.path.exists(base_path):
-                        self.logger.warning(f"Base 資料夾不存在: {base_path}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
-                        cannot_compare_modules.append({
-                            'SN': len(cannot_compare_modules) + 1,
-                            'module': module,
-                            'location_path': module_path,
-                            'folder_count': 0,
-                            'folders': f'缺少 {base_folder}',
-                            'path': base_path,
-                            'reason': f'{scenario_name}: 缺少 base 資料夾 ({base_folder})'
-                        })
-                        continue
-                    
-                    if not os.path.exists(compare_path):
-                        self.logger.warning(f"Compare 資料夾不存在: {compare_path}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
-                        cannot_compare_modules.append({
-                            'SN': len(cannot_compare_modules) + 1,
-                            'module': module,
-                            'location_path': module_path,
-                            'folder_count': 0,
-                            'folders': f'缺少 {compare_folder}',
-                            'path': compare_path,
-                            'reason': f'{scenario_name}: 缺少 compare 資料夾 ({compare_folder})'
-                        })
-                        continue
                     
                     # 執行比對
-                    try:
-                        results = self._compare_specific_folders(
-                            module_path, base_folder, compare_folder, module, scenario_key
-                        )
-                        
-                        # 收集資料
-                        all_revision_diff.extend(results['revision_diff'])
-                        all_branch_error.extend(results['branch_error'])
-                        all_lost_project.extend(results['lost_project'])
-                        if 'version_diffs' in results:
-                            all_version_diff.extend(results['version_diffs'])
-                        
-                        # 記錄成功
-                        all_results[scenario_key]['success'] += 1
-                        all_results[scenario_key]['modules'].append(module)
-                        
-                        # 寫入個別報表
-                        if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
-                            scenario_dir = os.path.join(output_dir, scenario_key)
-                            module_output_dir = os.path.join(scenario_dir, module)
-                            
-                            if not os.path.exists(module_output_dir):
-                                os.makedirs(module_output_dir)
-                            
-                            # 生成檔案名稱
-                            compare_filename = self._generate_compare_filename(
-                                module, base_folder, compare_folder
+                    for pair in comparison_pairs:
+                        try:
+                            results = self._compare_specific_folders(
+                                os.path.dirname(pair['base_path']),
+                                os.path.basename(pair['base_path']),
+                                os.path.basename(pair['compare_path']),
+                                pair['module'],
+                                scenario
                             )
                             
-                            report_file = self._write_module_compare_report(
-                                module, results, module_output_dir, compare_filename
-                            )
-                            if report_file:
-                                all_results[scenario_key]['reports'].append(report_file)
+                            # 收集資料
+                            all_revision_diff.extend(results['revision_diff'])
+                            all_branch_error.extend(results['branch_error'])
+                            all_lost_project.extend(results['lost_project'])
+                            if 'version_diffs' in results:
+                                all_version_diff.extend(results['version_diffs'])
+                            
+                            # 記錄成功
+                            all_results[scenario]['success'] += 1
+                            all_results[scenario]['modules'].append(pair['module'])
+                            
+                            # 在寫入個別報表時
+                            if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
+                                scenario_dir = os.path.join(output_dir, scenario)
+                                module_output_dir = os.path.join(scenario_dir, pair['module'])
                                 
-                    except Exception as e:
-                        self.logger.error(f"比對 {module} ({scenario_name}) 失敗: {str(e)}")
-                        all_results[scenario_key]['failed'] += 1
-                        all_results[scenario_key]['failed_modules'].append(module)
+                                # 確保目錄存在（使用 exist_ok=True 避免競爭條件）
+                                if not os.path.exists(module_output_dir):
+                                    os.makedirs(module_output_dir, exist_ok=True)
+                                
+                                compare_filename = self._generate_compare_filename(
+                                    pair['module'], pair['base_folder'], pair['compare_folder']
+                                )
+                                
+                                report_file = self._write_module_compare_report(
+                                    pair['module'], results, module_output_dir, compare_filename
+                                )
+                                if report_file:
+                                    all_results[scenario]['reports'].append(report_file)
+                                    
+                        except Exception as e:
+                            self.logger.error(f"比對 {pair['module']} ({scenario}) 失敗: {str(e)}")
+                            all_results[scenario]['failed'] += 1
+                            all_results[scenario]['failed_modules'].append(pair['module'])
+                else:
+                    self.logger.warning(f"未找到 {scenario} 的 mapping table")
             
             # 重新編號所有資料
             for i, item in enumerate(all_revision_diff, 1):
@@ -1814,26 +699,25 @@ class FileComparator:
             return all_results
             
         except Exception as e:
-            self.logger.error(f"使用 mapping table 執行比對失敗: {str(e)}")
-            raise
-    
-    def _compare_all_scenarios_default(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
+            self.logger.error(f"使用 mapping table 比對失敗: {str(e)}")
+            # 如果失敗，改用原有邏輯
+            self.logger.info("改用原有比對邏輯")
+            return self._compare_without_mapping(source_dir, output_dir)
+
+    def _compare_without_mapping(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
         """
-        使用預設邏輯執行所有比對情境（原有邏輯）
+        不使用 mapping table 的原有比對邏輯
         
         Args:
             source_dir: 來源目錄
             output_dir: 輸出目錄
             
         Returns:
-            所有比對結果的摘要
+            比對結果
         """
+        # 這裡使用原本的 compare_all_scenarios 邏輯
+        # （以下為原始邏輯）
         output_dir = output_dir or source_dir
-        
-        # 確保輸出目錄存在
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            self.logger.info(f"建立輸出目錄: {output_dir}")
         
         # 初始化結果
         all_results = {
@@ -1972,10 +856,6 @@ class FileComparator:
                         else:
                             failure_reasons.append(f"{failure['scenario']}: {failure['error']}")
                     
-                    # 新增偵錯資訊
-                    self.logger.warning(f"模組 {module} 無法比對，資料夾列表: {folders}")
-                    self.logger.warning(f"失敗原因: {failure_reasons}")
-                    
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
                         'module': module,
@@ -1987,7 +867,6 @@ class FileComparator:
                     })
                     all_results['failed'] += 1
                     all_results['failed_modules'].append(module)
-                
             
             # 重新編號所有資料
             for i, item in enumerate(all_revision_diff, 1):
@@ -2012,7 +891,7 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"執行所有比對情境失敗: {str(e)}")
             raise
-    
+
     def _generate_compare_filename(self, module: str, base_folder: str, compare_folder: str) -> str:
         """
         生成比較檔案名稱
@@ -2077,7 +956,12 @@ class FileComparator:
             import pandas as pd
             from openpyxl.styles import PatternFill, Font, Alignment
             from openpyxl.worksheet.filters import FilterColumn, Filters, AutoFilter
-            
+
+            # 確保輸出目錄存在（重要修正）
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                self.logger.info(f"建立目錄: {output_dir}")
+                            
             output_file = os.path.join(output_dir, "all_scenarios_compare.xlsx")
             
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
@@ -2298,9 +1182,9 @@ class FileComparator:
             has_wave_col = None
             for idx, col in enumerate(df.columns):
                 if col == 'problem':
-                    problem_col = idx + 1  # 修正：改為 idx + 1
+                    problem_col = idx + 1
                 elif col == 'has_wave':
-                    has_wave_col = idx + 1  # 修正：改為 idx + 1
+                    has_wave_col = idx + 1
             
             if problem_col:
                 # 設定深紅底白字
@@ -2314,9 +1198,9 @@ class FileComparator:
                 cell.font = white_font
                 
                 # 設定 problem 欄位有內容的儲存格為紅字
-                for row_idx in range(2, worksheet.max_row + 1):
+                for row_idx in range(2, worksheet.max_row + 1):  # 使用 worksheet.max_row
                     cell_value = worksheet.cell(row=row_idx, column=problem_col).value
-                    if cell_value and str(cell_value).strip():
+                    if cell_value and str(cell_value).strip():  # 如果有內容
                         worksheet.cell(row=row_idx, column=problem_col).font = red_font
             
             # 設定自動篩選
@@ -2327,7 +1211,7 @@ class FileComparator:
                 # 取得所有唯一的 has_wave 值
                 has_wave_values = df['has_wave'].unique().tolist()
                 
-                # 建立篩選器
+                # 建立篩選器，注意 colId 是從 0 開始的
                 has_wave_df_index = df.columns.get_loc('has_wave')
                 filter_column = FilterColumn(colId=has_wave_df_index)
                 filter_column.filters = Filters()
@@ -2403,7 +1287,7 @@ class FileComparator:
             
             for idx, col in enumerate(df.columns):
                 if col in target_columns:
-                    column_indices[col] = idx + 1  # 修正：改為 idx + 1
+                    column_indices[col] = idx + 1
             
             # 設定標題為深紅底白字（只有 base_content 和 compare_content）
             for col_name, col_idx in column_indices.items():
@@ -2458,7 +1342,7 @@ class FileComparator:
                             self._format_f_version_content(worksheet, row_idx, column_indices, base_content, compare_content)
                         else:
                             # 其他行不需要特殊格式化
-                            pass  # 加上 pass
+                            pass
                     elif 'F_HASH:' in str(base_content) or 'F_HASH:' in str(compare_content):
                         # Version.txt with F_HASH
                         self._format_f_hash_content(worksheet, row_idx, column_indices, base_content, compare_content)
@@ -2481,7 +1365,7 @@ class FileComparator:
                 if i > 0:
                     rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
                 
-                # 只有第3、4部分（索引3和4，即git hash 和 svn number）需要比較
+                # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
                 if i in [3, 4] and i < len(compare_parts) and part != compare_parts[i]:
                     rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
                 else:
@@ -2500,7 +1384,7 @@ class FileComparator:
                 if i > 0:
                     rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
                 
-                # 只有第3、4部分（索引3和4，即git hash 和 svn number）需要比較
+                # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
                 if i in [3, 4] and i < len(base_parts) and part != base_parts[i]:
                     rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
                 else:
@@ -2683,16 +1567,18 @@ class FileComparator:
                             
                             # 為整合報表準備版本檔案差異資料
                             if target_file.lower() in ['version.txt', 'f_version.txt']:
+                                if 'version_diffs' not in results:
+                                    results['version_diffs'] = []
                                 for diff in differences:
                                     version_diff_item = {
-                                        'module': self._extract_simple_module_name(module),
+                                        'module': self._extract_simple_module_name(results['module']),
                                         'location_path': module_path,
                                         'base_folder': base_folder,
                                         'compare_folder': compare_folder,
-                                        'file_type': target_file,  
-                                        'base_content': diff.get('file1', ''), 
-                                        'compare_content': diff.get('file2', ''),  
-                                        'org_content': diff.get('content1', '')  
+                                        'file_type': target_file,  # 這裡應該是檔案類型，如 "F_Version.txt" 或 "Version.txt"
+                                        'base_content': diff.get('file1', ''),  # 這裡應該是差異內容
+                                        'compare_content': diff.get('file2', ''),  # 這裡應該是差異內容
+                                        'org_content': diff.get('content1', '')  # 這裡是原始完整內容
                                     }
                                     results['version_diffs'].append(version_diff_item)
                 else:
@@ -2716,12 +1602,12 @@ class FileComparator:
             產生的比較報表檔案列表
         """
         output_dir = output_dir or source_dir
-        
-        # 確保輸出目錄存在
+
+        # 確保輸出目錄存在（重要修正）
         if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+            os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"建立輸出目錄: {output_dir}")
-        
+            
         compare_files = []
         
         # 用於整合報表的資料
@@ -2791,9 +1677,9 @@ class FileComparator:
                     else:
                         module_output_dir = os.path.join(output_dir, module)
                     
-                    # 確保目錄存在
+                    # 確保目錄存在（使用 exist_ok=True）
                     if not os.path.exists(module_output_dir):
-                        os.makedirs(module_output_dir)
+                        os.makedirs(module_output_dir, exist_ok=True)
                     
                     # 生成檔案名稱
                     compare_filename = self._generate_compare_filename(
@@ -2843,30 +1729,18 @@ class FileComparator:
         backup_folder = None
         
         for folder in folders:
-            folder_upper = folder.upper()
-            
-            # 優先檢查後綴（向後相容）
             if folder.endswith('-wave.backup'):
                 backup_folder = folder
             elif folder.endswith('-wave'):
                 wave_folder = folder
             elif folder.endswith('-premp'):
                 premp_folder = folder
-            # 檢查資料夾名稱中是否包含關鍵字（不區分大小寫）
-            elif 'WAVE.BACKUP' in folder_upper or 'WAVEBACKUP' in folder_upper:
-                backup_folder = folder
-            elif 'WAVE' in folder_upper and 'BACKUP' not in folder_upper and 'PREMP' not in folder_upper:
-                wave_folder = folder
-            elif 'PREMP' in folder_upper:
-                premp_folder = folder
             else:
-                # 沒有關鍵字的是 master
+                # 沒有後綴的是 master
                 if is_rddb_format and folder.startswith('RDDB-'):
                     master_folder = folder
                 elif not is_rddb_format and folder.startswith('DB'):
-                    # 確保不是已經被分類的資料夾
-                    if not any(kw in folder_upper for kw in ['PREMP', 'WAVE', 'BACKUP']):
-                        master_folder = folder
+                    master_folder = folder
         
         # 根據比對模式決定要比對的資料夾
         base_folder = None
@@ -2940,7 +1814,8 @@ class FileComparator:
         
         return base_folder, compare_folder, missing_info
 
-    def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, module: str, compare_mode: str = None) -> Dict[str, Any]:
+    def _compare_specific_folders(self, module_path: str, base_folder: str, compare_folder: str, 
+                              module: str, compare_mode: str = None) -> Dict[str, Any]:
         """
         比較指定的兩個資料夾
         """
@@ -2950,7 +1825,7 @@ class FileComparator:
             'branch_error': [],
             'lost_project': [],
             'text_file_differences': {},
-            'version_diffs': [],  # 新增版本檔案差異
+            'version_diffs': [],
             'base_folder': base_folder,
             'compare_folder': compare_folder
         }
@@ -2984,25 +1859,24 @@ class FileComparator:
                         results['branch_error'] = branch_error
                         results['lost_project'] = lost_project
                     else:
-                        # 比較文字檔案（使用新的比較規則）
+                        # 比較文字檔案（Version.txt 或 F_Version.txt）
                         differences = self._compare_text_files(file1, file2, target_file)
                         if differences:
                             results['text_file_differences'][target_file] = differences
                             
                             # 為整合報表準備版本檔案差異資料
-                            if target_file.lower() in ['version.txt', 'f_version.txt']:
-                                for diff in differences:
-                                    version_diff_item = {
-                                        'module': self._extract_simple_module_name(module),
-                                        'location_path': module_path,
-                                        'base_folder': base_folder,
-                                        'compare_folder': compare_folder,
-                                        'file_type': target_file,  # 保持為檔案類型名稱
-                                        'base_content': diff.get('file1', ''),  # 差異行內容
-                                        'compare_content': diff.get('file2', ''),  # 差異行內容
-                                        'org_content': diff.get('content1', '')  # base 檔案的完整內容
-                                    }
-                                    results['version_diffs'].append(version_diff_item)
+                            for diff in differences:
+                                version_diff_item = {
+                                    'module': self._extract_simple_module_name(module),
+                                    'location_path': module_path,
+                                    'base_folder': base_folder,
+                                    'compare_folder': compare_folder,
+                                    'file_type': target_file,  # 正確的檔案類型
+                                    'base_content': diff.get('file1', ''),  # 實際的差異內容
+                                    'compare_content': diff.get('file2', ''),  # 實際的差異內容
+                                    'org_content': diff.get('content1', '')  # 完整內容
+                                }
+                                results['version_diffs'].append(version_diff_item)
                 elif file1 or file2:
                     # 只有一個檔案存在的情況
                     self.logger.warning(f"檔案 {target_file} 只在一個資料夾中存在")
@@ -3063,7 +1937,12 @@ class FileComparator:
             import pandas as pd
             from openpyxl.styles import PatternFill, Font
             from openpyxl.worksheet.filters import FilterColumn, Filters
-            
+
+            # 確保輸出目錄存在（重要修正）
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                self.logger.info(f"建立目錄: {output_dir}")
+                            
             # 使用自訂檔名或預設檔名
             output_file = os.path.join(output_dir, filename or f"{module}_compare.xlsx")
             
@@ -3162,17 +2041,16 @@ class FileComparator:
     def _write_all_compare_report(self, revision_diff: List[Dict], branch_error: List[Dict],
                              lost_project: List[Dict], version_diff: List[Dict],
                              cannot_compare_modules: List[Dict], output_dir: str) -> str:
-        """
-        寫入整合比較報表（包含所有比較結果）
-        """
+        """寫入整合比較報表（包含所有比較結果）"""
         try:
             import pandas as pd
             from openpyxl.styles import PatternFill, Font
             from openpyxl.worksheet.filters import FilterColumn, Filters
             
-            # 確保輸出目錄存在
+            # 確保輸出目錄存在（重要修正）
             if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+                os.makedirs(output_dir, exist_ok=True)
+                self.logger.info(f"建立目錄: {output_dir}")
                 
             output_file = os.path.join(output_dir, "all_compare.xlsx")
             
@@ -3268,3 +2146,350 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"寫入整合報表失敗: {str(e)}")
             raise
+
+    def _load_mapping_tables(self, source_dir: str) -> Dict[str, pd.DataFrame]:
+        """
+        載入所有 mapping table 檔案
+        
+        Args:
+            source_dir: 來源目錄
+            
+        Returns:
+            包含所有 mapping table 的字典
+        """
+        mapping_tables = {}
+        
+        try:
+            import glob
+            import fnmatch
+            
+            # 搜尋所有可能的 mapping table 檔案模式
+            mapping_patterns = [
+                '*_mapping.xlsx',
+                '*_mapping.xls'
+            ]
+            
+            self.logger.info(f"開始在 {source_dir} 搜尋 mapping tables")
+            
+            # 收集所有找到的檔案（避免重複）
+            found_files = set()
+            
+            # 使用 os.walk 搜尋所有子目錄
+            for root, dirs, files in os.walk(source_dir):
+                for pattern in mapping_patterns:
+                    for file in files:
+                        # 使用 fnmatch 進行模式匹配
+                        if fnmatch.fnmatch(file.lower(), pattern.lower()):
+                            file_path = os.path.join(root, file)
+                            
+                            # 避免重複處理
+                            if file_path not in found_files:
+                                found_files.add(file_path)
+                                
+                                try:
+                                    # 讀取 Excel 檔案
+                                    df = pd.read_excel(file_path)
+                                    
+                                    self.logger.info(f"成功讀取 mapping table: {file}")
+                                    self.logger.info(f"  欄位: {df.columns.tolist()}")
+                                    self.logger.info(f"  資料筆數: {len(df)}")
+                                    
+                                    # 根據檔名決定 mapping 類型
+                                    file_base = os.path.splitext(file)[0].lower()
+                                    
+                                    # 判斷 mapping 類型
+                                    if 'master_vs_premp' in file_base:
+                                        mapping_type = 'master_vs_premp'
+                                    elif 'premp_vs_wave' in file_base or 'premp_vs_mp' in file_base:
+                                        mapping_type = 'premp_vs_wave'
+                                    elif 'wave_vs_backup' in file_base or 'mp_vs_mpbackup' in file_base:
+                                        mapping_type = 'wave_vs_backup'
+                                    elif 'dailybuild' in file_base:
+                                        mapping_type = 'dailybuild'
+                                    elif 'prebuildffw' in file_base or 'prebuild' in file_base:
+                                        mapping_type = 'prebuild'
+                                    else:
+                                        mapping_type = 'general'
+                                    
+                                    # 如果同類型已存在，根據檔名長度決定優先級（更具體的優先）
+                                    if mapping_type in mapping_tables:
+                                        existing_file_length = len(mapping_tables[mapping_type].attrs.get('source_file', ''))
+                                        new_file_length = len(file)
+                                        if new_file_length > existing_file_length:
+                                            mapping_tables[mapping_type] = df
+                                            df.attrs['source_file'] = file
+                                            self.logger.info(f"覆蓋 mapping table 類型 {mapping_type}: {file}")
+                                    else:
+                                        mapping_tables[mapping_type] = df
+                                        df.attrs['source_file'] = file
+                                        self.logger.info(f"載入 mapping table: {file} (類型: {mapping_type})")
+                                    
+                                except Exception as e:
+                                    self.logger.warning(f"無法讀取 mapping table {file}: {str(e)}")
+                                    
+        except Exception as e:
+            self.logger.error(f"載入 mapping tables 失敗: {str(e)}")
+            
+        return mapping_tables
+    
+    def _find_comparison_pairs_from_mapping(self, mapping_df: pd.DataFrame, source_dir: str, scenario: str) -> List[Dict[str, Any]]:
+        """
+        根據 mapping table 找出需要比對的檔案對
+        
+        Args:
+            mapping_df: Mapping DataFrame
+            source_dir: 來源目錄
+            scenario: 比對情境
+            
+        Returns:
+            比對對列表
+        """
+        comparison_pairs = []
+        
+        try:
+            # 預期的欄位名稱（不區分大小寫）- 擴充欄位
+            expected_columns = {
+                'db_type': ['DB_Type', 'db_type', 'Type', 'type'],
+                'db_info': ['DB_Info', 'db_info', 'Info', 'info', 'Module', 'module'],
+                'db_folder': ['DB_Folder', 'db_folder', 'Folder', 'folder'],  # 新增
+                'sftp_path': ['SftpPath', 'sftp_path', 'Path', 'path', 'LocalPath', 'local_path'],
+                'compare_db_type': ['compare_DB_Type', 'compare_db_type', 'Compare_Type', 'compare_type'],
+                'compare_db_info': ['compare_DB_Info', 'compare_db_info', 'Compare_Info', 'compare_info'],
+                'compare_db_folder': ['compare_DB_Folder', 'compare_db_folder', 'Compare_Folder', 'compare_folder'],  # 新增
+                'compare_sftp_path': ['compare_SftpPath', 'compare_sftp_path', 'Compare_Path', 'compare_path'],
+                'module': ['Module', 'module', 'ModuleName', 'module_name']  # 新增 Module 欄位
+            }
+            
+            # 找出實際存在的欄位名稱
+            actual_columns = {}
+            for key, possible_names in expected_columns.items():
+                for name in possible_names:
+                    if name in mapping_df.columns:
+                        actual_columns[key] = name
+                        break
+            
+            self.logger.info(f"找到的 mapping 欄位: {actual_columns}")
+            
+            # 遍歷每一行
+            for idx, row in mapping_df.iterrows():
+                try:
+                    # 取得基礎資訊
+                    db_type = row.get(actual_columns.get('db_type', ''), '')
+                    db_info = row.get(actual_columns.get('db_info', ''), '')
+                    db_folder = row.get(actual_columns.get('db_folder', ''), '')  # 新增
+                    sftp_path = row.get(actual_columns.get('sftp_path', ''), '')
+                    module_name = row.get(actual_columns.get('module', ''), '')  # 新增
+                    
+                    # 取得比對資訊
+                    compare_db_type = row.get(actual_columns.get('compare_db_type', ''), '')
+                    compare_db_info = row.get(actual_columns.get('compare_db_info', ''), '')
+                    compare_db_folder = row.get(actual_columns.get('compare_db_folder', ''), '')  # 新增
+                    compare_sftp_path = row.get(actual_columns.get('compare_sftp_path', ''), '')
+                    
+                    # 檢查是否符合當前情境
+                    if not self._match_scenario(db_type, compare_db_type, scenario):
+                        continue
+                    
+                    self.logger.info(f"處理 mapping 行 {idx}: {db_info}({db_folder}) vs {compare_db_info}({compare_db_folder})")
+                    
+                    # 在 source_dir 中尋找對應的本地路徑（傳入 db_folder）
+                    base_local_path = self._find_local_path(source_dir, sftp_path, db_info, db_folder)
+                    compare_local_path = self._find_local_path(source_dir, compare_sftp_path, compare_db_info, compare_db_folder)
+                    
+                    if base_local_path and compare_local_path:
+                        # 使用 module_name 或從路徑提取
+                        if not module_name:
+                            # 從路徑提取模組名稱
+                            path_parts = base_local_path.replace('\\', '/').split('/')
+                            for part in path_parts:
+                                if part in ['bootcode', 'emcu', 'audio_fw', 'video_fw', 'tee', 'bl31', 'dprx_quickshow']:
+                                    module_name = part
+                                    break
+                            
+                            if not module_name:
+                                module_name = db_info  # 使用 DB_Info 作為後備
+                        
+                        comparison_pairs.append({
+                            'module': module_name,
+                            'base_folder': os.path.basename(base_local_path),
+                            'compare_folder': os.path.basename(compare_local_path),
+                            'base_path': base_local_path,
+                            'compare_path': compare_local_path,
+                            'db_type': db_type,
+                            'compare_db_type': compare_db_type
+                        })
+                        self.logger.info(f"找到比對對: {db_info} ({db_type}) vs {compare_db_info} ({compare_db_type})")
+                        self.logger.info(f"  Base路徑: {base_local_path}")
+                        self.logger.info(f"  Compare路徑: {compare_local_path}")
+                    else:
+                        self.logger.warning(f"無法找到本地路徑 - Base: {base_local_path}, Compare: {compare_local_path}")
+                        
+                except Exception as e:
+                    self.logger.warning(f"處理 mapping 行 {idx} 時出錯: {str(e)}")
+                    
+        except Exception as e:
+            self.logger.error(f"解析 mapping table 失敗: {str(e)}")
+            
+        return comparison_pairs
+    
+    def _match_scenario(self, db_type: str, compare_db_type: str, scenario: str) -> bool:
+        """
+        檢查 DB 類型是否符合比對情境
+        
+        Args:
+            db_type: 基礎 DB 類型
+            compare_db_type: 比對 DB 類型
+            scenario: 比對情境
+            
+        Returns:
+            是否符合
+        """
+        db_type = str(db_type).lower().strip()
+        compare_db_type = str(compare_db_type).lower().strip()
+        
+        scenario_map = {
+            'master_vs_premp': [
+                ('master', 'premp'),
+                ('main', 'premp'),
+                ('release', 'premp')
+            ],
+            'premp_vs_wave': [
+                ('premp', 'wave'),
+                ('premp', 'mp'),
+                ('pre-mp', 'wave'),
+                ('pre-mp', 'mp')
+            ],
+            'wave_vs_backup': [
+                ('wave', 'backup'),
+                ('wave', 'wavebackup'),
+                ('wave', 'wave.backup'),
+                ('mp', 'mpbackup'),
+                ('mp', 'mp.backup')
+            ]
+        }
+        
+        if scenario == 'all':
+            # 檢查所有情境
+            for scenario_pairs in scenario_map.values():
+                for valid_pair in scenario_pairs:
+                    if (db_type == valid_pair[0] and compare_db_type == valid_pair[1]):
+                        return True
+        elif scenario in scenario_map:
+            # 檢查特定情境
+            for valid_pair in scenario_map[scenario]:
+                if (db_type == valid_pair[0] and compare_db_type == valid_pair[1]):
+                    return True
+                    
+        return False
+    
+    def _find_local_path(self, source_dir: str, sftp_path: str, db_info: str, db_folder: str = None) -> Optional[str]:
+        """
+        根據 SFTP 路徑、DB 資訊和 DB Folder 找出本地路徑
+        
+        Args:
+            source_dir: 來源目錄
+            sftp_path: SFTP 路徑
+            db_info: DB 資訊
+            db_folder: DB 資料夾名稱（新增參數）
+            
+        Returns:
+            本地路徑或 None
+        """
+        try:
+            # 策略 0: 如果有 db_folder，優先使用它來匹配
+            if db_folder:
+                for root, dirs, files in os.walk(source_dir):
+                    for dir_name in dirs:
+                        # 完全匹配 db_folder
+                        if dir_name == db_folder:
+                            dir_path = os.path.join(root, dir_name)
+                            if self._has_target_files(dir_path):
+                                self.logger.info(f"通過 DB_Folder 找到路徑: {dir_path}")
+                                return dir_path
+                        # 部分匹配（去除版本號後綴）
+                        if db_folder.split('_')[0] in dir_name:
+                            dir_path = os.path.join(root, dir_name)
+                            if self._has_target_files(dir_path):
+                                self.logger.info(f"通過 DB_Folder 部分匹配找到路徑: {dir_path}")
+                                return dir_path
+            
+            # 策略 1: 直接匹配 DB 資訊
+            for root, dirs, files in os.walk(source_dir):
+                for dir_name in dirs:
+                    # 檢查目錄名稱是否包含 DB 資訊
+                    if db_info and db_info in dir_name:
+                        dir_path = os.path.join(root, dir_name)
+                        if self._has_target_files(dir_path):
+                            self.logger.info(f"通過 DB_Info 找到路徑: {dir_path}")
+                            return dir_path
+            
+            # 策略 2: 從 SFTP 路徑提取關鍵資訊
+            if sftp_path:
+                # 處理 Windows 和 Linux 路徑分隔符
+                sftp_path = sftp_path.replace('\\', '/')
+                path_parts = sftp_path.strip('/').split('/')
+                
+                # 嘗試匹配路徑中的各個部分
+                for i in range(len(path_parts) - 1, -1, -1):
+                    path_part = path_parts[i]
+                    
+                    # 跳過太短的部分
+                    if len(path_part) < 3:
+                        continue
+                        
+                    for root, dirs, files in os.walk(source_dir):
+                        for dir_name in dirs:
+                            # 檢查是否包含路徑部分
+                            if path_part in dir_name or dir_name in path_part:
+                                dir_path = os.path.join(root, dir_name)
+                                if self._has_target_files(dir_path):
+                                    self.logger.info(f"通過 SFTP 路徑部分 '{path_part}' 找到路徑: {dir_path}")
+                                    return dir_path
+            
+            # 策略 3: 模糊匹配
+            # 嘗試用 DB 或 RDDB 編號匹配
+            if db_info and ('DB' in db_info or 'RDDB' in db_info):
+                # 提取編號部分
+                import re
+                match = re.search(r'(R?D+B)-?(\d+)', db_info)
+                if match:
+                    db_prefix = match.group(1)
+                    db_number = match.group(2)
+                    
+                    for root, dirs, files in os.walk(source_dir):
+                        for dir_name in dirs:
+                            # 檢查是否包含相同的 DB 編號
+                            if f"{db_prefix}-{db_number}" in dir_name or f"{db_prefix}{db_number}" in dir_name:
+                                dir_path = os.path.join(root, dir_name)
+                                if self._has_target_files(dir_path):
+                                    self.logger.info(f"通過 DB 編號匹配找到路徑: {dir_path}")
+                                    return dir_path
+            
+            self.logger.warning(f"無法找到本地路徑 - DB_Info: {db_info}, DB_Folder: {db_folder}, SFTP: {sftp_path}")
+            
+        except Exception as e:
+            self.logger.warning(f"尋找本地路徑失敗: {str(e)}")
+            
+        return None
+    
+    def _has_target_files(self, dir_path: str) -> bool:
+        """
+        檢查目錄是否包含目標檔案
+        
+        Args:
+            dir_path: 目錄路徑
+            
+        Returns:
+            是否包含目標檔案
+        """
+        target_files = ['manifest.xml', 'version.txt', 'f_version.txt']
+        
+        try:
+            files = os.listdir(dir_path)
+            for file in files:
+                if file.lower() in target_files:
+                    return True
+        except:
+            pass
+            
+        return False            
