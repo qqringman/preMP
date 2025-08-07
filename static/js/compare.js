@@ -1005,7 +1005,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     modal.classList.remove('hidden');
 }
 
-// 生成比對表格內容 - 修正版本，使用單一表格且套用正確的樣式
+// 生成比對表格內容 - 完整版本，包含版本差異顏色標註
 function generateCompareTableContent(sheetData, sheetName) {
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return generateEmptyState('此資料表沒有內容', false);
@@ -1037,8 +1037,9 @@ function generateCompareTableContent(sheetData, sheetName) {
             headerClass = 'header-red-bg';
         }
         
-        // 欄位名稱對應和寬度設定...
+        // 欄位名稱對應和寬度設定
         const columnMap = {
+            'SN': { text: 'SN', width: '60px' },
             'module': { text: '模組名稱', width: '200px' },
             'location_path': { text: 'FTP 路徑', width: '400px' },
             'path': { text: 'FTP 路徑', width: '400px' },
@@ -1051,7 +1052,23 @@ function generateCompareTableContent(sheetData, sheetName) {
             'problem': { text: '問題', width: '200px' },
             'has_wave': { text: 'has_wave', width: '100px' },
             'Base folder': { text: 'Base folder', width: '150px' },
-            '狀態': { text: '狀態', width: '100px' }
+            '狀態': { text: '狀態', width: '100px' },
+            'name': { text: 'name', width: '250px' },
+            'revision': { text: 'revision', width: '150px' },
+            'revision_short': { text: 'revision_short', width: '100px' },
+            'upstream': { text: 'upstream', width: '300px' },
+            'dest-branch': { text: 'dest-branch', width: '300px' },
+            'base_link': { text: 'base_link', width: '200px' },
+            'compare_link': { text: 'compare_link', width: '200px' },
+            'base_upstream': { text: 'base_upstream', width: '300px' },
+            'compare_upstream': { text: 'compare_upstream', width: '300px' },
+            'base_dest-branch': { text: 'base_dest-branch', width: '300px' },
+            'compare_dest-branch': { text: 'compare_dest-branch', width: '300px' },
+            'folder': { text: 'folder', width: '200px' },
+            'link': { text: 'link', width: '200px' },
+            'folder_count': { text: 'folder_count', width: '100px' },
+            'folders': { text: 'folders', width: '300px' },
+            'reason': { text: 'reason', width: '400px' }
         };
         
         if (columnMap[col]) {
@@ -1066,17 +1083,10 @@ function generateCompareTableContent(sheetData, sheetName) {
     
     html += '</tr></thead>';
     
-    // 表身 - 加入版本差異的顏色標記邏輯
+    // 表身
     html += '<tbody>';
     
     sheetData.data.forEach((row) => {
-        // 檢查是否需要隱藏此行
-        //let shouldHide = false;
-        //if (sheetName === 'branch_error' && row['has_wave'] === 'Y') {
-        //    shouldHide = true;
-        //}
-        
-        //html += `<tr ${shouldHide ? 'style="display: none;"' : ''}>`;
         html += `<tr>`;
 
         sheetData.columns.forEach(col => {
@@ -1087,6 +1097,7 @@ function generateCompareTableContent(sheetData, sheetName) {
             
             // 取得與標頭相同的寬度
             const columnMap = {
+                'SN': { width: '60px' },
                 'module': { width: '200px' },
                 'location_path': { width: '400px' },
                 'path': { width: '400px' },
@@ -1099,7 +1110,23 @@ function generateCompareTableContent(sheetData, sheetName) {
                 'problem': { width: '200px' },
                 'has_wave': { width: '100px' },
                 'Base folder': { width: '150px' },
-                '狀態': { width: '100px' }
+                '狀態': { width: '100px' },
+                'name': { width: '250px' },
+                'revision': { width: '150px' },
+                'revision_short': { width: '100px' },
+                'upstream': { width: '300px' },
+                'dest-branch': { width: '300px' },
+                'base_link': { width: '200px' },
+                'compare_link': { width: '200px' },
+                'base_upstream': { width: '300px' },
+                'compare_upstream': { width: '300px' },
+                'base_dest-branch': { width: '300px' },
+                'compare_dest-branch': { width: '300px' },
+                'folder': { width: '200px' },
+                'link': { width: '200px' },
+                'folder_count': { width: '100px' },
+                'folders': { width: '300px' },
+                'reason': { width: '400px' }
             };
             
             if (columnMap[col]) {
@@ -1109,8 +1136,11 @@ function generateCompareTableContent(sheetData, sheetName) {
             }
             
             // 處理不同類型的欄位
-            if (col === 'module' || col === '模組名稱') {
-                // 模組名稱處理...
+            if (col === 'SN') {
+                // SN 欄位居中顯示
+                cellContent = `<div style="text-align: center;">${value}</div>`;
+            } else if (col === 'module' || col === '模組名稱') {
+                // 模組名稱處理
                 let icon = 'fa-file';
                 const fileName = value.toLowerCase();
                 
@@ -1124,6 +1154,16 @@ function generateCompareTableContent(sheetData, sheetName) {
                     icon = 'fa-cube';
                 } else if (fileName.includes('bootcode')) {
                     icon = 'fa-microchip';
+                } else if (fileName.includes('emcu')) {
+                    icon = 'fa-memory';
+                } else if (fileName.includes('audio_fw')) {
+                    icon = 'fa-volume-up';
+                } else if (fileName.includes('video_fw')) {
+                    icon = 'fa-video';
+                } else if (fileName.includes('tee')) {
+                    icon = 'fa-shield-alt';
+                } else if (fileName.includes('bl31')) {
+                    icon = 'fa-lock';
                 }
                 
                 cellContent = `
@@ -1133,9 +1173,11 @@ function generateCompareTableContent(sheetData, sheetName) {
                     </div>
                 `;
             } else if (col === 'problem' && value) {
+                // problem 欄位紅字
                 cellClass = 'text-red';
                 cellContent = value;
             } else if (col === '狀態') {
+                // 狀態欄位根據值顯示不同顏色
                 if (value === '刪除') {
                     cellClass = 'text-red';
                 } else if (value === '新增') {
@@ -1143,25 +1185,37 @@ function generateCompareTableContent(sheetData, sheetName) {
                 }
                 cellContent = value;
             } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
+                // revision 相關欄位紅字
                 cellClass = 'text-red';
                 cellContent = value;
             } else if (col === 'has_wave') {
+                // has_wave 欄位顯示徽章
                 if (value === 'Y') {
                     cellContent = '<span class="badge-yes">Y</span>';
                 } else if (value === 'N') {
                     cellContent = '<span class="badge-no">N</span>';
                 }
             } else if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
-                // 版本差異內容的特殊處理
-                cellContent = formatVersionDiffContent(row, col);
+                // 版本差異內容的特殊處理 - 關鍵部分！
+                cellContent = formatVersionDiffContentWithColors(row, col);
             } else if (col.includes('link') || col.includes('_link')) {
+                // 連結欄位
                 if (value && value.startsWith('http')) {
                     cellContent = `<a href="${value}" target="_blank" class="table-link">
                         <i class="fas fa-external-link-alt"></i> 查看
                     </a>`;
                 }
             } else if (col.includes('path') || col.includes('folder')) {
+                // 路徑欄位使用等寬字型
                 cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
+            } else if (col === 'org_content') {
+                // org_content 欄位可能很長，限制顯示
+                if (value && value.length > 100) {
+                    const truncated = value.substring(0, 100) + '...';
+                    cellContent = `<span title="${value.replace(/"/g, '&quot;')}" style="cursor: help;">${truncated}</span>`;
+                } else {
+                    cellContent = value;
+                }
             }
             
             html += `<td class="${cellClass}" style="min-width: ${minWidth};">${cellContent}</td>`;
@@ -1174,6 +1228,118 @@ function generateCompareTableContent(sheetData, sheetName) {
     html += '</div>';
     
     return html;
+}
+
+// 新增專門處理版本差異內容並標註顏色的函數
+function formatVersionDiffContentWithColors(row, column) {
+    const fileType = row['file_type'] || '';
+    const baseContent = row['base_content'] || '';
+    const compareContent = row['compare_content'] || '';
+    const currentValue = row[column] || '';
+    
+    // 處理檔案不存在的情況
+    if (currentValue === '(檔案不存在)') {
+        return `<span class="text-red">${currentValue}</span>`;
+    }
+    
+    if (currentValue === '(檔案存在)') {
+        return `<span>${currentValue}</span>`;
+    }
+    
+    // 處理多行差異（用換行符號分隔）
+    if (currentValue.includes('\n')) {
+        const currentLines = currentValue.split('\n');
+        const otherContent = column === 'base_content' ? compareContent : baseContent;
+        const otherLines = otherContent ? otherContent.split('\n') : [];
+        
+        let formattedHtml = '<div class="version-diff-container">';
+        
+        currentLines.forEach((line, index) => {
+            const otherLine = otherLines[index] || '';
+            
+            // 格式化每一行
+            formattedHtml += '<div class="version-diff-line">';
+            
+            if (line.startsWith('P_GIT_')) {
+                // F_Version.txt 格式
+                formattedHtml += formatPGitLine(line, otherLine);
+            } else if (line.includes(':')) {
+                // Version.txt 格式
+                formattedHtml += formatKeyValueLine(line, otherLine);
+            } else {
+                formattedHtml += line;
+            }
+            
+            formattedHtml += '</div>';
+        });
+        
+        formattedHtml += '</div>';
+        return formattedHtml;
+    }
+    
+    // 單行處理
+    if (currentValue.startsWith('P_GIT_')) {
+        return formatPGitLine(currentValue, column === 'base_content' ? compareContent : baseContent);
+    } else if (currentValue.includes(':')) {
+        return formatKeyValueLine(currentValue, column === 'base_content' ? compareContent : baseContent);
+    }
+    
+    return currentValue;
+}
+
+// 格式化 P_GIT 行（F_Version.txt 格式）
+function formatPGitLine(currentLine, otherLine) {
+    if (!currentLine || !currentLine.startsWith('P_GIT_')) return currentLine;
+    
+    const currentParts = currentLine.split(';');
+    const otherParts = otherLine ? otherLine.split(';') : [];
+    
+    let formatted = '';
+    
+    currentParts.forEach((part, index) => {
+        if (index > 0) formatted += ';';
+        
+        // 索引 3 是 git hash，索引 4 是 revision number
+        if (index === 3 || index === 4) {
+            const isDifferent = otherParts[index] && part !== otherParts[index];
+            if (isDifferent) {
+                formatted += `<span class="diff-highlight">${part}</span>`;
+            } else {
+                formatted += part;
+            }
+        } else {
+            formatted += part;
+        }
+    });
+    
+    return formatted;
+}
+
+// 格式化 key:value 行（Version.txt 格式）
+function formatKeyValueLine(currentLine, otherLine) {
+    if (!currentLine || !currentLine.includes(':')) return currentLine;
+    
+    const colonIndex = currentLine.indexOf(':');
+    const key = currentLine.substring(0, colonIndex);
+    const value = currentLine.substring(colonIndex + 1).trim();
+    
+    // 檢查另一行是否有相同的 key
+    let isDifferent = false;
+    if (otherLine && otherLine.includes(':')) {
+        const otherColonIndex = otherLine.indexOf(':');
+        const otherKey = otherLine.substring(0, otherColonIndex);
+        const otherValue = otherLine.substring(otherColonIndex + 1).trim();
+        
+        if (key === otherKey && value !== otherValue) {
+            isDifferent = true;
+        }
+    }
+    
+    if (isDifferent) {
+        return `${key}: <span class="diff-highlight">${value}</span>`;
+    }
+    
+    return currentLine;
 }
 
 // 在顯示空狀態時，使用新的 UI
@@ -1198,6 +1364,7 @@ function formatVersionDiffContent(row, column) {
     const baseContent = row['base_content'] || '';
     const compareContent = row['compare_content'] || '';
     const currentValue = row[column] || '';
+    const diffCount = row['diff_count'] || 0;
     
     // 處理檔案不存在的情況
     if (currentValue === '(檔案不存在)') {
@@ -1208,7 +1375,45 @@ function formatVersionDiffContent(row, column) {
         return `<span>${currentValue}</span>`;
     }
     
-    // 根據檔案類型處理
+    // 如果包含多行差異（用換行符號分隔）
+    if (currentValue.includes('\n')) {
+        const lines = currentValue.split('\n');
+        const otherLines = (column === 'base_content' ? compareContent : baseContent).split('\n');
+        
+        let formattedContent = '<div class="multi-line-diff">';
+        
+        lines.forEach((line, index) => {
+            const otherLine = otherLines[index] || '';
+            
+            // 根據檔案類型處理每一行
+            if (fileType.toLowerCase() === 'f_version.txt') {
+                formattedContent += '<div class="diff-line">';
+                formattedContent += formatSingleFVersionLine(line, otherLine);
+                formattedContent += '</div>';
+            } else if (line.includes('F_HASH:')) {
+                formattedContent += '<div class="diff-line">';
+                formattedContent += formatSingleFHashLine(line, otherLine);
+                formattedContent += '</div>';
+            } else if (line.includes(':')) {
+                formattedContent += '<div class="diff-line">';
+                formattedContent += formatSingleColonLine(line, otherLine);
+                formattedContent += '</div>';
+            } else {
+                formattedContent += `<div class="diff-line">${line}</div>`;
+            }
+        });
+        
+        formattedContent += '</div>';
+        
+        // 如果有差異數量，顯示標籤
+        if (diffCount > 1) {
+            formattedContent += `<div class="diff-count-badge">${diffCount} 處差異</div>`;
+        }
+        
+        return formattedContent;
+    }
+    
+    // 單行差異的原有處理邏輯
     if (fileType.toLowerCase() === 'f_version.txt') {
         return formatFVersionContent(currentValue, column === 'base_content' ? compareContent : baseContent);
     } else if (currentValue.includes('F_HASH:')) {
@@ -1218,6 +1423,93 @@ function formatVersionDiffContent(row, column) {
     }
     
     return currentValue;
+}
+
+// 新增：格式化單行 F_Version 內容
+function formatSingleFVersionLine(currentLine, otherLine) {
+    if (!currentLine.startsWith('P_GIT_')) return currentLine;
+    
+    const currentParts = currentLine.split(';');
+    const otherParts = otherLine ? otherLine.split(';') : [];
+    
+    let formattedContent = '<span class="diff-text">';
+    
+    currentParts.forEach((part, index) => {
+        if (index > 0) formattedContent += ';';
+        
+        // 只有第4和第5部分（索引3和4）需要比較
+        if ((index === 3 || index === 4) && 
+            index < otherParts.length && 
+            part !== otherParts[index]) {
+            formattedContent += `<span class="diff-part">${part}</span>`;
+        } else {
+            formattedContent += `<span class="normal-part">${part}</span>`;
+        }
+    });
+    
+    formattedContent += '</span>';
+    return formattedContent;
+}
+
+// 新增：格式化單行 F_HASH 內容
+function formatSingleFHashLine(currentLine, otherLine) {
+    if (!currentLine.includes('F_HASH:')) return currentLine;
+    
+    const parts = currentLine.split('F_HASH:', 2);
+    if (parts.length < 2) return currentLine;
+    
+    const currentHash = parts[1].trim();
+    let otherHash = '';
+    
+    if (otherLine && otherLine.includes('F_HASH:')) {
+        const otherParts = otherLine.split('F_HASH:', 2);
+        if (otherParts.length >= 2) {
+            otherHash = otherParts[1].trim();
+        }
+    }
+    
+    let formattedContent = '<span class="diff-text">';
+    formattedContent += '<span class="normal-part">F_HASH: </span>';
+    
+    if (currentHash !== otherHash) {
+        formattedContent += `<span class="diff-part">${currentHash}</span>`;
+    } else {
+        formattedContent += `<span class="normal-part">${currentHash}</span>`;
+    }
+    
+    formattedContent += '</span>';
+    return formattedContent;
+}
+
+// 新增：格式化單行冒號內容
+function formatSingleColonLine(currentLine, otherLine) {
+    if (!currentLine.includes(':')) return currentLine;
+    
+    const parts = currentLine.split(':', 2);
+    if (parts.length < 2) return currentLine;
+    
+    const key = parts[0];
+    const currentVal = parts[1].trim();
+    let otherVal = '';
+    
+    if (otherLine && otherLine.includes(':')) {
+        const otherParts = otherLine.split(':', 2);
+        if (otherParts.length >= 2 && otherParts[0] === key) {
+            otherVal = otherParts[1].trim();
+        }
+    }
+    
+    let formattedContent = '<span class="diff-text">';
+    formattedContent += `<span class="normal-part">${key}: </span>`;
+    
+    if (currentVal !== otherVal) {
+        formattedContent += `<span class="diff-part">${currentVal}</span>`;
+    } else {
+        formattedContent += `<span class="normal-part">${currentVal}</span>`;
+    }
+    
+    formattedContent += '</span>';
+    return formattedContent;
 }
 
 // 格式化包含冒號的內容

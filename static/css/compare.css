@@ -3747,3 +3747,112 @@ input.path-input::-webkit-contacts-auto-fill-button {
     background: var(--nordic-blue);
     box-shadow: 0 0 0 6px rgba(33, 150, 243, 0.2);
 }
+
+/* 多行差異顯示樣式 */
+.multi-line-diff {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.875rem;
+}
+
+.diff-line {
+    padding: 0.25rem 0.5rem;
+    background: white;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.diff-line:hover {
+    background: #e9ecef;
+    border-left-color: #2196F3;
+}
+
+/* 差異部分高亮 */
+.diff-part {
+    color: #dc3545;
+    font-weight: 600;
+    background: rgba(220, 53, 69, 0.1);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
+.normal-part {
+    color: #495057;
+}
+
+/* 差異數量標籤 */
+.diff-count-badge {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: #ffc107;
+    color: #212529;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 12px;
+}
+
+/* 改善表格內的多行顯示 */
+.files-table td .multi-line-diff {
+    max-width: 600px;
+    overflow-x: auto;
+}
+
+/* 差異文字容器 */
+.diff-text {
+    display: inline-block;
+    line-height: 1.5;
+}
+
+/* 版本差異容器 */
+.version-diff-container {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.version-diff-line {
+    padding: 2px 0;
+    min-height: 1.4em;
+}
+
+/* 差異高亮標記 - 重要！ */
+.diff-highlight {
+    color: #dc3545 !important;
+    font-weight: 600;
+    background-color: rgba(220, 53, 69, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+/* 確保表格內的差異高亮顯示 */
+.files-table td .diff-highlight {
+    color: #dc3545 !important;
+    font-weight: 600;
+}
+
+/* 多行差異之間的分隔 */
+.version-diff-line + .version-diff-line {
+    border-top: 1px dashed #e0e0e0;
+    margin-top: 4px;
+    padding-top: 4px;
+}
+
+/* 當 hover 時整行高亮 */
+.version-diff-line:hover {
+    background-color: rgba(33, 150, 243, 0.05);
+}
+
+/* 確保文字不會被截斷 */
+.files-table td .version-diff-container {
+    max-width: none;
+    overflow: visible;
+}

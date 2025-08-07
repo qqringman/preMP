@@ -1864,17 +1864,28 @@ class FileComparator:
                         if differences:
                             results['text_file_differences'][target_file] = differences
                             
-                            # 為整合報表準備版本檔案差異資料
-                            for diff in differences:
+                            # 為整合報表準備版本檔案差異資料 - 整合同一檔案的所有差異
+                            if len(differences) > 0:
+                                # 將所有差異整合成一筆資料
+                                all_base_lines = []
+                                all_compare_lines = []
+                                full_content = differences[0].get('content1', '')
+                                
+                                for diff in differences:
+                                    all_base_lines.append(diff.get('file1', ''))
+                                    all_compare_lines.append(diff.get('file2', ''))
+                                
+                                # 建立整合的版本差異項目
                                 version_diff_item = {
                                     'module': self._extract_simple_module_name(module),
                                     'location_path': module_path,
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
-                                    'file_type': target_file,  # 正確的檔案類型
-                                    'base_content': diff.get('file1', ''),  # 實際的差異內容
-                                    'compare_content': diff.get('file2', ''),  # 實際的差異內容
-                                    'org_content': diff.get('content1', '')  # 完整內容
+                                    'file_type': target_file,
+                                    'base_content': '\n'.join(all_base_lines),  # 合併所有 base 差異行
+                                    'compare_content': '\n'.join(all_compare_lines),  # 合併所有 compare 差異行
+                                    'org_content': full_content,  # 完整內容
+                                    'diff_count': len(differences)  # 記錄差異行數
                                 }
                                 results['version_diffs'].append(version_diff_item)
                 elif file1 or file2:
@@ -1896,10 +1907,11 @@ class FileComparator:
                                     'location_path': module_path,
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
-                                    'file_type': target_file,  # 保持為檔案類型名稱
+                                    'file_type': target_file,
                                     'base_content': '(檔案存在)',
                                     'compare_content': '(檔案不存在)',
-                                    'org_content': content1
+                                    'org_content': content1,
+                                    'diff_count': 0
                                 }
                                 results['version_diffs'].append(version_diff_item)
                             except Exception as e:
@@ -1913,10 +1925,11 @@ class FileComparator:
                                     'location_path': module_path,
                                     'base_folder': base_folder,
                                     'compare_folder': compare_folder,
-                                    'file_type': target_file,  # 保持為檔案類型名稱
+                                    'file_type': target_file,
                                     'base_content': '(檔案不存在)',
                                     'compare_content': '(檔案存在)',
-                                    'org_content': content2
+                                    'org_content': content2,
+                                    'diff_count': 0
                                 }
                                 results['version_diffs'].append(version_diff_item)
                             except Exception as e:
