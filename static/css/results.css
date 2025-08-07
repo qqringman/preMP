@@ -2905,3 +2905,73 @@ body {
 .data-table td.content-cell span[style*="color"] {
     /* inline style 已經有最高優先級 */
 }
+
+/* 表格容器重構 - 修正對齊問題 */
+.table-view {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 標頭容器 - 固定高度，隱藏橫向捲軸 */
+.table-header-container {
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  height: auto;
+  overflow: hidden; /* 隱藏標頭的捲軸 */
+  position: relative;
+  z-index: 10;
+}
+
+/* 內容容器 - 確保有捲軸 */
+.table-body-container {
+  background: white;
+  flex: 1;
+  min-height: 0;
+  overflow: auto !important;
+  position: relative;
+}
+
+/* 確保兩個表格使用相同的 table-layout */
+.data-table.header-only,
+.data-table.body-only {
+  background: transparent;
+  border-collapse: collapse;
+  margin: 0;
+  table-layout: fixed; /* 重要：使用固定佈局 */
+  width: 100%;
+  min-width: 1200px; /* 設定相同的最小寬度 */
+}
+
+/* 統一欄位寬度設定 */
+.data-table th,
+.data-table td {
+  padding: 12px 20px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Revision 差異特定欄位寬度 */
+.table-view[data-sheet="revision_diff"] th:nth-child(1),
+.table-view[data-sheet="revision_diff"] td:nth-child(1) { width: 60px; }  /* SN */
+.table-view[data-sheet="revision_diff"] th:nth-child(2),
+.table-view[data-sheet="revision_diff"] td:nth-child(2) { width: 150px; } /* module */
+.table-view[data-sheet="revision_diff"] th:nth-child(3),
+.table-view[data-sheet="revision_diff"] td:nth-child(3) { width: 120px; } /* location */
+.table-view[data-sheet="revision_diff"] th:nth-child(4),
+.table-view[data-sheet="revision_diff"] td:nth-child(4) { width: 250px; } /* location_path */
+.table-view[data-sheet="revision_diff"] th:nth-child(5),
+.table-view[data-sheet="revision_diff"] td:nth-child(5) { width: 150px; } /* base_short */
+.table-view[data-sheet="revision_diff"] th:nth-child(6),
+.table-view[data-sheet="revision_diff"] td:nth-child(6) { width: 200px; } /* base_revision */
+.table-view[data-sheet="revision_diff"] th:nth-child(7),
+.table-view[data-sheet="revision_diff"] td:nth-child(7) { width: 150px; } /* compare_short */
+.table-view[data-sheet="revision_diff"] th:nth-child(8),
+.table-view[data-sheet="revision_diff"] td:nth-child(8) { width: 200px; } /* compare_revision */
+.table-view[data-sheet="revision_diff"] th:nth-child(9),
+.table-view[data-sheet="revision_diff"] td:nth-child(9) { width: 100px; } /* has_wave */

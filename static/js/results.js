@@ -557,55 +557,91 @@ function renderDataTable(sheetData) {
         }
     }
 
-    // 啟用表格功能（拖曳和調整寬度）
     setTimeout(() => {
         try {
-            enableTableFeatures();
-            
             // 同步標頭和內容的橫向捲動
             const bodyContainer = document.querySelector('.table-body-container');
             const headerContainer = document.querySelector('.table-header-container');
+            const tableView = document.getElementById('tableView');
+            
+            // 設定 data-sheet 屬性以應用特定樣式
+            if (tableView && currentSheet) {
+                tableView.setAttribute('data-sheet', currentSheet);
+            }
             
             if (bodyContainer && headerContainer) {
-                // 同步捲動
-                bodyContainer.addEventListener('scroll', function() {
-                    headerContainer.scrollLeft = bodyContainer.scrollLeft;
+                // 移除舊的事件監聽器
+                const newBodyContainer = bodyContainer.cloneNode(true);
+                bodyContainer.parentNode.replaceChild(newBodyContainer, bodyContainer);
+                
+                // 添加新的捲動同步
+                newBodyContainer.addEventListener('scroll', function() {
+                    headerContainer.scrollLeft = this.scrollLeft;
                 });
                 
-                // 同步欄位寬度
+                // 同步表格寬度
                 const headerTable = headerContainer.querySelector('table');
-                const bodyTable = bodyContainer.querySelector('table');
+                const bodyTable = newBodyContainer.querySelector('table');
                 
                 if (headerTable && bodyTable) {
+                    // 確保兩個表格有相同的寬度
+                    const computedWidth = Math.max(1200, headerTable.scrollWidth, bodyTable.scrollWidth);
+                    headerTable.style.width = computedWidth + 'px';
+                    bodyTable.style.width = computedWidth + 'px';
+                    
+                    // 同步每個欄位的寬度
                     const headerCells = headerTable.querySelectorAll('th');
                     const firstBodyRow = bodyTable.querySelector('tr');
                     
-                    if (firstBodyRow) {
+                    if (firstBodyRow && firstBodyRow.cells.length > 0) {
                         const bodyCells = firstBodyRow.querySelectorAll('td');
                         
-                        // 確保兩個表格的總寬度一致
-                        let totalWidth = 0;
+                        // 先計算每個欄位應有的寬度
+                        const columnWidths = [];
                         headerCells.forEach((th, index) => {
-                            const width = th.offsetWidth;
-                            totalWidth += width;
-                            
-                            if (bodyCells[index]) {
-                                bodyCells[index].style.width = width + 'px';
-                                bodyCells[index].style.minWidth = width + 'px';
-                                bodyCells[index].style.maxWidth = width + 'px';
+                            const td = bodyCells[index];
+                            if (td) {
+                                // 取標頭和內容中較寬的那個
+                                const maxWidth = Math.max(
+                                    th.getBoundingClientRect().width,
+                                    td.getBoundingClientRect().width
+                                );
+                                columnWidths.push(maxWidth);
                             }
                         });
                         
-                        // 設定表格總寬度
-                        headerTable.style.width = totalWidth + 'px';
-                        bodyTable.style.width = totalWidth + 'px';
+                        // 應用計算出的寬度
+                        headerCells.forEach((th, index) => {
+                            if (columnWidths[index]) {
+                                th.style.width = columnWidths[index] + 'px';
+                                th.style.minWidth = columnWidths[index] + 'px';
+                                th.style.maxWidth = columnWidths[index] + 'px';
+                            }
+                        });
+                        
+                        // 對所有內容行應用相同寬度
+                        const allBodyRows = bodyTable.querySelectorAll('tr');
+                        allBodyRows.forEach(row => {
+                            const cells = row.querySelectorAll('td');
+                            cells.forEach((td, index) => {
+                                if (columnWidths[index]) {
+                                    td.style.width = columnWidths[index] + 'px';
+                                    td.style.minWidth = columnWidths[index] + 'px';
+                                    td.style.maxWidth = columnWidths[index] + 'px';
+                                }
+                            });
+                        });
                     }
                 }
             }
+            
+            // 啟用拖曳功能
+            enableTableFeatures();
+            
         } catch (error) {
-            console.error('同步表格功能時發生錯誤:', error);
+            console.error('同步表格時發生錯誤:', error);
         }
-    }, 200);
+    }, 100);
 }
 
 function formatMultiLineContent(value, compareValue, fileType) {
