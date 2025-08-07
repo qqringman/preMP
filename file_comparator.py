@@ -109,6 +109,7 @@ class FileComparator:
                     return None
                 
                 self.logger.info(f"成功載入 mapping table，共 {len(df)} 筆資料")
+                self.mapping_table = df
                 return df
                 
             except Exception as e:
@@ -654,24 +655,49 @@ class FileComparator:
             
         return differences
 
-    def compare_single_scenario(self, source_dir, output_dir, scenario):
+    def _extract_module_name_fixed(self, path, source_dir):
         """
-        執行單一比對情境 - 使用與 compare_all_scenarios 相同的邏輯和命名規則
+        修正版：從路徑中提取模組名稱，支援新舊兩種目錄結構
+        
+        新結構：downloads/task_xxx/Merlin8/DB2858_xxx -> 模組名稱是 Merlin8
+        舊結構：downloads/task_xxx/PrebuildFW/bootcode/RDDB-531 -> 模組名稱是 bootcode
+                downloads/task_xxx/DailyBuild/Merlin7/DB2302 -> 模組名稱是 Merlin7
         """
-        results = {}
-        all_data = {}
+        # 移除 source_dir 前綴，得到相對路徑
+        rel_path = os.path.relpath(path, source_dir)
+        path_parts = rel_path.split(os.sep)
         
-        # 確保輸出目錄存在
-        os.makedirs(output_dir, exist_ok=True)
+        # 檢查是否為舊的目錄結構
+        if len(path_parts) >= 2:
+            # 檢查是否有 PrebuildFW 或 DailyBuild
+            if path_parts[0] in ['PrebuildFW', 'DailyBuild']:
+                if len(path_parts) >= 3:
+                    # 舊結構：第二層是模組名稱
+                    # 例如：PrebuildFW/bootcode/RDDB-531 -> bootcode
+                    # 或：DailyBuild/Merlin7/DB2302 -> Merlin7
+                    return path_parts[1]
+            else:
+                # 新結構：第一層就是模組名稱
+                # 例如：Merlin8/DB2858_xxx -> Merlin8
+                module_name = path_parts[0]
+                if not module_name.startswith('task_'):
+                    return module_name
         
-        # 收集所有模組及其位置（與 compare_all_scenarios 相同）
+        return None
+
+    def _get_module_locations(self, source_dir):
+        """
+        收集所有模組及其位置，支援新舊兩種目錄結構
+        """
         module_locations = {}
         
         # 掃描目錄結構
         for root, dirs, files in os.walk(source_dir):
+            # 判斷版本類型
             version_type = None
             folder_name = os.path.basename(root).lower()
             
+            # 從資料夾名稱判斷版本類型
             if 'master' in folder_name:
                 version_type = 'master'
             elif 'premp' in folder_name or 'pre_mp' in folder_name or 'pre-mp' in folder_name:
@@ -681,20 +707,56 @@ class FileComparator:
                     version_type = 'wave'
             elif 'backup' in folder_name:
                 version_type = 'backup'
+            else:
+                # 沒有版本標識的視為 master（舊結構）
+                # 例如 RDDB-300, DB2302 等
+                if any(f in files for f in ['manifest.xml', 'F_Version.txt', 'Version.txt']):
+                    # 檢查是否為 RDDB 或 DB 開頭的資料夾
+                    if folder_name.startswith('rddb-') or folder_name.startswith('db'):
+                        # 如果沒有版本後綴，視為 master
+                        if not any(suffix in folder_name for suffix in ['-premp', '-wave', '-backup']):
+                            version_type = 'master'
             
+            # 收集模組資訊
             for file in files:
                 if file in ['manifest.xml', 'F_Version.txt', 'Version.txt']:
+                    # 提取模組名稱
                     module_name = self._extract_module_name_fixed(root, source_dir)
                     
                     if module_name and version_type:
                         if module_name not in module_locations:
                             module_locations[module_name] = {}
                         
+                        # 儲存完整路徑和資料夾名稱
                         module_locations[module_name][version_type] = {
                             'path': root,
                             'folder': os.path.basename(root)
                         }
-                        break
+                        break  # 找到一個檔案就夠了
+        
+        return module_locations
+
+    def compare_single_scenario(self, source_dir, output_dir, scenario):
+        """
+        執行單一比對情境 - 優先使用 mapping table
+        """
+        results = {}
+        all_data = {}
+        
+        # 確保輸出目錄存在
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # 優先嘗試載入 mapping table
+        mapping_df = self._load_mapping_table(source_dir)
+        
+        if mapping_df is not None:
+            # 使用 mapping table 進行比對
+            self.logger.info(f"使用 mapping table 進行 {scenario} 比對")
+            module_locations = self._process_mapping_table_for_scenario(mapping_df, source_dir, scenario)
+        else:
+            # 使用資料夾結構進行比對
+            self.logger.info(f"使用資料夾結構進行 {scenario} 比對")
+            module_locations = self._get_module_locations(source_dir)
         
         self.logger.info(f"Found {len(module_locations)} modules for single scenario: {scenario}")
         
@@ -763,7 +825,7 @@ class FileComparator:
                     base_path = base_info['path']
                     compare_path = compare_info['path']
                     
-                    # ===== 1. 比對 manifest.xml（與 compare_all_scenarios 相同）=====
+                    # ===== 1. 比對 manifest.xml =====
                     base_manifest = os.path.join(base_path, 'manifest.xml')
                     compare_manifest = os.path.join(compare_path, 'manifest.xml')
                     
@@ -1018,7 +1080,7 @@ class FileComparator:
             
     def compare_all_scenarios(self, source_dir, output_dir):
         """
-        執行所有比對情境 - 統一使用相同的深度比對邏輯和命名規則
+        執行所有比對情境 - 優先使用 mapping table
         """
         results = {}
         all_data = {}
@@ -1026,42 +1088,17 @@ class FileComparator:
         # 確保輸出目錄存在
         os.makedirs(output_dir, exist_ok=True)
         
-        # 收集所有模組及其位置
-        module_locations = {}
+        # 優先嘗試載入 mapping table
+        mapping_df = self._load_mapping_table(source_dir)
         
-        # 掃描目錄結構
-        for root, dirs, files in os.walk(source_dir):
-            # 判斷版本類型 - 從資料夾名稱判斷
-            version_type = None
-            folder_name = os.path.basename(root).lower()
-            
-            # 更精確的版本判斷
-            if 'master' in folder_name:
-                version_type = 'master'
-            elif 'premp' in folder_name or 'pre_mp' in folder_name or 'pre-mp' in folder_name:
-                version_type = 'premp'
-            elif 'wave' in folder_name:
-                if 'backup' not in folder_name:
-                    version_type = 'wave'
-            elif 'backup' in folder_name:
-                version_type = 'backup'
-            
-            # 收集模組資訊
-            for file in files:
-                if file in ['manifest.xml', 'F_Version.txt', 'Version.txt']:
-                    # 提取模組名稱
-                    module_name = self._extract_module_name_fixed(root, source_dir)
-                    
-                    if module_name and version_type:
-                        if module_name not in module_locations:
-                            module_locations[module_name] = {}
-                        
-                        # 儲存完整路徑和資料夾名稱
-                        module_locations[module_name][version_type] = {
-                            'path': root,
-                            'folder': os.path.basename(root)
-                        }
-                        break  # 找到一個檔案就夠了
+        if mapping_df is not None:
+            # 使用 mapping table 進行比對
+            self.logger.info("使用 mapping table 進行所有情境比對")
+            module_locations = self._process_mapping_table_for_all_scenarios(mapping_df, source_dir)
+        else:
+            # 使用資料夾結構進行比對
+            self.logger.info("使用資料夾結構進行所有情境比對")
+            module_locations = self._get_module_locations(source_dir)
         
         self.logger.info(f"Found {len(module_locations)} modules")
         for module, locations in module_locations.items():
@@ -1407,26 +1444,124 @@ class FileComparator:
         self.logger.info(f"All scenarios comparison completed. Results saved to {summary_path}")
         return results
 
-    def _extract_module_name_fixed(self, path, source_dir):
+    def _process_mapping_table_for_scenario(self, mapping_df, source_dir, scenario):
         """
-        修正版：從路徑中提取模組名稱
-        對於您的目錄結構：downloads/task_xxx/Merlin8/DB2858_xxx
-        模組名稱應該是 Merlin8
+        根據 mapping table 處理單一情境的模組位置
         """
-        # 移除 source_dir 前綴，得到相對路徑
-        rel_path = os.path.relpath(path, source_dir)
-        path_parts = rel_path.split(os.sep)
+        module_locations = {}
         
-        # 對於您的目錄結構，模組名稱是第一層目錄
-        # 例如：Merlin8/DB2858_xxx -> 模組名稱是 Merlin8
-        if len(path_parts) > 0:
-            # 第一層目錄就是模組名稱
-            module_name = path_parts[0]
+        # 根據 scenario 過濾 mapping table
+        pairs = self._get_mapping_pairs(mapping_df, scenario)
+        
+        for pair in pairs:
+            module = pair['module']
+            base_path = pair['base_path']
+            compare_path = pair['compare_path']
             
-            # 確保不是 task_ 開頭的目錄
-            if not module_name.startswith('task_'):
-                return module_name
-        return None
+            # 尋找本地資料夾
+            base_module_path, base_folder = self._find_local_folder_from_mapping(source_dir, module, base_path)
+            compare_module_path, compare_folder = self._find_local_folder_from_mapping(source_dir, module, compare_path)
+            
+            if base_module_path and base_folder and compare_module_path and compare_folder:
+                if module not in module_locations:
+                    module_locations[module] = {}
+                
+                # 根據 scenario 設定版本類型
+                if scenario == 'master_vs_premp':
+                    module_locations[module]['master'] = {
+                        'path': os.path.join(base_module_path, base_folder),
+                        'folder': base_folder
+                    }
+                    module_locations[module]['premp'] = {
+                        'path': os.path.join(compare_module_path, compare_folder),
+                        'folder': compare_folder
+                    }
+                elif scenario == 'premp_vs_wave':
+                    module_locations[module]['premp'] = {
+                        'path': os.path.join(base_module_path, base_folder),
+                        'folder': base_folder
+                    }
+                    module_locations[module]['wave'] = {
+                        'path': os.path.join(compare_module_path, compare_folder),
+                        'folder': compare_folder
+                    }
+                elif scenario == 'wave_vs_backup':
+                    module_locations[module]['wave'] = {
+                        'path': os.path.join(base_module_path, base_folder),
+                        'folder': base_folder
+                    }
+                    module_locations[module]['backup'] = {
+                        'path': os.path.join(compare_module_path, compare_folder),
+                        'folder': compare_folder
+                    }
+        
+        # 如果 mapping table 沒有找到配對，使用資料夾結構
+        if not module_locations:
+            self.logger.warning(f"Mapping table 沒有找到 {scenario} 的配對，改用資料夾結構")
+            module_locations = self._get_module_locations(source_dir)
+        
+        return module_locations
+
+    def _process_mapping_table_for_all_scenarios(self, mapping_df, source_dir):
+        """
+        根據 mapping table 處理所有情境的模組位置
+        """
+        module_locations = {}
+        
+        # 處理所有情境
+        scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
+        
+        for scenario in scenarios:
+            pairs = self._get_mapping_pairs(mapping_df, scenario)
+            
+            for pair in pairs:
+                module = pair['module']
+                base_path = pair['base_path']
+                compare_path = pair['compare_path']
+                
+                # 尋找本地資料夾
+                base_module_path, base_folder = self._find_local_folder_from_mapping(source_dir, module, base_path)
+                compare_module_path, compare_folder = self._find_local_folder_from_mapping(source_dir, module, compare_path)
+                
+                if base_module_path and base_folder and compare_module_path and compare_folder:
+                    if module not in module_locations:
+                        module_locations[module] = {}
+                    
+                    # 根據 scenario 設定版本類型
+                    if scenario == 'master_vs_premp':
+                        module_locations[module]['master'] = {
+                            'path': os.path.join(base_module_path, base_folder),
+                            'folder': base_folder
+                        }
+                        module_locations[module]['premp'] = {
+                            'path': os.path.join(compare_module_path, compare_folder),
+                            'folder': compare_folder
+                        }
+                    elif scenario == 'premp_vs_wave':
+                        module_locations[module]['premp'] = {
+                            'path': os.path.join(base_module_path, base_folder),
+                            'folder': base_folder
+                        }
+                        module_locations[module]['wave'] = {
+                            'path': os.path.join(compare_module_path, compare_folder),
+                            'folder': compare_folder
+                        }
+                    elif scenario == 'wave_vs_backup':
+                        module_locations[module]['wave'] = {
+                            'path': os.path.join(base_module_path, base_folder),
+                            'folder': base_folder
+                        }
+                        module_locations[module]['backup'] = {
+                            'path': os.path.join(compare_module_path, compare_folder),
+                            'folder': compare_folder
+                        }
+        
+        # 如果 mapping table 沒有找到任何配對，使用資料夾結構
+        if not module_locations:
+            self.logger.warning("Mapping table 沒有找到任何配對，改用資料夾結構")
+            module_locations = self._get_module_locations(source_dir)
+        
+        return module_locations
 
     def _compare_files(self, file1_path, file2_path, file_type):
         """
@@ -1455,20 +1590,8 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"Error comparing files: {e}")
             return None
-
-    def _extract_module_name(self, path):
-        """
-        從路徑中提取模組名稱（舊版本，保留以相容）
-        """
-        # 這裡需要根據您的實際目錄結構調整
-        path_parts = path.split(os.sep)
-        
-        # 尋找可能的模組名稱
-        for part in reversed(path_parts):
-            if part and not part.startswith('task_') and part not in ['master', 'premp', 'wave', 'backup']:
-                return part
-        
-        return None    
+    
+    # 以下是原始檔案中的其他方法，保持不變
     
     def _compare_with_mapping_table(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
         """
