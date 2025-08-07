@@ -821,6 +821,8 @@ async function showCompareDetails(type) {
         // 取得比對資料
         const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
         
+        console.log('Pivot data for', type, ':', pivotData); // 加入除錯
+        
         // 決定要顯示的資料和標題
         let modalTitle = '';
         let modalClass = '';
@@ -830,26 +832,38 @@ async function showCompareDetails(type) {
             case 'master_vs_premp':
                 modalTitle = 'Master vs PreMP';
                 modalClass = 'info';
-                // 可能的相關資料表
                 relevantSheets = [
+                    { name: 'master_vs_premp_revision', title: 'Revision 差異' },
+                    { name: 'master_vs_premp_branch', title: '分支錯誤' },
+                    { name: 'master_vs_premp_lost_project', title: '新增/刪除專案' },
+                    { name: 'master_vs_premp_version', title: '版本檔案差異' },
+                    // 相容舊格式
                     { name: 'revision_diff', title: 'Revision 差異' },
                     { name: 'branch_error', title: '分支錯誤' },
                     { name: 'lost_project', title: '新增/刪除專案' },
                     { name: 'version_diff', title: '版本檔案差異' }
                 ];
                 break;
+            
             case 'premp_vs_wave':
                 modalTitle = 'PreMP vs Wave';
                 modalClass = 'success';
                 relevantSheets = [
-                    { name: 'premp_wave_diff', title: '差異比對' }
+                    { name: 'premp_vs_wave_revision', title: 'Revision 差異' },
+                    { name: 'premp_vs_wave_branch', title: '分支錯誤' },
+                    { name: 'premp_vs_wave_lost_project', title: '新增/刪除專案' },
+                    { name: 'premp_vs_wave_version', title: '版本檔案差異' }
                 ];
                 break;
+            
             case 'wave_vs_backup':
                 modalTitle = 'Wave vs Backup';
                 modalClass = 'warning';
                 relevantSheets = [
-                    { name: 'wave_backup_diff', title: '差異比對' }
+                    { name: 'wave_vs_backup_revision', title: 'Revision 差異' },
+                    { name: 'wave_vs_backup_branch', title: '分支錯誤' },
+                    { name: 'wave_vs_backup_lost_project', title: '新增/刪除專案' },
+                    { name: 'wave_vs_backup_version', title: '版本檔案差異' }
                 ];
                 break;
             case 'failed':
@@ -862,7 +876,41 @@ async function showCompareDetails(type) {
         }
         
         // 過濾出實際存在的資料表
-        const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
+        const availableSheets = relevantSheets.filter(sheet => {
+            const hasData = pivotData[sheet.name];
+            console.log(`Checking sheet ${sheet.name}:`, hasData); // 除錯
+            return hasData;
+        });
+        
+        // 如果沒有找到任何資料，顯示特別的訊息
+        if (availableSheets.length === 0) {
+            // 檢查是否有無法比對的資料
+            const failedData = pivotData['無法比對'];
+            if (failedData) {
+                // 過濾出相關的失敗資料
+                const filteredFailedData = {
+                    columns: failedData.columns,
+                    data: failedData.data.filter(row => {
+                        const scenario = row['比對情境'];
+                        return scenario === type || scenario === type.replace(/_/g, ' ');
+                    })
+                };
+                
+                if (filteredFailedData.data.length > 0) {
+                    showCompareModal(
+                        { '無法比對': filteredFailedData },
+                        [{ name: '無法比對', title: '無資料原因' }],
+                        modalTitle + ' - 無可比對資料',
+                        modalClass
+                    );
+                    return;
+                }
+            }
+            
+            // 顯示完全沒有資料的提示
+            showEmptyModal(modalTitle, modalClass);
+            return;
+        }
         
         // 顯示資料
         showCompareModal(pivotData, availableSheets, modalTitle, modalClass);
@@ -871,6 +919,69 @@ async function showCompareDetails(type) {
         console.error('Show compare details error:', error);
         utils.showNotification('無法載入詳細資料', 'error');
     }
+}
+
+// 顯示空資料模態框
+function showEmptyModal(title, modalClass) {
+    // 創建或取得模態框
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    // 根據 modalClass 決定標題背景色
+    let headerColor = '';
+    switch(modalClass) {
+        case 'info':
+            headerColor = '#2196F3';
+            break;
+        case 'success':
+            headerColor = '#4CAF50';
+            break;
+        case 'warning':
+            headerColor = '#FF9800';
+            break;
+        case 'danger':
+            headerColor = '#F44336';
+            break;
+        default:
+            headerColor = '#2196F3';
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    modal.innerHTML = `
+        <div class="modal-content modal-large">
+            <div class="modal-header compare-modal-header" style="background: ${headerColor};">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 0 筆資料</span>
+                <button class="modal-close" onclick="window.closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="empty-state-container">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <h3 class="empty-state-title">此比對情境沒有資料</h3>
+                    <p class="empty-state-desc">
+                        可能的原因：<br>
+                        1. 來源目錄中沒有符合此情境的檔案<br>
+                        2. 檔案結構不符合比對要求<br>
+                        3. 沒有提供 Mapping Table
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
 }
 
 // 顯示比對模態框 - 修正版本，使用單一表格不分離 header 和 body
