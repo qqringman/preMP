@@ -154,8 +154,14 @@ class FileComparator:
                 base_folder = self._extract_folder_from_path(sftp_path, row.get('DB_Folder', ''))
                 compare_folder = self._extract_folder_from_path(compare_sftp_path, row.get('compare_DB_Folder', ''))
                 
+                # 如果有 Module 欄位，使用它；否則從路徑提取
+                module = row.get('Module', '')
+                if not module:
+                    # 從路徑提取模組名稱
+                    module = self._extract_module_from_path(sftp_path)
+                
                 pairs.append({
-                    'module': row.get('Module', ''),
+                    'module': module,
                     'base_type': row.get('DB_Type', ''),
                     'base_info': row.get('DB_Info', ''),
                     'base_path': sftp_path,
@@ -167,6 +173,34 @@ class FileComparator:
                 })
         
         return pairs
+    
+    def _extract_module_from_path(self, sftp_path: str) -> str:
+        """
+        從 SFTP 路徑提取模組名稱
+        
+        Args:
+            sftp_path: SFTP 路徑
+            
+        Returns:
+            模組名稱
+        """
+        # 例如：/DailyBuild/Merlin7/DB2302_xxx -> Merlin7
+        # 例如：/home/vince_lin/ai/PrebuildFW/bootcode/RDDB-531 -> bootcode
+        parts = sftp_path.split('/')
+        
+        # DailyBuild 格式
+        if 'DailyBuild' in parts:
+            idx = parts.index('DailyBuild')
+            if idx + 1 < len(parts):
+                return parts[idx + 1]
+        
+        # PrebuildFW 格式
+        if 'PrebuildFW' in parts:
+            idx = parts.index('PrebuildFW')
+            if idx + 1 < len(parts):
+                return parts[idx + 1]
+        
+        return ''
     
     def _extract_folder_from_path(self, sftp_path: str, db_folder: str = '') -> str:
         """
@@ -183,52 +217,102 @@ class FileComparator:
             return db_folder
         
         # 從路徑提取資料夾名稱
-        # 例如：/DailyBuild/Merlin7/DB2302_xxx -> DB2302_xxx
+        # 例如：/DailyBuild/Merlin7/DB2302_xxx/540_all_202508060105 -> DB2302_xxx
         parts = sftp_path.rstrip('/').split('/')
-        if parts:
-            # 取得包含 DB 或 RDDB 的部分
-            for part in parts:
-                if part.startswith('DB') or part.startswith('RDDB-'):
-                    # 只取得版本號之前的部分
-                    if '/' in part:
-                        return part.split('/')[0]
-                    return part
+        
+        # 尋找包含 DB 或 RDDB 的部分
+        for i, part in enumerate(parts):
+            if part.startswith('DB') or part.startswith('RDDB-'):
+                # 返回該部分（不包含後面的版本號路徑）
+                return part
+        
+        # 如果找不到 DB 開頭的，返回倒數第二個部分（假設最後一個是版本號）
+        if len(parts) >= 2:
+            # 檢查最後一個部分是否像版本號（包含數字和底線）
+            last_part = parts[-1]
+            if '_' in last_part or last_part.isdigit():
+                # 返回倒數第二個部分
+                return parts[-2] if len(parts) >= 2 else parts[-1]
         
         return os.path.basename(sftp_path.rstrip('/'))
     
-    def _find_module_path(self, source_dir: str, module: str, folder_name: str) -> Optional[str]:
+    def _find_local_folder_from_mapping(self, source_dir: str, module: str, sftp_path: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        尋找模組的實際路徑
+        根據 mapping table 的 SFTP 路徑，在本地尋找對應的資料夾
         
         Args:
             source_dir: 來源目錄
             module: 模組名稱
-            folder_name: 資料夾名稱（用於判斷）
+            sftp_path: SFTP 路徑
             
         Returns:
-            模組路徑或 None
+            (module_path, folder_name) 或 (None, None)
         """
-        # 可能的路徑組合
-        possible_paths = [
-            os.path.join(source_dir, module),  # 直接在 source_dir 下
-            os.path.join(source_dir, 'DailyBuild', module),  # 在 DailyBuild 下
-            os.path.join(source_dir, 'PrebuildFW', module),  # 在 PrebuildFW 下
+        # 從 SFTP 路徑提取資料夾名稱特徵
+        # 例如：/DailyBuild/Merlin7/DB2302_Merlin7_32Bit_FW_Android14_Ref_Plus_GoogleGMS/540_all_202508060105
+        # 提取 DB2302 作為關鍵字
+        
+        db_number = None
+        folder_keywords = []
+        
+        parts = sftp_path.split('/')
+        for part in parts:
+            if part.startswith('DB'):
+                # 提取 DB 編號
+                db_match = re.match(r'(DB\d+)', part)
+                if db_match:
+                    db_number = db_match.group(1)
+                    # 從完整資料夾名稱提取關鍵字
+                    if '_' in part:
+                        folder_keywords = part.split('_')
+                    break
+            elif part.startswith('RDDB-'):
+                # 提取 RDDB 編號
+                rddb_match = re.match(r'(RDDB-\d+)', part)
+                if rddb_match:
+                    db_number = rddb_match.group(1)
+                    folder_keywords = [db_number]
+                    break
+        
+        if not db_number:
+            self.logger.warning(f"無法從路徑提取 DB 編號: {sftp_path}")
+            return None, None
+        
+        # 可能的模組路徑
+        possible_module_paths = [
+            os.path.join(source_dir, module),
+            os.path.join(source_dir, 'DailyBuild', module),
+            os.path.join(source_dir, 'PrebuildFW', module),
+            os.path.join(source_dir, module.split('/')[-1]) if '/' in module else None
         ]
         
-        for path in possible_paths:
-            if os.path.exists(path):
-                # 檢查是否包含目標資料夾
-                if os.path.exists(os.path.join(path, folder_name)):
-                    return path
+        # 過濾掉 None
+        possible_module_paths = [p for p in possible_module_paths if p]
         
-        # 如果都找不到，嘗試搜尋
-        for root, dirs, files in os.walk(source_dir):
-            if module in dirs:
-                module_path = os.path.join(root, module)
-                if os.path.exists(os.path.join(module_path, folder_name)):
-                    return module_path
+        # 在每個可能的路徑中尋找
+        for module_path in possible_module_paths:
+            if not os.path.exists(module_path):
+                continue
+                
+            # 列出該模組下的所有資料夾
+            folders = [f for f in os.listdir(module_path) 
+                      if os.path.isdir(os.path.join(module_path, f))]
+            
+            # 尋找匹配的資料夾
+            for folder in folders:
+                # 檢查是否包含 DB 編號
+                if db_number in folder:
+                    # 額外檢查：如果有更多關鍵字，確認是否匹配
+                    if 'PREMP' in sftp_path.upper() and 'PREMP' not in folder.upper():
+                        continue
+                    if 'WAVE' in sftp_path.upper() and 'WAVE' not in folder.upper():
+                        continue
+                    
+                    self.logger.info(f"找到匹配的資料夾: {folder} (根據 {db_number})")
+                    return module_path, folder
         
-        return None
+        self.logger.warning(f"找不到本地資料夾對應: {sftp_path}")
+        return None, None
         
     def _parse_manifest_xml(self, file_path: str) -> Dict[str, Dict[str, str]]:
         """
@@ -583,6 +667,11 @@ class FileComparator:
         """
         output_dir = output_dir or source_dir
         
+        # 確保輸出目錄存在
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            self.logger.info(f"建立輸出目錄: {output_dir}")
+        
         # 載入 mapping table（如果存在）
         self.mapping_table = self._load_mapping_table(source_dir)
         
@@ -655,16 +744,67 @@ class FileComparator:
                 
                 for pair in pairs:
                     module = pair['module']
-                    base_folder = pair['base_folder']
-                    compare_folder = pair['compare_folder']
+                    base_sftp_path = pair['base_path']
+                    compare_sftp_path = pair['compare_path']
                     
-                    # 尋找實際的資料夾路徑
-                    module_path = self._find_module_path(source_dir, module, base_folder)
+                    # 使用新方法尋找本地資料夾
+                    base_module_path, base_folder = self._find_local_folder_from_mapping(
+                        source_dir, module, base_sftp_path
+                    )
+                    compare_module_path, compare_folder = self._find_local_folder_from_mapping(
+                        source_dir, module, compare_sftp_path
+                    )
+                    
+                    # 確保在同一個模組路徑下
+                    if base_module_path and compare_module_path:
+                        # 優先使用找到的路徑
+                        module_path = base_module_path
+                    else:
+                        module_path = base_module_path or compare_module_path
                     
                     if not module_path:
-                        self.logger.warning(f"找不到模組路徑: {module}/{base_folder}")
+                        self.logger.warning(f"找不到模組路徑: {module}")
                         all_results[scenario_key]['failed'] += 1
                         all_results[scenario_key]['failed_modules'].append(module)
+                        cannot_compare_modules.append({
+                            'SN': len(cannot_compare_modules) + 1,
+                            'module': module,
+                            'location_path': '',
+                            'folder_count': 0,
+                            'folders': '找不到模組路徑',
+                            'path': '',
+                            'reason': f'{scenario_name}: 找不到模組路徑'
+                        })
+                        continue
+                    
+                    if not base_folder:
+                        self.logger.warning(f"找不到 base 資料夾對應: {base_sftp_path}")
+                        all_results[scenario_key]['failed'] += 1
+                        all_results[scenario_key]['failed_modules'].append(module)
+                        cannot_compare_modules.append({
+                            'SN': len(cannot_compare_modules) + 1,
+                            'module': module,
+                            'location_path': module_path,
+                            'folder_count': 0,
+                            'folders': f'找不到對應的 base 資料夾',
+                            'path': base_sftp_path,
+                            'reason': f'{scenario_name}: 找不到 base 資料夾 (SFTP: {base_sftp_path})'
+                        })
+                        continue
+                    
+                    if not compare_folder:
+                        self.logger.warning(f"找不到 compare 資料夾對應: {compare_sftp_path}")
+                        all_results[scenario_key]['failed'] += 1
+                        all_results[scenario_key]['failed_modules'].append(module)
+                        cannot_compare_modules.append({
+                            'SN': len(cannot_compare_modules) + 1,
+                            'module': module,
+                            'location_path': module_path,
+                            'folder_count': 0,
+                            'folders': f'找不到對應的 compare 資料夾',
+                            'path': compare_sftp_path,
+                            'reason': f'{scenario_name}: 找不到 compare 資料夾 (SFTP: {compare_sftp_path})'
+                        })
                         continue
                     
                     # 確認兩個資料夾都存在
@@ -675,12 +815,30 @@ class FileComparator:
                         self.logger.warning(f"Base 資料夾不存在: {base_path}")
                         all_results[scenario_key]['failed'] += 1
                         all_results[scenario_key]['failed_modules'].append(module)
+                        cannot_compare_modules.append({
+                            'SN': len(cannot_compare_modules) + 1,
+                            'module': module,
+                            'location_path': module_path,
+                            'folder_count': 0,
+                            'folders': f'缺少 {base_folder}',
+                            'path': base_path,
+                            'reason': f'{scenario_name}: 缺少 base 資料夾 ({base_folder})'
+                        })
                         continue
                     
                     if not os.path.exists(compare_path):
                         self.logger.warning(f"Compare 資料夾不存在: {compare_path}")
                         all_results[scenario_key]['failed'] += 1
                         all_results[scenario_key]['failed_modules'].append(module)
+                        cannot_compare_modules.append({
+                            'SN': len(cannot_compare_modules) + 1,
+                            'module': module,
+                            'location_path': module_path,
+                            'folder_count': 0,
+                            'folders': f'缺少 {compare_folder}',
+                            'path': compare_path,
+                            'reason': f'{scenario_name}: 缺少 compare 資料夾 ({compare_folder})'
+                        })
                         continue
                     
                     # 執行比對
@@ -760,6 +918,11 @@ class FileComparator:
             所有比對結果的摘要
         """
         output_dir = output_dir or source_dir
+        
+        # 確保輸出目錄存在
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            self.logger.info(f"建立輸出目錄: {output_dir}")
         
         # 初始化結果
         all_results = {
@@ -898,6 +1061,10 @@ class FileComparator:
                         else:
                             failure_reasons.append(f"{failure['scenario']}: {failure['error']}")
                     
+                    # 新增偵錯資訊
+                    self.logger.warning(f"模組 {module} 無法比對，資料夾列表: {folders}")
+                    self.logger.warning(f"失敗原因: {failure_reasons}")
+                    
                     cannot_compare_modules.append({
                         'SN': len(cannot_compare_modules) + 1,
                         'module': module,
@@ -909,6 +1076,7 @@ class FileComparator:
                     })
                     all_results['failed'] += 1
                     all_results['failed_modules'].append(module)
+                
             
             # 重新編號所有資料
             for i, item in enumerate(all_revision_diff, 1):
@@ -1637,6 +1805,12 @@ class FileComparator:
             產生的比較報表檔案列表
         """
         output_dir = output_dir or source_dir
+        
+        # 確保輸出目錄存在
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            self.logger.info(f"建立輸出目錄: {output_dir}")
+        
         compare_files = []
         
         # 用於整合報表的資料
@@ -1758,18 +1932,30 @@ class FileComparator:
         backup_folder = None
         
         for folder in folders:
+            folder_upper = folder.upper()
+            
+            # 優先檢查後綴（向後相容）
             if folder.endswith('-wave.backup'):
                 backup_folder = folder
             elif folder.endswith('-wave'):
                 wave_folder = folder
             elif folder.endswith('-premp'):
                 premp_folder = folder
+            # 檢查資料夾名稱中是否包含關鍵字（不區分大小寫）
+            elif 'WAVE.BACKUP' in folder_upper or 'WAVEBACKUP' in folder_upper:
+                backup_folder = folder
+            elif 'WAVE' in folder_upper and 'BACKUP' not in folder_upper and 'PREMP' not in folder_upper:
+                wave_folder = folder
+            elif 'PREMP' in folder_upper:
+                premp_folder = folder
             else:
-                # 沒有後綴的是 master
+                # 沒有關鍵字的是 master
                 if is_rddb_format and folder.startswith('RDDB-'):
                     master_folder = folder
                 elif not is_rddb_format and folder.startswith('DB'):
-                    master_folder = folder
+                    # 確保不是已經被分類的資料夾
+                    if not any(kw in folder_upper for kw in ['PREMP', 'WAVE', 'BACKUP']):
+                        master_folder = folder
         
         # 根據比對模式決定要比對的資料夾
         base_folder = None
@@ -2170,4 +2356,4 @@ class FileComparator:
             
         except Exception as e:
             self.logger.error(f"寫入整合報表失敗: {str(e)}")
-            raise    
+            raise
