@@ -437,8 +437,7 @@ function renderDataTable(sheetData) {
                 } else {
                     td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
                 }
-            } else if (col === 'base_content' || col === 'compare_content') {
-                // 內容比較欄位處理
+            } else             if (col === 'base_content' || col === 'compare_content') {
                 td.classList.add('content-cell');
                 
                 if (value) {
@@ -453,40 +452,22 @@ function renderDataTable(sheetData) {
                         const compareCol = isBaseContent ? 'compare_content' : 'base_content';
                         const compareValue = row[compareCol];
                         
-                        // 根據檔案類型處理
-                        const fileType = row['file_type'] || '';
-                        let formattedValue = value;
+                        let formattedValue = String(value);
                         
-                        // 特別處理 F_Version.txt 檔案
-                        if (fileType.toLowerCase() === 'f_version.txt' || 
-                            fileType.toLowerCase().includes('version')) {
-                            // 處理 P_GIT_ 開頭的內容
-                            if (value.startsWith('P_GIT_') && compareValue && compareValue.startsWith('P_GIT_')) {
-                                formattedValue = formatFVersionContent(value, compareValue);
-                            }
-                        } 
-                        // 處理 F_HASH 內容
-                        else if (value.includes('F_HASH:')) {
-                            if (compareValue && compareValue.includes('F_HASH:')) {
+                        // 檢查是否包含多行
+                        if (value.includes('\n') || value.includes('P_GIT_')) {
+                            // 多行內容或包含 P_GIT 的內容
+                            formattedValue = formatMultiLineContent(value, compareValue, row['file_type']);
+                        } else if (value.includes('F_HASH:')) {
+                            if (compareValue) {
                                 formattedValue = formatFHashContent(value, compareValue);
                             }
-                        }
-                        // 處理一般的 key:value 格式（包括版本號）
-                        else if (value.includes(':') && !value.includes('F_HASH:')) {
+                        } else if (value.includes(':')) {
                             if (compareValue && compareValue.includes(':')) {
                                 formattedValue = formatColonContent(value, compareValue);
                             }
                         }
-                        // 處理純數字版本號（如 0007093）
-                        else if (/^\d+$/.test(value.trim())) {
-                            if (compareValue && /^\d+$/.test(compareValue.trim())) {
-                                if (value.trim() !== compareValue.trim()) {
-                                    formattedValue = `<span class="highlight-red">${value}</span>`;
-                                }
-                            }
-                        }
                         
-                        // 如果有搜尋詞，進行高亮
                         if (searchTerm) {
                             formattedValue = highlightText(formattedValue, searchTerm);
                         }
@@ -654,30 +635,74 @@ function renderDataTable(sheetData) {
 }
 
 function formatMultiLineContent(value, compareValue, fileType) {
+    if (!value) return value;
+    if (!compareValue) return value; // 如果沒有比較值，返回原值
+    
     const lines = value.split('\n');
-    const compareLines = compareValue ? compareValue.split('\n') : [];
+    const compareLines = compareValue.split('\n');
+    
+    // 建立比較行的映射表
+    const compareMap = {};
+    compareLines.forEach(line => {
+        if (line.startsWith('P_GIT_')) {
+            const gitId = line.split(';')[0];
+            compareMap[gitId] = line;
+        } else if (line.includes(':')) {
+            const key = line.split(':')[0].trim();
+            compareMap[key] = line;
+        } else {
+            // 對於其他格式，使用整行作為 key
+            compareMap[line.substring(0, 20)] = line;
+        }
+    });
     
     let formattedLines = [];
     
-    lines.forEach((line, index) => {
-        const compareLine = compareLines[index] || '';
+    lines.forEach((line) => {
+        let compareLine = '';
         let formattedLine = line;
         
         if (line.startsWith('P_GIT_')) {
-            // F_Version.txt 格式
-            formattedLine = formatFVersionContent(line, compareLine);
-        } else if (line.includes('F_HASH:')) {
-            // F_HASH 格式
-            formattedLine = formatFHashContent(line, compareLine);
+            const gitId = line.split(';')[0];
+            compareLine = compareMap[gitId] || '';
+            
+            if (compareLine) {
+                // 直接比較並格式化 P_GIT 行
+                const parts1 = line.split(';');
+                const parts2 = compareLine.split(';');
+                
+                if (parts1.length >= 5 && parts2.length >= 5) {
+                    let result = '';
+                    for (let i = 0; i < parts1.length; i++) {
+                        if (i > 0) result += ';';
+                        
+                        // 索引 3 是 git hash，索引 4 是 revision
+                        if ((i === 3 || i === 4) && parts1[i] !== parts2[i]) {
+                            result += `<span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${parts1[i]}</span>`;
+                        } else {
+                            result += parts1[i];
+                        }
+                    }
+                    formattedLine = result;
+                }
+            }
         } else if (line.includes(':')) {
-            // key:value 格式
-            formattedLine = formatColonContent(line, compareLine);
+            const key = line.split(':')[0].trim();
+            compareLine = compareMap[key] || '';
+            
+            if (compareLine) {
+                const val1 = line.split(':')[1]?.trim() || '';
+                const val2 = compareLine.split(':')[1]?.trim() || '';
+                
+                if (val1 !== val2) {
+                    formattedLine = `${key}: <span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${val1}</span>`;
+                }
+            }
         }
         
         formattedLines.push(formattedLine);
     });
     
-    // 用 <br> 連接所有行
     return formattedLines.join('<br>');
 }
 
