@@ -1198,12 +1198,7 @@ function generateCompareTableContent(sheetData, sheetName) {
                 }
             } else if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
                 // 版本差異內容的特殊處理 - 關鍵部分！
-                console.log(`Processing version_diff for row ${rowIndex}, column ${col}`);
                 cellContent = formatVersionDiffContentWithColors(row, col);
-                // 直接在這裡也嘗試加入樣式
-                if (cellContent.includes('diff-highlight')) {
-                    console.log('diff-highlight class found in content!');
-                }                
             } else if (col.includes('link') || col.includes('_link')) {
                 // 連結欄位
                 if (value && value.startsWith('http')) {
