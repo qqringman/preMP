@@ -736,3 +736,17 @@
     padding: 20px;
     background: white;
 }
+
+/* 表格容器修正 */
+.table-wrapper {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #E8EAF6;
+    overflow: hidden;
+}
+
+.table-container {
+    max-height: 650px; /* 限制表格高度 */
+    overflow: auto; /* 表格內容可捲動 */
+    position: relative;
+}

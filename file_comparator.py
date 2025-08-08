@@ -528,21 +528,14 @@ class FileComparator:
     def compare_all_scenarios(self, source_dir: str, output_dir: str = None) -> Dict[str, Any]:
         """
         執行所有比對情境（支援 mapping table）
-        
-        Args:
-            source_dir: 來源目錄
-            output_dir: 輸出目錄
-            
-        Returns:
-            所有比對結果的摘要
         """
         output_dir = output_dir or source_dir
 
-        # 確保輸出目錄存在（重要修正）
+        # 確保輸出目錄存在
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"建立輸出目錄: {output_dir}")
-                    
+        
         # 載入 mapping tables
         self.mapping_tables = self._load_mapping_tables(source_dir)
         
@@ -554,23 +547,160 @@ class FileComparator:
             self.logger.info("未找到 mapping tables，使用原有邏輯")
             return self._compare_without_mapping(source_dir, output_dir)
 
+    def _write_total_summary_report(self, all_results, scenario_data, output_file):
+        """寫入總摘要報告，包含所有情境的統計"""
+        try:
+            import pandas as pd
+            from openpyxl.styles import PatternFill, Font, Alignment
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 總摘要頁籤
+                summary_rows = []
+                
+                # 各情境的統計
+                for scenario_key in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
+                    scenario_result = all_results[scenario_key]
+                    scenario_name = self._get_scenario_display_name(scenario_key)
+                    
+                    summary_rows.append({
+                        '比對情境': scenario_name,
+                        '成功模組數': scenario_result['success'],
+                        '失敗模組數': scenario_result['failed'],
+                        '成功模組清單': ', '.join(scenario_result['modules'][:5]) + ('...' if len(scenario_result['modules']) > 5 else ''),
+                        '失敗模組清單': ', '.join(scenario_result['failed_modules'][:5]) + ('...' if len(scenario_result['failed_modules']) > 5 else '')
+                    })
+                
+                # 加入總計
+                total_success = sum(all_results[key]['success'] for key in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'])
+                total_failed = sum(all_results[key]['failed'] for key in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'])
+                
+                summary_rows.append({
+                    '比對情境': '總計',
+                    '成功模組數': total_success,
+                    '失敗模組數': total_failed,
+                    '成功模組清單': f'共 {total_success} 個模組',
+                    '失敗模組清單': f'共 {total_failed} 個模組'
+                })
+                
+                df_summary = pd.DataFrame(summary_rows)
+                df_summary.to_excel(writer, sheet_name='總摘要', index=False)
+                
+                # 所有差異的統計頁籤
+                stats_data = []
+                for scenario_key in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
+                    data = scenario_data[scenario_key]
+                    scenario_name = self._get_scenario_display_name(scenario_key)
+                    
+                    stats_data.append({
+                        '情境': scenario_name,
+                        'Revision 差異': len(data['revision_diff']),
+                        '分支錯誤': len(data['branch_error']),
+                        '新增/刪除專案': len(data['lost_project']),
+                        '版本檔案差異': len(data['version_diff']),
+                        '無法比對': len(data['cannot_compare'])
+                    })
+                
+                df_stats = pd.DataFrame(stats_data)
+                df_stats.to_excel(writer, sheet_name='差異統計', index=False)
+                
+                # 格式化工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    if hasattr(self, 'excel_handler'):
+                        self.excel_handler._format_worksheet(worksheet)
+                    else:
+                        # 基本格式化
+                        for cell in worksheet[1]:
+                            cell.font = Font(bold=True)
+                            cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                            cell.font = Font(color="FFFFFF", bold=True)
+            
+            self.logger.info(f"成功寫入總摘要報告: {output_file}")
+            
+        except Exception as e:
+            self.logger.error(f"寫入總摘要報告失敗: {str(e)}")
+            raise
+        
+    def _write_scenario_summary_report(self, revision_diff, branch_error, lost_project, 
+                                    version_diff, cannot_compare, scenario_results,
+                                    output_file, scenario_name):
+        """為單一情境寫入摘要報表"""
+        try:
+            import pandas as pd
+            from openpyxl.styles import PatternFill, Font, Alignment
+            
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # 摘要頁籤
+                summary_data = [{
+                    '項目': '比對情境',
+                    '值': self._get_scenario_display_name(scenario_name)
+                }, {
+                    '項目': '成功模組數',
+                    '值': scenario_results['success']
+                }, {
+                    '項目': '失敗模組數',
+                    '值': scenario_results['failed']
+                }, {
+                    '項目': '成功模組清單',
+                    '值': ', '.join(scenario_results['modules']) if scenario_results['modules'] else '無'
+                }, {
+                    '項目': '失敗模組清單',
+                    '值': ', '.join(scenario_results['failed_modules']) if scenario_results['failed_modules'] else '無'
+                }]
+                
+                df_summary = pd.DataFrame(summary_data)
+                df_summary.to_excel(writer, sheet_name='摘要', index=False)
+                
+                # 各資料表
+                if revision_diff:
+                    df = pd.DataFrame(revision_diff)
+                    df.to_excel(writer, sheet_name='revision_diff', index=False)
+                
+                if branch_error:
+                    df = pd.DataFrame(branch_error)
+                    df.to_excel(writer, sheet_name='branch_error', index=False)
+                
+                if lost_project:
+                    df = pd.DataFrame(lost_project)
+                    df.to_excel(writer, sheet_name='lost_project', index=False)
+                
+                if version_diff:
+                    df = pd.DataFrame(version_diff)
+                    df.to_excel(writer, sheet_name='version_diff', index=False)
+                
+                if cannot_compare:
+                    df = pd.DataFrame(cannot_compare)
+                    df.to_excel(writer, sheet_name='無法比對', index=False)
+                
+                # 格式化所有工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+            
+            self.logger.info(f"成功寫入情境摘要報表: {output_file}")
+            
+        except Exception as e:
+            self.logger.error(f"寫入情境摘要報表失敗: {str(e)}")
+            raise
+
+    def _get_scenario_display_name(self, scenario):
+        """取得情境的顯示名稱"""
+        name_map = {
+            'master_vs_premp': 'Master vs PreMP',
+            'premp_vs_wave': 'PreMP vs Wave',
+            'wave_vs_backup': 'Wave vs Backup'
+        }
+        return name_map.get(scenario, scenario)
+
     def _compare_with_mapping(self, source_dir: str, output_dir: str) -> Dict[str, Any]:
         """
         使用 mapping table 執行比對
-        
-        Args:
-            source_dir: 來源目錄
-            output_dir: 輸出目錄
-            
-        Returns:
-            比對結果
         """
-
-        # 確保輸出目錄存在（重要修正）
+        # 確保輸出目錄存在
         if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"建立輸出目錄: {output_dir}")
-            
+        
         # 初始化結果
         all_results = {
             'master_vs_premp': {
@@ -578,33 +708,54 @@ class FileComparator:
                 'failed': 0,
                 'modules': [],
                 'failed_modules': [],
-                'reports': []
+                'reports': [],
+                'summary_report': None
             },
             'premp_vs_wave': {
                 'success': 0,
                 'failed': 0,
                 'modules': [],
                 'failed_modules': [],
-                'reports': []
+                'reports': [],
+                'summary_report': None
             },
             'wave_vs_backup': {
                 'success': 0,
                 'failed': 0,
                 'modules': [],
                 'failed_modules': [],
-                'reports': []
+                'reports': [],
+                'summary_report': None
             },
             'failed': 0,
             'failed_modules': [],
             'summary_report': ''
         }
         
-        # 整合報表的資料
-        all_revision_diff = []
-        all_branch_error = []
-        all_lost_project = []
-        all_version_diff = []
-        cannot_compare_modules = []
+        # 為每個情境準備獨立的資料容器
+        scenario_data = {
+            'master_vs_premp': {
+                'revision_diff': [],
+                'branch_error': [],
+                'lost_project': [],
+                'version_diff': [],
+                'cannot_compare': []
+            },
+            'premp_vs_wave': {
+                'revision_diff': [],
+                'branch_error': [],
+                'lost_project': [],
+                'version_diff': [],
+                'cannot_compare': []
+            },
+            'wave_vs_backup': {
+                'revision_diff': [],
+                'branch_error': [],
+                'lost_project': [],
+                'version_diff': [],
+                'cannot_compare': []
+            }
+        }
         
         try:
             # 處理每個情境
@@ -615,24 +766,45 @@ class FileComparator:
                 
                 # 尋找適用的 mapping table
                 mapping_df = None
+                
+                # 優先使用情境特定的 mapping table
                 if scenario in self.mapping_tables:
                     mapping_df = self.mapping_tables[scenario]
-                elif 'general' in self.mapping_tables:
-                    mapping_df = self.mapping_tables['general']
+                    self.logger.info(f"使用情境特定的 mapping table: {scenario}")
+                # 檢查是否有 DailyBuild mapping
                 elif 'dailybuild' in self.mapping_tables:
                     mapping_df = self.mapping_tables['dailybuild']
-                elif 'prebuild' in self.mapping_tables:
-                    mapping_df = self.mapping_tables['prebuild']
+                    self.logger.info(f"使用 DailyBuild mapping table")
+                # 檢查是否有 PrebuildFW mapping
+                elif 'prebuild' in self.mapping_tables or 'prebuildffw' in self.mapping_tables:
+                    mapping_df = self.mapping_tables.get('prebuild') or self.mapping_tables.get('prebuildffw')
+                    self.logger.info(f"使用 PrebuildFW mapping table")
+                # 使用通用 mapping
+                elif 'general' in self.mapping_tables:
+                    mapping_df = self.mapping_tables['general']
+                    self.logger.info(f"使用通用 mapping table")
                 
                 if mapping_df is not None:
+                    self.logger.info(f"Mapping table 欄位: {mapping_df.columns.tolist()}")
+                    self.logger.info(f"Mapping table 資料筆數: {len(mapping_df)}")
+                    
                     # 根據 mapping table 找出比對對
                     comparison_pairs = self._find_comparison_pairs_from_mapping(
                         mapping_df, source_dir, scenario
                     )
                     
+                    self.logger.info(f"找到 {len(comparison_pairs)} 對需要比對的資料夾")
+                    
                     # 執行比對
                     for pair in comparison_pairs:
                         try:
+                            self.logger.info(f"比對: {pair['base_path']} vs {pair['compare_path']}")
+                            
+                            # 確保路徑存在
+                            if not os.path.exists(pair['base_path']) or not os.path.exists(pair['compare_path']):
+                                self.logger.warning(f"路徑不存在: {pair['base_path']} 或 {pair['compare_path']}")
+                                continue
+                            
                             results = self._compare_specific_folders(
                                 os.path.dirname(pair['base_path']),
                                 os.path.basename(pair['base_path']),
@@ -642,11 +814,11 @@ class FileComparator:
                             )
                             
                             # 收集資料
-                            all_revision_diff.extend(results['revision_diff'])
-                            all_branch_error.extend(results['branch_error'])
-                            all_lost_project.extend(results['lost_project'])
+                            scenario_data[scenario]['revision_diff'].extend(results['revision_diff'])
+                            scenario_data[scenario]['branch_error'].extend(results['branch_error'])
+                            scenario_data[scenario]['lost_project'].extend(results['lost_project'])
                             if 'version_diffs' in results:
-                                all_version_diff.extend(results['version_diffs'])
+                                scenario_data[scenario]['version_diff'].extend(results['version_diffs'])
                             
                             # 記錄成功
                             all_results[scenario]['success'] += 1
@@ -657,7 +829,7 @@ class FileComparator:
                                 scenario_dir = os.path.join(output_dir, scenario)
                                 module_output_dir = os.path.join(scenario_dir, pair['module'])
                                 
-                                # 確保目錄存在（使用 exist_ok=True 避免競爭條件）
+                                # 確保目錄存在
                                 if not os.path.exists(module_output_dir):
                                     os.makedirs(module_output_dir, exist_ok=True)
                                 
@@ -670,7 +842,7 @@ class FileComparator:
                                 )
                                 if report_file:
                                     all_results[scenario]['reports'].append(report_file)
-                                    
+                            
                         except Exception as e:
                             self.logger.error(f"比對 {pair['module']} ({scenario}) 失敗: {str(e)}")
                             all_results[scenario]['failed'] += 1
@@ -678,28 +850,53 @@ class FileComparator:
                 else:
                     self.logger.warning(f"未找到 {scenario} 的 mapping table")
             
-            # 重新編號所有資料
-            for i, item in enumerate(all_revision_diff, 1):
-                item['SN'] = i
-            for i, item in enumerate(all_branch_error, 1):
-                item['SN'] = i
-            for i, item in enumerate(all_lost_project, 1):
-                item['SN'] = i
-            for i, item in enumerate(all_version_diff, 1):
-                item['SN'] = i
+            # 為每個情境生成獨立的 all_scenarios_compare.xlsx
+            for scenario_key in scenarios:
+                data = scenario_data[scenario_key]
+                
+                # 重新編號
+                for i, item in enumerate(data['revision_diff'], 1):
+                    item['SN'] = i
+                for i, item in enumerate(data['branch_error'], 1):
+                    item['SN'] = i
+                for i, item in enumerate(data['lost_project'], 1):
+                    item['SN'] = i
+                for i, item in enumerate(data['version_diff'], 1):
+                    item['SN'] = i
+                
+                # 建立情境輸出目錄
+                scenario_output_dir = os.path.join(output_dir, scenario_key)
+                if not os.path.exists(scenario_output_dir):
+                    os.makedirs(scenario_output_dir, exist_ok=True)
+                
+                # 寫入該情境的整合報表
+                summary_report_path = os.path.join(scenario_output_dir, 'all_scenarios_compare.xlsx')
+                
+                self._write_scenario_summary_report(
+                    data['revision_diff'],
+                    data['branch_error'],
+                    data['lost_project'],
+                    data['version_diff'],
+                    data.get('cannot_compare', []),
+                    all_results[scenario_key],
+                    summary_report_path,
+                    scenario_key
+                )
+                
+                all_results[scenario_key]['summary_report'] = summary_report_path
+                self.logger.info(f"為 {scenario_key} 生成摘要報告: {summary_report_path}")
             
-            # 寫入總整合報表
-            summary_report_path = self._write_all_scenarios_report(
-                all_revision_diff, all_branch_error, all_lost_project,
-                all_version_diff, cannot_compare_modules, all_results, output_dir
-            )
-            
-            all_results['summary_report'] = summary_report_path
+            # 生成總摘要
+            total_summary_path = os.path.join(output_dir, 'all_scenarios_summary.xlsx')
+            self._write_total_summary_report(all_results, scenario_data, total_summary_path)
+            all_results['summary_report'] = total_summary_path
             
             return all_results
             
         except Exception as e:
             self.logger.error(f"使用 mapping table 比對失敗: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             # 如果失敗，改用原有邏輯
             self.logger.info("改用原有比對邏輯")
             return self._compare_without_mapping(source_dir, output_dir)

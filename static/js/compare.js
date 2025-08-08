@@ -540,10 +540,9 @@ function showCompareResults(results) {
     const summaryHtml = generateCompareResultsSummary(results);
     document.getElementById('resultsSummary').innerHTML = summaryHtml;
     
-    // 如果是 all 情境，顯示資料夾結構
-    if (window.currentCompareScenario === 'all') {
-        showResultsStructure(currentTaskId);
-    }
+    // 顯示檔案結構區塊（獨立區塊）
+    document.getElementById('resultsStructureSection').classList.remove('hidden');
+    showResultsStructure(currentTaskId);
     
     // 繪製圖表
     drawCharts(results);
@@ -839,7 +838,7 @@ function createEnhancedStatCard(type, title, value, colorClass, icon, hasSuccess
                     <i class="fas fa-check"></i>
                 </div>
             ` : `
-                <div class="stat-icon-wrapper">
+                <div>
                     <div class="stat-icon">
                         <i class="fas ${icon}"></i>
                     </div>
@@ -914,16 +913,8 @@ async function showCompareDetails(type) {
             return;
         }
         
-        // 先取得任務狀態，確認是否有成功的比對
-        const statusData = await utils.apiRequest(`/api/status/${currentTaskId}`);
-        const compareResults = statusData?.results?.compare_results || {};
-        
-        // 檢查該類型是否有成功的比對
-        const typeData = compareResults[type];
-        const successCount = typeData?.success || 0;
-        
-        // 取得 pivot data
-        const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
+        // 獲取特定情境的資料
+        const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}?scenario=${type}`);
         
         let modalTitle = '';
         let modalClass = '';
@@ -964,14 +955,19 @@ async function showCompareDetails(type) {
         
         const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
         
-        // 重要：區分「沒有差異」和「沒有資料」
-        if (successCount > 0 && availableSheets.length === 0) {
-            // 有成功比對但沒有差異
-            showNoDifferenceModal(modalTitle, modalClass, successCount);
-            return;
-        } else if (successCount === 0) {
-            // 沒有成功的比對
-            showNoDataModal(modalTitle, modalClass);
+        // 檢查是否有資料
+        if (availableSheets.length === 0) {
+            // 再檢查是否有成功的比對
+            const statusData = await utils.apiRequest(`/api/status/${currentTaskId}`);
+            const compareResults = statusData?.results?.compare_results || {};
+            const typeData = compareResults[type];
+            const successCount = typeData?.success || 0;
+            
+            if (successCount > 0) {
+                showNoDifferenceModal(modalTitle, modalClass, successCount);
+            } else {
+                showNoDataModal(modalTitle, modalClass);
+            }
             return;
         }
         
@@ -1444,8 +1440,8 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
     const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
     
     let html = `
-        <div class="modal-content modal-large">
-            <div class="modal-header">
+        <div class="modal-content modal-large" style="max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
                 <h3 class="modal-title">
                     <i class="fas fa-table"></i> ${title}
                 </h3>
@@ -1454,7 +1450,7 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 30px;">
     `;
     
     // 頁籤
@@ -3523,9 +3519,6 @@ async function showResultsStructure(taskId) {
         if (structure && structure.scenarios) {
             let structureHtml = `
                 <div class="results-structure-card">
-                    <h4 class="structure-title">
-                        <i class="fas fa-folder-tree"></i> 結果檔案結構
-                    </h4>
                     <div class="structure-tree">
                         <div class="tree-root">
                             <i class="fas fa-folder-open"></i> ${taskId}/
@@ -3535,17 +3528,19 @@ async function showResultsStructure(taskId) {
             // 顯示各情境資料夾
             for (const [scenario, data] of Object.entries(structure.scenarios)) {
                 const scenarioName = getScenarioDisplayName(scenario);
+                const hasFiles = data.files && data.files.length > 0;
+                
                 structureHtml += `
                     <div class="tree-branch">
-                        <div class="tree-node">
-                            <i class="fas fa-folder"></i> ${scenario}/
+                        <div class="tree-node ${hasFiles ? 'has-files' : 'no-files'}">
+                            <i class="fas fa-folder${hasFiles ? '' : '-open'}"></i> ${scenario}/
                             <span class="tree-label">${scenarioName}</span>
+                            ${hasFiles ? `<span class="file-count">(${data.files.length} 個檔案)</span>` : '<span class="no-data-label">無資料</span>'}
                         </div>
-                        <div class="tree-files">
                 `;
                 
-                // 顯示檔案
-                if (data.files && data.files.length > 0) {
+                if (hasFiles) {
+                    structureHtml += '<div class="tree-files">';
                     data.files.forEach(file => {
                         const icon = file.name.endsWith('.xlsx') ? 'fa-file-excel' : 
                                     file.name.endsWith('.json') ? 'fa-file-code' : 'fa-file';
@@ -3559,12 +3554,10 @@ async function showResultsStructure(taskId) {
                             </div>
                         `;
                     });
+                    structureHtml += '</div>';
                 }
                 
-                structureHtml += `
-                        </div>
-                    </div>
-                `;
+                structureHtml += '</div>';
             }
             
             structureHtml += `
@@ -3573,19 +3566,25 @@ async function showResultsStructure(taskId) {
                         <button class="btn btn-primary btn-small" onclick="downloadAllScenarios()">
                             <i class="fas fa-download"></i> 下載所有檔案
                         </button>
+                        <button class="btn btn-secondary btn-small" onclick="window.location.href='/results/${taskId}'">
+                            <i class="fas fa-folder-open"></i> 開啟結果資料夾
+                        </button>
                     </div>
                 </div>
             `;
             
-            // 插入到結果摘要後面
-            const summaryElement = document.getElementById('resultsSummary');
-            const structureContainer = document.createElement('div');
-            structureContainer.innerHTML = structureHtml;
-            summaryElement.appendChild(structureContainer);
+            // 插入到獨立區塊
+            document.getElementById('resultsStructureContent').innerHTML = structureHtml;
         }
         
     } catch (error) {
         console.error('Get results structure error:', error);
+        document.getElementById('resultsStructureContent').innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>無法載入檔案結構</p>
+            </div>
+        `;
     }
 }
 

@@ -894,56 +894,106 @@ def get_statistics():
 
 @app.route('/api/pivot-data/<task_id>')
 def get_pivot_data(task_id):
-    """取得樞紐分析資料 API - 使用真實資料"""
+    """取得樞紐分析資料 API - 支援按情境查找"""
     try:
         app.logger.info(f'Getting pivot data for task: {task_id}')
+        
+        # 檢查是否有情境參數
+        scenario = request.args.get('scenario', 'all')
+        app.logger.info(f'Requested scenario: {scenario}')
         
         # 查找任務結果
         summary_report_path = None
         
-        # 1. 優先從儲存的任務結果中查找
-        if task_id in task_results:
-            app.logger.info(f'Found in task_results')
-            result_info = task_results[task_id]
+        # 1. 如果指定了特定情境，優先查找該情境的報告
+        if scenario != 'all' and scenario in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
+            # 查找情境特定的報告
+            scenario_dir = os.path.join('compare_results', task_id, scenario)
+            app.logger.info(f'Checking scenario directory: {scenario_dir}')
             
-            # 嘗試多個可能的鍵
-            if 'summary_report' in result_info:
-                summary_report_path = result_info['summary_report']
-            elif 'results' in result_info and 'summary_report' in result_info['results']:
-                summary_report_path = result_info['results']['summary_report']
+            if os.path.exists(scenario_dir):
+                # 優先查找 all_scenarios_compare.xlsx
+                scenario_report = os.path.join(scenario_dir, 'all_scenarios_compare.xlsx')
+                if os.path.exists(scenario_report):
+                    summary_report_path = scenario_report
+                    app.logger.info(f'Found scenario-specific report: {scenario_report}')
+                else:
+                    # 如果沒有 all_scenarios_compare.xlsx，查找其他 xlsx 檔案
+                    for file in os.listdir(scenario_dir):
+                        if file.endswith('.xlsx') and not file.startswith('~'):
+                            summary_report_path = os.path.join(scenario_dir, file)
+                            app.logger.info(f'Found alternative Excel file: {file}')
+                            break
         
-        # 2. 從處理狀態中查找
-        if not summary_report_path and task_id in processing_status:
-            app.logger.info(f'Found in processing_status')
-            task_data = processing_status[task_id]
-            results = task_data.get('results', {})
+        # 2. 如果沒有找到情境特定的報告，或者請求的是 'all'，使用原有邏輯
+        if not summary_report_path:
+            # 從儲存的任務結果中查找
+            if task_id in task_results:
+                app.logger.info(f'Found in task_results')
+                result_info = task_results[task_id]
+                
+                # 嘗試多個可能的鍵
+                if 'summary_report' in result_info:
+                    summary_report_path = result_info['summary_report']
+                elif 'results' in result_info and 'summary_report' in result_info['results']:
+                    summary_report_path = result_info['results']['summary_report']
+                elif 'results' in result_info and 'compare_results' in result_info['results']:
+                    # 檢查是否有情境特定的報告
+                    compare_results = result_info['results']['compare_results']
+                    if scenario != 'all' and scenario in compare_results:
+                        scenario_data = compare_results[scenario]
+                        if 'summary_report' in scenario_data:
+                            summary_report_path = scenario_data['summary_report']
             
-            if 'summary_report' in results:
-                summary_report_path = results['summary_report']
+            # 從處理狀態中查找
+            if not summary_report_path and task_id in processing_status:
+                app.logger.info(f'Found in processing_status')
+                task_data = processing_status[task_id]
+                results = task_data.get('results', {})
+                
+                if 'summary_report' in results:
+                    summary_report_path = results['summary_report']
+                elif 'compare_results' in results:
+                    compare_results = results['compare_results']
+                    if scenario != 'all' and scenario in compare_results:
+                        scenario_data = compare_results[scenario]
+                        if 'summary_report' in scenario_data:
+                            summary_report_path = scenario_data['summary_report']
         
-        # 3. 從比對結果目錄中查找
+        # 3. 如果還是沒找到，從檔案系統中查找
         if not summary_report_path:
             compare_dir = os.path.join('compare_results', task_id)
             app.logger.info(f'Checking directory: {compare_dir}')
             
             if os.path.exists(compare_dir):
-                # 優先查找特定檔名
-                priority_files = ['all_scenarios_compare.xlsx', 'all_compare.xlsx']
-                
-                for filename in priority_files:
-                    file_path = os.path.join(compare_dir, filename)
-                    if os.path.exists(file_path):
-                        summary_report_path = file_path
-                        app.logger.info(f'Found report: {filename}')
-                        break
-                
-                # 如果沒找到，查找任何 xlsx 檔案
-                if not summary_report_path:
-                    for file in os.listdir(compare_dir):
-                        if file.endswith('.xlsx') and not file.startswith('~'):
-                            summary_report_path = os.path.join(compare_dir, file)
-                            app.logger.info(f'Found Excel file: {file}')
+                # 如果是 'all'，查找根目錄的總報告
+                if scenario == 'all':
+                    # 優先查找特定檔名
+                    priority_files = ['all_scenarios_summary.xlsx', 'all_scenarios_compare.xlsx', 'all_compare.xlsx']
+                    
+                    for filename in priority_files:
+                        file_path = os.path.join(compare_dir, filename)
+                        if os.path.exists(file_path):
+                            summary_report_path = file_path
+                            app.logger.info(f'Found report: {filename}')
                             break
+                    
+                    # 如果沒找到，查找任何 xlsx 檔案
+                    if not summary_report_path:
+                        for file in os.listdir(compare_dir):
+                            if file.endswith('.xlsx') and not file.startswith('~'):
+                                summary_report_path = os.path.join(compare_dir, file)
+                                app.logger.info(f'Found Excel file: {file}')
+                                break
+                else:
+                    # 特定情境，再次嘗試查找
+                    scenario_dir = os.path.join(compare_dir, scenario)
+                    if os.path.exists(scenario_dir):
+                        for file in os.listdir(scenario_dir):
+                            if file.endswith('.xlsx') and not file.startswith('~'):
+                                summary_report_path = os.path.join(scenario_dir, file)
+                                app.logger.info(f'Found Excel file in scenario dir: {file}')
+                                break
         
         # 4. 讀取並返回資料
         if summary_report_path and os.path.exists(summary_report_path):
@@ -961,17 +1011,17 @@ def get_pivot_data(task_id):
                 for sheet_name, df in excel_data.items():
                     app.logger.info(f'Processing sheet: {sheet_name} with {len(df)} rows')
                     
-                    # 特別記錄 PreMP vs Wave 相關的資料表
-                    if 'premp' in sheet_name.lower() or 'wave' in sheet_name.lower():
-                        app.logger.info(f'Found PreMP/Wave related sheet: {sheet_name}')
-                    
-                    # 處理 NaN 值和日期格式
+                    # 處理 NaN 值
                     df = df.fillna('')
                     
                     # 將日期轉換為字串
                     for col in df.columns:
                         if df[col].dtype == 'datetime64[ns]':
                             df[col] = df[col].astype(str)
+                        # 處理其他可能的物件類型
+                        elif df[col].dtype == 'object':
+                            # 確保所有值都是可序列化的
+                            df[col] = df[col].apply(lambda x: str(x) if pd.notna(x) else '')
                     
                     # 將 DataFrame 轉換為記錄格式
                     pivot_data[sheet_name] = {
@@ -980,6 +1030,35 @@ def get_pivot_data(task_id):
                     }
                 
                 app.logger.info(f'Successfully loaded {len(pivot_data)} sheets')
+                
+                # 如果請求特定情境但找到的是總報告，過濾相關資料
+                if scenario != 'all' and 'all_scenarios' in os.path.basename(summary_report_path):
+                    # 這是總報告，可能需要過濾資料
+                    filtered_data = {}
+                    for sheet_name, sheet_data in pivot_data.items():
+                        # 檢查資料是否包含情境相關的內容
+                        if sheet_data['data']:
+                            # 根據情境過濾資料
+                            filtered_rows = []
+                            for row in sheet_data['data']:
+                                # 檢查是否有情境相關的欄位
+                                if 'scenario' in row and row['scenario'] == scenario:
+                                    filtered_rows.append(row)
+                                elif 'base_folder' in row or 'compare_folder' in row:
+                                    # 根據資料夾名稱判斷是否屬於該情境
+                                    if row_belongs_to_scenario(row, scenario):
+                                        filtered_rows.append(row)
+                            
+                            if filtered_rows:
+                                filtered_data[sheet_name] = {
+                                    'columns': sheet_data['columns'],
+                                    'data': filtered_rows
+                                }
+                    
+                    # 如果有過濾後的資料，使用過濾後的資料
+                    if filtered_data:
+                        pivot_data = filtered_data
+                
                 return jsonify(pivot_data)
                 
             except Exception as e:
@@ -988,7 +1067,7 @@ def get_pivot_data(task_id):
                 app.logger.error(traceback.format_exc())
                 return jsonify({'error': f'讀取資料失敗：{str(e)}'}), 500
         else:
-            app.logger.warning(f'No data found for task: {task_id}, path: {summary_report_path}')
+            app.logger.warning(f'No data found for task: {task_id}, scenario: {scenario}, path: {summary_report_path}')
         
         # 如果沒有找到資料，返回空對象
         return jsonify({})
@@ -998,6 +1077,56 @@ def get_pivot_data(task_id):
         import traceback
         app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+
+def row_belongs_to_scenario(row, scenario):
+    """判斷資料行是否屬於特定情境（獨立函數，不是方法）"""
+    # 根據資料夾名稱判斷
+    base_folder = str(row.get('base_folder', ''))
+    compare_folder = str(row.get('compare_folder', ''))
+    
+    if scenario == 'master_vs_premp':
+        # Master 資料夾（無後綴）vs PreMP 資料夾
+        return (not any(base_folder.endswith(suffix) for suffix in ['-premp', '-wave', '-wave.backup']) and
+                compare_folder.endswith('-premp'))
+    
+    elif scenario == 'premp_vs_wave':
+        # PreMP 資料夾 vs Wave 資料夾
+        return (base_folder.endswith('-premp') and 
+                compare_folder.endswith('-wave') and 
+                not compare_folder.endswith('-wave.backup'))
+    
+    elif scenario == 'wave_vs_backup':
+        # Wave 資料夾 vs Wave.backup 資料夾
+        return (base_folder.endswith('-wave') and 
+                not base_folder.endswith('-wave.backup') and
+                compare_folder.endswith('-wave.backup'))
+    
+    return False
+
+def _row_belongs_to_scenario(self, row, scenario):
+    """判斷資料行是否屬於特定情境"""
+    # 根據資料夾名稱判斷
+    base_folder = str(row.get('base_folder', ''))
+    compare_folder = str(row.get('compare_folder', ''))
+    
+    if scenario == 'master_vs_premp':
+        # Master 資料夾（無後綴）vs PreMP 資料夾
+        return (not any(base_folder.endswith(suffix) for suffix in ['-premp', '-wave', '-wave.backup']) and
+                base_folder.endswith('-premp'))
+    
+    elif scenario == 'premp_vs_wave':
+        # PreMP 資料夾 vs Wave 資料夾
+        return (base_folder.endswith('-premp') and 
+                compare_folder.endswith('-wave') and 
+                not compare_folder.endswith('-wave.backup'))
+    
+    elif scenario == 'wave_vs_backup':
+        # Wave 資料夾 vs Wave.backup 資料夾
+        return (compare_folder.endswith('-wave') and 
+                not compare_folder.endswith('-wave.backup') and
+                compare_folder.endswith('-wave.backup'))
+    
+    return False
 
 def get_mock_pivot_data():
     """取得模擬的樞紐分析資料"""
@@ -2656,6 +2785,53 @@ def copy_excel_to_results():
         app.logger.error(f"複製 Excel 檔案失敗: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# 在 web_app.py 的 API 路由部分新增
+@app.route('/api/results-structure/<task_id>')
+def get_results_structure(task_id):
+    """獲取結果檔案結構 API"""
+    try:
+        structure = {
+            'task_id': task_id,
+            'scenarios': {}
+        }
+        
+        # 檢查比對結果目錄
+        compare_dir = os.path.join('compare_results', task_id)
+        
+        if not os.path.exists(compare_dir):
+            return jsonify({'error': '找不到結果目錄'}), 404
+        
+        # 檢查各情境子目錄
+        scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
+        
+        for scenario in scenarios:
+            scenario_dir = os.path.join(compare_dir, scenario)
+            if os.path.exists(scenario_dir):
+                scenario_data = {
+                    'path': scenario_dir,
+                    'files': []
+                }
+                
+                # 列出該情境目錄下的所有檔案
+                for file in os.listdir(scenario_dir):
+                    if file.endswith('.xlsx'):
+                        file_path = os.path.join(scenario_dir, file)
+                        file_stat = os.stat(file_path)
+                        scenario_data['files'].append({
+                            'name': file,
+                            'path': file_path,
+                            'size': file_stat.st_size,
+                            'modified': file_stat.st_mtime
+                        })
+                
+                structure['scenarios'][scenario] = scenario_data
+        
+        return jsonify(structure)
+        
+    except Exception as e:
+        app.logger.error(f'Get results structure error: {e}')
+        return jsonify({'error': str(e)}), 500
+    
 if __name__ == '__main__':
     # 開發模式執行
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)

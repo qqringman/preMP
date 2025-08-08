@@ -3014,9 +3014,9 @@ input.path-input::-webkit-contacts-auto-fill-button {
 }
 
 .modal-close:hover {
-    background: rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     transform: rotate(90deg);
+    color: white !important; /* 確保關閉按鈕是白色 */
 }
 
 /* 模態框基礎樣式 */
@@ -4859,4 +4859,32 @@ input.path-input::-webkit-contacts-auto-fill-button {
     .progress-stats:has(.stat-card:nth-child(4)) {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* 獨立的檔案結構區塊 */
+.results-structure-section {
+    margin-top: 2rem;
+}
+
+.results-structure-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.tree-node.no-files {
+    opacity: 0.6;
+}
+
+.tree-node .no-data-label {
+    color: #9E9E9E;
+    font-size: 0.875rem;
+    margin-left: 8px;
+}
+
+.tree-node .file-count {
+    color: #2196F3;
+    font-size: 0.875rem;
+    margin-left: 8px;
 }
