@@ -470,32 +470,34 @@ class SFTPDownloader:
         for idx, row in df.iterrows():
             ftp_path = row[ftp_column]
             
-            # 檢查空值或 NotFound
-            if pd.isna(ftp_path) or str(ftp_path).strip() == '' or \
-               str(ftp_path).strip().lower() in ['notfound', 'sftpnotfound']:
-                self.logger.warning(f"第 {idx + 1} 筆資料的 FTP 路徑為空或 NotFound")
-                
-                # 更新統計
-                if hasattr(self, 'stats'):
-                    for file in config.TARGET_FILES:
-                        self.stats['failed'] += 1
-                        if hasattr(self, 'failed_files_list'):
-                            self.failed_files_list.append({
-                                'name': file,
-                                'path': '',
-                                'reason': 'FTP 路徑為空或 NotFound',
-                                'ftp_path': str(ftp_path) if not pd.isna(ftp_path) else '空值'
-                            })
-                
-                # 加入報表資料
-                report_data.append({
-                    'SN': idx + 1,
-                    '模組': '未知',
-                    ftp_column: str(ftp_path) if not pd.isna(ftp_path) else '空值',
-                    '本地資料夾': 'N/A',
-                    '版本資訊檔案': 'FTP 路徑為空或 NotFound'
-                })
-                continue
+            # 使用相同的驗證邏輯（如果是 WebDownloader 的實例）
+            if hasattr(self, '_is_valid_ftp_path'):
+                if not self._is_valid_ftp_path(ftp_path):
+                    self.logger.info(f"第 {idx + 1} 筆資料的 FTP 路徑無效，跳過: {ftp_path}")
+                    
+                    # 加入報表資料但標記為跳過
+                    report_data.append({
+                        'SN': idx + 1,
+                        '模組': '未知',
+                        ftp_column: str(ftp_path) if not pd.isna(ftp_path) else '空值',
+                        '本地資料夾': 'N/A',
+                        '版本資訊檔案': '無效路徑（NotFound 或空值）'
+                    })
+                    continue
+            else:
+                # 原有的檢查邏輯（向後相容）
+                if pd.isna(ftp_path) or str(ftp_path).strip() == '' or \
+                str(ftp_path).strip().lower() in ['notfound', 'sftpnotfound']:
+                    self.logger.info(f"第 {idx + 1} 筆資料的 FTP 路徑無效，跳過")
+                    
+                    report_data.append({
+                        'SN': idx + 1,
+                        '模組': '未知',
+                        ftp_column: str(ftp_path) if not pd.isna(ftp_path) else '空值',
+                        '本地資料夾': 'N/A',
+                        '版本資訊檔案': '無效路徑（NotFound 或空值）'
+                    })
+                    continue
             
             # 進行路徑替換
             original_path = str(ftp_path)

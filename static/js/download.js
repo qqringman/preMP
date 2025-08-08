@@ -521,6 +521,7 @@ function getMockCompareData(type) {
 // ==================== 原有功能保持不變 ====================
 
 // 顯示檔案列表 - 統一設計風格
+// 顯示檔案列表 - 統一設計風格
 function showFilesList(type) {
     let files = [];
     let title = '';
@@ -634,13 +635,33 @@ function showFilesList(type) {
             // SN
             html += `<td class="index-cell">${index + 1}</td>`;
             
-            // 檔案名稱
-            html += `<td class="file-name-cell">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fas ${getFileIcon(file.name)}" style="color: #2196F3;"></i>
-                            <span class="searchable">${file.name || ''}</span>
-                        </div>
-                     </td>`;
+            // 檔案名稱 - 特別處理失敗的情況
+            if (file.name === '無檔案') {
+                // 路徑存在但無檔案的情況
+                html += `<td class="file-name-cell">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-folder-open" style="color: #F44336;"></i>
+                                <span class="searchable" style="color: #F44336; font-style: italic;">路徑無檔案</span>
+                            </div>
+                         </td>`;
+            } else {
+                // 正常檔案
+                let fileIconColor = '#2196F3';  // 預設藍色
+                if (type === 'failed' || (type === 'total' && file.status === 'failed')) {
+                    fileIconColor = '#F44336';  // 失敗用紅色
+                } else if (type === 'skipped' || (type === 'total' && file.status === 'skipped')) {
+                    fileIconColor = '#FF9800';  // 跳過用橘色
+                } else if (type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) {
+                    fileIconColor = '#4CAF50';  // 下載成功用綠色
+                }
+                
+                html += `<td class="file-name-cell">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas ${getFileIcon(file.name)}" style="color: ${fileIconColor};"></i>
+                                <span class="searchable">${file.name || ''}</span>
+                            </div>
+                         </td>`;
+            }
             
             // FTP 路徑
             html += `<td class="file-path-cell searchable" title="${file.ftp_path || '-'}">
@@ -648,34 +669,69 @@ function showFilesList(type) {
                      </td>`;
             
             // 本地路徑
-            html += `<td class="file-path-cell searchable" title="${file.path || '-'}">
-                        <span style="font-family: monospace; font-size: 0.875rem;">${file.path || '-'}</span>
+            const localPath = file.path || '-';
+            const displayPath = localPath === '-' ? '-' : localPath;
+            html += `<td class="file-path-cell searchable" title="${localPath}">
+                        <span style="font-family: monospace; font-size: 0.875rem;">${displayPath}</span>
                      </td>`;
             
             // 狀態（如果是總覽）
             if (type === 'total') {
-                const statusClass = file.status === 'downloaded' ? 'success' : 
-                                  file.status === 'skipped' ? 'info' : 'danger';
-                const statusText = file.status === 'downloaded' ? '已下載' : 
-                                 file.status === 'skipped' ? '已跳過' : '失敗';
-                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+                let statusClass = '';
+                let statusText = '';
+                let statusIcon = '';
+                
+                switch(file.status) {
+                    case 'downloaded':
+                        statusClass = 'success';
+                        statusText = '已下載';
+                        statusIcon = 'fa-check';
+                        break;
+                    case 'skipped':
+                        statusClass = 'info';
+                        statusText = '已跳過';
+                        statusIcon = 'fa-forward';
+                        break;
+                    case 'failed':
+                        statusClass = 'danger';
+                        statusText = '失敗';
+                        statusIcon = 'fa-times';
+                        break;
+                }
+                
+                html += `<td>
+                            <span class="status-badge ${statusClass}">
+                                <i class="fas ${statusIcon}" style="font-size: 0.75rem; margin-right: 4px;"></i>
+                                ${statusText}
+                            </span>
+                         </td>`;
             }
             
             // 原因（如果是跳過或失敗）
             if (type === 'skipped' || type === 'failed') {
-                html += `<td class="searchable">${file.reason || '-'}</td>`;
+                let reasonStyle = '';
+                if (type === 'failed') {
+                    reasonStyle = 'color: #F44336; font-weight: 500;';
+                }
+                html += `<td class="searchable" style="${reasonStyle}">${file.reason || '-'}</td>`;
             }
             
             // 操作
             html += '<td class="action-cell">';
-            if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
+            
+            // 只有成功下載的檔案才能預覽（排除「無檔案」的情況）
+            if (file.name !== '無檔案' && 
+                ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path)) {
                 const cleanPath = file.path.replace(/\\/g, '/');
                 html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                          </button>`;
+            } else {
+                // 失敗或跳過的檔案不提供預覽
+                html += `<span style="color: #CCC;">-</span>`;
             }
-            html += '</td>';
             
+            html += '</td>';
             html += '</tr>';
         });
         
@@ -683,19 +739,64 @@ function showFilesList(type) {
         html += '</table>';
         html += '</div></div>';
         
-        // 表格底部統計
+        // 表格底部統計 - 修正這裡的錯誤
         html += `
             <div class="table-footer">
                 <div class="table-footer-stats">
                     <div class="footer-stat">
                         <i class="fas fa-chart-bar"></i>
-                        <span>共 <span class="footer-stat-value">${files.length}</span> 個檔案</span>
-                    </div>
+                        <span>共 <span class="footer-stat-value">${files.length}</span> `;
+        
+        // 檢查是否有「無檔案」的項目來決定用詞
+        const hasNoFileItem = files.some(f => f.name === '無檔案');
+        if (hasNoFileItem && files.length === 1) {
+            html += '個路徑';
+        } else if (hasNoFileItem) {
+            html += '個項目';
+        } else {
+            html += '個檔案';
+        }
+        
+        html += `</span>
+                    </div>`;
+        
+        // 如果是總覽，顯示各類別的數量
+        if (type === 'total' && files.length > 0) {
+            const downloadedCount = files.filter(f => f.status === 'downloaded').length;
+            const skippedCount = files.filter(f => f.status === 'skipped').length;
+            const failedCount = files.filter(f => f.status === 'failed').length;
+            
+            html += `
+                <div class="footer-stat">
+                    <span style="color: #4CAF50;">
+                        <i class="fas fa-check-circle"></i> ${downloadedCount} 已下載
+                    </span>
+                </div>
+                <div class="footer-stat">
+                    <span style="color: #FF9800;">
+                        <i class="fas fa-forward"></i> ${skippedCount} 已跳過
+                    </span>
+                </div>
+                <div class="footer-stat">
+                    <span style="color: #F44336;">
+                        <i class="fas fa-times-circle"></i> ${failedCount} 失敗
+                    </span>
+                </div>
+            `;
+        }
+        
+        html += `
                 </div>
             </div>
         `;
     } else {
-        html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有檔案</p></div>';
+        // 沒有檔案的情況
+        html += `
+            <div class="empty-message">
+                <i class="fas fa-inbox"></i>
+                <p>沒有檔案</p>
+            </div>
+        `;
     }
     
     html += '</div></div>';
@@ -710,13 +811,27 @@ function getFileIcon(fileName) {
     
     const lowerName = fileName.toLowerCase();
     
-    if (lowerName.includes('manifest.xml')) return 'fa-file-code';
-    if (lowerName.includes('version.txt')) return 'fa-file-lines';
-    if (lowerName.includes('f_version.txt')) return 'fa-file-signature';
-    if (lowerName.endsWith('.xml')) return 'fa-file-code';
-    if (lowerName.endsWith('.txt')) return 'fa-file-alt';
-    if (lowerName.endsWith('.csv')) return 'fa-file-csv';
-    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) return 'fa-file-excel';
+    if (lowerName.includes('manifest.xml') || lowerName === 'manifest.xml') {
+        return 'fa-file-code';
+    }
+    if (lowerName.includes('version.txt') || lowerName === 'version.txt') {
+        return 'fa-file-lines';
+    }
+    if (lowerName.includes('f_version.txt') || lowerName === 'f_version.txt') {
+        return 'fa-file-signature';
+    }
+    if (lowerName.endsWith('.xml')) {
+        return 'fa-file-code';
+    }
+    if (lowerName.endsWith('.txt')) {
+        return 'fa-file-alt';
+    }
+    if (lowerName.endsWith('.csv')) {
+        return 'fa-file-csv';
+    }
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        return 'fa-file-excel';
+    }
     
     return 'fa-file';
 }
@@ -2036,13 +2151,21 @@ function handleDownloadProgress(event) {
 function updateDownloadProgress(data) {
     const { progress, status, message, stats, files, results } = data;
     
+    // 確保進度不超過 100%
+    const safeProgress = Math.min(Math.max(0, progress || 0), 100);
+    
     // 更新進度條
     const progressFill = document.getElementById('progressFill');
     const progressText = document.getElementById('progressText');
-    
+
+    // 驗證並修正統計
+    if (stats) {
+        validateStats(stats);
+    }
+
     if (progressFill && progressText) {
-        progressFill.style.width = `${progress}%`;
-        progressText.textContent = `${Math.round(progress)}%`;
+        progressFill.style.width = `${safeProgress}%`;
+        progressText.textContent = `${Math.round(safeProgress)}%`;
     }
     
     // 更新統計
@@ -2795,4 +2918,20 @@ function selectSource(source) {
     
     updateSelectedHint();
     updateDownloadButton();
+}
+
+function validateStats(stats) {
+    if (!stats) return;
+    
+    // 確保總數等於各項總和
+    const calculatedTotal = (stats.downloaded || 0) + 
+                          (stats.skipped || 0) + 
+                          (stats.failed || 0);
+    
+    if (stats.total !== calculatedTotal) {
+        console.warn(`統計不一致: total=${stats.total}, 計算值=${calculatedTotal}`);
+        stats.total = calculatedTotal;
+    }
+    
+    return stats;
 }
