@@ -30,10 +30,10 @@
             
             <div class="section-body">
                 <div class="source-tabs">
-                    <button class="tab-btn active" onclick="switchTab('local')">
+                    <button class="tab-btn active" onclick="switchTab('local', this)">
                         <i class="fas fa-upload"></i> 載入 Excel 檔案
                     </button>
-                    <button class="tab-btn" onclick="switchTab('server')">
+                    <button class="tab-btn" onclick="switchTab('server', this)">
                         <i class="fas fa-server"></i> 選擇伺服器檔案
                     </button>
                 </div>
@@ -64,17 +64,17 @@
                         </div>
                     </div>
                     
-                    <!-- 伺服器瀏覽 -->
+                    <!-- 伺服器瀏覽 - 預先放置內容 -->
                     <div class="tab-content" id="server-tab">
                         <div class="server-browser">
                             <div class="browser-header">
                                 <div class="path-input-container">
                                     <input type="text" 
-                                           class="path-input" 
-                                           id="serverPathInput" 
-                                           placeholder="輸入或貼上路徑..."
-                                           value="/home/vince_lin/ai/preMP"
-                                           autocomplete="off">
+                                        class="path-input" 
+                                        id="serverPathInput" 
+                                        placeholder="輸入或貼上路徑..."
+                                        value="/home/vince_lin/ai/preMP"
+                                        autocomplete="off">
                                     <div class="path-suggestions" id="pathSuggestions">
                                         <!-- 動態生成路徑建議 -->
                                     </div>
@@ -87,17 +87,10 @@
                                 </button>
                             </div>
                             <div class="browser-content" id="serverBrowser">
-                                <div class="empty-message">
+                                <div class="empty-state">
                                     <i class="fas fa-folder-open fa-3x"></i>
-                                    <p>切換到此標籤時將載入檔案列表</p>
+                                    <p>點擊「前往」載入檔案列表</p>
                                 </div>
-                            </div>
-                            
-                            <!-- 路徑麵包屑 -->
-                            <div class="path-breadcrumb" id="pathBreadcrumb" style="display: none;">
-                                <span class="breadcrumb-item" onclick="navigateTo('/')">
-                                    <i class="fas fa-home"></i>
-                                </span>
                             </div>
                         </div>
                         

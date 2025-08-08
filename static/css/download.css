@@ -59,7 +59,6 @@
   --text-secondary: #5C6BC0;
   --warning: #FF9800;
   --warning-light: #FFF3E0;
-  /* 橘色系 */
   --orange-50: #FFF3E0;
 }
 
@@ -291,17 +290,17 @@ body {
 }
 
 .upload-container:hover {
-  background: var(--nordic-sky);
-  border-color: var(--nordic-blue-light);
-  box-shadow: 0 4px 16px rgba(33, 150, 243, 0.1);
+  background: #F5F5F5;
+  border-color: #9E9E9E;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
 .upload-container.dragging {
-  background: var(--nordic-sky);
-  border-color: var(--nordic-blue);
+  background: #EEEEEE;
+  border-color: #757575;
   border-style: solid;
-  box-shadow: 0 12px 40px rgba(25, 118, 210, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 }
 
 .upload-icon-wrapper {
@@ -320,6 +319,7 @@ body {
 .upload-container:hover .upload-icon-wrapper i {
   color: var(--success);
   transform: scale(1.05);
+  filter: brightness(0.95);
 }
 
 .hint-card {
@@ -343,7 +343,6 @@ body {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 2rem;
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -388,6 +387,7 @@ body {
 
 .file-items {
   background: var(--bg-secondary);
+  padding: 8px;
 }
 
 .file-item-card {
@@ -399,6 +399,9 @@ body {
   padding: 18px 24px;
   position: relative;
   transition: all 0.2s ease;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
 }
 
 .file-item-card:hover {
@@ -406,7 +409,8 @@ body {
 }
 
 .file-item-card:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 0;
 }
 
 .file-icon-wrapper {
@@ -847,7 +851,6 @@ input:checked + .switch-slider::before {
   justify-content: center;
   min-height: 140px;
   overflow: hidden;
-  padding: 24px 16px;
   position: relative;
   text-align: center;
   transition: all 0.2s ease;
@@ -1236,26 +1239,25 @@ input:checked + .switch-slider::before {
 .progress-stats {
   display: grid;
   gap: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   margin-bottom: 32px;
 }
 
 .stat-card {
-  /* 強制淺白灰色底色 */
-  border: 2px solid transparent;
   align-items: center;
   background: #FFFFFF !important;
+  border: 2px solid #E3E7F3;
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   display: flex;
   gap: 16px;
+  min-height: 100px;
   overflow: hidden;
   padding: 20px;
   position: relative;
   transition: all 0.3s ease;
 }
 
-/* 移除右上角的藍色樣式 */
 .stat-card::after {
   display: none !important;
 }
@@ -1265,7 +1267,7 @@ input:checked + .switch-slider::before {
   border-style: solid;
   border-width: 0 20px 20px 0;
   content: "";
-  display: none !important;
+  display: none;
   height: 0;
   opacity: 0.3;
   position: absolute;
@@ -1345,8 +1347,8 @@ input:checked + .switch-slider::before {
   color: var(--text-primary);
   line-height: 1;
   margin-bottom: 4px;
-  display: block; /* 確保顯示 */
-  visibility: visible; /* 確保可見 */
+  display: block;
+  visibility: visible;
 }
 
 .stat-label {
@@ -1585,13 +1587,15 @@ input:checked + .switch-slider::before {
 
 .summary-item {
   align-items: center;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-light);
+  background: #FAFBFC;
+  border: 2px solid transparent;
   border-radius: var(--radius-lg);
   display: flex;
   gap: 1.5rem;
   padding: 1.5rem;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  position: relative;
 }
 
 .summary-item:hover {
@@ -1685,6 +1689,7 @@ input:checked + .switch-slider::before {
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
+  padding: 0 4px;
 }
 
 .btn-icon {
@@ -1820,51 +1825,62 @@ input:checked + .switch-slider::before {
 .modal {
   align-items: center;
   backdrop-filter: blur(8px);
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   inset: 0;
   justify-content: center;
   position: fixed;
   transition: opacity 0.3s ease, visibility 0.3s ease;
-  z-index: 2000;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  animation: fadeIn 0.2s ease;
 }
 
 .modal-content {
-  animation: modalSlideIn 0.3s ease-out;
-  background: #FFFFFF;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  animation: modalSlideIn 0.3s ease;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   max-height: 90vh;
-  max-width: 1100px;
+  max-width: 800px;
   overflow: hidden;
   transform: scale(0.95);
   transition: transform 0.3s ease;
-  width: 95%;
+  width: 90%;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
   align-items: center;
-  background: #2196F3;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-bottom: 1px solid var(--border-color);
   color: white;
   display: flex;
   gap: 16px;
   justify-content: space-between;
   overflow: hidden;
-  padding: 16px 24px;
+  padding: 1.5rem;
   position: relative;
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .modal-title {
   align-items: center;
   color: white;
   display: flex;
-  font-size: 1rem;
-  font-weight: 500;
-  gap: 10px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  gap: 0.75rem;
   margin: 0;
   position: relative;
   z-index: 1;
+  flex: 1;
 }
 
 .modal-title i {
@@ -1874,18 +1890,18 @@ input:checked + .switch-slider::before {
 
 .modal-close {
   align-items: center;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.2);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   color: white;
   cursor: pointer;
   display: flex;
   font-size: 1.25rem;
-  height: 32px;
+  height: 36px;
   justify-content: center;
   position: relative;
   transition: all 0.2s ease;
-  width: 32px;
+  width: 36px;
   z-index: 1;
 }
 
@@ -1896,13 +1912,16 @@ input:checked + .switch-slider::before {
 }
 
 .modal-body {
-  background: var(--bg-primary);
+  background: white;
   display: flex;
   flex-direction: column;
   max-height: calc(90vh - 60px);
   overflow: hidden;
   overflow-y: auto;
   padding: 0;
+  flex: 1;
+  border-radius: 0 0 12px 12px;
+  min-height: 0;
 }
 
 .preview-toolbar {
@@ -1927,42 +1946,47 @@ input:checked + .switch-slider::before {
 }
 
 .preview-content {
-  background: #1E1E1E;
+  background: #FFFFFF;
   border: none;
   border-radius: 0;
-  color: #D4D4D4;
+  color: #263238;
   flex: 1;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
   font-size: 14px;
   font-weight: 400;
   letter-spacing: 0.5px;
-  line-height: 1.7;
+  line-height: 1.8;
   margin: 0;
   max-height: calc(85vh - 200px);
   overflow: auto;
   padding: 24px 32px;
   tab-size: 4;
-  white-space: pre;
-  word-wrap: normal;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: none;
 }
 
 .preview-content.xml {
-  color: #D4D4D4;
+  color: #263238;
   font-size: 14px;
+  background: #FAFBFD;
+  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  line-height: 1.8;
+  padding: 24px 32px;
 }
 
 .preview-content .xml-tag {
-  color: #4EC9B0;
-  font-weight: 600;
-}
-
-.preview-content .xml-attr {
-  color: #C586C0;
+  color: #1565C0;
   font-weight: 500;
 }
 
+.preview-content .xml-attr {
+  color: #6A1B9A;
+  font-weight: 400;
+}
+
 .preview-content .xml-value {
-  color: #CE9178;
+  color: #2E7D32;
   font-weight: 400;
 }
 
@@ -2140,15 +2164,15 @@ input:checked + .switch-slider::before {
 }
 
 .modal.success .modal-header {
-  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+  background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%);
 }
 
 .modal.info .modal-header {
-  background: var(--nordic-gradient);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .modal.danger .modal-header {
-  background: linear-gradient(135deg, #F44336 0%, #EF5350 100%);
+  background: linear-gradient(135deg, #EB5757 0%, #000000 100%);
 }
 
 .files-table-container {
@@ -2226,6 +2250,9 @@ input:checked + .switch-slider::before {
   font-size: 0.8125rem;
   font-weight: 600;
   padding: 4px 12px;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
 }
 
 .status-badge.success {
@@ -2455,6 +2482,7 @@ input:checked + .switch-slider::before {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
+  display: none;
 }
 
 #filesListModal[style*="display: none"] {
@@ -2507,24 +2535,6 @@ input:checked + .switch-slider::before {
   animation: copySuccess 0.3s ease;
 }
 
-/*
-.action-cell .btn-icon:hover::after {
-  background: var(--text-primary);
-  border-radius: 4px;
-  bottom: -25px;
-  color: white;
-  content: attr(title);
-  font-size: 0.75rem;
-  left: 50%;
-  padding: 4px 8px;
-  pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  z-index: 10;
-}
-*/
-
 .notification {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
@@ -2544,8 +2554,9 @@ input:checked + .switch-slider::before {
 }
 
 .notification.success {
-  background: var(--success-light);
-  border: 1px solid var(--success);
+  background: #FFFFFF;
+  border: 2px solid var(--success);
+  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.15);
 }
 
 .notification.error {
@@ -2606,7 +2617,6 @@ input:checked + .switch-slider::before {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   content: "";
   display: flex;
-  height: 24px;
   justify-content: center;
   position: absolute;
   right: 8px;
@@ -2623,7 +2633,6 @@ input:checked + .switch-slider::before {
   color: white;
   display: flex;
   font-size: 0.875rem;
-  height: 24px;
   justify-content: center;
   position: absolute;
   right: 8px;
@@ -2739,24 +2748,25 @@ input:checked + .switch-slider::before {
 
 .empty-message {
   align-items: center;
-  color: var(--text-muted);
+  color: #ADB5BD;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 200px;
+  min-height: 400px;
   padding: 40px;
   text-align: center;
+  height: 100%;
 }
 
 .empty-message i {
   color: var(--nordic-blue-light);
-  font-size: 3rem;
+  font-size: 4rem;
   margin-bottom: 16px;
   opacity: 0.5;
 }
 
 .empty-message p {
-  font-size: 1rem;
+  font-size: 1.125rem;
   margin: 0;
 }
 
@@ -2885,12 +2895,12 @@ button:hover,
 }
 
 .stat-card.success {
-  background: #E8F5E9;
-  border-color: #4CAF50;
+  background: #FAFBFC;
+  border-color: #C8E6C9;
 }
 
 .stat-card.success:hover {
-  background: rgba(76, 175, 80, 0.05) !important;
+  background: rgba(76, 175, 80, 0.05);
   border-color: #4CAF50;
   border-width: 2px;
   box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
@@ -2910,12 +2920,12 @@ button:hover,
 }
 
 .stat-card.danger {
-  background: #FFEBEE;
-  border-color: #F44336;
+  background: #FAFBFC;
+  border-color: #FFCDD2;
 }
 
 .stat-card.danger:hover {
-  background: rgba(244, 67, 54, 0.05) !important;
+  background: rgba(244, 67, 54, 0.05);
   border-color: #F44336;
   border-width: 2px;
   box-shadow: 0 8px 24px rgba(244, 67, 54, 0.15);
@@ -2955,24 +2965,24 @@ button:hover,
 }
 
 .preview-content::-webkit-scrollbar {
-  height: 12px;
-  width: 12px;
+  height: 10px;
+  width: 10px;
 }
 
 .preview-content::-webkit-scrollbar-track {
-  background: #2D2D30;
-  border: 1px solid #1E1E1E;
+  background: #F5F9FF;
+  border: none;
   border-radius: 0;
 }
 
 .preview-content::-webkit-scrollbar-thumb {
-  background: #424242;
-  border: 1px solid #2D2D30;
-  border-radius: 0;
+  background: #90CAF9;
+  border: none;
+  border-radius: 5px;
 }
 
 .preview-content::-webkit-scrollbar-thumb:hover {
-  background: #4E4E51;
+  background: #64B5F6;
 }
 
 .preview-filename.xml::before {
@@ -2999,6 +3009,8 @@ button:hover,
   justify-content: center;
   min-height: 400px;
   white-space: normal;
+  color: #5C6BC0;
+  text-align: center;
 }
 
 .preview-content .loading {
@@ -3007,7 +3019,7 @@ button:hover,
 
 .preview-content .loading i {
   animation: spin 1s linear infinite;
-  color: #569CD6;
+  color: #2196F3;
   font-size: 3rem;
   margin-bottom: 20px;
 }
@@ -3022,8 +3034,8 @@ button:hover,
 }
 
 .preview-content .xml-bracket {
-  color: #808080;
-  font-weight: 400;
+  color: #64B5F6;
+  font-weight: 500;
 }
 
 .modal-header-left {
@@ -3077,7 +3089,7 @@ button:hover,
 }
 
 .preview-content::-webkit-scrollbar-corner {
-  background: #2D2D30;
+  background: #F5F9FF;
 }
 
 .preview-filename.xml i {
@@ -3094,11 +3106,16 @@ button:hover,
 }
 
 .preview-content.plain-text {
-  background: #1E1E1E;
-  color: #D4D4D4;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  background: #FAFBFD;
+  color: #1A237E;
+  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
   font-size: 14px;
   line-height: 1.8;
+  padding: 32px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  letter-spacing: 0.3px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .preview-content .keyword {
@@ -3107,23 +3124,23 @@ button:hover,
 }
 
 .preview-content .git-label {
-  color: #4EC9B0;
-  font-weight: 600;
+  color: #82AAFF;
+  font-weight: 500;
 }
 
 .preview-content .git-path {
-  color: #DCDCAA;
+  color: #FFCB6B;
   font-weight: 500;
 }
 
 .preview-content .git-commit {
-  color: #D16969;
+  color: #C3E88D;
   font-family: monospace;
   font-weight: 500;
 }
 
 .preview-content .git-branch {
-  color: #C586C0;
+  color: #F78C6C;
   font-weight: 500;
 }
 
@@ -3139,12 +3156,13 @@ button:hover,
 }
 
 .preview-content .line-number {
-  color: #5A5A5A;
+  color: #546E7A;
   display: inline-block;
-  margin-right: 20px;
+  margin-right: 16px;
   text-align: right;
   user-select: none;
   width: 40px;
+  min-width: 40px;
 }
 
 .preview-filename.txt i {
@@ -3189,7 +3207,6 @@ button:hover,
   color: #C586C0;
 }
 
-/* 藍色 - 總檔案數 */
 .stat-card.blue {
   border-color: var(--nordic-blue-200);
 }
@@ -3208,12 +3225,6 @@ button:hover,
   color: var(--nordic-blue);
 }
 
-/* 綠色 - 已下載 */
-.stat-card.success {
-  border-color: #C8E6C9;
-}
-
-/* 橘色 - 已跳過 */
 .stat-card.warning {
   border-color: var(--orange-200);
 }
@@ -3232,29 +3243,6 @@ button:hover,
   color: var(--orange-500);
 }
 
-/* 紅色 - 失敗 */
-.stat-card.danger {
-  border-color: #FFCDD2;
-}
-
-/* 動畫效果 */
-@keyframes slideInLeft {
-  from {
-    transform: translateX(-100%);
-  opacity: 0;
-}
-
-to {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-}
-
-.stat-card {
-  animation: slideInLeft 0.5s ease-out;
-}
-
 .stat-card:nth-child(1) {
   animation-delay: 0.1s;
 }
@@ -3271,41 +3259,11 @@ to {
   animation-delay: 0.4s;
 }
 
-/* 綠色 - 已下載（確保有淺白灰底） */
-.stat-card.success {
-  /* 淺白灰底色 */
-  border-color: #C8E6C9;
-  background: #FAFBFC !important;
-}
-
-/* 紅色 - 失敗（確保有淺白灰底） */
-.stat-card.danger {
-  /* 淺白灰底色 */
-  border-color: #FFCDD2;
-  background: #FAFBFC !important;
-}
-
-/* 下載結果的摘要項目 - 確保淺白灰底色 */
-.summary-item {
-  align-items: center;
-  background: #FAFBFC !important;
-  border: 2px solid transparent;
-  border-radius: var(--radius-lg);
-  display: flex;
-  gap: 1.5rem;
-  overflow: hidden;
-  padding: 1.5rem;
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-/* 移除右上角的藍色樣式 */
 .summary-item::after,
 .summary-item.clickable::after {
-  display: none !important;
+  display: none;
 }
 
-/* 左邊邊條 */
 .summary-item::before {
   content: "";
   height: 100%;
@@ -3322,149 +3280,20 @@ to {
   transform: scaleX(1);
 }
 
-/* 模態框標題欄 - 基礎樣式 */
-.modal-header {
-  /* 預設藍色 */
-  padding: 16px 24px;
-  align-items: center;
-  background: #2196F3;
-  border-bottom: 1px solid var(--border-color);
-  color: white;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  overflow: hidden;
-  position: relative;
-}
-
-/* 成功類型 - 綠色（已下載） */
-.modal.success .modal-header {
-  background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
-}
-
-/* 資訊類型 - 橘色（已跳過） */
-.modal.info .modal-header {
-  background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
-}
-
-/* 危險類型 - 紅色（失敗） */
-.modal.danger .modal-header {
-  background: linear-gradient(135deg, #F44336 0%, #EF5350 100%);
-}
-
-/* 確保文字和圖標在所有背景色下都清晰可見 */
 .modal-header .modal-title,
 .modal-header .modal-close {
-  color: white !important;
+  color: white;
 }
 
 .modal-header .modal-title i {
-  color: white !important;
-}
-
-/* 模態框關閉按鈕樣式 */
-.modal-close {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
   color: white;
-  cursor: pointer;
-  display: flex;
-  font-size: 1.25rem;
-  height: 32px;
-  justify-content: center;
-  position: relative;
-  transition: all 0.2s ease;
-  width: 32px;
-  z-index: 1;
-}
-
-/* 通知提示樣式 */
-.notification {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card-hover);
-  min-width: 300px;
-  padding: var(--spacing-md);
-  position: fixed;
-  right: 20px;
-  top: 100px;
-  transform: translateX(400px);
-  transition: transform var(--transition-normal);
-  z-index: 9999;
-}
-
-/* 成功類型通知 - 白底綠框 */
-.notification.success {
-  /* 白底 */
-    border: 2px solid var(--success);
-  background: #FFFFFF;
-  box-shadow: 0 4px 20px rgba(76, 175, 80, 0.15);
 }
 
 .notification.success .notification-message {
-  /* 深色文字以便在白底上清晰可見 */
-    font-weight: 500;
+  font-weight: 500;
   color: #333;
 }
 
-/* 修改 hover 效果為淺灰 */
-.upload-container:hover {
-  /* 淺灰背景 */
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  /* 灰色邊框 */
-    background: #F5F5F5;
-  border-color: #9E9E9E;
-  transform: translateY(-1px);
-}
-
-/* 拖曳中的狀態也改為淺灰 */
-.upload-container.dragging {
-  /* 更深一點的灰色 */
-    border-color: #757575;
-  /* 深灰邊框 */
-    border-style: solid;
-  background: #EEEEEE;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
-}
-
-/* hover 時圖標顏色保持不變或稍微變暗 */
-.upload-container:hover .upload-icon-wrapper i {
-  color: var(--success);
-  filter: brightness(0.95);
-  transform: scale(1.05);
-}
-
-/* 進度統計 - 確保兩個區域都使用相同樣式 */
-.progress-stats {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(4, 1fr);
-  margin-bottom: 32px;
-}
-
-@media (max-width: 768px) {
-  .progress-stats {
-        grid-template-columns: repeat(2, 1fr);
-}
-
-}
-
-/* 統計提示文字 */
-.stats-hint {
-  align-items: center;
-  color: var(--text-muted);
-  display: flex;
-  font-size: 0.875rem;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 24px;
-  margin-top: 16px;
-  text-align: center;
-}
-
-/* 確保動畫在兩個區域都能運作 */
 #downloadResults .stat-card {
   animation: slideInLeft 0.5s ease-out;
 }
@@ -3485,20 +3314,22 @@ to {
   animation-delay: 0.4s;
 }
 
-/* 下載頁面的檔案列表模態框 - 固定標頭表格 */
 #filesListModal .table-container-fixed {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
-/* 固定的表頭 */
 #filesListModal .table-header-fixed {
   flex-shrink: 0;
   overflow: hidden;
   border-bottom: 2px solid #E3F2FD;
   background: white;
+  flex: 0 0 auto;
+  height: auto;
 }
 
 #filesListModal .files-table-header {
@@ -3516,17 +3347,22 @@ to {
   font-size: 0.9375rem;
   white-space: nowrap;
   border-right: 1px solid #E3F2FD;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 #filesListModal .files-table-header th:last-child {
   border-right: none;
 }
 
-/* 可捲動的表身 */
 #filesListModal .table-body-scrollable {
   flex: 1;
   overflow: auto;
   background: white;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #filesListModal .files-table-body {
@@ -3553,7 +3389,6 @@ to {
   background-color: #F8FBFF;
 }
 
-/* 捲軸樣式 */
 #filesListModal .table-body-scrollable::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -3577,20 +3412,23 @@ to {
   background: #F5F9FF;
 }
 
-/* 更新模態框內容高度 */
 #filesListModal .modal-body {
-  padding: 0 !important;
+  padding: 0;
   background: #FFFFFF;
   max-height: 80vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
 }
 
-/* 底部統計樣式 */
 #filesListModal .table-footer {
   text-align: center;
-  padding: 24px;
+  padding: 0 20px;
   background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
   border-top: 2px solid #E3F2FD;
   color: #78909C;
@@ -3601,6 +3439,11 @@ to {
   gap: 10px;
   font-weight: 500;
   flex-shrink: 0;
+  height: 60px;
+  margin: 0;
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #filesListModal .table-footer i {
@@ -3608,7 +3451,6 @@ to {
   font-size: 1.125rem;
 }
 
-/* 確保模態框正確顯示 */
 #filesListModal.modal {
   position: fixed;
   top: 0;
@@ -3628,249 +3470,52 @@ to {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   width: 90%;
   max-width: 1400px;
-  height: 90vh;
+  height: 85vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  max-height: 85vh;
+  position: relative;
 }
 
-/* 下載頁面的檔案列表模態框 - 固定標頭表格 */
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  height: 100%; /* 使用 100% 高度 */
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-#filesListModal .table-container-fixed {
-  display: flex;
-  flex-direction: column;
-  flex: 1; /* 佔滿可用空間 */
-  overflow: hidden;
-  min-height: 0; /* 重要：允許 flex 子元素收縮 */
-}
-
-/* 固定的表頭 */
-#filesListModal .table-header-fixed {
-  flex: 0 0 auto;
-  overflow: hidden;
-  border-bottom: 2px solid #E3F2FD;
-  background: white;
-  height: auto; /* 改為 auto */
-}
-
-#filesListModal .files-table-header {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-#filesListModal .files-table-header th {
-  padding: 16px 20px;
-  text-align: left;
-  font-weight: 600;
-  color: #424242;
-  background: #F8FBFF;
-  font-size: 0.9375rem;
-  white-space: nowrap;
-  border-right: 1px solid #E3F2FD;
-}
-
-#filesListModal .files-table-header th:last-child {
-  border-right: none;
-}
-
-/* 可捲動的表身 - 關鍵修改 */
-#filesListModal .table-body-scrollable {
-  flex: 1;
-  overflow: auto; /* 允許橫向和垂直捲軸 */
-  background: white;
-  min-height: 0; /* 重要：允許收縮 */
-}
-
-#filesListModal .files-table-body {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-#filesListModal .files-table-body td {
-  padding: 14px 20px;
-  border-bottom: 1px solid #F5F5F5;
-  border-right: 1px solid #F5F5F5;
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#filesListModal .files-table-body td:last-child {
-  border-right: none;
-}
-
-#filesListModal .files-table-body tbody tr:hover {
-  background-color: #F8FBFF;
-}
-
-/* 底部統計樣式 - 修正位置 */
-#filesListModal .table-footer {
-  text-align: center;
-  padding: 20px;
-  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
-  border-top: 2px solid #E3F2FD;
-  color: #78909C;
-  font-size: 0.9375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-weight: 500;
-  flex-shrink: 0; /* 不收縮 */
-}
-
-/* 更新模態框內容結構 */
-#filesListModal .modal-content {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 1400px;
-  height: 80vh; /* 改為 80vh 避免太高 */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* 確保捲軸正確顯示 */
-#filesListModal .table-body-scrollable::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-#filesListModal .table-body-scrollable::-webkit-scrollbar-track {
-  background: #F5F9FF;
-  border-radius: 5px;
-}
-
-#filesListModal .table-body-scrollable::-webkit-scrollbar-thumb {
-  background: #90CAF9;
-  border-radius: 5px;
-}
-
-#filesListModal .table-body-scrollable::-webkit-scrollbar-thumb:hover {
-  background: #64B5F6;
-}
-
-#filesListModal .table-body-scrollable::-webkit-scrollbar-corner {
-  background: #F5F9FF;
-}
-
-/* 在 download.css 中，找到檔案列表模態框相關的樣式，修改為： */
-
-/* 下載頁面的檔案列表模態框 - 固定標頭表格 */
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  height: calc(100% - 60px); /* 減去 header 高度 */
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-#filesListModal .table-container-fixed {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* 固定的表頭 */
-#filesListModal .table-header-fixed {
-  flex-shrink: 0;
-  overflow: hidden;
-  border-bottom: 2px solid #E3F2FD;
-  background: white;
-}
-
-#filesListModal .files-table-header {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-#filesListModal .files-table-header th {
-  padding: 16px 20px;
-  text-align: left;
-  font-weight: 600;
-  color: #424242;
-  background: #F8FBFF;
-  font-size: 0.9375rem;
-  white-space: nowrap;
-  border-right: 1px solid #E3F2FD;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-/* 可捲動的表身 */
-#filesListModal .table-body-scrollable {
-  flex: 1;
-  overflow-y: auto; /* 只允許垂直捲軸 */
-  overflow-x: hidden; /* 隱藏水平捲軸 */
-  background: white;
-}
-
-/* 確保表格寬度一致 */
 #filesListModal .files-table-header,
 #filesListModal .files-table-body {
-  width: calc(100% - 10px); /* 預留捲軸空間 */
+  width: calc(100% - 10px);
 }
 
-/* 統一欄位寬度定義 */
 #filesListModal th:nth-child(1),
-#filesListModal td:nth-child(1) { width: 60px; }
+#filesListModal td:nth-child(1) {
+  width: 60px;
+}
 
 #filesListModal th:nth-child(2),
-#filesListModal td:nth-child(2) { width: 250px; }
-
-#filesListModal th:nth-child(3),
-#filesListModal td:nth-child(3) { width: 35%; }
-
-#filesListModal th:nth-child(4),
-#filesListModal td:nth-child(4) { width: 35%; }
-
-#filesListModal th:nth-child(5),
-#filesListModal td:nth-child(5) { width: 120px; }
-
-#filesListModal th:nth-child(6),
-#filesListModal td:nth-child(6) { width: 200px; }
-
-#filesListModal th:last-child,
-#filesListModal td:last-child { width: 80px; }
-
-/* 統計卡片 - 確保填滿高度 */
-.progress-stats {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(4, 1fr);
-  margin-bottom: 32px;
+#filesListModal td:nth-child(2) {
+  width: 250px;
 }
 
-.stat-card {
-  align-items: stretch; /* 改為 stretch 確保填滿高度 */
-  background: #FFFFFF !important;
-  border: 2px solid #E3E7F3;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  display: flex;
-  gap: 16px;
-  min-height: 100px; /* 設定最小高度 */
-  overflow: hidden;
-  padding: 20px;
-  position: relative;
-  transition: all 0.3s ease;
+#filesListModal th:nth-child(3),
+#filesListModal td:nth-child(3) {
+  width: 35%;
+}
+
+#filesListModal th:nth-child(4),
+#filesListModal td:nth-child(4) {
+  width: 35%;
+}
+
+#filesListModal th:nth-child(5),
+#filesListModal td:nth-child(5) {
+  width: 120px;
+}
+
+#filesListModal th:nth-child(6),
+#filesListModal td:nth-child(6) {
+  width: 200px;
+}
+
+#filesListModal th:last-child,
+#filesListModal td:last-child {
+  width: 80px;
 }
 
 .stat-card .stat-icon {
@@ -3884,14 +3529,14 @@ to {
   height: 52px;
   justify-content: center;
   width: 52px;
-  align-self: center; /* 垂直居中 */
+  align-self: center;
 }
 
 .stat-card .stat-content {
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: center; /* 垂直居中內容 */
+  justify-content: center;
 }
 
 .stat-card .stat-value {
@@ -3909,148 +3554,45 @@ to {
   line-height: 1.2;
 }
 
-/* 確保四個卡片高度一致 */
 .progress-stats .stat-card {
   min-height: 120px;
 }
 
-/* 下載結果的統計卡片也使用相同樣式 */
 #downloadResults .progress-stats .stat-card {
   min-height: 120px;
 }
 
-/* 更新模態框樣式 */
-#filesListModal .modal-content {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 1400px;
-  height: 85vh; /* 調整為 85vh */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* 模態框 header 固定高度 */
 #filesListModal .modal-header {
   height: 60px;
   flex-shrink: 0;
 }
 
-/* 模態框 body 佔據剩餘空間 */
-#filesListModal .modal-body {
-  flex: 1;
-  min-height: 0; /* 重要：允許收縮 */
-  display: flex;
-  flex-direction: column;
-}
-
-/* table footer 固定在底部 */
-#filesListModal .table-footer {
-  flex-shrink: 0;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 檔案列表模態框 - 修正高度計算 */
-#filesListModal .modal-content {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 1400px;
-  height: 85vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0; /* 重要：允許收縮 */
-}
-
-#filesListModal .table-container-fixed {
-  display: flex;
-  flex-direction: column;
-  flex: 1; /* 佔滿可用空間 */
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* 固定的表頭 */
-#filesListModal .table-header-fixed {
-  flex-shrink: 0;
-  overflow: hidden;
-  border-bottom: 2px solid #E3F2FD;
-  background: white;
-}
-
-/* 可捲動的表身 - 重要修改 */
-#filesListModal .table-body-scrollable {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: white;
-  min-height: 0; /* 允許收縮 */
-}
-
-/* 底部統計 - 移到 table-container-fixed 外面 */
-#filesListModal .table-footer {
-  flex-shrink: 0;
-  text-align: center;
-  padding: 20px;
-  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
-  border-top: 2px solid #E3F2FD;
-  color: #78909C;
-  font-size: 0.9375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-weight: 500;
-}
-
-/* 檔案列表模態框 - 使用 sticky 表頭方案 */
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* 單一表格容器 */
 #filesListModal .table-wrapper {
-  flex: 1;
-  overflow: auto;
-  background: white;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: #F8FBFF;
+  overflow-y: scroll;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  padding-right: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 60px);
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
-/* 單一表格 */
 #filesListModal .files-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: auto; /* 自動調整寬度 */
+  table-layout: auto;
+  min-width: 1000px;
+  margin: 0;
 }
-
-/*
-#filesListModal .files-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: #F8FBFF;
-}*/
 
 #filesListModal .files-table th {
   padding: 16px 20px;
@@ -4066,6 +3608,8 @@ to {
 
 #filesListModal .files-table th:last-child {
   border-right: none;
+  padding-right: 30px;
+  min-width: 90px;
 }
 
 #filesListModal .files-table td {
@@ -4078,7 +3622,6 @@ to {
   background-color: #F8FBFF;
 }
 
-/* 路徑欄位可以有最大寬度，但會自動調整 */
 #filesListModal .file-path-cell {
   max-width: 400px;
   overflow: hidden;
@@ -4086,24 +3629,6 @@ to {
   white-space: nowrap;
 }
 
-/* 底部統計 */
-#filesListModal .table-footer {
-  flex-shrink: 0;
-  height: 60px;
-  text-align: center;
-  padding: 0 20px;
-  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
-  border-top: 2px solid #E3F2FD;
-  color: #78909C;
-  font-size: 0.9375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-weight: 500;
-}
-
-/* 捲軸樣式 */
 #filesListModal .table-wrapper::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -4123,399 +3648,48 @@ to {
   background: #64B5F6;
 }
 
-/* 修正捲軸抖動 - 強制顯示捲軸 */
-#filesListModal .table-wrapper {
-  flex: 1;
-  overflow: auto;
-  background: white;
-  /* 強制顯示垂直捲軸，避免內容變化時的抖動 */
-  overflow-y: scroll;
-  overflow-x: auto;
-}
-
-/* 或者使用 overlay 捲軸（如果瀏覽器支援） */
-@supports (overflow: overlay) {
-  #filesListModal .table-wrapper {
-    overflow-y: overlay;
-    overflow-x: overlay;
-  }
-}
-
-/* 確保表格最小寬度，避免過度壓縮 */
-#filesListModal .files-table {
-  width: 100%;
-  min-width: 800px; /* 設定最小寬度 */
-  border-collapse: collapse;
-  table-layout: auto;
-}
-
-/* 狀態標籤不折行 */
-.status-badge {
-  border-radius: var(--radius-full);
-  display: inline-block;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  padding: 4px 12px;
-  white-space: nowrap; /* 防止折行 */
-  min-width: 60px; /* 設定最小寬度 */
-  text-align: center;
-}
-
-/* 確保狀態欄位不會太窄 */
 #filesListModal .files-table th:nth-child(5),
 #filesListModal .files-table td:nth-child(5) {
-  min-width: 80px; /* 確保有足夠空間 */
+  min-width: 80px;
   white-space: nowrap;
 }
 
-/* 所有表格單元格預設不折行 */
 #filesListModal .files-table th,
 #filesListModal .files-table td {
   white-space: nowrap;
-}
-
-/* 只有路徑欄位可以使用省略號 */
-#filesListModal .file-path-cell {
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 優化表格佈局 */
-#filesListModal .files-table {
-  width: 100%;
-  min-width: 1000px; /* 增加最小寬度，確保內容不會過度壓縮 */
-  border-collapse: collapse;
-  table-layout: auto;
-}
-
-/* 設定各欄位的最小寬度 */
-#filesListModal .files-table th,
-#filesListModal .files-table td {
   padding: 14px 20px;
-  white-space: nowrap;
 }
 
-/* 序號欄 */
 #filesListModal .index-cell {
   text-align: center;
   min-width: 50px;
 }
 
-/* 檔案名稱欄 */
 #filesListModal .file-name-cell {
   min-width: 200px;
 }
 
-/* 操作欄 */
 #filesListModal .action-cell {
   text-align: center;
   min-width: 80px;
 }
 
-/* 修正模態框內容區域 */
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* 設定最小寬度，避免過度縮小 */
-  min-width: 0;
-}
-
-/* 固定捲軸軌道大小 */
-#filesListModal .table-wrapper {
-  /* 為捲軸預留空間 */
-  scrollbar-gutter: stable;
-}
-
-/* 或者使用傳統方法 */
-#filesListModal .table-wrapper {
-  padding-right: 10px; /* 預留捲軸空間 */
-  box-sizing: content-box;
-}
-
-/* 預覽模態框 - 重新設計 */
 #filePreviewModal .modal-header {
   background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
-  padding: 20px 24px;
+  padding: 16px 24px;
   border-bottom: none;
+  position: relative;
+  overflow: hidden;
 }
 
 #filePreviewModal .modal-body {
-  background: #263238;
+  background: #FFFFFF;
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-/* 預覽工具列 */
-#filePreviewModal .preview-toolbar {
-  background: #37474F;
-  border-bottom: 1px solid #455A64;
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-/* 檔案名稱樣式 */
-#filePreviewModal .preview-filename {
-  color: #CFD8DC;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#filePreviewModal .preview-filename i {
-  color: #80CBC4;
-  font-size: 1.125rem;
-}
-
-/* 預覽內容區域 - 美化樣式 */
-.preview-content {
-  background: #263238;
-  border: none;
-  border-radius: 0;
-  color: #ECEFF1;
-  flex: 1;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  margin: 0;
-  overflow: auto;
-  padding: 24px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* XML 語法高亮 - 使用 Material Theme 配色 */
-.preview-content.xml {
-  background: #263238;
-}
-
-.preview-content .xml-bracket {
-  color: #89DDFF;
-}
-
-.preview-content .xml-tag {
-  color: #FF5370;
-  font-weight: 500;
-}
-
-.preview-content .xml-attr {
-  color: #FFCB6B;
-}
-
-.preview-content .xml-value {
-  color: #C3E88D;
-}
-
-/* 純文字檔案樣式 */
-.preview-content.plain-text {
-  background: #263238;
-  color: #ECEFF1;
-}
-
-/* Git 相關高亮 */
-.preview-content .git-label {
-  color: #82AAFF;
-  font-weight: 500;
-}
-
-.preview-content .git-path {
-  color: #FFCB6B;
-}
-
-.preview-content .git-commit {
-  color: #C3E88D;
-  font-family: monospace;
-}
-
-.preview-content .git-branch {
-  color: #F78C6C;
-}
-
-/* 行號樣式（可選） */
-.preview-content .line-number {
-  color: #546E7A;
-  display: inline-block;
-  margin-right: 16px;
-  min-width: 40px;
-  text-align: right;
-  user-select: none;
-}
-
-/* 修正複製按鈕的 z-index */
-#filePreviewModal .modal-header-actions {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  position: relative;
-  z-index: 10; /* 確保在最上層 */
-}
-
-#filePreviewModal .btn-copy {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  font-size: 0.875rem;
-  gap: 6px;
-  padding: 8px 16px;
-  transition: all 0.2s ease;
-  position: relative;
-  z-index: 11; /* 確保按鈕可點擊 */
-}
-
-#filePreviewModal .btn-copy:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* 關閉按鈕也要確保可點擊 */
-#filePreviewModal .modal-close {
-  position: relative;
-  z-index: 11;
-}
-
-/* 移除可能的覆蓋元素 */
-#filePreviewModal .modal-header::before,
-#filePreviewModal .modal-header::after {
-  z-index: 0; /* 確保裝飾元素在底層 */
-}
-
-/* 預覽視窗捲軸 - 配合深色主題 */
-.preview-content::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-.preview-content::-webkit-scrollbar-track {
-  background: #37474F;
-  border: 1px solid #263238;
-}
-
-.preview-content::-webkit-scrollbar-thumb {
-  background: #546E7A;
-  border-radius: 6px;
-}
-
-.preview-content::-webkit-scrollbar-thumb:hover {
-  background: #607D8B;
-}
-
-.preview-content::-webkit-scrollbar-corner {
-  background: #37474F;
-}
-
-/* Version.txt 專用樣式 - 簡潔美觀 */
-.preview-content.version-txt {
-  background: #1E1E1E;
-  color: #D4D4D4;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  padding: 24px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* 或者使用更現代的深色主題 */
-.preview-content.version-txt {
-  background: #282C34;
-  color: #ABB2BF;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  padding: 24px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  letter-spacing: 0.5px;
-}
-
-/* 純文字檔案的通用樣式 */
-.preview-content.plain-text {
-  background: #282C34;
-  color: #ABB2BF;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  padding: 24px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* XML 保持原有的語法高亮 */
-.preview-content.xml {
-  background: #1E1E1E;
-  color: #D4D4D4;
-  font-family: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  padding: 24px;
-}
-
-/* XML 語法高亮顏色 */
-.preview-content .xml-bracket {
-  color: #808080;
-}
-
-.preview-content .xml-tag {
-  color: #569CD6;
-}
-
-.preview-content .xml-attr {
-  color: #9CDCFE;
-}
-
-.preview-content .xml-value {
-  color: #CE9178;
-}
-
-/* 預覽模態框 - 北歐風格配色 */
-#filePreviewModal .modal-header {
-  background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
-  padding: 20px 24px;
-  border-bottom: none;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 添加裝飾性光效 */
-#filePreviewModal .modal-header::before {
-  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
-  content: "";
-  height: 300%;
-  opacity: 0.5;
-  position: absolute;
-  right: -25%;
-  top: -100%;
-  transform: rotate(35deg);
-  width: 70%;
-}
-
-#filePreviewModal .modal-body {
-  background: #FAFBFD;
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 預覽工具列 - 淺色設計 */
 #filePreviewModal .preview-toolbar {
   background: #F8FBFF;
   border-bottom: 1px solid #E3F2FD;
@@ -4527,76 +3701,34 @@ to {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* 檔案名稱樣式 */
 #filePreviewModal .preview-filename {
-  color: #1A237E;
+  color: #FFFFFF;
   font-size: 0.9375rem;
-  font-weight: 500;
+  font-weight: 400;
   display: flex;
   align-items: center;
   gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  opacity: 0.95;
 }
 
 #filePreviewModal .preview-filename i {
-  color: #2196F3;
-  font-size: 1.125rem;
+  color: #FFFFFF;
+  font-size: 1rem;
+  opacity: 0.8;
 }
 
-/* 預覽內容區域 - 淺色主題 */
-.preview-content {
-  background: #FFFFFF;
-  border: 1px solid #E8F4FD;
-  border-radius: 0;
-  color: #1A237E;
-  flex: 1;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  margin: 0;
-  overflow: auto;
-  padding: 32px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+#filePreviewModal .modal-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
 }
 
-/* XML 語法高亮 - 北歐風格配色 */
-.preview-content.xml {
-  background: #FFFFFF;
-  color: #1A237E;
-}
-
-.preview-content .xml-bracket {
-  color: #90CAF9;
-  font-weight: 600;
-}
-
-.preview-content .xml-tag {
-  color: #1976D2;
-  font-weight: 500;
-}
-
-.preview-content .xml-attr {
-  color: #7B1FA2;
-  font-weight: 400;
-}
-
-.preview-content .xml-value {
-  color: #388E3C;
-  font-weight: 400;
-}
-
-/* 純文字檔案樣式 */
-.preview-content.plain-text {
-  background: #FFFFFF;
-  color: #263238;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  letter-spacing: 0.3px;
-}
-
-/* 複製按鈕 - 配合主題 */
 #filePreviewModal .btn-copy {
   align-items: center;
   background: rgba(255, 255, 255, 0.25);
@@ -4606,12 +3738,12 @@ to {
   cursor: pointer;
   display: flex;
   font-size: 0.875rem;
-  font-weight: 500;
   gap: 6px;
   padding: 8px 16px;
   transition: all 0.2s ease;
   position: relative;
   z-index: 11;
+  font-weight: 500;
 }
 
 #filePreviewModal .btn-copy:hover {
@@ -4620,8 +3752,9 @@ to {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* 關閉按鈕樣式 */
 #filePreviewModal .modal-close {
+  position: relative;
+  z-index: 11;
   background: transparent;
   border: none;
   color: white;
@@ -4634,110 +3767,13 @@ to {
   justify-content: center;
   border-radius: 50%;
   transition: all 0.2s ease;
-  position: relative;
-  z-index: 11;
 }
 
-#filePreviewModal .modal-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: rotate(90deg);
+#filePreviewModal .modal-header::before,
+#filePreviewModal .modal-header::after {
+  z-index: 0;
 }
 
-/* 預覽視窗捲軸 - 淺色主題 */
-.preview-content::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-.preview-content::-webkit-scrollbar-track {
-  background: #F5F9FF;
-  border-radius: 6px;
-}
-
-.preview-content::-webkit-scrollbar-thumb {
-  background: #90CAF9;
-  border-radius: 6px;
-  border: 2px solid #F5F9FF;
-}
-
-.preview-content::-webkit-scrollbar-thumb:hover {
-  background: #64B5F6;
-}
-
-.preview-content::-webkit-scrollbar-corner {
-  background: #F5F9FF;
-}
-
-/* 載入和錯誤狀態 */
-.preview-content .loading,
-.preview-content .error {
-  align-items: center;
-  background: transparent;
-  color: #5C6BC0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-}
-
-.preview-content .loading i {
-  animation: spin 1s linear infinite;
-  color: #2196F3;
-  font-size: 3rem;
-  margin-bottom: 20px;
-}
-
-.preview-content .error {
-  color: #F44336;
-}
-
-.preview-content .error i {
-  font-size: 3rem;
-  margin-bottom: 20px;
-}
-
-/* 添加細微的陰影效果 */
-#filePreviewModal .modal-content {
-  box-shadow: 0 20px 60px rgba(33, 150, 243, 0.1);
-}
-
-/* 為了更好的可讀性，給程式碼添加背景 */
-.preview-content.xml,
-.preview-content.plain-text {
-  background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFD 100%);
-}
-
-/* 所有預覽內容的統一淺色背景 */
-.preview-content {
-  background: #FFFFFF;
-  border: none;
-  border-radius: 0;
-  color: #263238;
-  flex: 1;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  margin: 0;
-  overflow: auto;
-  padding: 32px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* 純文字檔案樣式 (Version.txt, F_Version.txt 等) */
-.preview-content.plain-text {
-  background: #FAFBFD; /* 淺灰藍背景 */
-  color: #1A237E; /* 深藍色文字 */
-  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  letter-spacing: 0.3px;
-  padding: 32px;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
-}
-
-/* Version.txt 專用樣式 */
 .preview-content.version-txt {
   background: linear-gradient(to bottom, #FFFFFF 0%, #F8FBFF 100%);
   color: #1A237E;
@@ -4750,206 +3786,56 @@ to {
   letter-spacing: 0.5px;
 }
 
-/* XML 檔案樣式 */
-.preview-content.xml {
-  background: #FFFFFF;
-  color: #263238;
-  padding: 32px;
+#filePreviewModal .modal-header::before {
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  content: "";
+  height: 300%;
+  opacity: 0.5;
+  position: absolute;
+  right: -25%;
+  top: -100%;
+  transform: rotate(35deg);
+  width: 70%;
 }
 
-/* 移除任何可能的深色背景樣式 */
+#filePreviewModal .modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+#filePreviewModal .modal-content {
+  box-shadow: 0 20px 60px rgba(33, 150, 243, 0.1);
+}
+
+.preview-content.xml,
+.preview-content.plain-text {
+  background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFD 100%);
+}
+
 .preview-content,
 .preview-content.plain-text,
 .preview-content.version-txt,
 .preview-content.xml {
-  /* 確保沒有深色背景 */
-  background-color: #FFFFFF !important;
+  background-color: #FFFFFF;
 }
 
-/* 給不同類型的檔案添加細微的背景變化 */
-.preview-content.plain-text {
-  background: #FAFBFD !important;
-}
-
-.preview-content.version-txt {
-  background: linear-gradient(to bottom, #FFFFFF 0%, #F8FBFF 100%) !important;
-}
-
-.preview-content.xml {
-  background: #FFFFFF !important;
-}
-
-/* 調整文字顏色以配合淺色背景 */
 .preview-content,
 .preview-content * {
   color: #263238;
 }
 
-/* XML 語法高亮 - 適合淺色背景的配色 */
-.preview-content .xml-bracket {
-  color: #64B5F6;
-  font-weight: 500;
-}
-
-.preview-content .xml-tag {
-  color: #1565C0;
-  font-weight: 500;
-}
-
-.preview-content .xml-attr {
-  color: #6A1B9A;
-  font-weight: 400;
-}
-
-.preview-content .xml-value {
-  color: #2E7D32;
-  font-weight: 400;
-}
-
-/* 確保預覽區域的整體背景也是淺色 */
-#filePreviewModal .modal-body {
-  background: #F5F9FF;
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 添加一個內邊框來增加層次感 */
-.preview-content {
-  border: 1px solid #E3F2FD;
-  margin: 16px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-}
-
-/* 預覽視窗捲軸 - 移除邊框 */
-.preview-content::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.preview-content::-webkit-scrollbar-track {
-  background: #F5F9FF;
-  border-radius: 0;
-  border: none; /* 移除邊框 */
-}
-
-.preview-content::-webkit-scrollbar-thumb {
-  background: #90CAF9;
-  border-radius: 5px;
-  border: none; /* 移除邊框 */
-}
-
-.preview-content::-webkit-scrollbar-thumb:hover {
-  background: #64B5F6;
-}
-
-.preview-content::-webkit-scrollbar-corner {
-  background: #F5F9FF;
-}
-
-/* 移除預覽內容的邊框 */
-.preview-content {
-  border: none; /* 移除邊框 */
-  margin: 0; /* 移除邊距 */
-  border-radius: 0; /* 移除圓角 */
-  box-shadow: none; /* 移除陰影 */
-}
-
-/* 預覽視窗標題列檔案名稱 - 改善配色 */
-#filePreviewModal .preview-filename {
-  color: rgba(255, 255, 255, 0.95); /* 白色，略微透明 */
-  font-size: 0.9375rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.1); /* 淺白背景 */
-  padding: 6px 16px;
-  border-radius: 20px; /* 圓角標籤樣式 */
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-#filePreviewModal .preview-filename i {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 1rem;
-}
-
-/* 或者使用更簡潔的樣式 */
-#filePreviewModal .preview-filename {
-  color: #FFFFFF;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  opacity: 0.95;
-}
-
-#filePreviewModal .preview-filename i {
-  color: #FFFFFF;
-  font-size: 1rem;
-  opacity: 0.8;
-}
-
-/* 調整整體標題列樣式以提高對比度 */
-#filePreviewModal .modal-header {
-  background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
-  padding: 16px 24px;
-  border-bottom: none;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 確保標題文字清晰可見 */
 #filePreviewModal .modal-title {
   color: #FFFFFF;
   font-weight: 500;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-/* 預覽內容整體樣式優化 */
-.preview-content {
-  background: #FFFFFF;
-  border: none;
-  border-radius: 0;
-  color: #263238;
-  flex: 1;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.8;
-  margin: 0;
-  overflow: auto;
-  padding: 24px 32px; /* 調整內邊距 */
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  box-shadow: none;
-}
-
-/* 確保 modal body 沒有額外的內邊距 */
-#filePreviewModal .modal-body {
-  background: #FFFFFF;
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* XML 檔案特定樣式 */
-.preview-content.xml {
-  background: #FAFBFD;
-  padding: 24px 32px;
-}
-
-/* 純文字檔案特定樣式 */
 .preview-content.plain-text,
 .preview-content.version-txt {
   background: #FFFFFF;
   padding: 24px 32px;
 }
 
-/* 摺疊全部按鈕 - 北歐風格設計 */
 #toggleFoldersBtn {
   align-items: center;
   background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
@@ -4967,7 +3853,6 @@ to {
   overflow: hidden;
 }
 
-/* 懸停效果 */
 #toggleFoldersBtn:hover {
   background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
   border-color: #1976D2;
@@ -4976,24 +3861,20 @@ to {
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.25);
 }
 
-/* 圖標樣式 */
 #toggleFoldersBtn i {
   font-size: 0.875rem;
   transition: transform 0.3s ease;
 }
 
-/* 懸停時圖標旋轉 */
 #toggleFoldersBtn:hover i {
   transform: rotate(180deg);
 }
 
-/* 點擊效果 */
 #toggleFoldersBtn:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
 }
 
-/* 添加細微的光澤效果 */
 #toggleFoldersBtn::before {
   content: "";
   position: absolute;
@@ -5009,7 +3890,6 @@ to {
   left: 100%;
 }
 
-/* 或者使用更簡潔的設計 */
 #toggleFoldersBtn.btn-small {
   background: #FFFFFF;
   border: 2px solid #2196F3;
@@ -5027,15 +3907,6 @@ to {
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
 }
 
-/* 配合結構動作按鈕容器 */
-.structure-actions {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 0 4px;
-}
-
-/* 如果有其他按鈕，也統一樣式 */
 .structure-actions .btn {
   background: white;
   border: 2px solid #E3F2FD;
@@ -5054,719 +3925,281 @@ to {
   box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
 }
 
-/* 檔案列表模態框 - 固定標題實現 */
-#filesListModal .table-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: calc(100% - 60px); /* 減去底部統計欄高度 */
-  position: relative;
-}
-
-/* 固定的表頭容器 */
 #filesListModal .table-header-wrapper {
   flex-shrink: 0;
   overflow: hidden;
-  background: white;
+  background: #F8FBFF;
   border-bottom: 2px solid #E3F2FD;
+  flex: 0 0 auto;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin-right: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  padding-right: 10px;
 }
 
-/* 可滾動的表身容器 */
 #filesListModal .table-body-wrapper {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-}
-
-/* 表格樣式 */
-#filesListModal .files-table {
+  scrollbar-width: thin;
+  scrollbar-color: #90CAF9 #F5F9FF;
+  background: white;
   width: 100%;
-  border-collapse: collapse;
-  table-layout: auto;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  padding-top: 2px;
 }
 
-/* 表頭樣式 */
 #filesListModal .files-table.header-table {
   margin-bottom: 0;
+  width: calc(100% + 10px);
+  margin-right: -10px;
 }
 
-#filesListModal .files-table th {
-  padding: 16px 20px;
-  text-align: left;
-  font-weight: 600;
-  color: #424242;
-  background: #F8FBFF;
-  font-size: 0.9375rem;
-  white-space: nowrap;
-  border-right: 1px solid #E3F2FD;
-}
-
-/* 表身樣式 */
 #filesListModal .files-table.body-table {
   margin-top: 0;
 }
 
-#filesListModal .files-table td {
-  padding: 14px 20px;
-  border-bottom: 1px solid #F5F5F5;
-  vertical-align: middle;
-}
-
-/* 確保只有表身有捲軸 */
-#filesListModal .table-body-wrapper {
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #90CAF9 #F5F9FF;
-}
-
-/* 隱藏表頭容器的捲軸 */
-#filesListModal .table-header-wrapper {
-  overflow: hidden;
-}
-
-/* 確保表格寬度一致 */
-#filesListModal .files-table {
-  min-width: 1000px; /* 確保最小寬度 */
-}
-
-/* 修正模態框內容高度 */
-#filesListModal .modal-content {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 1400px;
-  height: 85vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#filesListModal .modal-body {
-  padding: 0 !important;
-  background: #FFFFFF;
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%; /* 確保填滿 */
-}
-
-/* 表格容器填滿可用空間 */
-#filesListModal .table-wrapper {
-  display: flex;
-  flex-direction: column;
-  flex: 1; /* 重要：填滿剩餘空間 */
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* 可滾動的表身容器 */
-#filesListModal .table-body-wrapper {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-  background: white;
-}
-
-/* 底部統計固定高度並移到外面 */
-#filesListModal .table-footer {
-  flex-shrink: 0;
-  height: 60px;
-  text-align: center;
-  padding: 0 20px;
-  background: linear-gradient(to bottom, #FAFAFA 0%, #F5F5F5 100%);
-  border-top: 2px solid #E3F2FD;
-  color: #78909C;
-  font-size: 0.9375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-weight: 500;
-  margin: 0; /* 移除邊距 */
-}
-
-/* 完整的 flex 佈局結構 */
-#filesListModal.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-#filesListModal .modal-content {
-  display: flex;
-  flex-direction: column;
-  height: 85vh;
-  max-height: 85vh;
-}
-
-#filesListModal .modal-header {
-  flex-shrink: 0;
-  height: 60px;
-}
-
-#filesListModal .modal-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#filesListModal .table-wrapper {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#filesListModal .table-header-wrapper {
-  flex: 0 0 auto;
-}
-
-#filesListModal .table-body-wrapper {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-#filesListModal .table-footer {
-  flex: 0 0 auto;
-}
-
-/* 移除任何固定高度限制 */
-#filesListModal .table-body-wrapper {
-  /* 不要設定 max-height */
-  /* max-height: 500px; <- 刪除這類限制 */
-}
-
-#filesListModal .files-table {
-  /* 不要設定固定高度 */
-  width: 100%;
-  border-collapse: collapse;
-}
-
-/* 確保表格填滿整個寬度 */
-#filesListModal .modal-body {
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-#filesListModal .table-wrapper {
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
 #filesListModal .table-header-wrapper,
 #filesListModal .table-body-wrapper {
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
+  width: calc(100% - 0px);
+  margin: 0;
+  padding: 0;
+  background: transparent;
 }
 
-#filesListModal .files-table {
-  width: 100% !important;
-  min-width: 100% !important;
-  margin: 0 !important;
-}
-
-/* 移除任何可能的邊距 */
-#filesListModal .table-footer {
-  width: 100% !important;
-  margin: 0 !important;
-  box-sizing: border-box;
-}
-
-/* 確保沒有內邊距影響寬度 */
 #filesListModal * {
   box-sizing: border-box;
-}
-
-/* 如果需要水平捲軸，確保表格有最小寬度 */
-#filesListModal .files-table {
-  min-width: 1000px; /* 根據內容調整 */
-}
-
-#filesListModal .table-body-wrapper {
-  overflow-x: auto; /* 允許水平捲動 */
-  overflow-y: auto;
-}
-
-#filesListModal .table-header-wrapper {
-  overflow-x: hidden;
-  overflow-y: hidden;
-}
-
-/* 同步 header 和 body 的捲動 */
-#filesListModal .table-body-wrapper {
-  overflow-x: auto;
-}
-
-#filesListModal .table-header-wrapper {
-  overflow-x: hidden;
-  margin-right: 10px; /* 預留捲軸空間 */
-}
-
-/* 統一 box-sizing 並修正寬度問題 */
-#filesListModal .table-wrapper {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-#filesListModal .table-header-wrapper {
-  width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  /* 補償捲軸寬度 */
-  padding-right: 20px !important;
-}
-
-#filesListModal .table-body-wrapper {
-  width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  overflow-y: scroll !important; /* 強制顯示捲軸 */
-  overflow-x: hidden !important;
-}
-
-/* 表格填滿容器 */
-#filesListModal .files-table {
-  width: 100% !important;
-  table-layout: auto !important;
-  border-collapse: collapse !important;
-  margin: 0 !important;
-}
-
-/* 移除可能存在的 10px 間隙 */
-#filesListModal .modal-body > * {
-  margin: 0 !important;
-}
-
-/* 確保所有子元素都是 border-box */
-#filesListModal .table-wrapper,
-#filesListModal .table-wrapper * {
-  box-sizing: border-box !important;
-}
-
-/* 如果還有問題，強制寬度 */
-#filesListModal .table-header-wrapper,
-#filesListModal .table-body-wrapper {
-  width: calc(100% - 0px) !important; /* 確保沒有額外減少 */
-}
-
-/* 修正模態框右上角的缺角問題 */
-#filesListModal .modal-content {
-  overflow: hidden !important; /* 確保圓角不會被內容破壞 */
-  position: relative;
-}
-
-/* 隱藏表頭右側可能的空白區域 */
-#filesListModal .table-header-wrapper {
-  background: #F8FBFF !important; /* 確保背景色一致 */
-  overflow: hidden !important;
-}
-
-/* 修正表格頭部的背景 */
-#filesListModal .files-table th {
-  background: #F8FBFF !important;
-}
-
-/* 確保最後一個 th 填滿空間 */
-#filesListModal .files-table th:last-child {
-  border-right: none !important;
-  padding-right: 30px !important; /* 增加右邊距以覆蓋空白區域 */
-}
-
-/* 處理捲軸造成的空白 */
-#filesListModal .table-body-wrapper {
-  background: white !important;
-}
-
-/* 如果黃色來自捲軸軌道 */
-#filesListModal .table-body-wrapper::-webkit-scrollbar-track {
-  background: #F5F9FF !important; /* 改為淺藍色而不是黃色 */
-}
-
-#filesListModal .table-body-wrapper::-webkit-scrollbar {
-  width: 10px !important;
-  background: #F5F9FF !important;
-}
-
-/* 確保捲軸角落的顏色正確 */
-#filesListModal .table-body-wrapper::-webkit-scrollbar-corner {
-  background: #F8FBFF !important;
-}
-
-/* 優化表頭右側的padding來對齊捲軸 */
-#filesListModal .table-header-wrapper {
-  /* 使用 CSS 變數來動態計算捲軸寬度 */
-  padding-right: 10px !important; /* 配合 10px 的捲軸寬度 */
-  background: #F8FBFF !important;
-}
-
-/* 或者讓整個表頭表格稍微寬一點 */
-#filesListModal .files-table.header-table {
-  width: calc(100% + 10px) !important;
-  margin-right: -10px !important;
-}
-
-/* 確保操作欄有足夠的寬度 */
-#filesListModal .files-table th:last-child {
-  min-width: 90px !important; /* 80px + 10px for scrollbar */
-}
-
-/* 統一整個表格區域的背景色 */
-#filesListModal .table-wrapper {
-  background: #F8FBFF !important;
-}
-
-#filesListModal .table-header-wrapper,
-#filesListModal .table-body-wrapper {
-  background: transparent !important;
-}
-
-/* 表身的背景改為白色 */
-#filesListModal .table-body-wrapper {
-  background: white !important;
-}
-
-#filesListModal .files-table tbody {
-  background: white !important;
-}
-
-/* 移除可能的黃色 highlight */
-#filesListModal * {
-  /* 移除可能的黃色選擇高亮 */
   -webkit-user-select: text;
   -moz-user-select: text;
   user-select: text;
 }
 
-/* 如果黃色來自某個偽元素 */
+#filesListModal .modal-body > * {
+  margin: 0;
+}
+
+#filesListModal .table-wrapper,
+#filesListModal .table-wrapper * {
+  box-sizing: border-box;
+}
+
+#filesListModal .table-body-wrapper::-webkit-scrollbar-track {
+  background: #F5F9FF;
+}
+
+#filesListModal .table-body-wrapper::-webkit-scrollbar {
+  width: 10px;
+  background: #F5F9FF;
+}
+
+#filesListModal .table-body-wrapper::-webkit-scrollbar-corner {
+  background: #F8FBFF;
+}
+
+#filesListModal .files-table tbody {
+  background: white;
+}
+
 #filesListModal .table-wrapper::before,
 #filesListModal .table-wrapper::after,
 #filesListModal .table-header-wrapper::before,
 #filesListModal .table-header-wrapper::after {
-  display: none !important;
+  display: none;
 }
 
 #filesListModal .table-body-container {
   flex: 1;
   overflow: hidden;
   position: relative;
-  /* 裁剪底部內容 */
   margin-top: -4px;
 }
 
-#filesListModal .table-body-wrapper {
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-top: 2px; /* 補償裁剪 */
-}
-
-/* Excel 改名相關樣式 */
-
-/* Excel 改名成功提示 */
 .excel-rename-info {
-    margin-top: 24px;
-    animation: slideInUp 0.5s ease-out;
+  margin-top: 24px;
+  animation: slideInUp 0.5s ease-out;
 }
 
 .excel-rename-info .alert {
-    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-    border: 2px solid #4CAF50;
-    border-radius: 12px;
-    padding: 20px 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
-    position: relative;
-    overflow: hidden;
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+  border: 2px solid #4CAF50;
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
+  position: relative;
+  overflow: hidden;
 }
 
 .excel-rename-info .alert::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: #4CAF50;
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: #4CAF50;
 }
 
 .excel-rename-info .alert i {
-    font-size: 1.5rem;
-    color: #4CAF50;
-    flex-shrink: 0;
+  font-size: 1.5rem;
+  color: #4CAF50;
+  flex-shrink: 0;
 }
 
 .excel-rename-info .alert strong {
-    color: #2E7D32;
-    font-weight: 600;
+  color: #2E7D32;
+  font-weight: 600;
 }
 
 .excel-rename-info .alert code {
-    background: rgba(255, 255, 255, 0.8);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.9rem;
-    color: #1B5E20;
-    border: 1px solid #A5D6A7;
-    margin: 0 4px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 0.9rem;
+  color: #1B5E20;
+  border: 1px solid #A5D6A7;
+  margin: 0 4px;
 }
 
-/* 檔案檢查提示 */
 .excel-check-notification {
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-    border: 2px solid #2196F3;
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
-    z-index: 1000;
-    max-width: 400px;
-    animation: slideInRight 0.5s ease-out;
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border: 2px solid #2196F3;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+  z-index: 1000;
+  max-width: 400px;
+  animation: slideInRight 0.5s ease-out;
 }
 
 .excel-check-notification.success {
-    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-    border-color: #4CAF50;
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+  border-color: #4CAF50;
 }
 
 .excel-check-notification.warning {
-    background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-    border-color: #FF9800;
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+  border-color: #FF9800;
 }
 
 .excel-check-notification .notification-title {
-    font-weight: 600;
-    color: #1565C0;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  font-weight: 600;
+  color: #1565C0;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .excel-check-notification.success .notification-title {
-    color: #2E7D32;
+  color: #2E7D32;
 }
 
 .excel-check-notification.warning .notification-title {
-    color: #E65100;
+  color: #E65100;
 }
 
 .excel-check-notification .notification-content {
-    font-size: 0.9rem;
-    color: #424242;
-    line-height: 1.5;
+  font-size: 0.9rem;
+  color: #424242;
+  line-height: 1.5;
 }
 
-/* 日誌中的 Excel 改名訊息高亮 */
 .log-entry.excel-renamed {
-    background: linear-gradient(to right, #E8F5E9 0%, transparent 100%);
-    border-left: 3px solid #4CAF50;
-    padding-left: 17px;
-    font-weight: 600;
+  background: linear-gradient(to right, #E8F5E9 0%, transparent 100%);
+  border-left: 3px solid #4CAF50;
+  padding-left: 17px;
+  font-weight: 600;
 }
 
 .log-entry.excel-renamed .log-icon {
-    color: #4CAF50;
+  color: #4CAF50;
 }
 
 .log-entry.excel-renamed .log-message {
-    color: #2E7D32;
+  color: #2E7D32;
 }
 
-/* 檔案列表中的 Excel 標記 */
 .file-item-card.excel-original {
-    position: relative;
+  position: relative;
 }
 
 .file-item-card.excel-original::after {
-    content: "將被改名";
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: #2196F3;
-    color: white;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-weight: 600;
+  content: "將被改名";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #2196F3;
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
 }
 
-/* 動畫效果 */
-@keyframes slideInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-/* 檔案結構樹中標記改名的 Excel */
 .tree-node-content.excel-renamed {
-    background: linear-gradient(135deg, #E8F5E9 0%, transparent 100%);
-    border: 1px solid #A5D6A7;
+  background: linear-gradient(135deg, #E8F5E9 0%, transparent 100%);
+  border: 1px solid #A5D6A7;
 }
 
 .tree-node-content.excel-renamed .tree-name::after {
-    content: " (Excel Mapping)";
-    color: #4CAF50;
-    font-size: 0.85rem;
-    font-style: italic;
-    margin-left: 8px;
+  content: " (Excel Mapping)";
+  color: #4CAF50;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-left: 8px;
 }
 
-/* 進度條中的 Excel 處理階段 */
 .progress-stage-excel {
-    background: linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%);
+  background: linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%);
 }
 
-/* 統計卡片 - Excel 處理狀態 */
 .stat-card.excel-status {
-    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-    border-color: #4CAF50;
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+  border-color: #4CAF50;
 }
 
 .stat-card.excel-status .stat-icon {
-    background: white;
-    color: #4CAF50;
+  background: white;
+  color: #4CAF50;
 }
 
 .stat-card.excel-status:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
-}
-
-/* 模態框基礎樣式 */
-.modal {
-  display: flex;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 9999;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.2s ease;
-}
-
-.modal.hidden {
-  display: none;
-}
-
-/* 模態框內容容器 - 修正高度問題 */
-.modal-content {
-  background: white;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 900px;
-  height: 85vh; /* 設定固定高度 */
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  animation: slideUp 0.3s ease;
-  overflow: hidden;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
 }
 
 .modal-content.modal-large {
   max-width: 1200px;
-  height: 90vh; /* 大型模態框使用更高的高度 */
+  height: 90vh;
 }
 
-/* 模態框頭部 - 修正對齊問題 */
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 32px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  flex-shrink: 0;
-}
-
-.modal-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-}
-
-/* 筆數顯示靠右對齊 */
 .modal-count {
-  margin-left: auto;
-  margin-right: 16px;
-  font-size: 1rem;
+  margin-left: 1rem;
+  margin-right: auto;
+  font-size: 0.875rem;
   font-weight: 500;
   opacity: 0.95;
   white-space: nowrap;
-}
-
-.modal-close {
   background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
 }
 
-/* 模態框主體 - 佔滿剩餘高度 */
-.modal-body {
-  flex: 1;
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 搜尋列 */
 .modal-search-bar {
   padding: 20px 32px;
   background: #F8F9FA;
@@ -5777,31 +4210,42 @@ to {
   flex-shrink: 0;
 }
 
-/* 表格容器 - 自動填充高度 */
 .table-wrapper {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
 }
 
 .table-container {
-  min-height: 100%;
+  min-height: 0;
   padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  position: relative;
 }
 
-/* 表格底部統計 - 靠左對齊 */
 .table-footer {
-  padding: 16px 32px;
-  background: #F8F9FA;
-  border-top: 1px solid #E9ECEF;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(180deg, #f8f9fa 0%, #fff 100%);
+  border-top: 1px solid #e0e0e0;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 0.875rem;
+  color: #666;
 }
 
 .table-footer-stats {
   display: flex;
   align-items: center;
-  gap: 24px;
-  justify-content: flex-start; /* 靠左對齊 */
+  gap: 2rem;
+  justify-content: flex-start;
 }
 
 .footer-stat {
@@ -5817,28 +4261,6 @@ to {
   color: #495057;
 }
 
-/* 空訊息樣式 */
-.empty-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 400px;
-  color: #ADB5BD;
-}
-
-.empty-message i {
-  font-size: 4rem;
-  margin-bottom: 16px;
-}
-
-.empty-message p {
-  font-size: 1.125rem;
-  margin: 0;
-}
-
-/* 頁籤容器高度調整 */
 .modal-tabs {
   display: flex;
   gap: 8px;
@@ -5855,147 +4277,99 @@ to {
 }
 
 .tab-content.active {
-  display: flex !important;
-}
-
-/* 不同狀態的模態框顏色主題 */
-.modal.success .modal-header {
-  background: linear-gradient(135deg, #56CCF2 0%, #2F80ED 100%);
-}
-
-.modal.info .modal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
 }
 
 .modal.warning .modal-header {
   background: linear-gradient(135deg, #F2994A 0%, #F2C94C 100%);
 }
 
-.modal.danger .modal-header {
-  background: linear-gradient(135deg, #EB5757 0%, #000000 100%);
+/* 空狀態樣式 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
 }
 
-/* 修正檔案卡片間距 */
-.file-items {
-  background: var(--bg-secondary);
-  padding: 8px;  /* 添加內邊距 */
+.empty-state i {
+  color: var(--nordic-blue-light);
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
-.file-item-card {
-  align-items: center;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  gap: 18px;
-  padding: 18px 24px;
-  position: relative;
-  transition: all 0.2s ease;
-  margin-bottom: 8px;  /* 添加下邊距，讓卡片之間有間隔 */
-  border-radius: 8px;  /* 添加圓角讓卡片更獨立 */
-  border: 1px solid var(--border-light);  /* 改為邊框而不是只有底部邊框 */
-}
-
-.file-item-card:last-child {
-  margin-bottom: 0;  /* 最後一個卡片不需要下邊距 */
-  border-bottom: 1px solid var(--border-light);  /* 保持原有邊框 */
-}
-
-/* 修正模態框高度佔滿問題 */
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 800px;
-  height: 85vh;  /* 設定固定高度而不是 max-height */
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: modalSlideIn 0.3s ease;
-}
-
-.modal-content.modal-large {
-  max-width: 1200px;
-  height: 90vh;  /* 大模態框使用更高的高度 */
-}
-
-/* 模態框主體佔滿剩餘高度 */
-.modal-body {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  background: white;
-  border-radius: 0 0 12px 12px;
-  min-height: 0;
-}
-
-/* 表格容器自動填充高度 */
-.table-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
-  min-height: 0;
-}
-
-.table-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  position: relative;
-  min-height: 0;  /* 移除固定的 max-height */
-}
-
-/* 修正統計數字對齊 - 統一靠左對齊 */
-.modal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1.5rem;
-  border-radius: 12px 12px 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
+.empty-state p {
+  font-size: 1rem;
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;  /* 讓標題佔據剩餘空間 */
 }
 
-/* 上方筆數統計 - 改為靠近標題（實際上是居中） */
-.modal-count {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-right: auto;  /* 改為 margin-right: auto 讓它靠左 */
-  margin-left: 1rem;   /* 與標題保持間距 */
+/* 確保非活動的標籤內容被隱藏 */
+.tab-content {
+  display: none;
 }
 
-/* 底部統計 - 確保靠左對齊 */
-.table-footer {
-  padding: 1rem 1.5rem;
-  background: linear-gradient(180deg, #f8f9fa 0%, #fff 100%);
-  border-top: 1px solid #e0e0e0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;  /* 確保靠左對齊 */
-  font-size: 0.875rem;
+.tab-content.active {
+  display: block;
+}
+
+/* 確保標籤內容顯示正確 */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block !important;
+}
+
+/* 空狀態樣式 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #9E9E9E;
+}
+
+.empty-state i {
+  color: #2196F3;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 1rem;
+  margin: 0;
   color: #666;
-  flex-shrink: 0;
 }
 
-.table-footer-stats {
+/* 載入狀態 */
+.loading {
   display: flex;
-  gap: 2rem;
-  justify-content: flex-start;  /* 確保靠左對齊 */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 40px;
+}
+
+.loading i {
+  color: #2196F3;
+  font-size: 3rem;
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+.loading span {
+  font-size: 1.125rem;
+  color: #666;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 檔案網格 */
+.file-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  padding: 20px;
 }

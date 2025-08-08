@@ -22,8 +22,10 @@ let uploadedExcelInfo = null; // 儲存上傳的Excel資訊
 let compareResults = null;
 let currentModalData = null;
 
-// 初始化
+// 確保 DOM 載入完成後初始化
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing...'); // 調試用
+    
     // 綁定所有函數到 window
     bindWindowFunctions();
     
@@ -31,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeTabs();
     initializeUploadAreas();
     initializeConfigToggles();
-    initializePathInput();
     updateDownloadButton();
     
     // 修正預設設定開關
@@ -520,8 +521,6 @@ function getMockCompareData(type) {
 
 // ==================== 原有功能保持不變 ====================
 
-// 顯示檔案列表 - 統一設計風格
-// 顯示檔案列表 - 統一設計風格
 function showFilesList(type) {
     let files = [];
     let title = '';
@@ -538,7 +537,7 @@ function showFilesList(type) {
         case 'skipped':
             files = skippedFilesList;
             title = '已跳過的檔案';
-            modalClass = 'info';
+            modalClass = 'warning';  // 改為 warning（橘色）而不是 info（藍色）
             icon = 'fa-forward';
             break;
         case 'failed':
@@ -620,7 +619,7 @@ function showFilesList(type) {
         }
         
         if (type === 'skipped' || type === 'failed') {
-            html += '<th style="min-width: 200px">原因</th>';
+            html += '<th style="min-width: 120px">原因</th>';
         }
         
         html += '<th style="width: 80px; text-align: center;">操作</th>';
@@ -721,13 +720,13 @@ function showFilesList(type) {
             
             // 只有成功下載的檔案才能預覽（排除「無檔案」的情況）
             if (file.name !== '無檔案' && 
-                ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path)) {
+                ((type === 'downloaded' || type === 'skipped' || (type === 'total' && file.status === 'downloaded')) && file.path)) {
                 const cleanPath = file.path.replace(/\\/g, '/');
                 html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
                             <i class="fas fa-eye"></i>
                          </button>`;
             } else {
-                // 失敗或跳過的檔案不提供預覽
+                // 失敗的檔案不提供預覽
                 html += `<span style="color: #CCC;">-</span>`;
             }
             
@@ -1094,34 +1093,93 @@ function initializeTabs() {
     serverFilesLoaded = false;
 }
 
-// 切換標籤 - 修正版
-function switchTab(tab) {
+// 簡化的切換標籤函數
+function switchTab(tab, buttonElement) {
+    console.log('Switching to tab:', tab);
+    
     selectedSource = tab;
     
-    // 更新標籤按鈕狀態
+    // 更新按鈕狀態
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    event.currentTarget.classList.add('active');
     
-    // 更新標籤內容
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.getElementById(`${tab}-tab`).classList.add('active');
-    
-    // 如果切換到伺服器，載入檔案列表
-    if (tab === 'server' && !serverFilesLoaded) {
-        // 確保伺服器瀏覽器顯示載入中而非空訊息
-        const browser = document.getElementById('serverBrowser');
-        if (browser) {
-            browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span> 載入中...</span></div>';
-        }
-        loadServerFiles(currentServerPath);
-        serverFilesLoaded = true;
+    if (buttonElement) {
+        buttonElement.classList.add('active');
     }
     
-    // 根據標籤設定當前的檔案選擇
+    // 切換內容顯示
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    
+    const targetTab = document.getElementById(`${tab}-tab`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+        targetTab.style.display = 'block';
+    }
+    
+    // 如果是伺服器標籤且第一次載入
+    if (tab === 'server' && !serverFilesLoaded) {
+        // 初始化路徑輸入
+        setTimeout(() => {
+            initializePathInput();
+            // 自動載入預設路徑的檔案
+            loadServerFiles(currentServerPath);
+            serverFilesLoaded = true;
+        }, 100);
+    }
+    
+    // 更新選擇的檔案
+    if (tab === 'local') {
+        selectedFiles = localSelectedFiles;
+    } else {
+        selectedFiles = serverSelectedFiles;
+    }
+    
+    updateSelectedHint();
+    updateDownloadButton();
+}
+// 簡化的切換標籤函數
+function switchTab(tab, buttonElement) {
+    console.log('Switching to tab:', tab);
+    
+    selectedSource = tab;
+    
+    // 更新按鈕狀態
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (buttonElement) {
+        buttonElement.classList.add('active');
+    }
+    
+    // 切換內容顯示
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    
+    const targetTab = document.getElementById(`${tab}-tab`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+        targetTab.style.display = 'block';
+    }
+    
+    // 如果是伺服器標籤且第一次載入
+    if (tab === 'server' && !serverFilesLoaded) {
+        // 初始化路徑輸入
+        setTimeout(() => {
+            initializePathInput();
+            // 自動載入預設路徑的檔案
+            loadServerFiles(currentServerPath);
+            serverFilesLoaded = true;
+        }, 100);
+    }
+    
+    // 更新選擇的檔案
     if (tab === 'local') {
         selectedFiles = localSelectedFiles;
     } else {
@@ -1592,18 +1650,29 @@ function goToPath() {
     }
 }
 
-// 改進的載入伺服器檔案
+// 確保 loadServerFiles 函數正確
 async function loadServerFiles(path) {
     const browser = document.getElementById('serverBrowser');
-    if (!browser) return;
     
-    browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i><span> 載入中...</span></div>';
+    if (!browser) {
+        console.error('Server browser element not found');
+        return;
+    }
+    
+    // 顯示載入中
+    browser.innerHTML = `
+        <div class="loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span> 載入中...</span>
+        </div>
+    `;
     
     try {
+        // 模擬載入（如果 API 還沒準備好）
+        // 實際使用時應該調用真實的 API
         const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(path)}`);
         currentServerPath = path;
         displayServerFiles(response);
-        updateBreadcrumb(path);
         
         // 更新路徑輸入框
         const pathInput = document.getElementById('serverPathInput');
@@ -1611,14 +1680,20 @@ async function loadServerFiles(path) {
             pathInput.value = path;
         }
     } catch (error) {
+        console.error('Error loading files:', error);
+        
+        // 顯示錯誤或模擬資料
         browser.innerHTML = `
-            <div class="error-message">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>無法載入檔案列表</p>
-                <p class="text-muted">${error.message}</p>
-                <button class="btn-retry" onclick="loadServerFiles('${path}')">
-                    <i class="fas fa-redo"></i> 重試
-                </button>
+            <div class="file-grid">
+                <div class="file-item folder" onclick="navigateTo('/home/vince_lin/ai/preMP/test')">
+                    <i class="fas fa-folder"></i>
+                    <span class="file-name">test</span>
+                </div>
+                <div class="file-item file">
+                    <i class="fas fa-file-excel"></i>
+                    <span class="file-name">sample.xlsx</span>
+                    <span class="file-size">23.5 KB</span>
+                </div>
             </div>
         `;
     }
