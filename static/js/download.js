@@ -1,4 +1,4 @@
-// 下載頁面 JavaScript - 修正版（統一檔案顯示格式）
+// 下載頁面 JavaScript - 統一模態框樣式版本
 
 // 頁面變數
 let selectedSource = 'local';
@@ -17,6 +17,10 @@ let currentModalFiles = []; // 當前模態框顯示的檔案
 let currentSortColumn = null;
 let currentSortOrder = 'asc';
 let uploadedExcelInfo = null; // 儲存上傳的Excel資訊
+
+// 比對結果相關變數（新增）
+let compareResults = null;
+let currentModalData = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -72,7 +76,449 @@ function bindWindowFunctions() {
     window.searchModalContent = searchModalContent;
     window.clearModalSearch = clearModalSearch;
     window.sortModalTable = sortModalTable;
+    // 新增比對相關函數
+    window.showCompareDetails = showCompareDetails;
+    window.closeCompareModal = closeCompareModal;
+    window.switchCompareTab = switchCompareTab;
+    window.searchCompareContent = searchCompareContent;
+    window.clearCompareSearch = clearCompareSearch;
 }
+
+// ==================== 新增：比對結果顯示功能（與 compare.html 統一） ====================
+
+// 顯示比對詳細資料 - 使用與 compare.html 相同的模態框樣式
+async function showCompareDetails(type) {
+    // 模擬比對資料（實際應從後端獲取）
+    const mockData = getMockCompareData(type);
+    
+    if (!mockData) {
+        showEmptyModal(getModalTitle(type), getModalClass(type));
+        return;
+    }
+    
+    currentModalData = mockData;
+    showCompareModal(mockData.pivotData, mockData.sheets, mockData.title, mockData.modalClass);
+}
+
+// 獲取模態框標題
+function getModalTitle(type) {
+    const titles = {
+        'master_vs_premp': 'Master vs PreMP',
+        'premp_vs_wave': 'PreMP vs Wave',
+        'wave_vs_backup': 'Wave vs Backup',
+        'failed': '無法比對的模組'
+    };
+    return titles[type] || '比對結果';
+}
+
+// 獲取模態框樣式類別
+function getModalClass(type) {
+    const classes = {
+        'master_vs_premp': 'info',
+        'premp_vs_wave': 'success',
+        'wave_vs_backup': 'warning',
+        'failed': 'danger'
+    };
+    return classes[type] || 'primary';
+}
+
+// 顯示比對模態框 - 與 compare.html 統一樣式
+function showCompareModal(pivotData, sheets, title, modalClass) {
+    let modal = document.getElementById('compareDetailsModal');
+    
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    if (!sheets || sheets.length === 0) {
+        modal.innerHTML = generateEmptyModal(title, modalClass);
+    } else if (sheets.length === 1) {
+        modal.innerHTML = generateSingleSheetModal(pivotData[sheets[0].name], sheets[0], title, modalClass);
+    } else {
+        modal.innerHTML = generateMultiSheetModal(pivotData, sheets, title, modalClass);
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+// 生成空模態框
+function generateEmptyModal(title, modalClass) {
+    return `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 0 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="empty-message">
+                    <i class="fas fa-inbox"></i>
+                    <p>沒有找到相關資料</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 生成單頁籤模態框
+function generateSingleSheetModal(sheetData, sheet, title, modalClass) {
+    const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
+    
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 ${recordCount} 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
+    
+    if (sheetData && sheetData.data && sheetData.data.length > 0) {
+        // 搜尋列
+        html += `
+            <div class="modal-search-bar">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" 
+                           class="search-input" 
+                           id="compare-search-input" 
+                           placeholder="搜尋內容..."
+                           onkeyup="searchCompareContent()">
+                </div>
+                <div class="search-stats">
+                    <i class="fas fa-filter"></i>
+                    <span>找到 <span class="highlight-count" id="compareSearchCount">${recordCount}</span> 筆</span>
+                </div>
+                <button class="btn-clear-search" onclick="clearCompareSearch()">
+                    <i class="fas fa-times"></i> 清除
+                </button>
+            </div>
+        `;
+        
+        // 表格
+        html += generateCompareTable(sheetData, sheet.name);
+        
+        // 底部統計
+        html += `
+            <div class="table-footer">
+                <div class="table-footer-stats">
+                    <div class="footer-stat">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>共 <span class="footer-stat-value">${recordCount}</span> 個項目</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有資料</p></div>';
+    }
+    
+    html += '</div></div>';
+    return html;
+}
+
+// 生成多頁籤模態框
+function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
+    const firstSheetData = pivotData[sheets[0].name];
+    const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
+    
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count" id="modalRecordCount">共 ${firstSheetCount} 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
+    
+    // 頁籤
+    html += '<div class="modal-tabs">';
+    sheets.forEach((sheet, index) => {
+        const sheetData = pivotData[sheet.name];
+        const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
+        const isActive = index === 0;
+        
+        html += `
+            <button class="modal-tab-btn ${isActive ? 'active' : ''}" 
+                    onclick="switchCompareTab('${sheet.name}', this)"
+                    data-count="${recordCount}">
+                <i class="fas fa-file-alt"></i> ${sheet.title}
+                <span class="tab-count">${recordCount}</span>
+            </button>
+        `;
+    });
+    html += '</div>';
+    
+    // 各頁籤內容
+    sheets.forEach((sheet, index) => {
+        const isActive = index === 0;
+        const sheetData = pivotData[sheet.name];
+        
+        html += `
+            <div class="tab-content ${isActive ? 'active' : ''}" 
+                 id="tab-${sheet.name}" 
+                 style="display: ${isActive ? 'block' : 'none'};">
+        `;
+        
+        if (sheetData && sheetData.data && sheetData.data.length > 0) {
+            html += generateCompareTable(sheetData, sheet.name);
+        } else {
+            html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有資料</p></div>';
+        }
+        
+        html += '</div>';
+    });
+    
+    html += '</div></div>';
+    return html;
+}
+
+// 生成比對表格
+function generateCompareTable(sheetData, sheetName) {
+    if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
+        return '<div class="empty-message"><i class="fas fa-inbox"></i><p>此資料表沒有內容</p></div>';
+    }
+    
+    let html = '<div class="table-wrapper">';
+    html += '<div class="table-container">';
+    html += `<table class="modal-table" id="table-${sheetName}">`;
+    
+    // 表頭
+    html += '<thead><tr>';
+    sheetData.columns.forEach(col => {
+        const columnInfo = getColumnInfo(col, sheetName);
+        html += `<th style="min-width: ${columnInfo.width};" class="${columnInfo.headerClass}">
+                    ${columnInfo.text}
+                 </th>`;
+    });
+    html += '</tr></thead>';
+    
+    // 表身
+    html += '<tbody>';
+    sheetData.data.forEach((row, index) => {
+        html += '<tr>';
+        sheetData.columns.forEach(col => {
+            const value = row[col];
+            const cellContent = formatCellContent(value, col, row, sheetName);
+            const cellClass = getCellClass(col, value, sheetName);
+            const columnInfo = getColumnInfo(col, sheetName);
+            
+            html += `<td class="${cellClass}" style="min-width: ${columnInfo.width};">
+                        ${cellContent}
+                     </td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody>';
+    
+    html += '</table>';
+    html += '</div></div>';
+    
+    return html;
+}
+
+// 獲取欄位資訊
+function getColumnInfo(col, sheetName) {
+    const columnMap = {
+        'SN': { text: 'SN', width: '60px', headerClass: '' },
+        'module': { text: '模組名稱', width: '200px', headerClass: '' },
+        'location_path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
+        'path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
+        'base_folder': { text: '本地路徑', width: '300px', headerClass: '' },
+        'base_content': { text: 'base_content', width: '400px', headerClass: 'header-red-bg' },
+        'compare_content': { text: 'compare_content', width: '400px', headerClass: 'header-red-bg' },
+        'problem': { text: '問題', width: '200px', headerClass: 'header-red-bg' },
+        '狀態': { text: '狀態', width: '100px', headerClass: 'header-red-bg' },
+        'has_wave': { text: 'has_wave', width: '100px', headerClass: '' }
+    };
+    
+    return columnMap[col] || { text: col, width: '150px', headerClass: '' };
+}
+
+// 獲取單元格樣式
+function getCellClass(col, value, sheetName) {
+    let classes = [];
+    
+    if (col === 'problem' && value) {
+        classes.push('text-red');
+    } else if (col === '狀態') {
+        if (value === '刪除') classes.push('text-red');
+        else if (value === '新增') classes.push('text-blue');
+    } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
+        classes.push('text-red');
+    }
+    
+    return classes.join(' ');
+}
+
+// 格式化單元格內容
+function formatCellContent(value, col, row, sheetName) {
+    if (!value && value !== 0) return '-';
+    
+    // 模組名稱處理
+    if (col === 'module' || col === '模組名稱') {
+        const icon = getFileIcon(value);
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas ${icon}" style="color: #2196F3;"></i>
+                <span>${value}</span>
+            </div>
+        `;
+    }
+    
+    // SN 欄位
+    if (col === 'SN') {
+        return `<div style="text-align: center;">${value}</div>`;
+    }
+    
+    // has_wave 欄位
+    if (col === 'has_wave') {
+        if (value === 'Y') {
+            return '<span class="badge badge-info">Y</span>';
+        } else if (value === 'N') {
+            return '<span class="badge badge-warning">N</span>';
+        }
+    }
+    
+    // 狀態欄位
+    if (col === '狀態') {
+        if (value === '刪除') {
+            return `<span class="text-red">${value}</span>`;
+        } else if (value === '新增') {
+            return `<span class="text-blue">${value}</span>`;
+        }
+    }
+    
+    // 連結處理
+    if (col.includes('link') && value && value.toString().startsWith('http')) {
+        return `<a href="${value}" target="_blank" class="table-link">
+                    <i class="fas fa-external-link-alt"></i> 查看
+                </a>`;
+    }
+    
+    // 路徑處理
+    if (col.includes('path') || col.includes('folder')) {
+        return `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
+    }
+    
+    return value;
+}
+
+// 切換比對頁籤
+function switchCompareTab(sheetName, clickedBtn) {
+    const modal = document.getElementById('compareDetailsModal');
+    
+    // 更新頁籤按鈕狀態
+    modal.querySelectorAll('.modal-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    clickedBtn.classList.add('active');
+    
+    // 更新筆數顯示
+    const count = clickedBtn.getAttribute('data-count') || '0';
+    const modalCount = document.getElementById('modalRecordCount');
+    if (modalCount) {
+        modalCount.textContent = `共 ${count} 筆資料`;
+    }
+    
+    // 切換內容
+    modal.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    
+    const targetContent = modal.querySelector(`#tab-${sheetName}`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+        targetContent.style.display = 'block';
+    }
+}
+
+// 搜尋比對內容
+function searchCompareContent() {
+    const searchInput = document.getElementById('compare-search-input');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('.modal-table tbody');
+    const resultCount = document.getElementById('compareSearchCount');
+    
+    if (tbody) {
+        searchTableContent(tbody, searchTerm, resultCount);
+    }
+}
+
+// 清除比對搜尋
+function clearCompareSearch() {
+    const searchInput = document.getElementById('compare-search-input');
+    if (searchInput) {
+        searchInput.value = '';
+        searchCompareContent();
+    }
+}
+
+// 關閉比對模態框
+function closeCompareModal() {
+    const modal = document.getElementById('compareDetailsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// 模擬比對資料（實際應從後端獲取）
+function getMockCompareData(type) {
+    // 這裡應該根據實際需求從後端獲取資料
+    // 現在返回模擬資料作為示例
+    
+    if (type === 'failed') {
+        return {
+            pivotData: {
+                'failed_modules': {
+                    columns: ['SN', 'module', 'scenario', 'reason'],
+                    data: [
+                        { SN: 1, module: 'test_module_1.xml', scenario: 'Master vs PreMP', reason: '檔案不存在' },
+                        { SN: 2, module: 'test_module_2.txt', scenario: 'PreMP vs Wave', reason: '格式錯誤' }
+                    ]
+                }
+            },
+            sheets: [{ name: 'failed_modules', title: '失敗的模組' }],
+            title: '無法比對的模組',
+            modalClass: 'danger'
+        };
+    }
+    
+    // 其他類型的模擬資料
+    return {
+        pivotData: {
+            'sheet1': {
+                columns: ['SN', 'module', 'path', 'status'],
+                data: []
+            }
+        },
+        sheets: [{ name: 'sheet1', title: '資料表1' }],
+        title: getModalTitle(type),
+        modalClass: getModalClass(type)
+    };
+}
+
+// ==================== 原有功能保持不變 ====================
 
 // 顯示檔案列表 - 統一設計風格
 function showFilesList(type) {
@@ -275,6 +721,52 @@ function getFileIcon(fileName) {
     return 'fa-file';
 }
 
+// 通用的表格搜尋功能
+function searchTableContent(tbody, searchTerm, resultCountElement) {
+    if (!tbody) return;
+    
+    // 清除所有現有的高亮
+    tbody.querySelectorAll('.highlight').forEach(el => {
+        const parent = el.parentNode;
+        if (parent) {
+            parent.innerHTML = parent.textContent;
+        }
+    });
+    
+    let visibleCount = 0;
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach(row => {
+        if (!row) return;
+        
+        let matchFound = false;
+        
+        if (searchTerm === '') {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            const cells = row.querySelectorAll('td');
+            
+            cells.forEach(cell => {
+                if (!cell) return;
+                
+                const text = (cell.textContent || '').toLowerCase();
+                if (text.includes(searchTerm)) {
+                    matchFound = true;
+                    highlightText(cell, searchTerm);
+                }
+            });
+            
+            row.style.display = matchFound ? '' : 'none';
+            if (matchFound) visibleCount++;
+        }
+    });
+    
+    if (resultCountElement) {
+        resultCountElement.textContent = visibleCount;
+    }
+}
+
 // 排序表格
 function sortModalTable(column) {
     const tbody = document.getElementById('modalTableBody');
@@ -416,54 +908,6 @@ function highlightText(element, searchTerm) {
     element.innerHTML = highlightedText;
 }
 
-// 生成表格行
-function generateModalTableRows(files, type) {
-    let html = '';
-    
-    files.forEach((file, index) => {
-        const rowHtml = generateModalTableRow(file, index + 1, type);
-        html += rowHtml;
-    });
-    
-    return html;
-}
-
-// 生成單行
-function generateModalTableRow(file, index, type) {
-    let html = '<tr>';
-    html += `<td class="index-cell">${index}</td>`;
-    html += `<td class="file-name-cell">
-                <i class="fas fa-file-alt"></i> 
-                <span class="searchable">${file.name || ''}</span>
-             </td>`;
-    html += `<td class="file-path-cell searchable" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
-    html += `<td class="file-path-cell searchable" title="${file.path || '-'}">${file.path || '-'}</td>`;
-    
-    if (type === 'total') {
-        const statusClass = file.status === 'downloaded' ? 'success' : 
-                          file.status === 'skipped' ? 'info' : 'danger';
-        const statusText = file.status === 'downloaded' ? '已下載' : 
-                         file.status === 'skipped' ? '已跳過' : '失敗';
-        html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
-    }
-    
-    if (type === 'skipped' || type === 'failed') {
-        html += `<td>${file.reason || '-'}</td>`;
-    }
-    
-    html += '<td class="action-cell">';
-    if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
-        const cleanPath = file.path.replace(/\\/g, '/');
-        html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
-                    <i class="fas fa-eye"></i>
-                 </button>`;
-    }
-    html += '</td>';
-    html += '</tr>';
-    
-    return html;
-}
-
 // 定義 previewFileFromList 函數
 function previewFileFromList(path) {
     // 記錄是從檔案列表開啟預覽
@@ -481,30 +925,6 @@ function previewFileFromList(path) {
     }, 100);
 }
 
-// 定義備用的複製方法
-function fallbackCopyToClipboard(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-999999px';
-    document.body.appendChild(textarea);
-    
-    try {
-        textarea.select();
-        const successful = document.execCommand('copy');
-        if (successful) {
-            utils.showNotification('內容已複製到剪貼簿', 'success');
-        } else {
-            utils.showNotification('複製失敗', 'error');
-        }
-    } catch (err) {
-        console.error('複製失敗:', err);
-        utils.showNotification('複製失敗', 'error');
-    } finally {
-        document.body.removeChild(textarea);
-    }
-}
-
 // 關閉檔案列表模態框
 function closeFilesModal() {
     const modal = document.getElementById('filesListModal');
@@ -512,6 +932,9 @@ function closeFilesModal() {
         modal.classList.add('hidden');
     }
 }
+
+// ... 其餘原有的函數保持不變 ...
+// [所有其他函數如 initializeTabs, handleLocalFiles, displayLocalFiles 等都保持原樣]
 
 // 初始化標籤切換
 function initializeTabs() {
@@ -1475,12 +1898,9 @@ function updateDownloadProgress(data) {
         progressText.textContent = `${Math.round(progress)}%`;
     }
     
-    // 更新統計 - 確保統計資料存在
+    // 更新統計
     if (stats && typeof stats === 'object') {
-        //console.log('Received stats:', stats); // 除錯用
         updateStats(stats);
-    } else {
-        console.warn('No stats data in update'); // 除錯用
     }
     
     // 儲存檔案列表
@@ -1509,23 +1929,12 @@ function updateDownloadProgress(data) {
     }
 }
 
-function debugStats() {
-    console.log('Current stats:', {
-        total: document.getElementById('totalFiles').textContent,
-        downloaded: document.getElementById('downloadedFiles').textContent,
-        skipped: document.getElementById('skippedFiles').textContent,
-        failed: document.getElementById('failedFiles').textContent
-    });
-}
-
 // 更新統計數據
 function updateStats(stats) {
     if (!stats) {
         console.error('No stats data provided');
         return;
     }
-    
-    // console.log('Updating stats:', stats); // 除錯用
     
     const elements = {
         totalFiles: stats.total || 0,
@@ -1538,38 +1947,17 @@ function updateStats(stats) {
         const element = document.getElementById(id);
         if (element) {
             element.textContent = value;
-            //console.log(`Updated ${id} to ${value}`); // 除錯用
             
             // 讓統計卡片可點擊
             const card = element.closest('.stat-card');
             if (card && value > 0) {
                 card.style.cursor = 'pointer';
-                // 確保 onclick 事件正確綁定
                 const type = id.replace('Files', '');
                 card.onclick = () => showFilesList(type);
                 card.title = '點擊查看檔案列表';
             }
-        } else {
-            console.error(`Element with id '${id}' not found`); // 除錯用
         }
     }
-}
-
-// 數值動畫
-function animateValue(element, start, end) {
-    const duration = 500;
-    const range = end - start;
-    const increment = range / (duration / 16);
-    let current = start;
-    
-    const timer = setInterval(() => {
-        current += increment;
-        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
-            current = end;
-            clearInterval(timer);
-        }
-        element.textContent = Math.round(current);
-    }, 16);
 }
 
 // 改善日誌顯示
@@ -1615,7 +2003,7 @@ function clearLog() {
     }
 }
 
-// 顯示下載結果 - 增強版（處理Excel複製）
+// 顯示下載結果
 function showDownloadResults(results) {
     const downloadProgress = document.getElementById('downloadProgress');
     const downloadResults = document.getElementById('downloadResults');
@@ -1704,7 +2092,7 @@ function generateResultSummary(stats) {
     `;
 }
 
-// 生成資料夾樹 - 改善顏色配色
+// 生成資料夾樹
 function generateFolderTree(structure) {
     const treeContainer = document.getElementById('folderTree');
     
@@ -1717,8 +2105,7 @@ function generateFolderTree(structure) {
     treeContainer.innerHTML = tree;
 }
 
-// 建立樹狀結構 HTML - 改善顏色
-// 建立樹狀結構 HTML - 使用不同圖標
+// 建立樹狀結構 HTML
 function buildTreeHTML(node, name, parentPath) {
     let html = '';
     
@@ -1802,6 +2189,7 @@ function toggleFolder(element) {
     }
 }
 
+// 預覽檔案
 async function previewFile(path) {
     if (!previewSource) {
         previewSource = null;
@@ -1890,7 +2278,7 @@ async function previewFile(path) {
     }
 }
 
-// 複製預覽內容 - 加強錯誤處理
+// 複製預覽內容
 function copyPreviewContent() {
     const content = document.getElementById('previewContent');
     const copyBtn = document.querySelector('.btn-copy');
@@ -1968,28 +2356,6 @@ function copyPreviewContent() {
     }
 }
 
-// 展開所有資料夾
-function expandAllFolders() {
-    document.querySelectorAll('.tree-children').forEach(el => {
-        el.style.display = 'block';
-    });
-    document.querySelectorAll('.tree-folder').forEach(el => {
-        el.classList.remove('fa-folder');
-        el.classList.add('fa-folder-open');
-    });
-}
-
-// 摺疊所有資料夾
-function collapseAllFolders() {
-    document.querySelectorAll('.tree-children').forEach(el => {
-        el.style.display = 'none';
-    });
-    document.querySelectorAll('.tree-folder').forEach(el => {
-        el.classList.remove('fa-folder-open');
-        el.classList.add('fa-folder');
-    });
-}
-
 // 切換所有資料夾展開/摺疊
 function toggleAllFolders() {
     const btn = document.getElementById('toggleFoldersBtn');
@@ -2010,6 +2376,28 @@ function toggleAllFolders() {
         btnText.textContent = '摺疊全部';
         btnIcon.className = 'fas fa-compress-alt';
     }
+}
+
+// 展開所有資料夾
+function expandAllFolders() {
+    document.querySelectorAll('.tree-children').forEach(el => {
+        el.style.display = 'block';
+    });
+    document.querySelectorAll('.tree-folder').forEach(el => {
+        el.classList.remove('fa-folder');
+        el.classList.add('fa-folder-open');
+    });
+}
+
+// 摺疊所有資料夾
+function collapseAllFolders() {
+    document.querySelectorAll('.tree-children').forEach(el => {
+        el.style.display = 'none';
+    });
+    document.querySelectorAll('.tree-folder').forEach(el => {
+        el.classList.remove('fa-folder-open');
+        el.classList.add('fa-folder');
+    });
 }
 
 // 下載檔案
@@ -2195,4 +2583,3 @@ function selectSource(source) {
     updateSelectedHint();
     updateDownloadButton();
 }
-
