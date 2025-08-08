@@ -1076,9 +1076,10 @@ function generateCompareTableContent(sheetData, sheetName) {
         'version_diff': ['base_content', 'compare_content']
     };
     
-    // 開始建立表格
-    let html = '<div class="table-scroll-single">';
-    html += '<table class="files-table">';
+    // 修改表格容器結構，確保有捲軸
+    let html = '<div class="table-wrapper" style="height: 100%; display: flex; flex-direction: column;">';
+    html += '<div class="table-container" style="flex: 1; overflow: auto; max-height: 500px;">';
+    html += '<table class="modal-table">';
     
     // 表頭
     html += '<thead><tr>';
@@ -1245,12 +1246,13 @@ function generateCompareTableContent(sheetData, sheetName) {
                 // revision 相關欄位紅字
                 cellClass = 'text-red';
                 cellContent = value;
-            } else if (col === 'has_wave') {
-                // has_wave 欄位顯示徽章
-                if (value === 'Y') {
+            } else if (col === 'has_wave' || col.toLowerCase().includes('has_wave')) {
+                if (value === 'Y' || value === 'y' || value === true || value === 'True') {
                     cellContent = '<span class="badge-yes">Y</span>';
-                } else if (value === 'N') {
+                } else if (value === 'N' || value === 'n' || value === false || value === 'False') {
                     cellContent = '<span class="badge-no">N</span>';
+                } else {
+                    cellContent = value;
                 }
             } else if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
                 // 版本差異內容的特殊處理 - 關鍵部分！
@@ -1282,7 +1284,7 @@ function generateCompareTableContent(sheetData, sheetName) {
     });
     
     html += '</tbody></table>';
-    html += '</div>';
+    tml += '</div></div>';  // 關閉 table-container 和 table-wrapper
     
     return html;
 }
@@ -1797,14 +1799,15 @@ function switchModalTab(sheetName, clickedBtn) {
     }
 }
 
-// 生成比對表格 - 增強版
+// 生成比對表格 - 修正版，確保捲軸顯示
 function generateCompareTable(sheetData, sheetName) {
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return '<div class="empty-message"><i class="fas fa-inbox"></i><p>此資料表沒有內容</p></div>';
     }
     
-    let html = '<div class="table-wrapper">';
-    html += '<div class="table-container">';
+    // 修改結構，確保表格有捲軸
+    let html = '<div class="table-wrapper" style="height: 100%; display: flex; flex-direction: column;">';
+    html += '<div class="table-container" style="flex: 1; overflow: auto; max-height: 500px;">';
     html += `<table class="modal-table" id="table-${sheetName}">`;
     
     // 表頭
@@ -1913,7 +1916,18 @@ function formatCellContent(value, col, row, sheetName) {
     if (col.includes('path') || col.includes('folder')) {
         return `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
     }
-    
+
+    // has_wave 欄位處理 - 加入顏色徽章
+    if (col === 'has_wave' || col.toLowerCase().includes('has_wave')) {
+        if (value === 'Y' || value === 'y' || value === true || value === 'True') {
+            return '<span class="badge-yes">Y</span>';
+        } else if (value === 'N' || value === 'n' || value === false || value === 'False') {
+            return '<span class="badge-no">N</span>';
+        } else {
+            return `<span>${value}</span>`;
+        }
+    }
+
     return value;
 }
 

@@ -89,7 +89,7 @@ function showFilesList(type) {
         case 'skipped':
             files = skippedFilesList;
             title = '已跳過的檔案';
-            modalClass = 'info';
+            modalClass = 'warning';  // 改為 warning (橘色)
             break;
         case 'failed':
             files = failedFilesList;
@@ -103,6 +103,7 @@ function showFilesList(type) {
                 ...failedFilesList.map(f => ({...f, status: 'failed'}))
             ];
             title = '所有檔案';
+            modalClass = 'primary';  // 改為 primary (與總檔案數對應的藍色)
             break;
     }
     
