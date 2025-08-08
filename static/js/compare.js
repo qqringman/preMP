@@ -1,34 +1,33 @@
 ﻿// 比較頁面 JavaScript - 更新以配合新的 UI
 
+// 頁面變數
 let currentTaskId = null;
 let sourceDirectory = null;
 let asyncDownloadUrl = null;
 let currentServerPath = '/home/vince_lin/ai/preMP/downloads';
 let selectedServerDirectory = null;
 let currentFoldersList = [];
-let serverFilesLoaded = false; // 新增變數追蹤伺服器檔案是否已載入
+let serverFilesLoaded = false;
 let pathInputTimer = null;
-
-// 新增：儲存圖表實例
 let chartInstances = {
     success: null,
     diff: null
 };
+let currentModalData = null; // 當前模態框資料
 
-// 更新 DOMContentLoaded 事件
+// DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
     loadDownloadedDirectories();
     loadRecentComparisons();
     initializeEventListeners();
     initializeFolderDrop();
-    initializePathInput()
+    initializePathInput();
     
     // 監聽標籤切換事件
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const tabName = e.currentTarget.textContent.includes('伺服器') ? 'server' : 'local';
             if (tabName === 'server') {
-                // 切換到伺服器標籤時載入資料夾
                 setTimeout(() => {
                     if (!serverFilesLoaded) {
                         loadServerFolders(currentServerPath);
@@ -39,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // 初始載入伺服器資料夾（如果預設是伺服器標籤）
+    // 初始載入伺服器資料夾
     const activeTab = document.querySelector('.tab-btn.active');
     if (activeTab && activeTab.textContent.includes('伺服器')) {
         loadServerFolders(currentServerPath);
@@ -47,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 載入伺服器資料夾
 // 載入伺服器資料夾
 async function loadServerFolders(path) {
     const browserContent = document.getElementById('serverBrowser');
@@ -810,7 +808,7 @@ function createSummaryCard(title, data, icon) {
     `;
 }
 
-// 顯示比對詳細資料
+// 顯示比對詳細資料 - 增強版
 async function showCompareDetails(type) {
     if (!currentTaskId) {
         utils.showNotification('無法取得任務資訊', 'error');
@@ -818,10 +816,8 @@ async function showCompareDetails(type) {
     }
     
     try {
-        // 取得比對資料
         const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
         
-        // 決定要顯示的資料和標題
         let modalTitle = '';
         let modalClass = '';
         let relevantSheets = [];
@@ -830,7 +826,6 @@ async function showCompareDetails(type) {
             case 'master_vs_premp':
                 modalTitle = 'Master vs PreMP';
                 modalClass = 'info';
-                // 可能的相關資料表
                 relevantSheets = [
                     { name: 'revision_diff', title: 'Revision 差異' },
                     { name: 'branch_error', title: '分支錯誤' },
@@ -861,10 +856,9 @@ async function showCompareDetails(type) {
                 break;
         }
         
-        // 過濾出實際存在的資料表
         const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
         
-        // 顯示資料
+        currentModalData = { pivotData, sheets: availableSheets, title: modalTitle, modalClass };
         showCompareModal(pivotData, availableSheets, modalTitle, modalClass);
         
     } catch (error) {
@@ -873,9 +867,8 @@ async function showCompareDetails(type) {
     }
 }
 
-// 顯示比對模態框 - 修正版本，使用單一表格不分離 header 和 body
+// 顯示比對模態框 - 統一樣式版本
 function showCompareModal(pivotData, sheets, title, modalClass) {
-    // 創建或取得模態框
     let modal = document.getElementById('compareDetailsModal');
     if (!modal) {
         modal = document.createElement('div');
@@ -884,125 +877,188 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
         document.body.appendChild(modal);
     }
     
-    // 根據 modalClass 決定標題背景色
-    let headerColor = '';
-    switch(modalClass) {
-        case 'info':
-            headerColor = '#2196F3';
-            break;
-        case 'success':
-            headerColor = '#4CAF50';
-            break;
-        case 'warning':
-            headerColor = '#FF9800';
-            break;
-        case 'danger':
-            headerColor = '#F44336';
-            break;
-        default:
-            headerColor = '#2196F3';
-    }
-    
     modal.className = `modal ${modalClass}`;
     
-    // 如果沒有資料
     if (!sheets || sheets.length === 0) {
-        modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
-                    <h3 class="modal-title">
-                        <i class="fas fa-table"></i> ${title}
-                    </h3>
-                    <span class="modal-count">共 0 筆資料</span>
-                    <button class="modal-close" onclick="window.closeCompareModal()">
-                        <i class="fas fa-times"></i>
+        modal.innerHTML = generateEmptyModal(title);
+    } else if (sheets.length === 1) {
+        // 單頁籤 - 使用統一的樣式
+        modal.innerHTML = generateSingleSheetModal(pivotData[sheets[0].name], sheets[0], title, modalClass);
+    } else {
+        // 多頁籤 - 保持原設計但加入搜尋功能
+        modal.innerHTML = generateMultiSheetModal(pivotData, sheets, title, modalClass);
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+// 生成多頁籤模態框 - 保持原設計但加入搜尋
+function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
+    const firstSheetData = pivotData[sheets[0].name];
+    const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
+    
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count" id="modalRecordCount">共 ${firstSheetCount} 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
+    
+    // 頁籤
+    html += '<div class="modal-tabs">';
+    sheets.forEach((sheet, index) => {
+        const sheetData = pivotData[sheet.name];
+        const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
+        const isActive = index === 0;
+        
+        html += `
+            <button class="modal-tab-btn ${isActive ? 'active' : ''}" 
+                    onclick="switchCompareTab('${sheet.name}', this)"
+                    data-count="${recordCount}">
+                <i class="fas fa-file-alt"></i> ${sheet.title}
+                <span class="tab-count">${recordCount}</span>
+            </button>
+        `;
+    });
+    html += '</div>';
+    
+    // 各頁籤內容
+    sheets.forEach((sheet, index) => {
+        const isActive = index === 0;
+        const sheetData = pivotData[sheet.name];
+        
+        html += `
+            <div class="tab-content ${isActive ? 'active' : ''}" 
+                 id="tab-${sheet.name}" 
+                 style="display: ${isActive ? 'block' : 'none'};">
+        `;
+        
+        if (sheetData && sheetData.data && sheetData.data.length > 0) {
+            // 每個頁籤都有自己的搜尋列
+            html += `
+                <div class="modal-search-bar">
+                    <div class="search-input-wrapper">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" 
+                               class="search-input" 
+                               id="search-${sheet.name}" 
+                               placeholder="搜尋${sheet.title}..."
+                               onkeyup="searchTabContent('${sheet.name}')">
+                    </div>
+                    <div class="search-stats">
+                        <i class="fas fa-filter"></i>
+                        <span>找到 <span class="highlight-count" id="count-${sheet.name}">${sheetData.data.length}</span> 筆</span>
+                    </div>
+                    <button class="btn-clear-search" onclick="clearTabSearch('${sheet.name}')">
+                        <i class="fas fa-times"></i> 清除
                     </button>
                 </div>
-                <div class="modal-body">
-                    ${generateEmptyState('沒有找到相關資料', false)}
+            `;
+            
+            html += generateCompareTable(sheetData, sheet.name);
+        } else {
+            html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有資料</p></div>';
+        }
+        
+        html += '</div>';
+    });
+    
+    html += '</div></div>';
+    
+    return html;
+}
+
+// 生成空模態框
+function generateEmptyModal(title) {
+    return `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 0 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="empty-message">
+                    <i class="fas fa-inbox"></i>
+                    <p>沒有找到相關資料</p>
                 </div>
             </div>
-        `;
-    } else if (sheets.length === 1) {
-        // 只有一個資料表，不需要頁籤
-        const sheetData = pivotData[sheets[0].name];
-        const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
-        
-        modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
-                    <h3 class="modal-title">
-                        <i class="fas fa-table"></i> ${title}
-                    </h3>
-                    <span class="modal-count">共 ${recordCount} 筆資料</span>
-                    <button class="modal-close" onclick="window.closeCompareModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
+        </div>
+    `;
+}
+
+// 生成單頁籤模態框 - 統一樣式
+function generateSingleSheetModal(sheetData, sheet, title, modalClass) {
+    const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
+    
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 ${recordCount} 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
+    
+    if (sheetData && sheetData.data && sheetData.data.length > 0) {
+        // 加入搜尋列
+        html += `
+            <div class="modal-search-bar">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" 
+                           class="search-input" 
+                           id="compareSearchInput" 
+                           placeholder="搜尋內容..."
+                           onkeyup="searchCompareContent()">
                 </div>
-                <div class="modal-body-wrapper">
-                    <div class="modal-data-area-single">
-                        ${sheetData ? generateCompareTableContent(sheetData, sheets[0].name) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>'}
+                <div class="search-stats">
+                    <i class="fas fa-filter"></i>
+                    <span>找到 <span class="highlight-count" id="compareSearchCount">${recordCount}</span> 筆</span>
+                </div>
+                <button class="btn-clear-search" onclick="clearCompareSearch()">
+                    <i class="fas fa-times"></i> 清除
+                </button>
+            </div>
+        `;
+        
+        // 表格
+        html += generateCompareTable(sheetData, sheet.name);
+        
+        // 底部統計
+        html += `
+            <div class="table-footer">
+                <div class="table-footer-stats">
+                    <div class="footer-stat">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>共 <span class="footer-stat-value">${recordCount}</span> 個項目</span>
                     </div>
                 </div>
             </div>
         `;
     } else {
-        // 多個資料表，顯示頁籤
-        let tabsHtml = '<div class="source-tabs" style="margin: 20px 20px 0 20px;">';
-        let contentHtml = '<div class="tab-container">';
-        
-        // 獲取第一個頁籤的筆數（預設顯示）
-        const firstSheetData = pivotData[sheets[0].name];
-        const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
-        
-        sheets.forEach((sheet, index) => {
-            const isActive = index === 0;
-            const sheetData = pivotData[sheet.name];
-            const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
-            
-            // 頁籤按鈕
-            tabsHtml += `
-                <button class="tab-btn ${isActive ? 'active' : ''}" 
-                        onclick="switchModalTab('${sheet.name}', this)"
-                        data-count="${recordCount}">
-                    <i class="fas fa-file-alt"></i> ${sheet.title}
-                </button>
-            `;
-            
-            // 頁籤內容
-            contentHtml += `
-                <div class="tab-content ${isActive ? 'active' : ''}" id="tab-${sheet.name}" style="display: ${isActive ? 'block' : 'none'};">
-                    <div class="modal-data-area-single">
-                        ${sheetData ? generateCompareTableContent(sheetData, sheet.name) : '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>'}
-                    </div>
-                </div>
-            `;
-        });
-        
-        tabsHtml += '</div>';
-        contentHtml += '</div>';
-        
-        // 使用第一個頁籤的筆數而不是總筆數
-        modal.innerHTML = `
-            <div class="modal-content modal-large">
-                <div class="modal-header compare-modal-header" style="background: ${headerColor};">
-                    <h3 class="modal-title">
-                        <i class="fas fa-table"></i> ${title}
-                    </h3>
-                    <span class="modal-count">共 ${firstSheetCount} 筆資料</span>
-                    <button class="modal-close" onclick="window.closeCompareModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="modal-body-wrapper">
-                    ${tabsHtml}
-                    ${contentHtml}
-                </div>
-            </div>
-        `;
+        html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有資料</p></div>';
     }
     
-    modal.classList.remove('hidden');
+    html += '</div></div>';
+    
+    return html;
 }
 
 // 生成比對表格內容 - 完整版本，包含版本差異顏色標註
@@ -1302,31 +1358,23 @@ function formatVersionDiffContentWithColors(row, column) {
     return currentValue;
 }
 
-// 修改 formatPGitLine 函數，加入 debug
+// 格式化 P_GIT 行
 function formatPGitLine(currentLine, otherLine) {
-    console.log('formatPGitLine - Current:', currentLine);
-    console.log('formatPGitLine - Other:', otherLine);
-    
     if (!currentLine || !currentLine.startsWith('P_GIT_')) return currentLine;
     
     const currentParts = currentLine.split(';');
     const otherParts = otherLine ? otherLine.split(';') : [];
-    
-    console.log('Current Parts:', currentParts);
-    console.log('Other Parts:', otherParts);
     
     let formatted = '';
     
     currentParts.forEach((part, index) => {
         if (index > 0) formatted += ';';
         
-        // 索引 3 是 git hash，索引 4 是 revision number
         if (index === 3 || index === 4) {
             const isDifferent = otherParts[index] && part !== otherParts[index];
-            console.log(`Part ${index}: "${part}" vs "${otherParts[index]}" - Different: ${isDifferent}`);
             
             if (isDifferent) {
-                formatted += `<span class="diff-highlight" style="color: red; font-weight: bold;">${part}</span>`;
+                formatted += `<span class="highlight" style="color: red; font-weight: bold;">${part}</span>`;
             } else {
                 formatted += part;
             }
@@ -1335,11 +1383,10 @@ function formatPGitLine(currentLine, otherLine) {
         }
     });
     
-    console.log('Formatted result:', formatted);
     return formatted;
 }
 
-// 格式化 key:value 行（Version.txt 格式）
+// 格式化 key:value 行
 function formatKeyValueLine(currentLine, otherLine) {
     if (!currentLine || !currentLine.includes(':')) return currentLine;
     
@@ -1347,7 +1394,6 @@ function formatKeyValueLine(currentLine, otherLine) {
     const key = currentLine.substring(0, colonIndex);
     const value = currentLine.substring(colonIndex + 1).trim();
     
-    // 檢查另一行是否有相同的 key
     let isDifferent = false;
     if (otherLine && otherLine.includes(':')) {
         const otherColonIndex = otherLine.indexOf(':');
@@ -1360,10 +1406,124 @@ function formatKeyValueLine(currentLine, otherLine) {
     }
     
     if (isDifferent) {
-        return `${key}: <span class="diff-highlight">${value}</span>`;
+        return `${key}: <span class="highlight" style="color: red; font-weight: bold;">${value}</span>`;
     }
     
     return currentLine;
+}
+
+// 搜尋比對內容
+function searchCompareContent() {
+    const searchInput = document.getElementById('compareSearchInput');
+    const searchTerm = searchInput.value.toLowerCase();
+    const tbody = document.querySelector('.modal-table tbody');
+    const resultCount = document.getElementById('compareSearchCount');
+    
+    searchTableContent(tbody, searchTerm, resultCount);
+}
+
+// 搜尋頁籤內容
+function searchTabContent(sheetName) {
+    const searchInput = document.getElementById(`search-${sheetName}`);
+    const searchTerm = searchInput.value.toLowerCase();
+    const tbody = document.querySelector(`#table-${sheetName} tbody`);
+    const resultCount = document.getElementById(`count-${sheetName}`);
+    
+    searchTableContent(tbody, searchTerm, resultCount);
+}
+
+// 通用的表格搜尋功能
+function searchTableContent(tbody, searchTerm, resultCountElement) {
+    if (!tbody) return;
+    
+    // 清除高亮
+    tbody.querySelectorAll('.highlight').forEach(el => {
+        const parent = el.parentNode;
+        parent.innerHTML = parent.textContent;
+    });
+    
+    let visibleCount = 0;
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach(row => {
+        const searchableElements = row.querySelectorAll('.searchable');
+        let matchFound = false;
+        
+        if (searchTerm === '') {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            searchableElements.forEach(element => {
+                const text = element.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    matchFound = true;
+                    highlightSearchTerm(element, searchTerm);
+                }
+            });
+            
+            row.style.display = matchFound ? '' : 'none';
+            if (matchFound) visibleCount++;
+        }
+    });
+    
+    if (resultCountElement) {
+        resultCountElement.textContent = visibleCount;
+    }
+}
+
+// 高亮搜尋詞
+function highlightSearchTerm(element, searchTerm) {
+    const text = element.textContent;
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const highlightedText = text.replace(regex, '<span class="highlight">$1</span>');
+    element.innerHTML = highlightedText;
+}
+
+// 清除比對搜尋
+function clearCompareSearch() {
+    const searchInput = document.getElementById('compareSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        searchCompareContent();
+    }
+}
+
+// 清除頁籤搜尋
+function clearTabSearch(sheetName) {
+    const searchInput = document.getElementById(`search-${sheetName}`);
+    if (searchInput) {
+        searchInput.value = '';
+        searchTabContent(sheetName);
+    }
+}
+
+// 切換比對頁籤
+function switchCompareTab(sheetName, clickedBtn) {
+    // 更新頁籤按鈕狀態
+    const modal = document.getElementById('compareDetailsModal');
+    modal.querySelectorAll('.modal-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    clickedBtn.classList.add('active');
+    
+    // 更新筆數顯示
+    const count = clickedBtn.getAttribute('data-count') || '0';
+    const modalCount = document.getElementById('modalRecordCount');
+    if (modalCount) {
+        modalCount.textContent = `共 ${count} 筆資料`;
+    }
+    
+    // 切換內容
+    modal.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    
+    const targetContent = modal.querySelector(`#tab-${sheetName}`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+        targetContent.style.display = 'block';
+    }
 }
 
 // 在顯示空狀態時，使用新的 UI
@@ -1383,14 +1543,12 @@ function showEmptyState(containerId, message) {
     `;
 }
 
+// 格式化版本差異內容
 function formatVersionDiffContent(row, column) {
-    const fileType = row['file_type'] || '';
+    const currentValue = row[column] || '';
     const baseContent = row['base_content'] || '';
     const compareContent = row['compare_content'] || '';
-    const currentValue = row[column] || '';
-    const diffCount = row['diff_count'] || 0;
     
-    // 處理檔案不存在的情況
     if (currentValue === '(檔案不存在)') {
         return `<span class="text-red">${currentValue}</span>`;
     }
@@ -1399,51 +1557,38 @@ function formatVersionDiffContent(row, column) {
         return `<span>${currentValue}</span>`;
     }
     
-    // 如果包含多行差異（用換行符號分隔）
+    // 處理多行差異
     if (currentValue.includes('\n')) {
-        const lines = currentValue.split('\n');
-        const otherLines = (column === 'base_content' ? compareContent : baseContent).split('\n');
+        const currentLines = currentValue.split('\n');
+        const otherContent = column === 'base_content' ? compareContent : baseContent;
+        const otherLines = otherContent ? otherContent.split('\n') : [];
         
-        let formattedContent = '<div class="multi-line-diff">';
+        let formattedHtml = '<div class="version-diff-container">';
         
-        lines.forEach((line, index) => {
+        currentLines.forEach((line, index) => {
             const otherLine = otherLines[index] || '';
+            formattedHtml += '<div class="version-diff-line">';
             
-            // 根據檔案類型處理每一行
-            if (fileType.toLowerCase() === 'f_version.txt') {
-                formattedContent += '<div class="diff-line">';
-                formattedContent += formatSingleFVersionLine(line, otherLine);
-                formattedContent += '</div>';
-            } else if (line.includes('F_HASH:')) {
-                formattedContent += '<div class="diff-line">';
-                formattedContent += formatSingleFHashLine(line, otherLine);
-                formattedContent += '</div>';
+            if (line.startsWith('P_GIT_')) {
+                formattedHtml += formatPGitLine(line, otherLine);
             } else if (line.includes(':')) {
-                formattedContent += '<div class="diff-line">';
-                formattedContent += formatSingleColonLine(line, otherLine);
-                formattedContent += '</div>';
+                formattedHtml += formatKeyValueLine(line, otherLine);
             } else {
-                formattedContent += `<div class="diff-line">${line}</div>`;
+                formattedHtml += line;
             }
+            
+            formattedHtml += '</div>';
         });
         
-        formattedContent += '</div>';
-        
-        // 如果有差異數量，顯示標籤
-        if (diffCount > 1) {
-            formattedContent += `<div class="diff-count-badge">${diffCount} 處差異</div>`;
-        }
-        
-        return formattedContent;
+        formattedHtml += '</div>';
+        return formattedHtml;
     }
     
-    // 單行差異的原有處理邏輯
-    if (fileType.toLowerCase() === 'f_version.txt') {
-        return formatFVersionContent(currentValue, column === 'base_content' ? compareContent : baseContent);
-    } else if (currentValue.includes('F_HASH:')) {
-        return formatFHashContent(currentValue, column === 'base_content' ? compareContent : baseContent);
+    // 單行處理
+    if (currentValue.startsWith('P_GIT_')) {
+        return formatPGitLine(currentValue, column === 'base_content' ? compareContent : baseContent);
     } else if (currentValue.includes(':')) {
-        return formatColonContent(currentValue, column === 'base_content' ? compareContent : baseContent);
+        return formatKeyValueLine(currentValue, column === 'base_content' ? compareContent : baseContent);
     }
     
     return currentValue;
@@ -1652,122 +1797,144 @@ function switchModalTab(sheetName, clickedBtn) {
     }
 }
 
-// 生成比對表格 - 修正版本
-function generateCompareTable(sheetData, sheetTitle, headerColor) {
+// 生成比對表格 - 增強版
+function generateCompareTable(sheetData, sheetName) {
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
-        return '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有資料</p></div>';
+        return '<div class="empty-message"><i class="fas fa-inbox"></i><p>此資料表沒有內容</p></div>';
     }
     
-    // 使用統一的表格結構
-    let html = `
-        <div class="file-list-container">
-            <div class="file-list-header modal-table-header">
-                <h4 class="file-list-title">
-                    <i class="fas fa-list"></i> ${sheetTitle}
-                </h4>
-                <span class="file-count-badge">
-                    共 ${sheetData.data.length} 個檔案
-                </span>
-            </div>
-            <div class="table-scroll-wrapper">
-                <div class="files-table-container">
-                    <table class="files-table">
-    `;
+    let html = '<div class="table-wrapper">';
+    html += '<div class="table-container">';
+    html += `<table class="modal-table" id="table-${sheetName}">`;
     
     // 表頭
     html += '<thead><tr>';
-    
-    // 動態生成欄位
     sheetData.columns.forEach(col => {
-        let thText = col;
-        let minWidth = '150px';
-        
-        // 欄位名稱對應
-        const columnMap = {
-            'module': { text: '模組名稱', width: '200px' },
-            'location_path': { text: 'FTP 路徑', width: '400px' },
-            'path': { text: 'FTP 路徑', width: '400px' },
-            'base_folder': { text: '本地路徑', width: '300px' },
-            'compare_folder': { text: 'compare_folder', width: '200px' },
-            'file_type': { text: 'file_type', width: '150px' },
-            'base_content': { text: 'base_content', width: '300px' }
-        };
-        
-        if (columnMap[col]) {
-            thText = columnMap[col].text;
-            minWidth = columnMap[col].width;
-        } else if (col.length > 20) {
-            minWidth = '250px';
-        }
-        
-        html += `<th style="min-width: ${minWidth};">${thText}</th>`;
+        const columnInfo = getColumnInfo(col, sheetName);
+        html += `<th style="min-width: ${columnInfo.width};" class="${columnInfo.headerClass}">
+                    ${columnInfo.text}
+                 </th>`;
     });
-    
     html += '</tr></thead>';
     
     // 表身
     html += '<tbody>';
-    
-    sheetData.data.forEach((row) => {
-        html += '<tr>';
-        
-        sheetData.columns.forEach(col => {
-            let value = row[col] || '';
-            let cellContent = value;
-            
-            // 處理不同類型的欄位
-            if (col === 'module' || col === '模組名稱') {
-                let icon = 'fa-file';
-                const fileName = value.toLowerCase();
-                
-                if (fileName.includes('manifest.xml')) {
-                    icon = 'fa-file-code';
-                } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
-                    icon = 'fa-file-alt';
-                } else if (fileName.includes('.txt')) {
-                    icon = 'fa-file-alt';
-                } else if (fileName.includes('dprx_quickshow')) {
-                    icon = 'fa-cube';
-                } else if (fileName.includes('bootcode')) {
-                    icon = 'fa-microchip';
-                }
-                
-                cellContent = `
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas ${icon}" style="color: #2196F3;"></i>
-                        <span>${value}</span>
-                    </div>
-                `;
-            } else if (col.includes('link') || col.includes('_link')) {
-                if (value && value.startsWith('http')) {
-                    cellContent = `<a href="${value}" target="_blank" class="table-link">
-                        <i class="fas fa-external-link-alt"></i> 查看
-                    </a>`;
-                }
-            } else if (col.includes('path') || col.includes('folder')) {
-                cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
-            }
-            
-            html += `<td>${cellContent}</td>`;
-        });
-        
-        html += '</tr>';
+    sheetData.data.forEach((row, index) => {
+        html += generateCompareTableRow(row, sheetData.columns, sheetName, index);
     });
+    html += '</tbody>';
     
-    html += '</tbody></table>';
-    html += '</div></div>'; // 關閉 files-table-container 和 table-scroll-wrapper
-    
-    // 底部統計
-    html += `
-        <div class="table-footer">
-            <i class="fas fa-chart-bar"></i>
-            共 ${sheetData.data.length} 個檔案
-        </div>
-    `;
-    
-    html += '</div>';
+    html += '</table>';
+    html += '</div></div>';
     
     return html;
+}
+
+// 生成表格行
+function generateCompareTableRow(row, columns, sheetName, rowIndex) {
+    let html = '<tr>';
+    
+    columns.forEach(col => {
+        const cellContent = formatCellContent(row[col], col, row, sheetName);
+        const cellClass = getCellClass(col, row[col], sheetName);
+        const columnInfo = getColumnInfo(col, sheetName);
+        
+        html += `<td class="${cellClass} searchable" style="min-width: ${columnInfo.width};">
+                    ${cellContent}
+                 </td>`;
+    });
+    
+    html += '</tr>';
+    return html;
+}
+
+// 獲取欄位資訊
+function getColumnInfo(col, sheetName) {
+    const columnMap = {
+        'SN': { text: 'SN', width: '60px', headerClass: '' },
+        'module': { text: '模組名稱', width: '200px', headerClass: '' },
+        'location_path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
+        'path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
+        'base_folder': { text: '本地路徑', width: '300px', headerClass: '' },
+        'base_content': { text: 'base_content', width: '400px', headerClass: 'header-red-bg' },
+        'compare_content': { text: 'compare_content', width: '400px', headerClass: 'header-red-bg' },
+        'problem': { text: '問題', width: '200px', headerClass: 'header-red-bg' },
+        '狀態': { text: '狀態', width: '100px', headerClass: 'header-red-bg' },
+        // 其他欄位...
+    };
+    
+    return columnMap[col] || { text: col, width: '150px', headerClass: '' };
+}
+
+// 獲取單元格樣式
+function getCellClass(col, value, sheetName) {
+    let classes = [];
+    
+    if (col === 'problem' && value) {
+        classes.push('text-red');
+    } else if (col === '狀態') {
+        if (value === '刪除') classes.push('text-red');
+        else if (value === '新增') classes.push('text-blue');
+    } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
+        classes.push('text-red');
+    }
+    
+    return classes.join(' ');
+}
+
+// 格式化單元格內容
+function formatCellContent(value, col, row, sheetName) {
+    if (!value) return '-';
+    
+    // 模組名稱處理
+    if (col === 'module' || col === '模組名稱') {
+        const icon = getFileIcon(value);
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas ${icon}" style="color: #2196F3;"></i>
+                <span>${value}</span>
+            </div>
+        `;
+    }
+    
+    // 版本差異處理
+    if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
+        return formatVersionDiffContent(row, col);
+    }
+    
+    // 連結處理
+    if (col.includes('link') && value.startsWith('http')) {
+        return `<a href="${value}" target="_blank" class="table-link">
+                    <i class="fas fa-external-link-alt"></i> 查看
+                </a>`;
+    }
+    
+    // 路徑處理
+    if (col.includes('path') || col.includes('folder')) {
+        return `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
+    }
+    
+    return value;
+}
+
+// 獲取檔案圖標
+function getFileIcon(fileName) {
+    const lowerName = fileName.toLowerCase();
+    
+    if (lowerName.includes('manifest.xml')) return 'fa-file-code';
+    if (lowerName.includes('version.txt')) return 'fa-file-lines';
+    if (lowerName.includes('f_version.txt')) return 'fa-file-signature';
+    if (lowerName.includes('.xml')) return 'fa-file-code';
+    if (lowerName.includes('.txt')) return 'fa-file-alt';
+    if (lowerName.includes('dprx_quickshow')) return 'fa-cube';
+    if (lowerName.includes('bootcode')) return 'fa-microchip';
+    if (lowerName.includes('emcu')) return 'fa-memory';
+    if (lowerName.includes('audio_fw')) return 'fa-volume-up';
+    if (lowerName.includes('video_fw')) return 'fa-video';
+    if (lowerName.includes('tee')) return 'fa-shield-alt';
+    if (lowerName.includes('bl31')) return 'fa-lock';
+    
+    return 'fa-file';
 }
 
 // 預覽失敗模組
@@ -2566,3 +2733,9 @@ window.switchModalTab = switchModalTab;
 window.previewCompareFile = previewCompareFile;
 window.previewFailedModule = previewFailedModule;
 window.closeCompareModal = closeCompareModal;
+window.switchCompareTab = switchCompareTab;
+window.searchCompareContent = searchCompareContent;
+window.searchTabContent = searchTabContent;
+window.clearCompareSearch = clearCompareSearch;
+window.clearTabSearch = clearTabSearch;
+

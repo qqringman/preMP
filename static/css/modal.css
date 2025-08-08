@@ -1,0 +1,539 @@
+/* =============================================
+   統一的彈跳視窗樣式
+   用於 download.html 和 compare.html
+   ============================================= */
+
+/* 基礎模態框結構 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease;
+}
+
+.modal-content.modal-large {
+    max-width: 1200px;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* 統一的模態框標頭 */
+.modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* 根據類型變換標頭顏色 */
+.modal.success .modal-header {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+}
+
+.modal.info .modal-header {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+}
+
+.modal.warning .modal-header {
+    background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+}
+
+.modal.danger .modal-header {
+    background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-title i {
+    font-size: 1.5rem;
+    opacity: 0.9;
+}
+
+.modal-count {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-left: 1rem;
+}
+
+.modal-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+}
+
+/* 搜尋列 - 統一樣式 */
+.modal-search-bar {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.search-input-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.625rem 1rem 0.625rem 2.5rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background: white;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    pointer-events: none;
+}
+
+.search-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #666;
+    padding: 0.5rem 1rem;
+    background: white;
+    border-radius: 6px;
+    min-width: 120px;
+}
+
+.search-stats .highlight-count {
+    font-weight: 600;
+    color: #667eea;
+}
+
+.btn-clear-search {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.btn-clear-search:hover {
+    background: #f5f5f5;
+    border-color: #999;
+}
+
+/* 高亮樣式 */
+.highlight {
+    background: linear-gradient(120deg, #fff59d 0%, #ffeb3b 100%);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 500;
+    animation: highlightPulse 0.5s ease;
+}
+
+@keyframes highlightPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* 模態框內容區域 */
+.modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 0 0 12px 12px;
+}
+
+/* 表格容器 - 統一樣式 */
+.table-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.table-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+/* 統一的表格樣式 */
+.modal-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+}
+
+/* 紅色標頭樣式（用於特定欄位） */
+.modal-table th.header-red-bg {
+    background: linear-gradient(180deg, #fee 0%, #fdd 100%);
+    color: #d32f2f;
+    font-weight: 600;
+}
+
+/* 紅色文字樣式 */
+.text-red {
+    color: #d32f2f;
+    font-weight: 500;
+}
+
+/* 藍色文字樣式 */
+.text-blue {
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.modal-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.modal-table th {
+    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+    position: relative;
+    user-select: none;
+}
+
+/* 可排序的欄位 */
+.modal-table th.sortable {
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.modal-table th.sortable:hover {
+    background: linear-gradient(180deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.modal-table th.sortable::after {
+    content: '';
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    opacity: 0.3;
+}
+
+.modal-table th.sortable.sort-asc::after {
+    border-bottom: 5px solid #667eea;
+    opacity: 1;
+}
+
+.modal-table th.sortable.sort-desc::after {
+    border-top: 5px solid #667eea;
+    opacity: 1;
+}
+
+.modal-table tbody tr {
+    transition: background 0.15s;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.modal-table tbody tr:hover {
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.modal-table td {
+    padding: 0.875rem 1rem;
+    vertical-align: middle;
+    color: #212529;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* 檔案名稱欄位 */
+.file-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.file-name-cell i {
+    color: #667eea;
+    font-size: 1rem;
+}
+
+/* 路徑欄位 */
+.file-path-cell {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.8125rem;
+    color: #666;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 索引欄位 */
+.index-cell {
+    text-align: center;
+    color: #999;
+    font-weight: 500;
+}
+
+/* 狀態標籤 */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.625rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.success {
+    background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
+    color: #2e7d32;
+}
+
+.status-badge.info {
+    background: linear-gradient(135deg, #bbdefb 0%, #90caf9 100%);
+    color: #1565c0;
+}
+
+.status-badge.danger {
+    background: linear-gradient(135deg, #ffcdd2 0%, #ef9a9a 100%);
+    color: #c62828;
+}
+
+/* 操作按鈕 */
+.action-cell {
+    text-align: center;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid #e0e0e0;
+    color: #667eea;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
+}
+
+/* 空狀態 */
+.empty-message {
+    padding: 4rem 2rem;
+    text-align: center;
+    color: #999;
+}
+
+.empty-message i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-message p {
+    font-size: 1.125rem;
+    margin: 0;
+}
+
+/* 表格底部統計 */
+.table-footer {
+    padding: 1rem 1.5rem;
+    background: linear-gradient(180deg, #f8f9fa 0%, #fff 100%);
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.table-footer-stats {
+    display: flex;
+    gap: 2rem;
+}
+
+.footer-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.footer-stat-value {
+    font-weight: 600;
+    color: #333;
+}
+
+/* 多頁籤樣式 - 保持原設計 */
+.modal-tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1rem 1rem 0;
+    background: #f8f9fa;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.modal-tab-btn {
+    padding: 0.625rem 1.25rem;
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+    position: relative;
+    bottom: -2px;
+}
+
+.modal-tab-btn.active {
+    background: white;
+    color: #667eea;
+    border-color: #667eea #667eea white;
+}
+
+.modal-tab-btn:hover:not(.active) {
+    background: #f5f5f5;
+}
+
+.tab-count {
+    background: #e0e0e0;
+    color: #666;
+    padding: 0.125rem 0.375rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+}
+
+.modal-tab-btn.active .tab-count {
+    background: #667eea;
+    color: white;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        max-height: 95vh;
+        margin: 1rem;
+    }
+    
+    .modal-header {
+        padding: 1rem;
+    }
+    
+    .modal-title {
+        font-size: 1.125rem;
+    }
+    
+    .modal-search-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .modal-table {
+        font-size: 0.8125rem;
+    }
+    
+    .modal-table th,
+    .modal-table td {
+        padding: 0.625rem 0.5rem;
+    }
+}

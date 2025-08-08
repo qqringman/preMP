@@ -2,21 +2,46 @@
 
 // 頁面變數
 let selectedSource = 'local';
-let selectedFiles = [];  // 當前選擇的檔案
-let localSelectedFiles = []; // 本地選擇的檔案
-let serverSelectedFiles = []; // 伺服器選擇的檔案  
+let selectedFiles = [];
+let localSelectedFiles = [];
+let serverSelectedFiles = [];  
 let downloadTaskId = null;
-let currentServerPath = '/home/vince_lin/ai/preMP'; // 使用 config.py 的預設路徑
+let currentServerPath = '/home/vince_lin/ai/preMP';
 let serverFilesLoaded = false;
 let pathInputTimer = null;
 let downloadedFilesList = [];
 let skippedFilesList = [];
 let failedFilesList = [];
-let previewSource = null; // 記錄預覽是從哪裡開啟的
+let previewSource = null;
+let currentModalFiles = []; // 當前模態框顯示的檔案
+let currentSortColumn = null;
+let currentSortOrder = 'asc';
+let uploadedExcelInfo = null; // 儲存上傳的Excel資訊
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
-    // 綁定函數到 window
+    // 綁定所有函數到 window
+    bindWindowFunctions();
+    
+    // 初始化功能
+    initializeTabs();
+    initializeUploadAreas();
+    initializeConfigToggles();
+    initializePathInput();
+    updateDownloadButton();
+    
+    // 修正預設設定開關
+    const useDefaultConfig = document.getElementById('useDefaultConfig');
+    if (useDefaultConfig) {
+        useDefaultConfig.addEventListener('change', (e) => {
+            toggleSftpConfig(e.target.checked);
+        });
+        toggleSftpConfig(useDefaultConfig.checked);
+    }
+});
+
+// 綁定函數到 window
+function bindWindowFunctions() {
     window.selectSource = selectSource;
     window.switchTab = switchTab;
     window.toggleDepthControl = toggleDepthControl;
@@ -44,26 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.closeFilesModal = closeFilesModal;
     window.previewFileFromList = previewFileFromList;
     window.copyPreviewContent = copyPreviewContent;
-    window.fallbackCopyToClipboard = fallbackCopyToClipboard;    
+    window.searchModalContent = searchModalContent;
+    window.clearModalSearch = clearModalSearch;
+    window.sortModalTable = sortModalTable;
+}
 
-    // 初始化功能
-    initializeTabs();
-    initializeUploadAreas();
-    initializeConfigToggles();
-    initializePathInput();
-    updateDownloadButton();
-    
-    // 修正預設設定開關
-    const useDefaultConfig = document.getElementById('useDefaultConfig');
-    if (useDefaultConfig) {
-        useDefaultConfig.addEventListener('change', (e) => {
-            toggleSftpConfig(e.target.checked);
-        });
-        // 初始化狀態
-        toggleSftpConfig(useDefaultConfig.checked);
-    }
-});
-
+// 顯示檔案列表 - 增強版（加入搜尋和排序）
 function showFilesList(type) {
     let files = [];
     let title = '';
@@ -95,6 +106,10 @@ function showFilesList(type) {
             break;
     }
     
+    currentModalFiles = [...files]; // 保存原始資料供搜尋使用
+    currentSortColumn = null;
+    currentSortOrder = 'asc';
+    
     const modal = document.getElementById('filesListModal');
     const modalTitle = document.getElementById('filesModalTitle');
     const modalBody = document.getElementById('filesModalBody');
@@ -107,26 +122,45 @@ function showFilesList(type) {
     modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     modal.className = `modal ${modalClass}`;
     
-    // 生成檔案列表 HTML - 使用單一表格
-    if (files.length === 0) {
-        modalBody.innerHTML = '<div class="empty-message"><i class="fas fa-inbox fa-3x"></i><p>沒有檔案</p></div>';
-    } else {
-        let html = '';
+    // 生成檔案列表 HTML - 加入搜尋列
+    let html = '';
+    
+    if (files.length > 0) {
+        // 加入搜尋列
+        html += `
+            <div class="modal-search-bar">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" 
+                           class="search-input" 
+                           id="modalSearchInput" 
+                           placeholder="搜尋檔案名稱、路徑..."
+                           onkeyup="searchModalContent()">
+                </div>
+                <div class="search-stats">
+                    <i class="fas fa-filter"></i>
+                    <span>找到 <span class="highlight-count" id="searchResultCount">${files.length}</span> 筆</span>
+                </div>
+                <button class="btn-clear-search" onclick="clearModalSearch()">
+                    <i class="fas fa-times"></i> 清除
+                </button>
+            </div>
+        `;
         
-        // 主容器
+        // 表格容器
         html += '<div class="table-wrapper">';
+        html += '<div class="table-container">';
+        html += '<table class="modal-table" id="modalFilesTable">';
         
-        // 表頭容器
-        html += '<div class="table-header-wrapper">';
-        html += '<table class="files-table header-table">';
+        // 表頭（支援排序）
         html += '<thead><tr>';
-        html += '<th style="width: 60px">#</th>';
-        html += '<th style="min-width: 200px">檔案名稱</th>';
-        html += '<th style="min-width: 300px">FTP 路徑</th>';
-        html += '<th style="min-width: 300px">本地路徑</th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'index\')" style="width: 60px"># <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'name\')" style="min-width: 200px">檔案名稱 <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'ftp_path\')" style="min-width: 300px">FTP 路徑 <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'path\')" style="min-width: 300px">本地路徑 <span class="sort-indicator"></span></th>';
         
         if (type === 'total') {
-            html += '<th style="width: 100px">狀態</th>';
+            html += '<th class="sortable" onclick="sortModalTable(\'status\')" style="width: 100px">狀態 <span class="sort-indicator"></span></th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
@@ -135,84 +169,221 @@ function showFilesList(type) {
         
         html += '<th style="width: 80px">操作</th>';
         html += '</tr></thead>';
-        html += '</table>';
-        html += '</div>'; // 結束 table-header-wrapper
         
-        // 表身容器
-        html += '<div class="table-body-container" style="flex: 1; overflow: hidden; position: relative;">';
-        html += '<div class="table-body-wrapper">';
-        html += '<table class="files-table body-table">';
-        
-        // 添加隱藏的表頭以保持列寬一致
-        html += '<thead style="visibility: hidden; height: 0;"><tr>';
-        html += '<th style="width: 60px; padding: 0; height: 0;"></th>';
-        html += '<th style="min-width: 200px; padding: 0; height: 0;"></th>';
-        html += '<th style="min-width: 300px; padding: 0; height: 0;"></th>';
-        html += '<th style="min-width: 300px; padding: 0; height: 0;"></th>';
-        
-        if (type === 'total') {
-            html += '<th style="width: 100px; padding: 0; height: 0;"></th>';
-        }
-        
-        if (type === 'skipped' || type === 'failed') {
-            html += '<th style="min-width: 200px; padding: 0; height: 0;"></th>';
-        }
-        
-        html += '<th style="width: 80px; padding: 0; height: 0;"></th>';
-        html += '</tr></thead>';
-        
-        html += '<tbody>';
-        
-        files.forEach((file, index) => {
-            html += '<tr>';
-            html += `<td class="index-cell">${index + 1}</td>`;
-            html += `<td class="file-name-cell">
-                        <i class="fas fa-file-alt"></i> ${file.name}
-                     </td>`;
-            html += `<td class="file-path-cell" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
-            html += `<td class="file-path-cell" title="${file.path || '-'}">${file.path || '-'}</td>`;
-            
-            if (type === 'total') {
-                const statusClass = file.status === 'downloaded' ? 'success' : 
-                                  file.status === 'skipped' ? 'info' : 'danger';
-                const statusText = file.status === 'downloaded' ? '已下載' : 
-                                 file.status === 'skipped' ? '已跳過' : '失敗';
-                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
-            }
-            
-            if (type === 'skipped' || type === 'failed') {
-                html += `<td>${file.reason || '-'}</td>`;
-            }
-            
-            html += '<td class="action-cell">';
-            if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
-                const cleanPath = file.path.replace(/\\/g, '/');
-                html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
-                            <i class="fas fa-eye"></i>
-                         </button>`;
-            }
-            html += '</td>';
-            html += '</tr>';
-        });
-        
+        html += '<tbody id="modalTableBody">';
+        html += generateModalTableRows(files, type);
         html += '</tbody>';
-        html += '</table>';
-        html += '</div>'; // 結束 table-body-wrapper
-        html += '</div>'; // 結束 table-wrapper
-        html += '</div>'; // 結束 table-body-container
         
-        // 統計摘要
+        html += '</table>';
+        html += '</div>'; // table-container
+        html += '</div>'; // table-wrapper
+        
+        // 表格底部統計
         html += `
             <div class="table-footer">
-                <i class="fas fa-chart-bar"></i>
-                共 ${files.length} 個檔案
+                <div class="table-footer-stats">
+                    <div class="footer-stat">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>共 <span class="footer-stat-value">${files.length}</span> 個檔案</span>
+                    </div>
+                </div>
             </div>
         `;
-        
-        modalBody.innerHTML = html
+    } else {
+        html = '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有檔案</p></div>';
     }
     
+    modalBody.innerHTML = html;
     modal.classList.remove('hidden');
+}
+
+// 排序表格
+function sortModalTable(column) {
+    const tbody = document.getElementById('modalTableBody');
+    if (!tbody) return;
+    
+    // 切換排序順序
+    if (currentSortColumn === column) {
+        currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortColumn = column;
+        currentSortOrder = 'asc';
+    }
+    
+    // 獲取所有行
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // 排序
+    rows.sort((a, b) => {
+        let aValue, bValue;
+        
+        switch(column) {
+            case 'index':
+                aValue = parseInt(a.querySelector('.index-cell').textContent);
+                bValue = parseInt(b.querySelector('.index-cell').textContent);
+                break;
+            case 'name':
+                aValue = a.querySelector('.file-name-cell .searchable').textContent.toLowerCase();
+                bValue = b.querySelector('.file-name-cell .searchable').textContent.toLowerCase();
+                break;
+            case 'ftp_path':
+                aValue = a.querySelectorAll('.file-path-cell')[0].textContent.toLowerCase();
+                bValue = b.querySelectorAll('.file-path-cell')[0].textContent.toLowerCase();
+                break;
+            case 'path':
+                aValue = a.querySelectorAll('.file-path-cell')[1].textContent.toLowerCase();
+                bValue = b.querySelectorAll('.file-path-cell')[1].textContent.toLowerCase();
+                break;
+            case 'status':
+                const statusA = a.querySelector('.status-badge');
+                const statusB = b.querySelector('.status-badge');
+                aValue = statusA ? statusA.textContent : '';
+                bValue = statusB ? statusB.textContent : '';
+                break;
+            default:
+                return 0;
+        }
+        
+        if (currentSortOrder === 'asc') {
+            return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        } else {
+            return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+        }
+    });
+    
+    // 重新排列
+    tbody.innerHTML = '';
+    rows.forEach(row => tbody.appendChild(row));
+    
+    // 更新排序指示器
+    updateSortIndicators(column);
+}
+
+// 更新排序指示器
+function updateSortIndicators(column) {
+    const headers = document.querySelectorAll('.modal-table th.sortable');
+    headers.forEach(header => {
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    const currentHeader = Array.from(headers).find(h => 
+        h.getAttribute('onclick').includes(`'${column}'`)
+    );
+    
+    if (currentHeader) {
+        currentHeader.classList.add(currentSortOrder === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+}
+
+// 清除搜尋
+function clearModalSearch() {
+    const searchInput = document.getElementById('modalSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        searchModalContent();
+    }
+}
+
+// 搜尋模態框內容
+function searchModalContent() {
+    const searchInput = document.getElementById('modalSearchInput');
+    const searchTerm = searchInput.value.toLowerCase();
+    const tbody = document.getElementById('modalTableBody');
+    const resultCount = document.getElementById('searchResultCount');
+    
+    if (!tbody) return;
+    
+    // 先清除所有高亮
+    tbody.querySelectorAll('.highlight').forEach(el => {
+        const parent = el.parentNode;
+        parent.innerHTML = parent.textContent;
+    });
+    
+    let visibleCount = 0;
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach(row => {
+        const searchableElements = row.querySelectorAll('.searchable');
+        let matchFound = false;
+        
+        if (searchTerm === '') {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            searchableElements.forEach(element => {
+                const text = (element.textContent || '').toLowerCase();
+                if (text.includes(searchTerm)) {
+                    matchFound = true;
+                    // 高亮匹配的文字
+                    highlightText(element, searchTerm);
+                }
+            });
+            
+            row.style.display = matchFound ? '' : 'none';
+            if (matchFound) visibleCount++;
+        }
+    });
+    
+    // 更新結果數量
+    if (resultCount) {
+        resultCount.textContent = visibleCount;
+    }
+}
+
+// 高亮文字
+function highlightText(element, searchTerm) {
+    const text = element.textContent;
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    const highlightedText = text.replace(regex, '<span class="highlight">$1</span>');
+    element.innerHTML = highlightedText;
+}
+
+// 生成表格行
+function generateModalTableRows(files, type) {
+    let html = '';
+    
+    files.forEach((file, index) => {
+        const rowHtml = generateModalTableRow(file, index + 1, type);
+        html += rowHtml;
+    });
+    
+    return html;
+}
+
+// 生成單行
+function generateModalTableRow(file, index, type) {
+    let html = '<tr>';
+    html += `<td class="index-cell">${index}</td>`;
+    html += `<td class="file-name-cell">
+                <i class="fas fa-file-alt"></i> 
+                <span class="searchable">${file.name || ''}</span>
+             </td>`;
+    html += `<td class="file-path-cell searchable" title="${file.ftp_path || '-'}">${file.ftp_path || '-'}</td>`;
+    html += `<td class="file-path-cell searchable" title="${file.path || '-'}">${file.path || '-'}</td>`;
+    
+    if (type === 'total') {
+        const statusClass = file.status === 'downloaded' ? 'success' : 
+                          file.status === 'skipped' ? 'info' : 'danger';
+        const statusText = file.status === 'downloaded' ? '已下載' : 
+                         file.status === 'skipped' ? '已跳過' : '失敗';
+        html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+    }
+    
+    if (type === 'skipped' || type === 'failed') {
+        html += `<td>${file.reason || '-'}</td>`;
+    }
+    
+    html += '<td class="action-cell">';
+    if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
+        const cleanPath = file.path.replace(/\\/g, '/');
+        html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
+                    <i class="fas fa-eye"></i>
+                 </button>`;
+    }
+    html += '</td>';
+    html += '</tr>';
+    
+    return html;
 }
 
 // 定義 previewFileFromList 函數
@@ -256,7 +427,7 @@ function fallbackCopyToClipboard(text) {
     }
 }
 
-// 先定義 closeFilesModal 函數
+// 關閉檔案列表模態框
 function closeFilesModal() {
     const modal = document.getElementById('filesListModal');
     if (modal) {
@@ -366,9 +537,8 @@ function setupDragDrop(element, handler) {
     });
 }
 
-// 處理本地檔案
+// 處理本地檔案 - 增強版（記錄Excel資訊）
 function handleLocalFiles(files) {
-    // 過濾支援的檔案格式
     const supportedFiles = files.filter(f => 
         f.name.endsWith('.xlsx') || 
         f.name.endsWith('.xls') || 
@@ -380,8 +550,17 @@ function handleLocalFiles(files) {
         return;
     }
     
-    localSelectedFiles = supportedFiles;  // 儲存到本地選擇
-    selectedFiles = supportedFiles;       // 更新當前選擇
+    localSelectedFiles = supportedFiles;
+    selectedFiles = supportedFiles;
+    
+    // 記錄Excel資訊（第一個檔案）
+    if (supportedFiles.length > 0) {
+        uploadedExcelInfo = {
+            file: supportedFiles[0],
+            originalName: supportedFiles[0].name
+        };
+    }
+    
     displayLocalFiles();
     updateSelectedHint();
     updateDownloadButton();
@@ -1039,9 +1218,8 @@ function getSftpConfig() {
     return config;
 }
 
-// 修正開始下載函數
+// 開始下載 - 增強版（處理Excel改名）
 async function startDownload() {
-    // 根據當前標籤決定使用哪些檔案
     const currentFiles = selectedSource === 'local' ? localSelectedFiles : serverSelectedFiles;
     
     if (currentFiles.length === 0) {
@@ -1050,17 +1228,13 @@ async function startDownload() {
     }
     
     try {
-        // 取得 SFTP 設定
         const sftpConfig = getSftpConfig();
         
-        // 隱藏表單，顯示進度
         document.getElementById('downloadForm').classList.add('hidden');
         document.getElementById('downloadProgress').classList.remove('hidden');
         
-        // 清除之前的日誌
         clearLog();
         
-        // 準備請求數據
         let requestData = {
             sftp_config: sftpConfig,
             options: {
@@ -1073,22 +1247,29 @@ async function startDownload() {
         
         // 處理檔案來源
         if (selectedSource === 'local') {
-            // 本地檔案模式 - 上傳檔案
-            const file = localSelectedFiles[0]; // 只處理第一個檔案
-            
-            // 根據檔案類型顯示不同的訊息
+            const file = localSelectedFiles[0];
             const fileType = file.name.endsWith('.csv') ? 'CSV' : 'Excel';
             addLog(`正在上傳 ${fileType} 檔案...`, 'info');
             
             try {
-                const uploadResult = await utils.uploadFile(file);
+                // 上傳檔案並檢查欄位
+                const uploadResult = await uploadFileAndCheckColumns(file);
                 
-                // 檢查返回的數據結構
                 if (!uploadResult.filepath) {
                     throw new Error('上傳檔案失敗：返回數據格式錯誤');
                 }
                 
                 requestData.excel_file = uploadResult.filepath;
+                
+                // 如果有特定欄位，加入請求中
+                if (uploadResult.hasSpecialColumns) {
+                    requestData.excel_metadata = {
+                        has_sftp_columns: true,
+                        original_name: file.name,
+                        root_folder: uploadResult.rootFolder
+                    };
+                }
+                
                 addLog(`檔案 ${file.name} 上傳成功`, 'success');
                 
             } catch (error) {
@@ -1098,7 +1279,6 @@ async function startDownload() {
                 return;
             }
         } else {
-            // 伺服器檔案模式
             const validFile = serverSelectedFiles.find(f => 
                 f.name.endsWith('.xlsx') || 
                 f.name.endsWith('.xls') || 
@@ -1113,14 +1293,12 @@ async function startDownload() {
             
             requestData.excel_file = validFile.path;
             
-            // 根據檔案類型顯示不同的訊息
             const fileType = validFile.name.endsWith('.csv') ? 'CSV' : 'Excel';
             addLog(`使用伺服器 ${fileType} 檔案: ${validFile.name}`, 'info');
         }
         
         addLog('正在初始化下載任務...', 'info');
         
-        // 發送下載請求
         const response = await utils.apiRequest('/api/download', {
             method: 'POST',
             body: JSON.stringify(requestData)
@@ -1135,15 +1313,11 @@ async function startDownload() {
         addLog(`任務 ID: ${downloadTaskId}`, 'info');
         addLog('開始下載檔案...', 'downloading');
         
-        // 如果有 socket 連接，加入任務房間
         if (window.socket && socket.connected) {
             socket.emit('join_task', { task_id: downloadTaskId });
         }
         
-        // 監聽進度更新
         document.addEventListener('task-progress', handleDownloadProgress);
-        
-        // 開始輪詢狀態
         pollDownloadStatus();
         
     } catch (error) {
@@ -1151,6 +1325,35 @@ async function startDownload() {
         addLog(`下載失敗: ${error.message}`, 'error');
         utils.showNotification(error.message || '下載失敗', 'error');
         resetDownloadForm();
+    }
+}
+
+// 上傳檔案並檢查欄位
+async function uploadFileAndCheckColumns(file) {
+    // 先上傳檔案
+    const uploadResult = await utils.uploadFile(file);
+    
+    // 檢查Excel欄位
+    try {
+        const checkResponse = await utils.apiRequest('/api/check-excel-columns', {
+            method: 'POST',
+            body: JSON.stringify({
+                filepath: uploadResult.filepath
+            })
+        });
+        
+        return {
+            filepath: uploadResult.filepath,
+            hasSpecialColumns: checkResponse.has_sftp_columns,
+            rootFolder: checkResponse.root_folder
+        };
+    } catch (error) {
+        // 如果檢查失敗，仍然返回上傳結果
+        return {
+            filepath: uploadResult.filepath,
+            hasSpecialColumns: false,
+            rootFolder: null
+        };
     }
 }
 
@@ -1334,7 +1537,7 @@ function clearLog() {
     }
 }
 
-// 顯示下載結果
+// 顯示下載結果 - 增強版（處理Excel複製）
 function showDownloadResults(results) {
     const downloadProgress = document.getElementById('downloadProgress');
     const downloadResults = document.getElementById('downloadResults');
@@ -1345,9 +1548,12 @@ function showDownloadResults(results) {
     
     if (downloadResults) {
         downloadResults.classList.remove('hidden');
-    } else {
-        console.error('downloadResults element not found');
-        return;
+    }
+    
+    // 檢查是否需要複製和改名Excel檔案
+    if (results.excel_copied) {
+        addLog(`Excel檔案已複製並改名為: ${results.excel_new_name}`, 'success');
+        utils.showNotification(`Excel檔案已另存為: ${results.excel_new_name}`, 'success');
     }
     
     // 確保檔案列表資料被保存
@@ -1357,9 +1563,20 @@ function showDownloadResults(results) {
         failedFilesList = results.files.failed || [];
     }
     
-    // 生成摘要 - 使用與進度統計相同的結構
+    // 生成摘要
     const stats = results.stats || {};
-    const summary = `
+    const summary = generateResultSummary(stats);
+    document.getElementById('resultSummary').innerHTML = summary;
+    
+    // 生成資料夾樹
+    if (results.folder_structure) {
+        generateFolderTree(results.folder_structure);
+    }
+}
+
+// 生成結果摘要
+function generateResultSummary(stats) {
+    return `
         <div class="progress-stats">
             <div class="stat-card blue" onclick="showFilesList('total')" title="點擊查看所有檔案">
                 <div class="stat-icon">
@@ -1402,19 +1619,11 @@ function showDownloadResults(results) {
             </div>
         </div>
         
-        <!-- 提示文字也保持一致 -->
         <div class="stats-hint">
             <i class="fas fa-info-circle"></i>
-            <span>提示：點擊上方統計卡片可查看詳細的檔案列表</span>
+            <span>提示：點擊上方統計卡片可查看詳細的檔案列表（支援搜尋和排序）</span>
         </div>
     `;
-    
-    document.getElementById('resultSummary').innerHTML = summary;
-    
-    // 生成資料夾樹
-    if (results.folder_structure) {
-        generateFolderTree(results.folder_structure);
-    }
 }
 
 // 生成資料夾樹 - 改善顏色配色

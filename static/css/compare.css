@@ -2028,7 +2028,7 @@ input.path-input::-webkit-contacts-auto-fill-button {
     padding: 6px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
+    /* border-radius: var(--radius-lg);*/
     margin-bottom: 24px;
 }
 

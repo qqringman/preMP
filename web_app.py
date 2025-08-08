@@ -22,6 +22,7 @@ import utils
 import openpyxl
 from copy import copy
 import io
+from excel_handler import ExcelHandler
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -37,6 +38,12 @@ app.register_blueprint(admin_bp)
 
 # 初始化 SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 初始化 Excel 處理器（在 app 初始化後）
+excel_handler = ExcelHandler()
+
+# 儲存上傳檔案的元資料
+uploaded_excel_metadata = {}
 
 # 確保必要的目錄存在
 for folder in ['uploads', 'downloads', 'compare_results', 'zip_output', 'logs']:
@@ -193,7 +200,7 @@ class WebProcessor:
             raise
             
     def process_download(self, excel_file, sftp_config, options):
-        """執行下載處理"""
+        """執行下載處理 - 包含 Excel 檔案複製改名功能"""
         try:
             self.update_progress(10, 'downloading', '正在連接 SFTP 伺服器...')
             
@@ -207,15 +214,14 @@ class WebProcessor:
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            # 設定進度回調，確保正確傳遞所有參數
+            # 設定進度回調
             def progress_callback(progress, status, message, stats=None, files=None):
-                # 確保統計資料完整
                 if stats:
                     self.update_progress(
-                        int(progress),  # 不再調整進度
+                        int(progress),
                         status, 
                         message, 
-                        stats=stats,  # 直接傳遞統計
+                        stats=stats,
                         files=files
                     )
                 else:
@@ -239,6 +245,9 @@ class WebProcessor:
                 stats = download_data['stats']
                 files = download_data['files']
                 
+                # ===== 新增：處理 Excel 檔案複製改名 =====
+                excel_result = self._handle_excel_copy_rename(excel_file, download_dir)
+                
                 # 生成資料夾結構
                 folder_structure = self._generate_folder_structure(download_dir, report_path)
                 
@@ -248,6 +257,14 @@ class WebProcessor:
                 self.results['files'] = files
                 self.results['folder_structure'] = folder_structure
                 
+                # 如果有 Excel 複製結果，加入到結果中
+                if excel_result['excel_copied']:
+                    self.results['excel_copied'] = True
+                    self.results['excel_new_name'] = excel_result['excel_new_name']
+                    # 加入到日誌
+                    self.update_progress(95, 'downloading', 
+                        f'Excel 檔案已另存為: {excel_result["excel_new_name"]}')
+                
                 # 確保最終統計正確
                 self.update_progress(100, 'completed', '下載完成！', stats, files)
                 add_activity('下載 SFTP 檔案', 'success', 
@@ -255,10 +272,9 @@ class WebProcessor:
                 
             except Exception as e:
                 error_msg = str(e)
-                # 獲取當前統計
                 current_stats = self.downloader.get_download_stats()
                 self.update_progress(0, 'error', f'下載失敗：{error_msg}', 
-                                   stats=current_stats['stats'])
+                                stats=current_stats['stats'])
                 add_activity('下載失敗', 'error', error_msg)
                 raise
                 
@@ -268,6 +284,53 @@ class WebProcessor:
             add_activity('下載失敗', 'error', error_msg)
             raise
 
+    def _handle_excel_copy_rename(self, excel_file, download_dir):
+        """
+        處理 Excel 檔案的複製和改名
+        
+        Args:
+            excel_file: Excel 檔案路徑
+            download_dir: 下載目錄
+            
+        Returns:
+            處理結果字典
+        """
+        result = {
+            'excel_copied': False,
+            'excel_new_name': None
+        }
+        
+        try:
+            # 從全域變數獲取 Excel 元資料
+            global uploaded_excel_metadata, excel_handler
+            
+            if excel_file in uploaded_excel_metadata:
+                excel_metadata = uploaded_excel_metadata[excel_file]
+                
+                # 使用 ExcelHandler 處理
+                process_result = excel_handler.process_download_complete(
+                    self.task_id,
+                    download_dir,
+                    excel_metadata
+                )
+                
+                result.update(process_result)
+                
+                if result['excel_copied']:
+                    self.logger.info(f"Excel 檔案已複製並改名: {result['excel_new_name']}")
+                    
+                    # 加入活動記錄
+                    add_activity('Excel 檔案處理', 'success', 
+                            f"檔案已另存為: {result['excel_new_name']}")
+            else:
+                self.logger.info(f"沒有找到 Excel 元資料: {excel_file}")
+                
+        except Exception as e:
+            self.logger.error(f"處理 Excel 檔案時發生錯誤: {str(e)}")
+            # 不要因為 Excel 處理失敗而中斷整個下載流程
+            
+        return result
+        
     def _generate_simple_folder_structure(self, download_dir):
         """生成簡單的資料夾結構"""
         structure = {}
@@ -597,7 +660,7 @@ def results_page(task_id):
 # API 端點
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    """上傳檔案 API - 支援 Excel 和 CSV"""
+    """上傳檔案 API - 支援 Excel 和 CSV，並檢查欄位"""
     if 'file' not in request.files:
         return jsonify({'error': '沒有檔案'}), 400
         
@@ -620,13 +683,33 @@ def upload_file():
         
         file.save(filepath)
         
-        # 記錄上傳資訊
-        app.logger.info(f'File uploaded: {filename} (type: {file_ext})')
+        # 檢查 Excel 欄位
+        excel_metadata = {
+            'original_name': file.filename,
+            'filepath': filepath,
+            'has_sftp_columns': False,
+            'root_folder': None
+        }
+        
+        # 如果是 Excel 或 CSV 檔案，檢查欄位
+        if file_ext in ['.xlsx', '.xls', '.csv']:
+            try:
+                check_result = excel_handler.check_excel_columns(filepath)
+                excel_metadata.update(check_result)
+                app.logger.info(f"Excel 欄位檢查結果: {check_result}")
+            except Exception as e:
+                app.logger.warning(f"檢查 Excel 欄位時發生錯誤: {str(e)}")
+        
+        # 儲存元資料（用於下載完成後處理）
+        uploaded_excel_metadata[filepath] = excel_metadata
+        
+        app.logger.info(f'檔案上傳: {filename} (類型: {file_ext})')
         
         return jsonify({
             'filename': filename, 
             'filepath': filepath,
-            'file_type': file_ext[1:]  # 返回檔案類型（不含點）
+            'file_type': file_ext[1:],
+            'excel_metadata': excel_metadata  # 返回欄位檢查結果
         })
     
     return jsonify({
@@ -676,7 +759,7 @@ def process_one_step():
 
 @app.route('/api/download', methods=['POST'])
 def process_download():
-    """下載處理 API"""
+    """下載處理 API - 包含 Excel 元資料處理"""
     try:
         data = request.json
         
@@ -688,11 +771,17 @@ def process_download():
         sftp_config = data.get('sftp_config', {})
         options = data.get('options', {})
         
-        # 處理伺服器檔案（如果有）
-        server_files = data.get('server_files', [])
+        # 獲取 Excel 元資料（從前端傳來或從全域變數取得）
+        excel_metadata = data.get('excel_metadata')
+        if not excel_metadata and excel_file in uploaded_excel_metadata:
+            excel_metadata = uploaded_excel_metadata[excel_file]
         
         # 生成任務 ID
         task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+        
+        # 如果有元資料，儲存到全域變數中
+        if excel_metadata:
+            uploaded_excel_metadata[excel_file] = excel_metadata
         
         # 在背景執行處理
         processor = WebProcessor(task_id)
@@ -2456,6 +2545,66 @@ def export_excel_single_sheet(task_id, sheet_name):
         app.logger.error(f"匯出單一資料表錯誤: {str(e)}")
         import traceback
         app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/check-excel-columns', methods=['POST'])
+def check_excel_columns():
+    """檢查 Excel 檔案的欄位"""
+    try:
+        data = request.json
+        filepath = data.get('filepath')
+        
+        if not filepath or not os.path.exists(filepath):
+            return jsonify({'error': '檔案不存在'}), 404
+        
+        # 使用 ExcelHandler 檢查欄位
+        result = excel_handler.check_excel_columns(filepath)
+        
+        app.logger.info(f"檢查 Excel 欄位結果: {result}")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        app.logger.error(f"檢查 Excel 欄位失敗: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-complete/<task_id>', methods=['POST'])
+def handle_download_complete(task_id):
+    """處理下載完成事件 - 用於手動觸發 Excel 檔案處理"""
+    try:
+        data = request.json
+        excel_file = data.get('excel_file')
+        
+        # 獲取下載資料夾路徑
+        download_folder = os.path.join('downloads', task_id)
+        
+        if not os.path.exists(download_folder):
+            return jsonify({'error': '下載資料夾不存在'}), 404
+        
+        # 獲取 Excel 元資料
+        excel_metadata = uploaded_excel_metadata.get(excel_file)
+        
+        if not excel_metadata:
+            return jsonify({
+                'excel_copied': False,
+                'message': '沒有 Excel 元資料'
+            })
+        
+        # 處理 Excel 檔案
+        excel_result = excel_handler.process_download_complete(
+            task_id,
+            download_folder,
+            excel_metadata
+        )
+        
+        # 更新任務結果
+        if task_id in processing_status:
+            processing_status[task_id]['results'].update(excel_result)
+        
+        return jsonify(excel_result)
+        
+    except Exception as e:
+        app.logger.error(f"處理下載完成事件失敗: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

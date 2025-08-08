@@ -1,10 +1,12 @@
 """
 Excel 處理模組
 處理所有 Excel 和 CSV 檔案的讀寫操作
+包含檢查欄位和複製改名功能
 """
 import os
+import shutil
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill, Font, Alignment
@@ -109,6 +111,173 @@ class ExcelHandler:
         except Exception as e:
             self.logger.error(f"讀取檔案失敗: {file_path}, 錯誤: {str(e)}")
             raise
+    
+    def check_excel_columns(self, file_path: str) -> Dict[str, Any]:
+        """
+        檢查 Excel 檔案的欄位
+        
+        Args:
+            file_path: Excel 檔案路徑
+            
+        Returns:
+            包含檢查結果的字典
+        """
+        try:
+            # 讀取檔案
+            df = self.read_excel(file_path)
+            
+            # 檢查是否有 SftpPath 和 compare_SftpPath 欄位
+            has_sftp_columns = ('SftpPath' in df.columns and 
+                               'compare_SftpPath' in df.columns)
+            
+            # 檢查 RootFolder 欄位
+            root_folder = None
+            if 'RootFolder' in df.columns:
+                # 取得第一個非空的 RootFolder 值
+                root_folder_values = df['RootFolder'].dropna()
+                if not root_folder_values.empty:
+                    root_folder = str(root_folder_values.iloc[0])
+            
+            self.logger.info(f"檢查 Excel 欄位: has_sftp_columns={has_sftp_columns}, root_folder={root_folder}")
+            
+            return {
+                'has_sftp_columns': has_sftp_columns,
+                'root_folder': root_folder,
+                'columns': df.columns.tolist()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"檢查 Excel 欄位失敗: {str(e)}")
+            return {
+                'has_sftp_columns': False,
+                'root_folder': None,
+                'error': str(e)
+            }
+    
+    def copy_and_rename_excel(self, 
+                            original_path: str, 
+                            download_folder: str,
+                            original_name: str,
+                            root_folder: Optional[str]) -> Optional[str]:
+        """
+        複製並改名 Excel 檔案到下載資料夾
+        
+        Args:
+            original_path: 原始 Excel 檔案路徑
+            download_folder: 下載資料夾路徑
+            original_name: 原始檔案名稱
+            root_folder: RootFolder 欄位值
+            
+        Returns:
+            新檔案名稱，如果複製失敗則返回 None
+        """
+        try:
+            # 決定新檔案名稱
+            new_name = self._determine_new_name(original_name, root_folder)
+            
+            if not new_name:
+                self.logger.info(f"不需要改名: root_folder={root_folder}")
+                return None
+            
+            # 確保下載資料夾存在
+            if not os.path.exists(download_folder):
+                os.makedirs(download_folder, exist_ok=True)
+            
+            # 建立目標路徑
+            target_path = os.path.join(download_folder, new_name)
+            
+            # 複製檔案
+            shutil.copy2(original_path, target_path)
+            
+            self.logger.info(f"Excel 檔案已複製並改名: {original_name} -> {new_name}")
+            self.logger.info(f"目標路徑: {target_path}")
+            
+            return new_name
+            
+        except Exception as e:
+            self.logger.error(f"複製 Excel 檔案失敗: {str(e)}")
+            return None
+    
+    def _determine_new_name(self, original_name: str, root_folder: Optional[str]) -> Optional[str]:
+        """
+        根據規則決定新檔案名稱
+        
+        Args:
+            original_name: 原始檔案名稱
+            root_folder: RootFolder 欄位值
+            
+        Returns:
+            新檔案名稱
+        """
+        if not root_folder:
+            return None
+        
+        # 將 root_folder 轉換為字串並處理
+        root_folder_str = str(root_folder).strip()
+        
+        # 處理不同的 RootFolder 值
+        if root_folder_str == 'DailyBuild':
+            return 'DailyBuild_mapping.xlsx'
+        elif root_folder_str == '/DailyBuild/PrebuildFW':
+            return 'PrebuildFW_mapping.xlsx'
+        elif root_folder_str == 'PrebuildFW':
+            return 'PrebuildFW_mapping.xlsx'
+        
+        # 如果不符合任何規則，返回 None
+        return None
+    
+    def process_download_complete(self, 
+                                task_id: str,
+                                download_folder: str,
+                                excel_metadata: Optional[Dict]) -> Dict:
+        """
+        下載完成後處理 Excel 檔案
+        
+        Args:
+            task_id: 任務 ID
+            download_folder: 下載資料夾路徑
+            excel_metadata: Excel 檔案的元資料
+            
+        Returns:
+            處理結果
+        """
+        result = {
+            'excel_copied': False,
+            'excel_new_name': None
+        }
+        
+        if not excel_metadata:
+            self.logger.info("沒有 Excel 元資料，跳過處理")
+            return result
+        
+        # 檢查是否需要複製和改名
+        if excel_metadata.get('has_sftp_columns'):
+            original_path = excel_metadata.get('filepath')
+            original_name = excel_metadata.get('original_name')
+            root_folder = excel_metadata.get('root_folder')
+            
+            self.logger.info(f"處理下載完成: has_sftp_columns=True, root_folder={root_folder}")
+            
+            if original_path and os.path.exists(original_path):
+                new_name = self.copy_and_rename_excel(
+                    original_path,
+                    download_folder,
+                    original_name,
+                    root_folder
+                )
+                
+                if new_name:
+                    result['excel_copied'] = True
+                    result['excel_new_name'] = new_name
+                    self.logger.info(f"Excel 檔案處理完成: {new_name}")
+                else:
+                    self.logger.info("Excel 檔案不需要改名")
+            else:
+                self.logger.warning(f"原始檔案不存在: {original_path}")
+        else:
+            self.logger.info("Excel 檔案沒有必要的欄位，跳過處理")
+        
+        return result
             
     def write_download_report(self, data: List[Dict[str, Any]], output_path: str, source_filename: str) -> str:
         """
