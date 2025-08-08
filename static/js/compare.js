@@ -511,7 +511,7 @@ function getScenarioInfo(scenario) {
 // 如果後端沒有儲存歷史記錄的 API，可以在前端暫存
 let completedTasks = [];
 
-// 顯示比對結果
+// 修改 showCompareResults 函數，儲存失敗模組資訊
 function showCompareResults(results) {
     document.getElementById('compareProgress').classList.add('hidden');
     document.getElementById('compareResults').classList.remove('hidden');
@@ -519,6 +519,28 @@ function showCompareResults(results) {
     // 確保 results 中有 task_id
     if (results.task_id) {
         currentTaskId = results.task_id;
+    }
+    
+    // 儲存失敗模組資訊到全域變數
+    if (results.compare_results) {
+        let failedModulesList = [];
+        
+        Object.entries(results.compare_results).forEach(([scenario, data]) => {
+            if (data && data.failed_modules && Array.isArray(data.failed_modules)) {
+                data.failed_modules.forEach(module => {
+                    failedModulesList.push({
+                        module: module,
+                        scenario: getScenarioDisplayName(scenario)
+                    });
+                });
+            }
+        });
+        
+        // 儲存到全域變數
+        if (!window.taskFailedModules) {
+            window.taskFailedModules = {};
+        }
+        window.taskFailedModules[currentTaskId] = failedModulesList;
     }
     
     // 生成結果摘要
@@ -731,11 +753,31 @@ async function loadRecentComparisons() {
     }
 }
 
-// 生成比對結果摘要 - 使用與下載頁面相同的樣式
+// 修改生成結果摘要，確保失敗統計正確
 function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
     
-    // 使用與下載頁面相同的 progress-stats 結構
+    // 計算總失敗數
+    let totalFailed = 0;
+    let failedModulesList = [];
+    
+    Object.values(compareResults).forEach(data => {
+        if (typeof data === 'object') {
+            totalFailed += data.failed || 0;
+            if (data.failed_modules && Array.isArray(data.failed_modules)) {
+                failedModulesList = failedModulesList.concat(data.failed_modules);
+            }
+        }
+    });
+    
+    // 儲存失敗的模組列表供後續使用
+    if (currentTaskId) {
+        if (!window.taskFailedModules) {
+            window.taskFailedModules = {};
+        }
+        window.taskFailedModules[currentTaskId] = failedModulesList;
+    }
+    
     let html = '<div class="progress-stats">';
     
     // Master vs PreMP
@@ -756,22 +798,12 @@ function generateCompareResultsSummary(results) {
         html += createStatCard('wave_vs_backup', 'Wave vs Backup', data.success || 0, 'warning', 'fa-database');
     }
     
-    // 計算總失敗數
-    const totalFailed = Object.values(compareResults).reduce((sum, data) => {
-        if (typeof data === 'object' && data.failed) {
-            return sum + data.failed;
-        }
-        return sum;
-    }, 0);
-    
-    // 失敗的模組
+    // 失敗的模組 - 只有當確實有失敗時才顯示
     if (totalFailed > 0) {
         html += createStatCard('failed', '無法比對', totalFailed, 'danger', 'fa-exclamation-triangle');
     }
     
     html += '</div>';
-    
-    // 移除提示文字部分
     
     return html;
 }
@@ -808,7 +840,7 @@ function createSummaryCard(title, data, icon) {
     `;
 }
 
-// 顯示比對詳細資料 - 增強版
+// 顯示比對詳細資料 - 修正版
 async function showCompareDetails(type) {
     if (!currentTaskId) {
         utils.showNotification('無法取得任務資訊', 'error');
@@ -816,6 +848,14 @@ async function showCompareDetails(type) {
     }
     
     try {
+        // 如果是 'failed' 類型，需要特別處理
+        if (type === 'failed') {
+            // 從 API 獲取失敗的模組資料
+            await showFailedModulesModal();
+            return;
+        }
+        
+        // 其他類型的正常處理
         const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
         
         let modalTitle = '';
@@ -847,16 +887,15 @@ async function showCompareDetails(type) {
                     { name: 'wave_backup_diff', title: '差異比對' }
                 ];
                 break;
-            case 'failed':
-                modalTitle = '無法比對的模組';
-                modalClass = 'danger';
-                relevantSheets = [
-                    { name: '無法比對', title: '無法比對的模組' }
-                ];
-                break;
         }
         
         const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
+        
+        if (availableSheets.length === 0) {
+            // 如果沒有資料，顯示空資料提示
+            showEmptyModal(modalTitle, modalClass);
+            return;
+        }
         
         currentModalData = { pivotData, sheets: availableSheets, title: modalTitle, modalClass };
         showCompareModal(pivotData, availableSheets, modalTitle, modalClass);
@@ -864,6 +903,321 @@ async function showCompareDetails(type) {
     } catch (error) {
         console.error('Show compare details error:', error);
         utils.showNotification('無法載入詳細資料', 'error');
+    }
+}
+
+// 修正：顯示失敗模組的模態框
+async function showFailedModulesModal() {
+    try {
+        // 方法1: 先嘗試從 pivot data API 獲取「無法比對」資料表
+        const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
+        
+        if (pivotData && pivotData['無法比對']) {
+            const failedData = pivotData['無法比對'];
+            displayFailedModulesModal(failedData.data || []);
+            return;
+        }
+        
+        // 方法2: 從任務狀態 API 獲取失敗模組資訊
+        const statusData = await utils.apiRequest(`/api/status/${currentTaskId}`);
+        
+        if (statusData && statusData.results && statusData.results.compare_results) {
+            const compareResults = statusData.results.compare_results;
+            
+            // 收集所有失敗的模組
+            let failedModules = [];
+            let sn = 1;
+            
+            for (const [scenario, data] of Object.entries(compareResults)) {
+                if (data && data.failed_modules && Array.isArray(data.failed_modules)) {
+                    data.failed_modules.forEach(module => {
+                        failedModules.push({
+                            SN: sn++,
+                            module: typeof module === 'string' ? module : (module.name || module.module || '未知'),
+                            scenario: getScenarioDisplayName(scenario),
+                            reason: typeof module === 'object' ? (module.reason || '無法比對') : '無法比對'
+                        });
+                    });
+                }
+            }
+            
+            if (failedModules.length > 0) {
+                displayFailedModulesModal(failedModules);
+                return;
+            }
+        }
+        
+        // 方法3: 檢查本地儲存的失敗模組資料
+        if (window.taskFailedModules && window.taskFailedModules[currentTaskId]) {
+            const failedModules = window.taskFailedModules[currentTaskId];
+            if (failedModules.length > 0) {
+                const formattedModules = failedModules.map((module, index) => ({
+                    SN: index + 1,
+                    module: typeof module === 'string' ? module : (module.name || module.module || '未知'),
+                    scenario: '未知',
+                    reason: typeof module === 'object' ? (module.reason || '無法比對') : '無法比對'
+                }));
+                displayFailedModulesModal(formattedModules);
+                return;
+            }
+        }
+        
+        // 如果都沒有資料，顯示空模態框
+        showEmptyModal('無法比對的模組', 'danger');
+        
+    } catch (error) {
+        console.error('Show failed modules error:', error);
+        showEmptyModal('無法比對的模組', 'danger');
+    }
+}
+
+// 從 pivot data 獲取失敗的模組
+async function fetchFailedModulesFromPivot() {
+    try {
+        const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
+        
+        // 檢查是否有「無法比對」資料表
+        if (pivotData && pivotData['無法比對']) {
+            const failedData = pivotData['無法比對'];
+            displayFailedModulesModal(failedData.data || []);
+        } else {
+            // 沒有失敗的模組
+            showEmptyModal('無法比對的模組', 'danger');
+        }
+    } catch (error) {
+        console.error('Fetch failed modules error:', error);
+        showEmptyModal('無法比對的模組', 'danger');
+    }
+}
+
+// 顯示失敗模組的模態框
+function displayFailedModulesModal(failedModules) {
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = 'modal danger';
+    
+    const recordCount = failedModules.length;
+    
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> 無法比對的模組
+                </h3>
+                <span class="modal-count">共 ${recordCount} 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
+    
+    if (recordCount > 0) {
+        // 加入搜尋列
+        html += `
+            <div class="modal-search-bar">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" 
+                           class="search-input" 
+                           id="failedSearchInput" 
+                           placeholder="搜尋模組名稱、情境..."
+                           onkeyup="searchFailedModules()">
+                </div>
+                <div class="search-stats">
+                    <i class="fas fa-filter"></i>
+                    <span>找到 <span class="highlight-count" id="failedSearchCount">${recordCount}</span> 筆</span>
+                </div>
+                <button class="btn-clear-search" onclick="clearFailedSearch()">
+                    <i class="fas fa-times"></i> 清除
+                </button>
+            </div>
+        `;
+        
+        // 表格
+        html += `
+            <div class="table-wrapper">
+                <div class="table-container">
+                    <table class="modal-table" id="failedModulesTable">
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortFailedTable(0)" style="width: 60px; text-align: center;">SN</th>
+                                <th class="sortable" onclick="sortFailedTable(1)" style="min-width: 200px;">模組名稱</th>
+                                <th class="sortable" onclick="sortFailedTable(2)" style="min-width: 150px;">比對情境</th>
+                                <th style="min-width: 200px;">失敗原因</th>
+                            </tr>
+                        </thead>
+                        <tbody id="failedModulesBody">
+        `;
+        
+        // 表格內容
+        failedModules.forEach((module, index) => {
+            // 檢查不同可能的欄位名稱
+            const moduleId = module.SN || module['SN'] || (index + 1);
+            const moduleName = module.module || module['模組名稱'] || module['module'] || '-';
+            const scenario = module.scenario || module['比對情境'] || module['scenario'] || '-';
+            const reason = module.reason || module['失敗原因'] || module['原因'] || module['reason'] || '無法比對';
+            
+            html += `
+                <tr>
+                    <td class="index-cell">${moduleId}</td>
+                    <td class="file-name-cell">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-exclamation-circle" style="color: #F44336;"></i>
+                            <span class="searchable">${moduleName}</span>
+                        </div>
+                    </td>
+                    <td class="searchable">${scenario}</td>
+                    <td class="text-red searchable">${reason}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        // 底部統計
+        html += `
+            <div class="table-footer">
+                <div class="table-footer-stats">
+                    <div class="footer-stat">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>共 <span class="footer-stat-value">${recordCount}</span> 個無法比對的模組</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        html += '<div class="empty-message"><i class="fas fa-check-circle"></i><p>沒有無法比對的模組</p></div>';
+    }
+    
+    html += '</div></div>';
+    
+    modal.innerHTML = html;
+    modal.classList.remove('hidden');
+}
+
+// 新增：排序失敗模組表格
+function sortFailedTable(columnIndex) {
+    const table = document.getElementById('failedModulesTable');
+    if (!table) return;
+    
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th');
+    const currentHeader = headers[columnIndex];
+    
+    // 獲取當前排序狀態
+    let sortOrder = currentHeader.classList.contains('sort-asc') ? 'desc' : 'asc';
+    
+    // 清除所有排序狀態
+    headers.forEach(h => {
+        h.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // 設置新的排序狀態
+    currentHeader.classList.add(`sort-${sortOrder}`);
+    
+    // 獲取所有行
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // 排序
+    rows.sort((a, b) => {
+        const aValue = a.cells[columnIndex].textContent.trim();
+        const bValue = b.cells[columnIndex].textContent.trim();
+        
+        // 數字排序
+        if (columnIndex === 0) { // SN 欄位
+            return sortOrder === 'asc' ? 
+                parseInt(aValue) - parseInt(bValue) : 
+                parseInt(bValue) - parseInt(aValue);
+        }
+        
+        // 文字排序
+        if (sortOrder === 'asc') {
+            return aValue.localeCompare(bValue);
+        } else {
+            return bValue.localeCompare(aValue);
+        }
+    });
+    
+    // 重新排列行
+    tbody.innerHTML = '';
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+// 顯示空模態框
+function showEmptyModal(title, modalClass) {
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    modal.innerHTML = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-table"></i> ${title}
+                </h3>
+                <span class="modal-count">共 0 筆資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="empty-message">
+                    <i class="fas fa-inbox"></i>
+                    <p>沒有找到相關資料</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// 獲取情境顯示名稱
+function getScenarioDisplayName(scenario) {
+    const nameMap = {
+        'master_vs_premp': 'Master vs PreMP',
+        'premp_vs_wave': 'PreMP vs Wave',
+        'wave_vs_backup': 'Wave vs Backup'
+    };
+    return nameMap[scenario] || scenario;
+}
+
+// 搜尋失敗的模組
+function searchFailedModules() {
+    const searchInput = document.getElementById('failedSearchInput');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#failedModulesBody');
+    const resultCount = document.getElementById('failedSearchCount');
+    
+    if (tbody) {
+        searchTableContent(tbody, searchTerm, resultCount);
+    }
+}
+
+// 清除失敗模組搜尋
+function clearFailedSearch() {
+    const searchInput = document.getElementById('failedSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        searchFailedModules();
     }
 }
 
@@ -892,7 +1246,7 @@ function showCompareModal(pivotData, sheets, title, modalClass) {
     modal.classList.remove('hidden');
 }
 
-// 生成多頁籤模態框 - 保持原設計但加入搜尋
+// 修改多頁籤模態框生成 - 加入底部統計
 function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
     const firstSheetData = pivotData[sheets[0].name];
     const firstSheetCount = firstSheetData && firstSheetData.data ? firstSheetData.data.length : 0;
@@ -933,6 +1287,7 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
     sheets.forEach((sheet, index) => {
         const isActive = index === 0;
         const sheetData = pivotData[sheet.name];
+        const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
         
         html += `
             <div class="tab-content ${isActive ? 'active' : ''}" 
@@ -941,7 +1296,7 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
         `;
         
         if (sheetData && sheetData.data && sheetData.data.length > 0) {
-            // 每個頁籤都有自己的搜尋列
+            // 搜尋列
             html += `
                 <div class="modal-search-bar">
                     <div class="search-input-wrapper">
@@ -954,7 +1309,7 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
                     </div>
                     <div class="search-stats">
                         <i class="fas fa-filter"></i>
-                        <span>找到 <span class="highlight-count" id="count-${sheet.name}">${sheetData.data.length}</span> 筆</span>
+                        <span>找到 <span class="highlight-count" id="count-${sheet.name}">${recordCount}</span> 筆</span>
                     </div>
                     <button class="btn-clear-search" onclick="clearTabSearch('${sheet.name}')">
                         <i class="fas fa-times"></i> 清除
@@ -963,6 +1318,18 @@ function generateMultiSheetModal(pivotData, sheets, title, modalClass) {
             `;
             
             html += generateCompareTable(sheetData, sheet.name);
+            
+            // 加入底部統計
+            html += `
+                <div class="table-footer">
+                    <div class="table-footer-stats">
+                        <div class="footer-stat">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>共 <span class="footer-stat-value">${recordCount}</span> 個項目</span>
+                        </div>
+                    </div>
+                </div>
+            `;
         } else {
             html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有資料</p></div>';
         }
@@ -998,7 +1365,7 @@ function generateEmptyModal(title) {
     `;
 }
 
-// 生成單頁籤模態框 - 統一樣式
+// 生成單頁籤模態框 - 修正搜尋功能綁定
 function generateSingleSheetModal(sheetData, sheet, title, modalClass) {
     const recordCount = sheetData && sheetData.data ? sheetData.data.length : 0;
     
@@ -1017,29 +1384,38 @@ function generateSingleSheetModal(sheetData, sheet, title, modalClass) {
     `;
     
     if (sheetData && sheetData.data && sheetData.data.length > 0) {
-        // 加入搜尋列
+        // 加入搜尋列 - 使用通用的搜尋函數
         html += `
             <div class="modal-search-bar">
                 <div class="search-input-wrapper">
                     <i class="fas fa-search search-icon"></i>
                     <input type="text" 
                            class="search-input" 
-                           id="compareSearchInput" 
+                           id="search-single-sheet" 
                            placeholder="搜尋內容..."
-                           onkeyup="searchCompareContent()">
+                           onkeyup="searchSingleSheetContent()">
                 </div>
                 <div class="search-stats">
                     <i class="fas fa-filter"></i>
-                    <span>找到 <span class="highlight-count" id="compareSearchCount">${recordCount}</span> 筆</span>
+                    <span>找到 <span class="highlight-count" id="singleSheetSearchCount">${recordCount}</span> 筆</span>
                 </div>
-                <button class="btn-clear-search" onclick="clearCompareSearch()">
+                <button class="btn-clear-search" onclick="clearSingleSheetSearch()">
                     <i class="fas fa-times"></i> 清除
                 </button>
             </div>
         `;
         
-        // 表格
-        html += generateCompareTable(sheetData, sheet.name);
+        // 給表格加上特定 ID
+        html += '<div class="table-wrapper">';
+        html += '<div class="table-container">';
+        html += '<table class="modal-table" id="single-sheet-table">';
+        
+        // 生成表格內容...
+        const tableContent = generateCompareTableContent(sheetData, sheet.name);
+        html += tableContent.replace('<table class="modal-table"', '').replace('</table>', '');
+        
+        html += '</table>';
+        html += '</div></div>';
         
         // 底部統計
         html += `
@@ -1059,6 +1435,27 @@ function generateSingleSheetModal(sheetData, sheet, title, modalClass) {
     html += '</div></div>';
     
     return html;
+}
+
+// 搜尋單頁籤內容
+function searchSingleSheetContent() {
+    const searchInput = document.getElementById('search-single-sheet');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const tbody = document.querySelector('#single-sheet-table tbody');
+    const resultCount = document.getElementById('singleSheetSearchCount');
+    
+    if (tbody) {
+        searchTableContent(tbody, searchTerm, resultCount);
+    }
+}
+
+// 清除單頁籤搜尋
+function clearSingleSheetSearch() {
+    const searchInput = document.getElementById('search-single-sheet');
+    if (searchInput) {
+        searchInput.value = '';
+        searchSingleSheetContent();
+    }
 }
 
 // 生成比對表格內容 - 完整版本，包含版本差異顏色標註
@@ -1417,49 +1814,70 @@ function formatKeyValueLine(currentLine, otherLine) {
 // 搜尋比對內容
 function searchCompareContent() {
     const searchInput = document.getElementById('compareSearchInput');
-    const searchTerm = searchInput.value.toLowerCase();
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     const tbody = document.querySelector('.modal-table tbody');
     const resultCount = document.getElementById('compareSearchCount');
     
-    searchTableContent(tbody, searchTerm, resultCount);
+    if (tbody) {
+        searchTableContent(tbody, searchTerm, resultCount);
+    }
 }
 
 // 搜尋頁籤內容
 function searchTabContent(sheetName) {
     const searchInput = document.getElementById(`search-${sheetName}`);
-    const searchTerm = searchInput.value.toLowerCase();
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     const tbody = document.querySelector(`#table-${sheetName} tbody`);
     const resultCount = document.getElementById(`count-${sheetName}`);
     
-    searchTableContent(tbody, searchTerm, resultCount);
+    if (tbody) {
+        searchTableContent(tbody, searchTerm, resultCount);
+    }
 }
 
-// 通用的表格搜尋功能
+// 通用的表格搜尋功能 - 修正版
 function searchTableContent(tbody, searchTerm, resultCountElement) {
     if (!tbody) return;
     
-    // 清除高亮
+    // 清除所有現有的高亮
     tbody.querySelectorAll('.highlight').forEach(el => {
-        const parent = el.parentNode;
-        parent.innerHTML = parent.textContent;
+        try {
+            const parent = el.parentNode;
+            if (parent && parent.textContent) {
+                const text = parent.textContent;
+                // 保留其他 HTML 結構，只替換高亮部分
+                const newHTML = parent.innerHTML.replace(/<span class="highlight">(.*?)<\/span>/gi, '$1');
+                parent.innerHTML = newHTML;
+            }
+        } catch (e) {
+            console.warn('清除高亮時出錯:', e);
+        }
     });
     
     let visibleCount = 0;
     const rows = tbody.querySelectorAll('tr');
     
     rows.forEach(row => {
-        const searchableElements = row.querySelectorAll('.searchable');
+        if (!row) return;
+        
         let matchFound = false;
         
         if (searchTerm === '') {
+            // 沒有搜尋詞時顯示所有行
             row.style.display = '';
             visibleCount++;
         } else {
-            searchableElements.forEach(element => {
-                const text = element.textContent.toLowerCase();
+            // 搜尋所有 td 元素的文字內容
+            const cells = row.querySelectorAll('td');
+            
+            cells.forEach(cell => {
+                if (!cell) return;
+                
+                const text = (cell.textContent || '').toLowerCase();
                 if (text.includes(searchTerm)) {
                     matchFound = true;
-                    highlightSearchTerm(element, searchTerm);
+                    // 高亮匹配的文字
+                    highlightSearchTerm(cell, searchTerm);
                 }
             });
             
@@ -1468,17 +1886,51 @@ function searchTableContent(tbody, searchTerm, resultCountElement) {
         }
     });
     
+    // 更新結果計數
     if (resultCountElement) {
         resultCountElement.textContent = visibleCount;
     }
 }
 
-// 高亮搜尋詞
+// 高亮搜尋詞 - 改進版
 function highlightSearchTerm(element, searchTerm) {
-    const text = element.textContent;
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
-    const highlightedText = text.replace(regex, '<span class="highlight">$1</span>');
-    element.innerHTML = highlightedText;
+    if (!element || !searchTerm) return;
+    
+    // 遞迴處理所有文字節點
+    function highlightTextNodes(node) {
+        if (node.nodeType === 3) { // 文字節點
+            const text = node.textContent;
+            const regex = new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi');
+            
+            if (regex.test(text)) {
+                const span = document.createElement('span');
+                span.innerHTML = text.replace(regex, '<span class="highlight">$1</span>');
+                node.parentNode.replaceChild(span, node);
+            }
+        } else if (node.nodeType === 1) { // 元素節點
+            // 跳過已經是高亮的元素
+            if (node.className !== 'highlight') {
+                // 不處理 script 和 style 標籤
+                if (node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+                    for (let i = 0; i < node.childNodes.length; i++) {
+                        highlightTextNodes(node.childNodes[i]);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 只處理可見的文字內容
+    try {
+        highlightTextNodes(element);
+    } catch (e) {
+        console.warn('高亮文字時出錯:', e);
+    }
+}
+
+// 輔助函數：轉義正則表達式特殊字符
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // 清除比對搜尋
@@ -1805,16 +2257,19 @@ function generateCompareTable(sheetData, sheetName) {
         return '<div class="empty-message"><i class="fas fa-inbox"></i><p>此資料表沒有內容</p></div>';
     }
     
-    // 修改結構，確保表格有捲軸
-    let html = '<div class="table-wrapper" style="height: 100%; display: flex; flex-direction: column;">';
-    html += '<div class="table-container" style="flex: 1; overflow: auto; max-height: 500px;">';
+    let html = '<div class="table-wrapper">';
+    html += '<div class="table-container">';
     html += `<table class="modal-table" id="table-${sheetName}">`;
     
-    // 表頭
+    // 表頭（加入排序功能）
     html += '<thead><tr>';
-    sheetData.columns.forEach(col => {
+    sheetData.columns.forEach((col, index) => {
         const columnInfo = getColumnInfo(col, sheetName);
-        html += `<th style="min-width: ${columnInfo.width};" class="${columnInfo.headerClass}">
+        const sortable = col !== 'reason' && col !== 'problem'; // 某些欄位不需要排序
+        
+        html += `<th style="min-width: ${columnInfo.width};" 
+                     class="${columnInfo.headerClass} ${sortable ? 'sortable' : ''}"
+                     ${sortable ? `onclick="sortSheetTable('${sheetName}', ${index})"` : ''}>
                     ${columnInfo.text}
                  </th>`;
     });
@@ -1833,16 +2288,66 @@ function generateCompareTable(sheetData, sheetName) {
     return html;
 }
 
-// 生成表格行
+// 新增：排序資料表
+function sortSheetTable(sheetName, columnIndex) {
+    const table = document.getElementById(`table-${sheetName}`);
+    if (!table) return;
+    
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th');
+    const currentHeader = headers[columnIndex];
+    
+    // 獲取當前排序狀態
+    let sortOrder = currentHeader.classList.contains('sort-asc') ? 'desc' : 'asc';
+    
+    // 清除所有排序狀態
+    headers.forEach(h => {
+        h.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // 設置新的排序狀態
+    currentHeader.classList.add(`sort-${sortOrder}`);
+    
+    // 獲取所有行
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // 排序
+    rows.sort((a, b) => {
+        const aValue = a.cells[columnIndex].textContent.trim();
+        const bValue = b.cells[columnIndex].textContent.trim();
+        
+        // 數字排序
+        if (!isNaN(aValue) && !isNaN(bValue)) {
+            return sortOrder === 'asc' ? 
+                parseFloat(aValue) - parseFloat(bValue) : 
+                parseFloat(bValue) - parseFloat(aValue);
+        }
+        
+        // 文字排序
+        if (sortOrder === 'asc') {
+            return aValue.localeCompare(bValue);
+        } else {
+            return bValue.localeCompare(aValue);
+        }
+    });
+    
+    // 重新排列行
+    tbody.innerHTML = '';
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+// 生成表格行 - 確保所有需要搜尋的內容都可被搜尋
 function generateCompareTableRow(row, columns, sheetName, rowIndex) {
     let html = '<tr>';
     
     columns.forEach(col => {
-        const cellContent = formatCellContent(row[col], col, row, sheetName);
-        const cellClass = getCellClass(col, row[col], sheetName);
+        const value = row[col];
+        const cellContent = formatCellContent(value, col, row, sheetName);
+        const cellClass = getCellClass(col, value, sheetName);
         const columnInfo = getColumnInfo(col, sheetName);
         
-        html += `<td class="${cellClass} searchable" style="min-width: ${columnInfo.width};">
+        // 所有單元格都可以被搜尋
+        html += `<td class="${cellClass}" style="min-width: ${columnInfo.width};">
                     ${cellContent}
                  </td>`;
     });
@@ -1885,9 +2390,9 @@ function getCellClass(col, value, sheetName) {
     return classes.join(' ');
 }
 
-// 格式化單元格內容
+// 格式化單元格內容 - 保持原有功能
 function formatCellContent(value, col, row, sheetName) {
-    if (!value) return '-';
+    if (!value && value !== 0) return '-';
     
     // 模組名稱處理
     if (col === 'module' || col === '模組名稱') {
@@ -1900,13 +2405,36 @@ function formatCellContent(value, col, row, sheetName) {
         `;
     }
     
+    // SN 欄位
+    if (col === 'SN') {
+        return `<div style="text-align: center;">${value}</div>`;
+    }
+    
     // 版本差異處理
     if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
-        return formatVersionDiffContent(row, col);
+        return formatVersionDiffContentWithColors(row, col);
+    }
+    
+    // has_wave 欄位
+    if (col === 'has_wave') {
+        if (value === 'Y') {
+            return '<span class="badge badge-info">Y</span>';
+        } else if (value === 'N') {
+            return '<span class="badge badge-warning">N</span>';
+        }
+    }
+    
+    // 狀態欄位
+    if (col === '狀態') {
+        if (value === '刪除') {
+            return `<span class="text-red">${value}</span>`;
+        } else if (value === '新增') {
+            return `<span class="text-blue">${value}</span>`;
+        }
     }
     
     // 連結處理
-    if (col.includes('link') && value.startsWith('http')) {
+    if (col.includes('link') && value && value.toString().startsWith('http')) {
         return `<a href="${value}" target="_blank" class="table-link">
                     <i class="fas fa-external-link-alt"></i> 查看
                 </a>`;
@@ -1916,18 +2444,13 @@ function formatCellContent(value, col, row, sheetName) {
     if (col.includes('path') || col.includes('folder')) {
         return `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
     }
-
-    // has_wave 欄位處理 - 加入顏色徽章
-    if (col === 'has_wave' || col.toLowerCase().includes('has_wave')) {
-        if (value === 'Y' || value === 'y' || value === true || value === 'True') {
-            return '<span class="badge-yes">Y</span>';
-        } else if (value === 'N' || value === 'n' || value === false || value === 'False') {
-            return '<span class="badge-no">N</span>';
-        } else {
-            return `<span>${value}</span>`;
-        }
+    
+    // 長內容處理
+    if (col === 'org_content' && value && value.toString().length > 100) {
+        const truncated = value.toString().substring(0, 100) + '...';
+        return `<span title="${value.toString().replace(/"/g, '&quot;')}" style="cursor: help;">${truncated}</span>`;
     }
-
+    
     return value;
 }
 
@@ -2752,4 +3275,9 @@ window.searchCompareContent = searchCompareContent;
 window.searchTabContent = searchTabContent;
 window.clearCompareSearch = clearCompareSearch;
 window.clearTabSearch = clearTabSearch;
-
+window.searchSingleSheetContent = searchSingleSheetContent;
+window.clearSingleSheetSearch = clearSingleSheetSearch;
+window.searchFailedModules = searchFailedModules;
+window.clearFailedSearch = clearFailedSearch;
+window.showFailedModulesModal = showFailedModulesModal;
+window.sortFailedTable = sortFailedTable;

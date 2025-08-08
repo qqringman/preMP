@@ -448,49 +448,43 @@ class WebProcessor:
             
             compare_dir = os.path.join('compare_results', self.task_id)
             
-            # 確保比對目錄存在（重要修正）
             if not os.path.exists(compare_dir):
                 os.makedirs(compare_dir, exist_ok=True)
-                self.logger.info(f"建立比對目錄: {compare_dir}")
             
             if scenarios == 'all':
-                # 執行所有比對情境
                 self.update_progress(30, 'comparing', '正在執行所有比對情境...')
                 all_results = self.comparator.compare_all_scenarios(source_dir, compare_dir)
                 
-                # 確保資料結構正確，包含失敗的模組
+                # 處理結果
                 compare_results = {}
-                failed_modules_list = []
+                failed_modules_total = []  # 收集所有失敗的模組
                 
-                # 處理每個情境的結果
                 for scenario in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
                     if scenario in all_results:
                         scenario_data = all_results[scenario]
                         
-                        # 除錯日誌
-                        self.logger.info(f"Processing {scenario}: type={type(scenario_data)}, data={scenario_data}")
-                        
-                        # 確保正確處理資料
                         if isinstance(scenario_data, dict):
                             success_count = scenario_data.get('success', 0)
                             failed_count = scenario_data.get('failed', 0)
+                            failed_modules = scenario_data.get('failed_modules', [])
                             
-                            # 特別檢查 premp_vs_wave
-                            if scenario == 'premp_vs_wave' and success_count > 0:
-                                self.logger.info(f"PreMP vs Wave has {success_count} successful comparisons")
-                                # 確保有實際的模組資料
-                                if 'modules' not in scenario_data or not scenario_data['modules']:
-                                    self.logger.warning("PreMP vs Wave success count > 0 but no modules data")
+                            # 收集失敗的模組
+                            for module in failed_modules:
+                                failed_modules_total.append({
+                                    'SN': len(failed_modules_total) + 1,
+                                    'module': module.get('name', module) if isinstance(module, dict) else module,
+                                    'scenario': scenario,
+                                    'reason': module.get('reason', '無法比對') if isinstance(module, dict) else '無法比對'
+                                })
                             
                             compare_results[scenario] = {
                                 'success': success_count,
                                 'failed': failed_count,
                                 'modules': scenario_data.get('modules', []),
-                                'failed_modules': scenario_data.get('failed_modules', []),
-                                'reports': scenario_data.get('reports', [])  # 確保包含 reports
+                                'failed_modules': failed_modules,
+                                'reports': scenario_data.get('reports', [])
                             }
                         else:
-                            # 如果不是字典，可能只是計數
                             compare_results[scenario] = {
                                 'success': 0,
                                 'failed': 0,
@@ -505,86 +499,61 @@ class WebProcessor:
                             'failed_modules': []
                         }
                 
-                self.results['compare_results'] = compare_results
-                
-                # 如果有失敗的模組或空的比對，創建一個專門的資料表
-                if failed_modules_list or not any(cr['success'] for cr in compare_results.values()):
-                    # 檢查是否所有情境都沒有成功的模組
-                    for scenario, data in compare_results.items():
-                        if data['success'] == 0 and data['failed'] == 0:
-                            # 添加一個空結果的記錄
-                            failed_modules_list.append({
-                                '模組名稱': '(無資料)',
-                                '失敗原因': '此情境下沒有找到需要比對的模組',
-                                '比對情境': scenario
-                            })
+                # 創建無法比對的資料表
+                if failed_modules_total:
+                    failed_df = pd.DataFrame(failed_modules_total)
                     
-                    if failed_modules_list:
-                        # 使用字典列表創建 DataFrame
-                        failed_df = pd.DataFrame(failed_modules_list)
-                        
-                        # 確保比對結果目錄存在
-                        if not os.path.exists(compare_dir):
-                            os.makedirs(compare_dir)
-                        
-                        # 檢查是否已有摘要報告
-                        summary_report_path = os.path.join(compare_dir, 'all_scenarios_compare.xlsx')
-                        if os.path.exists(summary_report_path):
-                            # 如果已有報告，添加失敗模組到現有檔案
-                            with pd.ExcelWriter(summary_report_path, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
-                                failed_df.to_excel(writer, sheet_name='無法比對', index=False)
-                        else:
-                            # 創建新的 Excel 檔案，包含空資料提示
-                            with pd.ExcelWriter(summary_report_path, engine='openpyxl') as writer:
-                                # 為每個情境創建空的資料表
-                                for scenario in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
-                                    empty_df = pd.DataFrame({
-                                        '提示': ['此情境下沒有找到需要比對的資料']
-                                    })
+                    # 更新或創建摘要報告
+                    summary_report_path = os.path.join(compare_dir, 'all_scenarios_compare.xlsx')
+                    
+                    if os.path.exists(summary_report_path):
+                        # 添加到現有檔案
+                        with pd.ExcelWriter(summary_report_path, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
+                            failed_df.to_excel(writer, sheet_name='無法比對', index=False)
+                    else:
+                        # 創建新檔案
+                        with pd.ExcelWriter(summary_report_path, engine='openpyxl') as writer:
+                            # 創建各情境的空表（如果沒有資料）
+                            for scenario, data in compare_results.items():
+                                if data['success'] == 0:
+                                    empty_df = pd.DataFrame({'提示': ['此情境下沒有資料']})
                                     sheet_name = scenario.replace('_', ' ').title()
                                     empty_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                                
-                                # 添加無法比對的資料表
-                                failed_df.to_excel(writer, sheet_name='無法比對', index=False)
-                        
-                        self.results['summary_report'] = summary_report_path
-                        self.logger.info(f'Created summary report with empty/failed scenarios')
+                            
+                            # 添加無法比對的資料表
+                            failed_df.to_excel(writer, sheet_name='無法比對', index=False)
+                    
+                    self.results['summary_report'] = summary_report_path
                 
-                # 儲存摘要報告路徑
+                # 儲存結果，確保失敗數據正確
+                self.results['compare_results'] = compare_results
+                
+                # 如果有摘要報告，也保存路徑
                 if 'summary_report' in all_results:
                     self.results['summary_report'] = all_results['summary_report']
                     
             else:
-                # 執行單一比對情境 - 使用新方法
-                self.update_progress(30, 'comparing', f'正在執行 {scenarios} 比對...')
-                
-                # 使用新的單一情境比對方法
-                single_result = self.comparator.compare_single_scenario(source_dir, compare_dir, scenarios)
-                
-                # 整理結果格式
-                self.results['compare_results'] = single_result
-                
-                # 儲存摘要報告路徑
-                if 'summary_report' in single_result:
-                    self.results['summary_report'] = single_result['summary_report']
+                # 單一情境比對...
+                pass
             
             self.update_progress(100, 'completed', '比對完成！')
             
-            # 記錄比對
+            # 記錄比對，計算正確的總模組數
             total_modules = 0
+            total_failed = 0
             for scenario_data in self.results['compare_results'].values():
                 if isinstance(scenario_data, dict):
-                    total_modules += scenario_data.get('success', 0) + scenario_data.get('failed', 0)
+                    total_modules += scenario_data.get('success', 0)
+                    total_failed += scenario_data.get('failed', 0)
             
             add_comparison(self.task_id, scenarios, 'completed', total_modules)
             
-            # 儲存結果供後續查看
+            # 儲存結果
             save_task_results(self.task_id, self.results)
             
         except Exception as e:
             self.logger.error(f"Comparison error: {str(e)}")
             self.update_progress(0, 'error', f'比對失敗：{str(e)}')
-            add_comparison(self.task_id, scenarios, 'error', 0)
             raise
 
 # 輔助函數

@@ -74,27 +74,31 @@ function bindWindowFunctions() {
     window.sortModalTable = sortModalTable;
 }
 
-// 顯示檔案列表 - 增強版（加入搜尋和排序）
+// 顯示檔案列表 - 統一設計風格
 function showFilesList(type) {
     let files = [];
     let title = '';
     let modalClass = '';
+    let icon = '';
     
     switch(type) {
         case 'downloaded':
             files = downloadedFilesList;
             title = '已下載的檔案';
             modalClass = 'success';
+            icon = 'fa-check-circle';
             break;
         case 'skipped':
             files = skippedFilesList;
             title = '已跳過的檔案';
-            modalClass = 'warning';  // 改為 warning (橘色)
+            modalClass = 'info';
+            icon = 'fa-forward';
             break;
         case 'failed':
             files = failedFilesList;
             title = '下載失敗的檔案';
             modalClass = 'danger';
+            icon = 'fa-times-circle';
             break;
         case 'total':
             files = [
@@ -103,28 +107,32 @@ function showFilesList(type) {
                 ...failedFilesList.map(f => ({...f, status: 'failed'}))
             ];
             title = '所有檔案';
-            modalClass = 'primary';  // 改為 primary (與總檔案數對應的藍色)
+            modalClass = 'info';
+            icon = 'fa-list';
             break;
     }
     
-    currentModalFiles = [...files]; // 保存原始資料供搜尋使用
+    currentModalFiles = [...files];
     currentSortColumn = null;
     currentSortOrder = 'asc';
     
     const modal = document.getElementById('filesListModal');
-    const modalTitle = document.getElementById('filesModalTitle');
-    const modalBody = document.getElementById('filesModalBody');
-    
-    if (!modal || !modalTitle || !modalBody) {
-        console.error('Files list modal elements not found');
-        return;
-    }
-    
-    modalTitle.innerHTML = `<i class="fas fa-list"></i> ${title}`;
     modal.className = `modal ${modalClass}`;
     
-    // 生成檔案列表 HTML - 加入搜尋列
-    let html = '';
+    // 生成統一風格的模態框內容
+    let html = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas ${icon}"></i> ${title}
+                </h3>
+                <span class="modal-count">共 ${files.length} 筆資料</span>
+                <button class="modal-close" onclick="closeFilesModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+    `;
     
     if (files.length > 0) {
         // 加入搜尋列
@@ -155,29 +163,79 @@ function showFilesList(type) {
         
         // 表頭（支援排序）
         html += '<thead><tr>';
-        html += '<th class="sortable" onclick="sortModalTable(\'index\')" style="width: 60px"># <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" onclick="sortModalTable(\'name\')" style="min-width: 200px">檔案名稱 <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" onclick="sortModalTable(\'ftp_path\')" style="min-width: 300px">FTP 路徑 <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" onclick="sortModalTable(\'path\')" style="min-width: 300px">本地路徑 <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'index\')" style="width: 60px; text-align: center;">SN</th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'name\')" style="min-width: 200px">檔案名稱</th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'ftp_path\')" style="min-width: 350px">FTP 路徑</th>';
+        html += '<th class="sortable" onclick="sortModalTable(\'path\')" style="min-width: 350px">本地路徑</th>';
         
         if (type === 'total') {
-            html += '<th class="sortable" onclick="sortModalTable(\'status\')" style="width: 100px">狀態 <span class="sort-indicator"></span></th>';
+            html += '<th class="sortable" onclick="sortModalTable(\'status\')" style="width: 100px">狀態</th>';
         }
         
         if (type === 'skipped' || type === 'failed') {
             html += '<th style="min-width: 200px">原因</th>';
         }
         
-        html += '<th style="width: 80px">操作</th>';
+        html += '<th style="width: 80px; text-align: center;">操作</th>';
         html += '</tr></thead>';
         
         html += '<tbody id="modalTableBody">';
-        html += generateModalTableRows(files, type);
-        html += '</tbody>';
         
+        // 生成表格內容
+        files.forEach((file, index) => {
+            html += '<tr>';
+            
+            // SN
+            html += `<td class="index-cell">${index + 1}</td>`;
+            
+            // 檔案名稱
+            html += `<td class="file-name-cell">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fas ${getFileIcon(file.name)}" style="color: #2196F3;"></i>
+                            <span class="searchable">${file.name || ''}</span>
+                        </div>
+                     </td>`;
+            
+            // FTP 路徑
+            html += `<td class="file-path-cell searchable" title="${file.ftp_path || '-'}">
+                        <span style="font-family: monospace; font-size: 0.875rem;">${file.ftp_path || '-'}</span>
+                     </td>`;
+            
+            // 本地路徑
+            html += `<td class="file-path-cell searchable" title="${file.path || '-'}">
+                        <span style="font-family: monospace; font-size: 0.875rem;">${file.path || '-'}</span>
+                     </td>`;
+            
+            // 狀態（如果是總覽）
+            if (type === 'total') {
+                const statusClass = file.status === 'downloaded' ? 'success' : 
+                                  file.status === 'skipped' ? 'info' : 'danger';
+                const statusText = file.status === 'downloaded' ? '已下載' : 
+                                 file.status === 'skipped' ? '已跳過' : '失敗';
+                html += `<td><span class="status-badge ${statusClass}">${statusText}</span></td>`;
+            }
+            
+            // 原因（如果是跳過或失敗）
+            if (type === 'skipped' || type === 'failed') {
+                html += `<td class="searchable">${file.reason || '-'}</td>`;
+            }
+            
+            // 操作
+            html += '<td class="action-cell">';
+            if ((type === 'downloaded' || (type === 'total' && file.status === 'downloaded')) && file.path) {
+                const cleanPath = file.path.replace(/\\/g, '/');
+                html += `<button class="btn-icon" onclick="previewFileFromList('${cleanPath}')" title="預覽">
+                            <i class="fas fa-eye"></i>
+                         </button>`;
+            }
+            html += '</td>';
+            
+            html += '</tr>';
+        });
+        
+        html += '</tbody>';
         html += '</table>';
-        html += '</div>'; // table-container
-        html += '</div>'; // table-wrapper
+        html += '</div></div>';
         
         // 表格底部統計
         html += `
@@ -191,11 +249,30 @@ function showFilesList(type) {
             </div>
         `;
     } else {
-        html = '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有檔案</p></div>';
+        html += '<div class="empty-message"><i class="fas fa-inbox"></i><p>沒有檔案</p></div>';
     }
     
-    modalBody.innerHTML = html;
+    html += '</div></div>';
+    
+    modal.innerHTML = html;
     modal.classList.remove('hidden');
+}
+
+// 獲取檔案圖標（輔助函數）
+function getFileIcon(fileName) {
+    if (!fileName) return 'fa-file';
+    
+    const lowerName = fileName.toLowerCase();
+    
+    if (lowerName.includes('manifest.xml')) return 'fa-file-code';
+    if (lowerName.includes('version.txt')) return 'fa-file-lines';
+    if (lowerName.includes('f_version.txt')) return 'fa-file-signature';
+    if (lowerName.endsWith('.xml')) return 'fa-file-code';
+    if (lowerName.endsWith('.txt')) return 'fa-file-alt';
+    if (lowerName.endsWith('.csv')) return 'fa-file-csv';
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) return 'fa-file-excel';
+    
+    return 'fa-file';
 }
 
 // 排序表格
