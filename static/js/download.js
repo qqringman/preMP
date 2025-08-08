@@ -572,8 +572,8 @@ function showFilesList(type) {
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i class="fas ${icon}"></i> ${title}
+                    <span class="modal-count">共 ${files.length} 筆資料</span>
                 </h3>
-                <span class="modal-count">共 ${files.length} 筆資料</span>
                 <button class="modal-close" onclick="closeFilesModal()">
                     <i class="fas fa-times"></i>
                 </button>
