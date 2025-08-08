@@ -854,9 +854,11 @@ function clearModalSearch() {
     }
 }
 
-// 搜尋模態框內容
+// 修復搜尋模態框內容函數
 function searchModalContent() {
     const searchInput = document.getElementById('modalSearchInput');
+    if (!searchInput) return;
+    
     const searchTerm = searchInput.value.toLowerCase();
     const tbody = document.getElementById('modalTableBody');
     const resultCount = document.getElementById('searchResultCount');
@@ -866,13 +868,19 @@ function searchModalContent() {
     // 先清除所有高亮
     tbody.querySelectorAll('.highlight').forEach(el => {
         const parent = el.parentNode;
-        parent.innerHTML = parent.textContent;
+        if (parent) {
+            // 修復：檢查 textContent 是否存在
+            const text = parent.textContent || parent.innerText || '';
+            parent.innerHTML = text;
+        }
     });
     
     let visibleCount = 0;
     const rows = tbody.querySelectorAll('tr');
     
     rows.forEach(row => {
+        if (!row) return;
+        
         const searchableElements = row.querySelectorAll('.searchable');
         let matchFound = false;
         
@@ -881,7 +889,10 @@ function searchModalContent() {
             visibleCount++;
         } else {
             searchableElements.forEach(element => {
-                const text = (element.textContent || '').toLowerCase();
+                if (!element) return;
+                
+                // 修復：安全地獲取文字內容
+                const text = (element.textContent || element.innerText || '').toLowerCase();
                 if (text.includes(searchTerm)) {
                     matchFound = true;
                     // 高亮匹配的文字
@@ -900,9 +911,13 @@ function searchModalContent() {
     }
 }
 
-// 高亮文字
+// 修復高亮文字函數
 function highlightText(element, searchTerm) {
-    const text = element.textContent;
+    if (!element || !searchTerm) return;
+    
+    const text = element.textContent || element.innerText || '';
+    if (!text) return;
+    
     const regex = new RegExp(`(${searchTerm})`, 'gi');
     const highlightedText = text.replace(regex, '<span class="highlight">$1</span>');
     element.innerHTML = highlightedText;
@@ -1054,17 +1069,130 @@ function handleLocalFiles(files) {
     localSelectedFiles = supportedFiles;
     selectedFiles = supportedFiles;
     
-    // 記錄Excel資訊（第一個檔案）
+    // 記錄 Excel 資訊
     if (supportedFiles.length > 0) {
         uploadedExcelInfo = {
             file: supportedFiles[0],
             originalName: supportedFiles[0].name
         };
+        
+        // 檢查 Excel 欄位（如果需要）
+        checkExcelColumns(supportedFiles[0]);
     }
     
     displayLocalFiles();
     updateSelectedHint();
     updateDownloadButton();
+}
+
+// 檢查 Excel 欄位（可選）
+async function checkExcelColumns(file) {
+    try {
+        // 上傳檔案並檢查欄位
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // 儲存 Excel 元資料
+            if (result.excel_metadata) {
+                uploadedExcelInfo = {
+                    ...uploadedExcelInfo,
+                    filepath: result.filepath,
+                    metadata: result.excel_metadata
+                };
+                
+                // 顯示檢查結果
+                if (result.excel_metadata.has_dual_sftp_columns) {
+                    console.log('✅ 檢測到雙 SFTP 欄位');
+                    console.log('RootFolder:', result.excel_metadata.root_folder);
+                    
+                    // 決定將改名為什麼
+                    let newName = getNewExcelName(result.excel_metadata.root_folder);
+                    if (newName) {
+                        utils.showNotification(
+                            `Excel 檔案將在下載完成後改名為: ${newName}`, 
+                            'info'
+                        );
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('檢查 Excel 欄位失敗:', error);
+    }
+}
+
+// 根據 RootFolder 決定新檔名
+function getNewExcelName(rootFolder) {
+    if (!rootFolder) return null;
+    
+    const rootFolderStr = String(rootFolder).trim();
+    
+    switch(rootFolderStr) {
+        case 'DailyBuild':
+            return 'DailyBuild_mapping.xlsx';
+        case '/DailyBuild/PrebuildFW':
+        case 'PrebuildFW':
+            return 'PrebuildFW_mapping.xlsx';
+        default:
+            return null;
+    }
+}
+
+// 在下載完成時處理 Excel 檔案
+async function handleDownloadComplete(taskId, results) {
+    // 檢查是否需要處理 Excel 檔案
+    if (uploadedExcelInfo && uploadedExcelInfo.metadata) {
+        const metadata = uploadedExcelInfo.metadata;
+        
+        if (metadata.has_dual_sftp_columns && metadata.root_folder) {
+            const newName = getNewExcelName(metadata.root_folder);
+            
+            if (newName) {
+                try {
+                    // 呼叫後端 API 複製和改名 Excel 檔案
+                    const response = await fetch('/api/copy-excel-to-results', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            task_id: taskId,
+                            original_filepath: uploadedExcelInfo.filepath,
+                            new_filename: newName
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        
+                        // 顯示成功訊息
+                        addLog(`Excel 檔案已另存為: ${newName}`, 'success');
+                        utils.showNotification(
+                            `Excel 檔案已成功改名為: ${newName}`, 
+                            'success'
+                        );
+                        
+                        // 更新結果顯示
+                        if (results) {
+                            results.excel_renamed = true;
+                            results.excel_new_name = newName;
+                        }
+                    }
+                } catch (error) {
+                    console.error('處理 Excel 檔案失敗:', error);
+                    addLog(`處理 Excel 檔案失敗: ${error.message}`, 'warning');
+                }
+            }
+        }
+    }
 }
 
 // 使用統一格式顯示本地檔案
@@ -1904,7 +2032,7 @@ function handleDownloadProgress(event) {
     }
 }
 
-// 更新下載進度
+// 監聽下載進度更新
 function updateDownloadProgress(data) {
     const { progress, status, message, stats, files, results } = data;
     
@@ -1931,6 +2059,16 @@ function updateDownloadProgress(data) {
     
     // 添加日誌
     addLog(message, status);
+    
+    // 檢查是否有 Excel 改名訊息
+    if (message && message.includes('Excel 檔案已另存為')) {
+        // 高亮顯示 Excel 改名訊息
+        const logEntry = document.querySelector('.log-entry:last-child');
+        if (logEntry) {
+            logEntry.style.background = '#E8F5E9';
+            logEntry.style.fontWeight = 'bold';
+        }
+    }
     
     // 處理完成或錯誤
     if (status === 'completed') {
@@ -2022,7 +2160,7 @@ function clearLog() {
     }
 }
 
-// 顯示下載結果
+// 顯示下載結果時包含 Excel 改名資訊
 function showDownloadResults(results) {
     const downloadProgress = document.getElementById('downloadProgress');
     const downloadResults = document.getElementById('downloadResults');
@@ -2035,8 +2173,10 @@ function showDownloadResults(results) {
         downloadResults.classList.remove('hidden');
     }
     
-    // 處理 Excel 檔案複製和改名
-    handleExcelCopyAndRename(results);
+    // 處理 Excel 檔案（如果需要）
+    if (downloadTaskId) {
+        handleDownloadComplete(downloadTaskId, results);
+    }
     
     // 確保檔案列表資料被保存
     if (results.files) {
@@ -2049,6 +2189,21 @@ function showDownloadResults(results) {
     const stats = results.stats || {};
     const summary = generateResultSummary(stats);
     document.getElementById('resultSummary').innerHTML = summary;
+    
+    // 如果有 Excel 改名資訊，顯示在摘要中
+    if (results.excel_renamed) {
+        const excelInfo = document.createElement('div');
+        excelInfo.className = 'excel-rename-info';
+        excelInfo.innerHTML = `
+            <div class="alert alert-success" style="margin-top: 20px;">
+                <i class="fas fa-check-circle"></i>
+                <strong>Excel 檔案已處理：</strong> 
+                已將上傳的 Excel 檔案改名為 <code>${results.excel_new_name}</code> 
+                並儲存到下載資料夾中
+            </div>
+        `;
+        document.getElementById('resultSummary').appendChild(excelInfo);
+    }
     
     // 生成資料夾樹
     if (results.folder_structure) {

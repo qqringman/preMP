@@ -5481,3 +5481,196 @@ to {
   overflow-x: hidden;
   padding-top: 2px; /* 補償裁剪 */
 }
+
+/* Excel 改名相關樣式 */
+
+/* Excel 改名成功提示 */
+.excel-rename-info {
+    margin-top: 24px;
+    animation: slideInUp 0.5s ease-out;
+}
+
+.excel-rename-info .alert {
+    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+    border: 2px solid #4CAF50;
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
+    position: relative;
+    overflow: hidden;
+}
+
+.excel-rename-info .alert::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: #4CAF50;
+}
+
+.excel-rename-info .alert i {
+    font-size: 1.5rem;
+    color: #4CAF50;
+    flex-shrink: 0;
+}
+
+.excel-rename-info .alert strong {
+    color: #2E7D32;
+    font-weight: 600;
+}
+
+.excel-rename-info .alert code {
+    background: rgba(255, 255, 255, 0.8);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.9rem;
+    color: #1B5E20;
+    border: 1px solid #A5D6A7;
+    margin: 0 4px;
+}
+
+/* 檔案檢查提示 */
+.excel-check-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+    border: 2px solid #2196F3;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+    z-index: 1000;
+    max-width: 400px;
+    animation: slideInRight 0.5s ease-out;
+}
+
+.excel-check-notification.success {
+    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+    border-color: #4CAF50;
+}
+
+.excel-check-notification.warning {
+    background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+    border-color: #FF9800;
+}
+
+.excel-check-notification .notification-title {
+    font-weight: 600;
+    color: #1565C0;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.excel-check-notification.success .notification-title {
+    color: #2E7D32;
+}
+
+.excel-check-notification.warning .notification-title {
+    color: #E65100;
+}
+
+.excel-check-notification .notification-content {
+    font-size: 0.9rem;
+    color: #424242;
+    line-height: 1.5;
+}
+
+/* 日誌中的 Excel 改名訊息高亮 */
+.log-entry.excel-renamed {
+    background: linear-gradient(to right, #E8F5E9 0%, transparent 100%);
+    border-left: 3px solid #4CAF50;
+    padding-left: 17px;
+    font-weight: 600;
+}
+
+.log-entry.excel-renamed .log-icon {
+    color: #4CAF50;
+}
+
+.log-entry.excel-renamed .log-message {
+    color: #2E7D32;
+}
+
+/* 檔案列表中的 Excel 標記 */
+.file-item-card.excel-original {
+    position: relative;
+}
+
+.file-item-card.excel-original::after {
+    content: "將被改名";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #2196F3;
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+/* 動畫效果 */
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* 檔案結構樹中標記改名的 Excel */
+.tree-node-content.excel-renamed {
+    background: linear-gradient(135deg, #E8F5E9 0%, transparent 100%);
+    border: 1px solid #A5D6A7;
+}
+
+.tree-node-content.excel-renamed .tree-name::after {
+    content: " (Excel Mapping)";
+    color: #4CAF50;
+    font-size: 0.85rem;
+    font-style: italic;
+    margin-left: 8px;
+}
+
+/* 進度條中的 Excel 處理階段 */
+.progress-stage-excel {
+    background: linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%);
+}
+
+/* 統計卡片 - Excel 處理狀態 */
+.stat-card.excel-status {
+    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+    border-color: #4CAF50;
+}
+
+.stat-card.excel-status .stat-icon {
+    background: white;
+    color: #4CAF50;
+}
+
+.stat-card.excel-status:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15);
+}

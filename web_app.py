@@ -23,6 +23,7 @@ import openpyxl
 from copy import copy
 import io
 from excel_handler import ExcelHandler
+from metadata_manager import metadata_manager
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -245,8 +246,28 @@ class WebProcessor:
                 stats = download_data['stats']
                 files = download_data['files']
                 
-                # ===== 新增：處理 Excel 檔案複製改名 =====
-                excel_result = self._handle_excel_copy_rename(excel_file, download_dir)
+                # ===== 處理 Excel 檔案複製改名 =====
+                self.logger.info("=" * 60)
+                self.logger.info("開始處理 Excel 檔案改名")
+                self.logger.info(f"  Task ID: {self.task_id}")
+                self.logger.info(f"  下載資料夾: {download_dir}")
+                self.logger.info(f"  Excel 檔案路徑: {excel_file}")  # 新增日誌
+                
+                # 重新檢查 Excel 檔案的欄位（這會包含 filepath）
+                global excel_handler
+                excel_check_result = excel_handler.check_excel_columns(excel_file)
+                
+                # 確保 filepath 存在（向後相容）
+                if 'filepath' not in excel_check_result or not excel_check_result['filepath']:
+                    excel_check_result['filepath'] = excel_file
+                    self.logger.info(f"  補充 filepath: {excel_file}")
+                
+                # 處理 Excel 檔案複製改名
+                excel_result = excel_handler.process_download_complete(
+                    self.task_id,
+                    download_dir,
+                    excel_check_result
+                )
                 
                 # 生成資料夾結構
                 folder_structure = self._generate_folder_structure(download_dir, report_path)
@@ -261,9 +282,14 @@ class WebProcessor:
                 if excel_result['excel_copied']:
                     self.results['excel_copied'] = True
                     self.results['excel_new_name'] = excel_result['excel_new_name']
-                    # 加入到日誌
+                    # 更新訊息
                     self.update_progress(95, 'downloading', 
-                        f'Excel 檔案已另存為: {excel_result["excel_new_name"]}')
+                        f'✅ Excel 檔案已另存為: {excel_result["excel_new_name"]}')
+                    self.logger.info(f"✅ Excel 檔案複製成功: {excel_result['excel_new_name']}")
+                else:
+                    self.logger.info(f"ℹ️ {excel_result['message']}")
+                
+                self.logger.info("=" * 60)
                 
                 # 確保最終統計正確
                 self.update_progress(100, 'completed', '下載完成！', stats, files)
@@ -307,6 +333,11 @@ class WebProcessor:
             if excel_file in uploaded_excel_metadata:
                 excel_metadata = uploaded_excel_metadata[excel_file]
                 
+                self.logger.info("=" * 60)
+                self.logger.info(f"開始處理 Excel 檔案改名")
+                self.logger.info(f"  Task ID: {self.task_id}")
+                self.logger.info(f"  下載資料夾: {download_dir}")
+                
                 # 使用 ExcelHandler 處理
                 process_result = excel_handler.process_download_complete(
                     self.task_id,
@@ -317,11 +348,14 @@ class WebProcessor:
                 result.update(process_result)
                 
                 if result['excel_copied']:
-                    self.logger.info(f"Excel 檔案已複製並改名: {result['excel_new_name']}")
+                    self.logger.info(f"✅ Excel 檔案已成功複製並改名: {result['excel_new_name']}")
                     
                     # 加入活動記錄
                     add_activity('Excel 檔案處理', 'success', 
                             f"檔案已另存為: {result['excel_new_name']}")
+                else:
+                    self.logger.info(f"ℹ️ {process_result.get('message', '不需要處理 Excel 檔案')}")
+                    
             else:
                 self.logger.info(f"沒有找到 Excel 元資料: {excel_file}")
                 
@@ -669,8 +703,8 @@ def upload_file():
             except Exception as e:
                 app.logger.warning(f"檢查 Excel 欄位時發生錯誤: {str(e)}")
         
-        # 儲存元資料（用於下載完成後處理）
-        uploaded_excel_metadata[filepath] = excel_metadata
+        # 使用元資料管理器儲存
+        metadata_manager.store_metadata(filepath, excel_metadata)
         
         app.logger.info(f'檔案上傳: {filename} (類型: {file_ext})')
         
@@ -678,7 +712,7 @@ def upload_file():
             'filename': filename, 
             'filepath': filepath,
             'file_type': file_ext[1:],
-            'excel_metadata': excel_metadata  # 返回欄位檢查結果
+            'excel_metadata': excel_metadata
         })
     
     return jsonify({
@@ -2574,6 +2608,52 @@ def handle_download_complete(task_id):
         
     except Exception as e:
         app.logger.error(f"處理下載完成事件失敗: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/copy-excel-to-results', methods=['POST'])
+def copy_excel_to_results():
+    """複製 Excel 檔案到結果資料夾 API"""
+    try:
+        data = request.json
+        task_id = data.get('task_id')
+        original_filepath = data.get('original_filepath')
+        new_filename = data.get('new_filename')
+        
+        if not all([task_id, original_filepath]):
+            return jsonify({'error': '缺少必要參數'}), 400
+        
+        # 獲取下載資料夾
+        download_folder = os.path.join('downloads', task_id)
+        
+        if not os.path.exists(download_folder):
+            os.makedirs(download_folder, exist_ok=True)
+        
+        # 如果沒有指定新檔名，從元資料決定
+        if not new_filename:
+            excel_metadata = uploaded_excel_metadata.get(original_filepath, {})
+            root_folder = excel_metadata.get('root_folder')
+            
+            if root_folder == 'DailyBuild':
+                new_filename = 'DailyBuild_mapping.xlsx'
+            elif root_folder in ['/DailyBuild/PrebuildFW', 'PrebuildFW']:
+                new_filename = 'PrebuildFW_mapping.xlsx'
+            else:
+                new_filename = os.path.basename(original_filepath)
+        
+        # 複製檔案
+        target_path = os.path.join(download_folder, new_filename)
+        shutil.copy2(original_filepath, target_path)
+        
+        app.logger.info(f"Excel 檔案已複製: {original_filepath} -> {target_path}")
+        
+        return jsonify({
+            'success': True,
+            'new_path': target_path,
+            'new_filename': new_filename
+        })
+        
+    except Exception as e:
+        app.logger.error(f"複製 Excel 檔案失敗: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

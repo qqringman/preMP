@@ -52,69 +52,41 @@ class ExcelHandler:
             
     def read_excel(self, file_path: str) -> pd.DataFrame:
         """
-        讀取 Excel 或 CSV 檔案
-        
-        Args:
-            file_path: Excel 或 CSV 檔案路徑
-            
-        Returns:
-            pandas DataFrame
+        讀取 Excel 或 CSV 檔案（支援多種編碼）
         """
         try:
-            # 根據副檔名判斷檔案類型
             file_ext = os.path.splitext(file_path)[1].lower()
             
             if file_ext == '.csv':
-                # 讀取 CSV 檔案，嘗試不同的編碼
-                encodings = ['utf-8', 'utf-8-sig', 'big5', 'cp950', 'gbk', 'gb18030', 
-                            'latin1', 'iso-8859-1', 'cp1252']
-                
-                df = None
-                last_error = None
+                # 嘗試多種編碼
+                encodings = ['utf-8', 'utf-8-sig', 'big5', 'cp950', 'gbk', 'latin1']
                 
                 for encoding in encodings:
                     try:
                         df = pd.read_csv(file_path, encoding=encoding)
-                        self.logger.info(f"成功使用 {encoding} 編碼讀取 CSV 檔案: {file_path}")
-                        break
-                    except UnicodeDecodeError as e:
-                        last_error = e
+                        self.logger.info(f"成功使用 {encoding} 編碼讀取 CSV")
+                        return df
+                    except UnicodeDecodeError:
                         continue
-                    except Exception as e:
-                        # 其他錯誤，直接拋出
-                        raise e
                 
-                if df is None:
-                    # 如果所有編碼都失敗，嘗試使用 errors='ignore' 參數
-                    try:
-                        df = pd.read_csv(file_path, encoding='utf-8', errors='ignore')
-                        self.logger.warning(f"使用 utf-8 編碼（忽略錯誤）讀取 CSV 檔案: {file_path}")
-                    except Exception:
-                        # 最後嘗試使用 python engine
-                        try:
-                            df = pd.read_csv(file_path, engine='python')
-                            self.logger.warning(f"使用 python engine 讀取 CSV 檔案: {file_path}")
-                        except Exception:
-                            raise ValueError(f"無法讀取 CSV 檔案，嘗試所有編碼都失敗: {last_error}")
-                
+                # 如果都失敗，使用忽略錯誤模式
+                df = pd.read_csv(file_path, encoding='utf-8', errors='ignore')
+                self.logger.warning(f"使用 utf-8 (忽略錯誤) 讀取 CSV")
                 return df
                 
-            elif file_ext in ['.xlsx', '.xls']:
-                # 讀取 Excel 檔案
+            else:  # Excel 檔案
                 df = pd.read_excel(file_path)
-                self.logger.info(f"成功讀取 Excel 檔案: {file_path}")
+                self.logger.info(f"成功讀取 Excel 檔案")
                 return df
-                
-            else:
-                raise ValueError(f"不支援的檔案格式: {file_ext}。只支援 .csv, .xlsx, .xls")
                 
         except Exception as e:
-            self.logger.error(f"讀取檔案失敗: {file_path}, 錯誤: {str(e)}")
+            self.logger.error(f"讀取檔案失敗: {str(e)}")
             raise
     
     def check_excel_columns(self, file_path: str) -> Dict[str, Any]:
         """
         檢查 Excel 檔案的欄位
+        重點檢查：SftpPath 和 compare_SftpPath 是否同時存在
         
         Args:
             file_path: Excel 檔案路徑
@@ -125,47 +97,63 @@ class ExcelHandler:
         try:
             # 讀取檔案
             df = self.read_excel(file_path)
+            columns = df.columns.tolist()
             
-            # 檢查是否有 SftpPath 和 compare_SftpPath 欄位
-            has_sftp_columns = ('SftpPath' in df.columns and 
-                               'compare_SftpPath' in df.columns)
+            # 檢查是否有 SftpPath 和 compare_SftpPath 欄位（必須同時存在）
+            has_dual_sftp_columns = (
+                'SftpPath' in columns and 
+                'compare_SftpPath' in columns
+            )
+            
+            # 檢查是否有單一 SFTP 欄位（向後相容）
+            has_sftp_columns = has_dual_sftp_columns or (
+                'ftp path' in columns or 
+                'SftpURL' in columns
+            )
             
             # 檢查 RootFolder 欄位
             root_folder = None
-            if 'RootFolder' in df.columns:
+            if 'RootFolder' in columns and len(df) > 0:
                 # 取得第一個非空的 RootFolder 值
                 root_folder_values = df['RootFolder'].dropna()
                 if not root_folder_values.empty:
-                    root_folder = str(root_folder_values.iloc[0])
+                    root_folder = str(root_folder_values.iloc[0]).strip()
             
-            self.logger.info(f"檢查 Excel 欄位: has_sftp_columns={has_sftp_columns}, root_folder={root_folder}")
+            self.logger.info(f"Excel 欄位檢查結果:")
+            self.logger.info(f"  - 檔案: {os.path.basename(file_path)}")
+            self.logger.info(f"  - 完整路徑: {file_path}")  # 新增
+            self.logger.info(f"  - 有雙 SFTP 欄位: {has_dual_sftp_columns}")
+            self.logger.info(f"  - RootFolder: {root_folder}")
+            self.logger.info(f"  - 欄位列表: {columns}")
             
             return {
+                'has_dual_sftp_columns': has_dual_sftp_columns,
                 'has_sftp_columns': has_sftp_columns,
                 'root_folder': root_folder,
-                'columns': df.columns.tolist()
+                'columns': columns,
+                'filepath': file_path  # ⭐ 新增：返回檔案路徑
             }
             
         except Exception as e:
             self.logger.error(f"檢查 Excel 欄位失敗: {str(e)}")
             return {
+                'has_dual_sftp_columns': False,
                 'has_sftp_columns': False,
                 'root_folder': None,
+                'filepath': file_path,  # ⭐ 即使失敗也返回路徑
                 'error': str(e)
             }
     
     def copy_and_rename_excel(self, 
                             original_path: str, 
                             download_folder: str,
-                            original_name: str,
                             root_folder: Optional[str]) -> Optional[str]:
         """
         複製並改名 Excel 檔案到下載資料夾
         
         Args:
             original_path: 原始 Excel 檔案路徑
-            download_folder: 下載資料夾路徑
-            original_name: 原始檔案名稱
+            download_folder: 下載資料夾路徑（task 資料夾）
             root_folder: RootFolder 欄位值
             
         Returns:
@@ -173,15 +161,14 @@ class ExcelHandler:
         """
         try:
             # 決定新檔案名稱
-            new_name = self._determine_new_name(original_name, root_folder)
+            new_name = self._determine_new_name(root_folder)
             
             if not new_name:
-                self.logger.info(f"不需要改名: root_folder={root_folder}")
+                self.logger.info(f"RootFolder '{root_folder}' 不符合改名規則，跳過")
                 return None
             
             # 確保下載資料夾存在
-            if not os.path.exists(download_folder):
-                os.makedirs(download_folder, exist_ok=True)
+            os.makedirs(download_folder, exist_ok=True)
             
             # 建立目標路徑
             target_path = os.path.join(download_folder, new_name)
@@ -189,8 +176,10 @@ class ExcelHandler:
             # 複製檔案
             shutil.copy2(original_path, target_path)
             
-            self.logger.info(f"Excel 檔案已複製並改名: {original_name} -> {new_name}")
-            self.logger.info(f"目標路徑: {target_path}")
+            self.logger.info(f"✅ Excel 檔案已複製並改名:")
+            self.logger.info(f"   原始: {os.path.basename(original_path)}")
+            self.logger.info(f"   新名: {new_name}")
+            self.logger.info(f"   位置: {target_path}")
             
             return new_name
             
@@ -198,33 +187,28 @@ class ExcelHandler:
             self.logger.error(f"複製 Excel 檔案失敗: {str(e)}")
             return None
     
-    def _determine_new_name(self, original_name: str, root_folder: Optional[str]) -> Optional[str]:
+    def _determine_new_name(self, root_folder: Optional[str]) -> Optional[str]:
         """
-        根據規則決定新檔案名稱
+        根據 RootFolder 值決定新檔案名稱
         
-        Args:
-            original_name: 原始檔案名稱
-            root_folder: RootFolder 欄位值
-            
-        Returns:
-            新檔案名稱
+        規則：
+        - 'DailyBuild' → 'DailyBuild_mapping.xlsx'
+        - '/DailyBuild/PrebuildFW' → 'PrebuildFW_mapping.xlsx'
+        - 'PrebuildFW' → 'PrebuildFW_mapping.xlsx'
         """
         if not root_folder:
             return None
         
-        # 將 root_folder 轉換為字串並處理
         root_folder_str = str(root_folder).strip()
         
-        # 處理不同的 RootFolder 值
-        if root_folder_str == 'DailyBuild':
-            return 'DailyBuild_mapping.xlsx'
-        elif root_folder_str == '/DailyBuild/PrebuildFW':
-            return 'PrebuildFW_mapping.xlsx'
-        elif root_folder_str == 'PrebuildFW':
-            return 'PrebuildFW_mapping.xlsx'
+        # 對應規則
+        name_mapping = {
+            'DailyBuild': 'DailyBuild_mapping.xlsx',
+            '/DailyBuild/PrebuildFW': 'PrebuildFW_mapping.xlsx',
+            'PrebuildFW': 'PrebuildFW_mapping.xlsx'
+        }
         
-        # 如果不符合任何規則，返回 None
-        return None
+        return name_mapping.get(root_folder_str)
     
     def process_download_complete(self, 
                                 task_id: str,
@@ -243,40 +227,75 @@ class ExcelHandler:
         """
         result = {
             'excel_copied': False,
-            'excel_new_name': None
+            'excel_new_name': None,
+            'message': ''
         }
         
         if not excel_metadata:
-            self.logger.info("沒有 Excel 元資料，跳過處理")
+            result['message'] = '沒有 Excel 元資料'
+            self.logger.warning(result['message'])
             return result
         
-        # 檢查是否需要複製和改名
-        if excel_metadata.get('has_sftp_columns'):
+        # 記錄接收到的元資料
+        self.logger.info("=" * 60)
+        self.logger.info("接收到的 Excel 元資料:")
+        for key, value in excel_metadata.items():
+            if key == 'columns' and isinstance(value, list) and len(value) > 10:
+                # 如果欄位太多，只顯示前幾個
+                self.logger.info(f"  {key}: {value[:5]} ... (共 {len(value)} 個欄位)")
+            else:
+                self.logger.info(f"  {key}: {value}")
+        self.logger.info("=" * 60)
+        
+        # 檢查是否有雙 SFTP 欄位（SftpPath 和 compare_SftpPath）
+        if excel_metadata.get('has_dual_sftp_columns'):
             original_path = excel_metadata.get('filepath')
-            original_name = excel_metadata.get('original_name')
             root_folder = excel_metadata.get('root_folder')
             
-            self.logger.info(f"處理下載完成: has_sftp_columns=True, root_folder={root_folder}")
+            self.logger.info("✅ 檢測到雙 SFTP 欄位，開始處理 Excel 檔案")
+            self.logger.info(f"  RootFolder: {root_folder}")
+            self.logger.info(f"  原始檔案: {original_path}")
             
-            if original_path and os.path.exists(original_path):
-                new_name = self.copy_and_rename_excel(
-                    original_path,
-                    download_folder,
-                    original_name,
-                    root_folder
-                )
+            # 檢查檔案是否存在
+            if not original_path:
+                result['message'] = '元資料中缺少檔案路徑 (filepath)'
+                self.logger.error(result['message'])
+                return result
                 
-                if new_name:
-                    result['excel_copied'] = True
-                    result['excel_new_name'] = new_name
-                    self.logger.info(f"Excel 檔案處理完成: {new_name}")
-                else:
-                    self.logger.info("Excel 檔案不需要改名")
+            if not os.path.exists(original_path):
+                result['message'] = f'原始檔案不存在: {original_path}'
+                self.logger.warning(result['message'])
+                # 嘗試在上傳目錄尋找
+                upload_dir = 'uploads'
+                possible_files = []
+                if os.path.exists(upload_dir):
+                    for file in os.listdir(upload_dir):
+                        if file.endswith(('.xlsx', '.xls')):
+                            possible_files.append(os.path.join(upload_dir, file))
+                    if possible_files:
+                        self.logger.info(f"  可能的檔案: {possible_files}")
+                return result
+                
+            # 執行複製和改名
+            new_name = self.copy_and_rename_excel(
+                original_path,
+                download_folder,
+                root_folder
+            )
+            
+            if new_name:
+                result['excel_copied'] = True
+                result['excel_new_name'] = new_name
+                result['message'] = f'Excel 檔案已改名為: {new_name}'
             else:
-                self.logger.warning(f"原始檔案不存在: {original_path}")
+                result['message'] = f'RootFolder "{root_folder}" 不需要改名'
         else:
-            self.logger.info("Excel 檔案沒有必要的欄位，跳過處理")
+            result['message'] = 'Excel 檔案沒有同時包含 SftpPath 和 compare_SftpPath 欄位'
+            self.logger.info(result['message'])
+            if 'columns' in excel_metadata:
+                self.logger.info(f"  現有欄位: {excel_metadata['columns'][:10]}")  # 只顯示前10個
         
+        self.logger.info("=" * 60)
         return result
             
     def write_download_report(self, data: List[Dict[str, Any]], output_path: str, source_filename: str) -> str:
