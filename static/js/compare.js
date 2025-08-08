@@ -823,22 +823,32 @@ function createEnhancedStatCard(type, title, value, colorClass, icon, hasSuccess
     const cardClass = isEmpty ? 'stat-card-empty' : `stat-card ${colorClass}`;
     const clickable = !isEmpty ? `onclick="showCompareDetails('${type}')"` : '';
     
+    let sublabel = '';
+    if (isEmpty) {
+        sublabel = '無資料';
+    } else if (type === 'failed') {
+        sublabel = '個模組無法比對';
+    } else {
+        sublabel = '個模組已比對';
+    }
+    
     return `
         <div class="${cardClass}" ${clickable}>
-            <div class="stat-icon-container">
-                <div class="stat-icon">
-                    <i class="fas ${icon}"></i>
+            ${hasSuccess && value > 0 ? `
+                <div class="stat-badge">
+                    <i class="fas fa-check"></i>
                 </div>
-            </div>
-            <div class="stat-card-inner">
-                <div class="stat-value-container">
-                    <div class="stat-value" data-value="${value}">${value}</div>
+            ` : `
+                <div class="stat-icon-wrapper">
+                    <div class="stat-icon">
+                        <i class="fas ${icon}"></i>
+                    </div>
                 </div>
+            `}
+            <div class="stat-content">
+                <div class="stat-value">${value}</div>
                 <div class="stat-label">${title}</div>
-                <div class="stat-sublabel">
-                    ${value > 0 ? '個模組已比對' : '無資料'}
-                </div>
-                <div class="stat-indicator"></div>
+                <div class="stat-sublabel">${sublabel}</div>
             </div>
         </div>
     `;

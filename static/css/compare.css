@@ -4018,3 +4018,845 @@ input.path-input::-webkit-contacts-auto-fill-button {
     opacity: 1;
 }
 
+/* ===== compare.css - 簡潔大方的統計卡片設計 ===== */
+
+/* 統計卡片容器 */
+.progress-stats {
+    display: grid;
+    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    margin-bottom: 40px;
+    padding: 0;
+}
+
+/* 統計卡片 - 簡潔設計 */
+.stat-card {
+    background: #FFFFFF;
+    border: 1px solid #E8ECF4;
+    border-radius: 16px;
+    padding: 32px 28px;
+    position: relative;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-color: currentColor;
+}
+
+/* 圖標 */
+.stat-icon {
+    width: 56px;
+    height: 56px;
+    background: #F0F4FA;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.1);
+}
+
+/* 數值 */
+.stat-value {
+    font-size: 3.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 12px;
+    color: #1A202C;
+}
+
+/* 標題 */
+.stat-label {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #64748B;
+    margin-bottom: 8px;
+}
+
+/* 副標題 */
+.stat-sublabel {
+    font-size: 0.875rem;
+    color: #94A3B8;
+    font-weight: 400;
+}
+
+/* Master vs PreMP - 藍色 */
+.stat-card.blue {
+    border-color: #E0E7FF;
+}
+
+.stat-card.blue:hover {
+    border-color: #6366F1;
+}
+
+.stat-card.blue .stat-icon {
+    background: #EEF2FF;
+    color: #6366F1;
+}
+
+.stat-card.blue .stat-value {
+    color: #6366F1;
+}
+
+/* PreMP vs Wave - 綠色 */
+.stat-card.success {
+    border-color: #D1FAE5;
+}
+
+.stat-card.success:hover {
+    border-color: #10B981;
+}
+
+.stat-card.success .stat-icon {
+    background: #ECFDF5;
+    color: #10B981;
+}
+
+.stat-card.success .stat-value {
+    color: #10B981;
+}
+
+/* Wave vs Backup - 橘色 */
+.stat-card.warning {
+    border-color: #FED7AA;
+}
+
+.stat-card.warning:hover {
+    border-color: #F97316;
+}
+
+.stat-card.warning .stat-icon {
+    background: #FFF7ED;
+    color: #F97316;
+}
+
+.stat-card.warning .stat-value {
+    color: #F97316;
+}
+
+/* 失敗 - 紅色 */
+.stat-card.danger {
+    border-color: #FECACA;
+}
+
+.stat-card.danger:hover {
+    border-color: #EF4444;
+}
+
+.stat-card.danger .stat-icon {
+    background: #FEF2F2;
+    color: #EF4444;
+}
+
+.stat-card.danger .stat-value {
+    color: #EF4444;
+}
+
+/* 空狀態卡片 */
+.stat-card-empty {
+    background: #FAFBFC;
+    border: 2px dashed #E2E8F0;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.stat-card-empty:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: #E2E8F0;
+}
+
+.stat-card-empty .stat-icon {
+    background: #F1F5F9;
+    color: #CBD5E1;
+}
+
+.stat-card-empty .stat-value {
+    color: #CBD5E1;
+}
+
+.stat-card-empty .stat-sublabel {
+    color: #CBD5E1;
+}
+
+/* 頂部色條 */
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 16px 16px 0 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-card.blue::before {
+    background: linear-gradient(90deg, #6366F1, #818CF8);
+}
+
+.stat-card.success::before {
+    background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+.stat-card.warning::before {
+    background: linear-gradient(90deg, #F97316, #FB923C);
+}
+
+.stat-card.danger::before {
+    background: linear-gradient(90deg, #EF4444, #F87171);
+}
+
+/* 成功標記 (可選) */
+.stat-success-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 24px;
+    height: 24px;
+    background: #10B981;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.75rem;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .progress-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .stat-card {
+        min-height: 160px;
+        padding: 24px 20px;
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+    }
+    
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 1.25rem;
+    }
+}
+
+/* ===== compare.css - 精緻設計感統計卡片 ===== */
+
+/* 統計卡片容器 */
+.progress-stats {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+    padding: 0;
+}
+
+/* 統計卡片 - 精緻設計 */
+.stat-card {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    width: 220px;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* 卡片頂部裝飾線 */
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    transition: height 0.3s ease;
+}
+
+.stat-card:hover::before {
+    height: 4px;
+}
+
+/* 卡片背景圖案 */
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    opacity: 0.05;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover::after {
+    transform: scale(1.2);
+    opacity: 0.08;
+}
+
+/* 卡片頭部 */
+.stat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+/* 圖標 - 小巧精緻 */
+.stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: rotate(-5deg) scale(1.1);
+}
+
+/* 狀態標記 */
+.stat-badge {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.2); }
+}
+
+/* 卡片內容 */
+.stat-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 數值 - 緊湊設計 */
+.stat-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -1px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 標題 */
+.stat-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+/* 副標題 */
+.stat-sublabel {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    font-weight: 400;
+}
+
+/* Master vs PreMP - 藍紫色系 */
+.stat-card.blue {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F0F4FF 100%);
+}
+
+.stat-card.blue::before {
+    background: linear-gradient(90deg, #6366F1, #8B5CF6);
+}
+
+.stat-card.blue::after {
+    background: #6366F1;
+}
+
+.stat-card.blue .stat-icon {
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366F1;
+}
+
+.stat-card.blue .stat-value {
+    color: #4F46E5;
+}
+
+.stat-card.blue .stat-badge {
+    background: #6366F1;
+}
+
+/* PreMP vs Wave - 青綠色系 */
+.stat-card.success {
+    background: linear-gradient(145deg, #FFFFFF 0%, #ECFDF5 100%);
+}
+
+.stat-card.success::before {
+    background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+.stat-card.success::after {
+    background: #10B981;
+}
+
+.stat-card.success .stat-icon {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10B981;
+}
+
+.stat-card.success .stat-value {
+    color: #059669;
+}
+
+.stat-card.success .stat-badge {
+    background: #10B981;
+}
+
+/* Wave vs Backup - 琥珀色系 */
+.stat-card.warning {
+    background: linear-gradient(145deg, #FFFFFF 0%, #FFFBEB 100%);
+}
+
+.stat-card.warning::before {
+    background: linear-gradient(90deg, #F59E0B, #FBBF24);
+}
+
+.stat-card.warning::after {
+    background: #F59E0B;
+}
+
+.stat-card.warning .stat-icon {
+    background: rgba(245, 158, 11, 0.1);
+    color: #F59E0B;
+}
+
+.stat-card.warning .stat-value {
+    color: #D97706;
+}
+
+.stat-card.warning .stat-badge {
+    background: #F59E0B;
+}
+
+/* 失敗 - 玫瑰色系 */
+.stat-card.danger {
+    background: linear-gradient(145deg, #FFFFFF 0%, #FEF2F2 100%);
+}
+
+.stat-card.danger::before {
+    background: linear-gradient(90deg, #EF4444, #F87171);
+}
+
+.stat-card.danger::after {
+    background: #EF4444;
+}
+
+.stat-card.danger .stat-icon {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+}
+
+.stat-card.danger .stat-value {
+    color: #DC2626;
+}
+
+/* 空狀態卡片 - 優雅處理 */
+.stat-card-empty {
+    background: #FAFBFC;
+    border: 1.5px dashed #CBD5E1;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.stat-card-empty:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.stat-card-empty::before {
+    display: none;
+}
+
+.stat-card-empty .stat-icon {
+    background: #F1F5F9;
+    color: #CBD5E1;
+}
+
+.stat-card-empty .stat-value {
+    color: #CBD5E1;
+}
+
+/* 懸停時的細節 */
+.stat-card:not(.stat-card-empty):hover {
+    border-color: transparent;
+}
+
+/* 額外的視覺層次 */
+.stat-card-footer {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.stat-trend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.trend-up {
+    color: #10B981;
+}
+
+.trend-up i {
+    font-size: 0.625rem;
+}
+
+/* 快速操作按鈕 */
+.stat-action {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.04);
+    color: #64748B;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover .stat-action {
+    background: currentColor;
+    color: white;
+}
+
+.stat-card.blue .stat-action:hover {
+    background: #6366F1;
+}
+
+.stat-card.success .stat-action:hover {
+    background: #10B981;
+}
+
+.stat-card.warning .stat-action:hover {
+    background: #F59E0B;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .progress-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        padding: 0 16px;
+    }
+    
+    .stat-card {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .progress-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== compare.css - 調整統計卡片為一致大小並平均分佈 ===== */
+
+/* 統計卡片容器 - 平均分佈 */
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);  /* 三等分 */
+    gap: 24px;
+    margin-bottom: 40px;
+    padding: 0;
+    width: 100%;
+}
+
+/* 統計卡片 - 統一大小 */
+.stat-card {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 28px 24px;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    min-height: 160px;  /* 統一高度 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    width: 100%;  /* 填滿容器寬度 */
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* 卡片頂部裝飾線 */
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    transition: height 0.3s ease;
+}
+
+.stat-card:hover::before {
+    height: 4px;
+}
+
+/* 圖標容器 - 統一樣式 */
+.stat-icon-wrapper {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+}
+
+.stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.125rem;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.1);
+}
+
+/* 狀態標記 - 統一位置 */
+.stat-badge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.75rem;
+}
+
+/* 卡片內容區 */
+.stat-content {
+    width: 100%;
+    padding-top: 10px;
+}
+
+/* 數值 - 統一大小 */
+.stat-value {
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 12px;
+    letter-spacing: -1px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 標題 */
+.stat-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+/* 副標題 */
+.stat-sublabel {
+    font-size: 0.8125rem;
+    color: #94A3B8;
+    font-weight: 400;
+}
+
+/* Master vs PreMP - 藍紫色系 */
+.stat-card.blue {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F0F4FF 100%);
+}
+
+.stat-card.blue::before {
+    background: linear-gradient(90deg, #6366F1, #8B5CF6);
+}
+
+.stat-card.blue .stat-icon {
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366F1;
+}
+
+.stat-card.blue .stat-value {
+    color: #4F46E5;
+}
+
+/* PreMP vs Wave - 青綠色系 */
+.stat-card.success {
+    background: linear-gradient(145deg, #FFFFFF 0%, #ECFDF5 100%);
+}
+
+.stat-card.success::before {
+    background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+.stat-card.success .stat-icon {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10B981;
+}
+
+.stat-card.success .stat-value {
+    color: #059669;
+}
+
+/* Wave vs Backup - 琥珀色系 */
+.stat-card.warning {
+    background: linear-gradient(145deg, #FFFFFF 0%, #FFFBEB 100%);
+}
+
+.stat-card.warning::before {
+    background: linear-gradient(90deg, #F59E0B, #FBBF24);
+}
+
+.stat-card.warning .stat-icon {
+    background: rgba(245, 158, 11, 0.1);
+    color: #F59E0B;
+}
+
+.stat-card.warning .stat-value {
+    color: #D97706;
+}
+
+.stat-card.warning .stat-badge {
+    background: #10B981;
+}
+
+/* 失敗 - 玫瑰色系 */
+.stat-card.danger {
+    background: linear-gradient(145deg, #FFFFFF 0%, #FEF2F2 100%);
+}
+
+.stat-card.danger::before {
+    background: linear-gradient(90deg, #EF4444, #F87171);
+}
+
+.stat-card.danger .stat-icon {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+}
+
+.stat-card.danger .stat-value {
+    color: #DC2626;
+}
+
+/* 空狀態卡片 */
+.stat-card-empty {
+    background: #FAFBFC;
+    border: 1.5px dashed #CBD5E1;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.stat-card-empty:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.stat-card-empty .stat-icon {
+    background: #F1F5F9;
+    color: #CBD5E1;
+}
+
+.stat-card-empty .stat-value {
+    color: #CBD5E1;
+}
+
+/* 響應式設計 */
+@media (max-width: 1024px) {
+    .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+}
+
+@media (max-width: 640px) {
+    .progress-stats {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .stat-card {
+        min-height: 140px;
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+    }
+}
+
+/* 如果有4個卡片時自動調整 */
+.progress-stats:has(.stat-card:nth-child(4)) {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+    .progress-stats:has(.stat-card:nth-child(4)) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
