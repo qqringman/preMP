@@ -13,7 +13,7 @@ let chartInstances = {
     success: null,
     diff: null
 };
-let currentModalData = null; // 當前模態框資料
+let currentModalData = null;
 
 // DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
@@ -43,6 +43,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (activeTab && activeTab.textContent.includes('伺服器')) {
         loadServerFolders(currentServerPath);
         serverFilesLoaded = true;
+    }
+
+    // 確保再比一筆按鈕有更好的樣式
+    const resultActions = document.querySelector('.result-actions:last-child');
+    if (resultActions) {
+        resultActions.className = 'compare-again-section';
+        const btn = resultActions.querySelector('button');
+        if (btn) {
+            btn.className = 'btn-compare-again';
+        }
     }
 });
 
@@ -516,7 +526,7 @@ function getScenarioInfo(scenario) {
 // 如果後端沒有儲存歷史記錄的 API，可以在前端暫存
 let completedTasks = [];
 
-// 修改 showCompareResults 函數，儲存失敗模組資訊
+// 修改 showCompareResults 函數
 function showCompareResults(results) {
     document.getElementById('compareProgress').classList.add('hidden');
     document.getElementById('compareResults').classList.remove('hidden');
@@ -526,31 +536,14 @@ function showCompareResults(results) {
         currentTaskId = results.task_id;
     }
     
-    // 儲存失敗模組資訊到全域變數
-    if (results.compare_results) {
-        let failedModulesList = [];
-        
-        Object.entries(results.compare_results).forEach(([scenario, data]) => {
-            if (data && data.failed_modules && Array.isArray(data.failed_modules)) {
-                data.failed_modules.forEach(module => {
-                    failedModulesList.push({
-                        module: module,
-                        scenario: getScenarioDisplayName(scenario)
-                    });
-                });
-            }
-        });
-        
-        // 儲存到全域變數
-        if (!window.taskFailedModules) {
-            window.taskFailedModules = {};
-        }
-        window.taskFailedModules[currentTaskId] = failedModulesList;
-    }
-    
     // 生成結果摘要
     const summaryHtml = generateCompareResultsSummary(results);
     document.getElementById('resultsSummary').innerHTML = summaryHtml;
+    
+    // 如果是 all 情境，顯示資料夾結構
+    if (window.currentCompareScenario === 'all') {
+        showResultsStructure(currentTaskId);
+    }
     
     // 繪製圖表
     drawCharts(results);
@@ -558,7 +551,7 @@ function showCompareResults(results) {
     // 重新載入最近記錄
     loadRecentComparisons();
     
-    utils.showNotification('比對完成！', 'success');
+    utils.showNotification('比對完成！結果已儲存到各自的資料夾', 'success');
 }
 
 // 新增函數：將任務儲存到歷史記錄
@@ -762,50 +755,61 @@ async function loadRecentComparisons() {
 function generateCompareResultsSummary(results) {
     const compareResults = results.compare_results || {};
     
-    // 計算總失敗數
-    let totalFailed = 0;
-    let failedModulesList = [];
-    
-    Object.values(compareResults).forEach(data => {
-        if (typeof data === 'object') {
-            totalFailed += data.failed || 0;
-            if (data.failed_modules && Array.isArray(data.failed_modules)) {
-                failedModulesList = failedModulesList.concat(data.failed_modules);
-            }
-        }
-    });
-    
-    // 儲存失敗的模組列表供後續使用
-    if (currentTaskId) {
-        if (!window.taskFailedModules) {
-            window.taskFailedModules = {};
-        }
-        window.taskFailedModules[currentTaskId] = failedModulesList;
-    }
-    
     let html = '<div class="progress-stats">';
     
     // Master vs PreMP
     if (compareResults.master_vs_premp) {
         const data = compareResults.master_vs_premp;
-        html += createStatCard('master_vs_premp', 'Master vs PreMP', data.success || 0, 'blue', 'fa-code-branch');
+        html += createEnhancedStatCard(
+            'master_vs_premp', 
+            'Master vs PreMP', 
+            data.success || 0, 
+            'blue', 
+            'fa-code-branch',
+            data.success > 0
+        );
     }
     
     // PreMP vs Wave  
     if (compareResults.premp_vs_wave) {
         const data = compareResults.premp_vs_wave;
-        html += createStatCard('premp_vs_wave', 'PreMP vs Wave', data.success || 0, 'success', 'fa-water');
+        html += createEnhancedStatCard(
+            'premp_vs_wave', 
+            'PreMP vs Wave', 
+            data.success || 0, 
+            'success', 
+            'fa-water',
+            data.success > 0
+        );
     }
     
     // Wave vs Backup
     if (compareResults.wave_vs_backup) {
         const data = compareResults.wave_vs_backup;
-        html += createStatCard('wave_vs_backup', 'Wave vs Backup', data.success || 0, 'warning', 'fa-database');
+        html += createEnhancedStatCard(
+            'wave_vs_backup', 
+            'Wave vs Backup', 
+            data.success || 0, 
+            'warning', 
+            'fa-database',
+            data.success > 0
+        );
     }
     
-    // 失敗的模組 - 只有當確實有失敗時才顯示
+    // 失敗的模組
+    const totalFailed = Object.values(compareResults).reduce((sum, data) => 
+        sum + (data.failed || 0), 0
+    );
+    
     if (totalFailed > 0) {
-        html += createStatCard('failed', '無法比對', totalFailed, 'danger', 'fa-exclamation-triangle');
+        html += createEnhancedStatCard(
+            'failed', 
+            '無法比對', 
+            totalFailed, 
+            'danger', 
+            'fa-exclamation-triangle',
+            false
+        );
     }
     
     html += '</div>';
@@ -813,16 +817,57 @@ function generateCompareResultsSummary(results) {
     return html;
 }
 
+// 創建增強版統計卡片
+function createEnhancedStatCard(type, title, value, colorClass, icon, hasSuccess) {
+    const isEmpty = value === 0;
+    const cardClass = isEmpty ? 'stat-card-empty' : `stat-card ${colorClass}`;
+    const clickable = !isEmpty ? `onclick="showCompareDetails('${type}')"` : '';
+    
+    return `
+        <div class="${cardClass}" ${clickable}>
+            <div class="stat-icon-container">
+                <div class="stat-icon">
+                    <i class="fas ${icon}"></i>
+                </div>
+            </div>
+            <div class="stat-card-inner">
+                <div class="stat-value-container">
+                    <div class="stat-value" data-value="${value}">${value}</div>
+                </div>
+                <div class="stat-label">${title}</div>
+                <div class="stat-sublabel">
+                    ${value > 0 ? '個模組已比對' : '無資料'}
+                </div>
+                <div class="stat-indicator"></div>
+            </div>
+        </div>
+    `;
+}
+
 // 創建統計卡片 - 新函數
 function createStatCard(type, title, value, colorClass, icon) {
+    // 加入 tooltip 提示
+    let tooltip = '';
+    if (value > 0 && type !== 'failed') {
+        tooltip = 'title="點擊查看詳細資料"';
+    } else if (type === 'failed' && value > 0) {
+        tooltip = 'title="點擊查看失敗的模組"';
+    }
+    
+    // 如果沒有資料，改變樣式
+    const cardClass = value === 0 ? 'stat-card-empty' : `stat-card ${colorClass}`;
+    const clickable = value > 0 ? `onclick="showCompareDetails('${type}')"` : '';
+    
     return `
-        <div class="stat-card ${colorClass}" onclick="showCompareDetails('${type}')" title="點擊查看詳細資料">
+        <div class="${cardClass}" ${clickable} ${tooltip}>
             <div class="stat-icon">
                 <i class="fas ${icon}"></i>
             </div>
             <div class="stat-content">
                 <div class="stat-value">${value}</div>
                 <div class="stat-label">${title}</div>
+                ${value > 0 && type !== 'failed' ? 
+                    '<div class="stat-hint"><i class="fas fa-mouse-pointer"></i> 點擊查看</div>' : ''}
             </div>
         </div>
     `;
@@ -853,14 +898,21 @@ async function showCompareDetails(type) {
     }
     
     try {
-        // 如果是 'failed' 類型，需要特別處理
+        // 如果是 'failed' 類型，特別處理
         if (type === 'failed') {
-            // 從 API 獲取失敗的模組資料
             await showFailedModulesModal();
             return;
         }
         
-        // 其他類型的正常處理
+        // 先取得任務狀態，確認是否有成功的比對
+        const statusData = await utils.apiRequest(`/api/status/${currentTaskId}`);
+        const compareResults = statusData?.results?.compare_results || {};
+        
+        // 檢查該類型是否有成功的比對
+        const typeData = compareResults[type];
+        const successCount = typeData?.success || 0;
+        
+        // 取得 pivot data
         const pivotData = await utils.apiRequest(`/api/pivot-data/${currentTaskId}`);
         
         let modalTitle = '';
@@ -902,12 +954,18 @@ async function showCompareDetails(type) {
         
         const availableSheets = relevantSheets.filter(sheet => pivotData[sheet.name]);
         
-        if (availableSheets.length === 0) {
-            // 如果沒有資料，顯示空資料提示
-            showEmptyModal(modalTitle, modalClass);
+        // 重要：區分「沒有差異」和「沒有資料」
+        if (successCount > 0 && availableSheets.length === 0) {
+            // 有成功比對但沒有差異
+            showNoDifferenceModal(modalTitle, modalClass, successCount);
+            return;
+        } else if (successCount === 0) {
+            // 沒有成功的比對
+            showNoDataModal(modalTitle, modalClass);
             return;
         }
         
+        // 有差異資料，顯示詳細內容
         currentModalData = { pivotData, sheets: availableSheets, title: modalTitle, modalClass };
         showCompareModal(pivotData, availableSheets, modalTitle, modalClass);
         
@@ -915,6 +973,119 @@ async function showCompareDetails(type) {
         console.error('Show compare details error:', error);
         utils.showNotification('無法載入詳細資料', 'error');
     }
+}
+
+// 顯示「無差異」模態框
+function showNoDifferenceModal(title, modalClass, moduleCount) {
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    modal.innerHTML = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-check-circle"></i> ${title}
+                </h3>
+                <span class="modal-count">比對 ${moduleCount} 個模組</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="success-state-container">
+                    <div class="success-state-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    
+                    <h3 class="success-state-title">比對成功！所有檔案完全一致</h3>
+                    <p class="success-state-desc">
+                        已成功比對 <strong>${moduleCount}</strong> 個模組，所有檔案內容完全相同，沒有發現任何差異。
+                    </p>
+                    
+                    <div class="success-details">
+                        <div class="success-detail-item">
+                            <i class="fas fa-check text-success"></i>
+                            <span>Manifest 檔案一致</span>
+                        </div>
+                        <div class="success-detail-item">
+                            <i class="fas fa-check text-success"></i>
+                            <span>版本檔案一致</span>
+                        </div>
+                        <div class="success-detail-item">
+                            <i class="fas fa-check text-success"></i>
+                            <span>所有專案檔案一致</span>
+                        </div>
+                    </div>
+                    
+                    <div class="success-actions">
+                        <button class="btn btn-primary" onclick="closeCompareModal()">
+                            <i class="fas fa-check"></i> 確認
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+}
+
+// 顯示「無資料」模態框
+function showNoDataModal(title, modalClass) {
+    let modal = document.getElementById('compareDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'compareDetailsModal';
+        modal.className = 'modal hidden';
+        document.body.appendChild(modal);
+    }
+    
+    modal.className = `modal ${modalClass}`;
+    
+    modal.innerHTML = `
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-info-circle"></i> ${title}
+                </h3>
+                <span class="modal-count">無可用資料</span>
+                <button class="modal-close" onclick="closeCompareModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="empty-state-container">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    
+                    <h3 class="empty-state-title">沒有找到對應的檔案</h3>
+                    <p class="empty-state-desc">
+                        此比對情境下沒有找到可以比對的檔案。可能的原因：
+                    </p>
+                    
+                    <ul class="empty-state-reasons">
+                        <li>選擇的目錄不包含此類型的檔案</li>
+                        <li>檔案路徑結構不符合預期格式</li>
+                        <li>此情境不適用於當前的資料集</li>
+                    </ul>
+                    
+                    <button class="btn btn-secondary" onclick="closeCompareModal()">
+                        <i class="fas fa-arrow-left"></i> 返回
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
 }
 
 // 修正：顯示失敗模組的模態框
@@ -3300,8 +3471,116 @@ function selectSuggestion(path) {
     goToPath();
 }
 
+// 下載所有情境的檔案
+async function downloadAllScenarios() {
+    if (!currentTaskId) {
+        utils.showNotification('無法取得任務 ID', 'error');
+        return;
+    }
+    
+    utils.showNotification('正在準備下載所有檔案...', 'info');
+    
+    try {
+        const response = await fetch(`/api/export-zip/${currentTaskId}`);
+        
+        if (!response.ok) {
+            throw new Error('下載失敗');
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTaskId}_complete.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        utils.showNotification('檔案下載完成', 'success');
+        
+    } catch (error) {
+        console.error('Download all scenarios error:', error);
+        utils.showNotification('下載失敗', 'error');
+    }
+}
+
+// 顯示結果資料夾結構
+async function showResultsStructure(taskId) {
+    try {
+        const structure = await utils.apiRequest(`/api/results-structure/${taskId}`);
+        
+        if (structure && structure.scenarios) {
+            let structureHtml = `
+                <div class="results-structure-card">
+                    <h4 class="structure-title">
+                        <i class="fas fa-folder-tree"></i> 結果檔案結構
+                    </h4>
+                    <div class="structure-tree">
+                        <div class="tree-root">
+                            <i class="fas fa-folder-open"></i> ${taskId}/
+                        </div>
+            `;
+            
+            // 顯示各情境資料夾
+            for (const [scenario, data] of Object.entries(structure.scenarios)) {
+                const scenarioName = getScenarioDisplayName(scenario);
+                structureHtml += `
+                    <div class="tree-branch">
+                        <div class="tree-node">
+                            <i class="fas fa-folder"></i> ${scenario}/
+                            <span class="tree-label">${scenarioName}</span>
+                        </div>
+                        <div class="tree-files">
+                `;
+                
+                // 顯示檔案
+                if (data.files && data.files.length > 0) {
+                    data.files.forEach(file => {
+                        const icon = file.name.endsWith('.xlsx') ? 'fa-file-excel' : 
+                                    file.name.endsWith('.json') ? 'fa-file-code' : 'fa-file';
+                        const sizeKB = (file.size / 1024).toFixed(1);
+                        
+                        structureHtml += `
+                            <div class="tree-file">
+                                <i class="fas ${icon}"></i> 
+                                ${file.name}
+                                <span class="file-size">(${sizeKB} KB)</span>
+                            </div>
+                        `;
+                    });
+                }
+                
+                structureHtml += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            structureHtml += `
+                    </div>
+                    <div class="structure-actions">
+                        <button class="btn btn-primary btn-small" onclick="downloadAllScenarios()">
+                            <i class="fas fa-download"></i> 下載所有檔案
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // 插入到結果摘要後面
+            const summaryElement = document.getElementById('resultsSummary');
+            const structureContainer = document.createElement('div');
+            structureContainer.innerHTML = structureHtml;
+            summaryElement.appendChild(structureContainer);
+        }
+        
+    } catch (error) {
+        console.error('Get results structure error:', error);
+    }
+}
 
 // 匯出函數
+// 確保所有函數都正確匯出到 window 物件
 window.switchSourceTab = switchSourceTab;
 window.selectLocalDirectory = selectLocalDirectory;
 window.refreshServerPath = refreshServerPath;
@@ -3321,7 +3600,6 @@ window.closeCompareModal = closeCompareModal;
 window.switchModalTab = switchModalTab;
 window.previewCompareFile = previewCompareFile;
 window.previewFailedModule = previewFailedModule;
-window.closeCompareModal = closeCompareModal;
 window.switchCompareTab = switchCompareTab;
 window.searchCompareContent = searchCompareContent;
 window.searchTabContent = searchTabContent;
@@ -3333,3 +3611,5 @@ window.searchFailedModules = searchFailedModules;
 window.clearFailedSearch = clearFailedSearch;
 window.showFailedModulesModal = showFailedModulesModal;
 window.sortFailedTable = sortFailedTable;
+window.showResultsStructure = showResultsStructure;
+window.downloadAllScenarios = downloadAllScenarios;
