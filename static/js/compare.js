@@ -428,13 +428,18 @@ async function executeCompare() {
             method: 'POST',
             body: JSON.stringify({
                 source_dir: sourceDirectory,
-                scenarios: scenario
+                scenarios: scenario,
+                // 添加多維度支援標誌
+                multi_dimension: scenario === 'all',
+                separate_results: true  // 要求分開儲存各維度結果
             })
         });
         
-        // 確保保存完整的 task_id
         currentTaskId = response.task_id;
-        console.log('Current task_id:', currentTaskId); // 除錯用
+        console.log('Current task_id:', currentTaskId);
+        
+        // 記錄當前比對情境
+        window.currentCompareScenario = scenario;
         
         // 加入任務房間
         if (socket) {
@@ -877,14 +882,20 @@ async function showCompareDetails(type) {
                 modalTitle = 'PreMP vs Wave';
                 modalClass = 'success';
                 relevantSheets = [
-                    { name: 'premp_wave_diff', title: '差異比對' }
+                    { name: 'revision_diff', title: 'Revision 差異' },
+                    { name: 'branch_error', title: '分支錯誤' },
+                    { name: 'lost_project', title: '新增/刪除專案' },
+                    { name: 'version_diff', title: '版本檔案差異' }
                 ];
                 break;
             case 'wave_vs_backup':
                 modalTitle = 'Wave vs Backup';
                 modalClass = 'warning';
                 relevantSheets = [
-                    { name: 'wave_backup_diff', title: '差異比對' }
+                    { name: 'revision_diff', title: 'Revision 差異' },
+                    { name: 'branch_error', title: '分支錯誤' },
+                    { name: 'lost_project', title: '新增/刪除專案' },
+                    { name: 'version_diff', title: '版本檔案差異' }
                 ];
                 break;
         }
@@ -1681,7 +1692,7 @@ function generateCompareTableContent(sheetData, sheetName) {
     });
     
     html += '</tbody></table>';
-    tml += '</div></div>';  // 關閉 table-container 和 table-wrapper
+    html += '</div></div>';  // 關閉 table-container 和 table-wrapper
     
     return html;
 }
@@ -2625,13 +2636,54 @@ async function exportResults(format) {
         return;
     }
     
+    // 獲取當前選擇的情境
+    const scenario = document.querySelector('input[name="scenario"]:checked').value;
+    
     const endpoints = {
         excel: `/api/export-excel/${currentTaskId}`,
         html: `/api/export-html/${currentTaskId}`,
         zip: `/api/export-zip/${currentTaskId}`
     };
     
-    if (format === 'zip') {
+    // 如果是特定情境，傳遞情境參數
+    if (scenario !== 'all') {
+        endpoints.excel += `?scenario=${scenario}`;
+        endpoints.html += `?scenario=${scenario}`;
+        endpoints.zip += `?scenario=${scenario}`;
+    }
+    
+    if (format === 'excel') {
+        // Excel 匯出支援多維度
+        try {
+            const response = await fetch(endpoints.excel);
+            
+            if (!response.ok) {
+                throw new Error('匯出失敗');
+            }
+            
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // 檔名包含情境資訊
+            let filename = scenario === 'all' ? 
+                'all_scenarios_compare.xlsx' : 
+                `${scenario}_compare.xlsx`;
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            utils.showNotification('Excel 檔案匯出完成', 'success');
+            
+        } catch (error) {
+            console.error('Export error:', error);
+            utils.showNotification('匯出失敗', 'error');
+        }
+    } else if (format === 'zip') {
         utils.showNotification('正在準備 ZIP 檔案，請稍候...', 'info');
         
         try {

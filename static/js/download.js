@@ -1763,7 +1763,13 @@ async function startDownload() {
                 requestData.excel_file = uploadResult.filepath;
                 
                 // 如果有特定欄位，加入請求中
-                if (uploadResult.hasSpecialColumns) {
+                if (uploadResult.hasDualColumns) {
+                    requestData.excel_metadata = {
+                        has_dual_columns: true,
+                        original_name: file.name,
+                        root_folder: uploadResult.rootFolder
+                    };
+                } else if (uploadResult.hasSpecialColumns) {
                     requestData.excel_metadata = {
                         has_sftp_columns: true,
                         original_name: file.name,
@@ -1843,9 +1849,21 @@ async function uploadFileAndCheckColumns(file) {
             })
         });
         
+        // 記錄 Excel 資訊供後續使用
+        if (checkResponse.has_dual_sftp_columns) {
+            uploadedExcelInfo = {
+                file: file,
+                originalName: file.name,
+                filepath: uploadResult.filepath,
+                rootFolder: checkResponse.root_folder,
+                hasDualColumns: true
+            };
+        }
+        
         return {
             filepath: uploadResult.filepath,
-            hasSpecialColumns: checkResponse.has_sftp_columns,
+            hasSpecialColumns: checkResponse.has_sftp_columns || checkResponse.has_dual_sftp_columns,
+            hasDualColumns: checkResponse.has_dual_sftp_columns,
             rootFolder: checkResponse.root_folder
         };
     } catch (error) {
@@ -1853,6 +1871,7 @@ async function uploadFileAndCheckColumns(file) {
         return {
             filepath: uploadResult.filepath,
             hasSpecialColumns: false,
+            hasDualColumns: false,
             rootFolder: null
         };
     }
@@ -2016,11 +2035,8 @@ function showDownloadResults(results) {
         downloadResults.classList.remove('hidden');
     }
     
-    // 檢查是否需要複製和改名Excel檔案
-    if (results.excel_copied) {
-        addLog(`Excel檔案已複製並改名為: ${results.excel_new_name}`, 'success');
-        utils.showNotification(`Excel檔案已另存為: ${results.excel_new_name}`, 'success');
-    }
+    // 處理 Excel 檔案複製和改名
+    handleExcelCopyAndRename(results);
     
     // 確保檔案列表資料被保存
     if (results.files) {
@@ -2037,6 +2053,48 @@ function showDownloadResults(results) {
     // 生成資料夾樹
     if (results.folder_structure) {
         generateFolderTree(results.folder_structure);
+    }
+}
+
+// 新增處理 Excel 檔案的複製和改名函數
+async function handleExcelCopyAndRename(results) {
+    // 檢查是否有需要複製的 Excel 檔案資訊
+    if (!uploadedExcelInfo || !uploadedExcelInfo.hasDualColumns) {
+        return;
+    }
+    
+    try {
+        // 決定新檔名
+        let newFileName = '';
+        const rootFolder = uploadedExcelInfo.rootFolder || results.root_folder;
+        
+        if (rootFolder === 'DailyBuild') {
+            newFileName = 'DailyBuild_mapping.xlsx';
+        } else if (rootFolder === '/DailyBuild/PrebuildFW' || rootFolder === 'PrebuildFW') {
+            newFileName = 'PrebuildFW_mapping.xlsx';
+        } else {
+            // 預設使用原檔名
+            newFileName = uploadedExcelInfo.originalName;
+        }
+        
+        // 呼叫後端 API 複製和改名 Excel 檔案
+        const copyResponse = await utils.apiRequest('/api/copy-excel-to-results', {
+            method: 'POST',
+            body: JSON.stringify({
+                task_id: downloadTaskId,
+                original_filepath: uploadedExcelInfo.filepath,
+                new_filename: newFileName
+            })
+        });
+        
+        if (copyResponse.success) {
+            addLog(`Excel 檔案已複製並改名為: ${newFileName}`, 'success');
+            utils.showNotification(`Excel 檔案已另存為: ${newFileName}`, 'success');
+        }
+        
+    } catch (error) {
+        console.error('複製 Excel 檔案失敗:', error);
+        addLog(`複製 Excel 檔案失敗: ${error.message}`, 'warning');
     }
 }
 
