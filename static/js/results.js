@@ -2253,6 +2253,7 @@ function hideExportLoading() {
 }
 
 // 匯出整個頁面為 HTML（保留 JS/CSS）- 完整離線版本
+// 修復版 exportPageAsHTML 函數 - 替換你現有的
 function exportPageAsHTML() {
     try {
         // 收集所有內嵌的 CSS
@@ -2276,8 +2277,8 @@ function exportPageAsHTML() {
             }
         }
         
-        // 獲取當前所有的 JavaScript 函數
-        const jsCode = getAllRequiredFunctions();
+        // 獲取當前所有的必要 JavaScript 函數
+        const jsCode = getRequiredOfflineFunctions();
         
         // 建立完整的離線 HTML
         const htmlContent = `
@@ -2312,7 +2313,7 @@ function exportPageAsHTML() {
     <style>
         ${allCSS}
         
-        /* 額外的離線模式樣式 */
+        /* 離線模式樣式 */
         .offline-mode-notice {
             position: fixed;
             top: 10px;
@@ -2326,7 +2327,6 @@ function exportPageAsHTML() {
             display: none;
         }
         
-        /* 確保離線模式下的響應式設計 */
         @media print {
             .offline-mode-notice,
             .fab-container,
@@ -2449,20 +2449,7 @@ function exportPageAsHTML() {
                                         <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
                                             <i class="fas fa-undo"></i> 重置
                                         </button>
-                                        <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
-                                            <i class="fas fa-file-excel"></i> 匯出
-                                        </button>
                                     </div>
-                                </div>
-                                
-                                <div class="pivot-instructions">
-                                    <i class="fas fa-info-circle"> 拖曳欄位到不同區域來建立樞紐分析表</i>
-                                    <ul>
-                                        <li>拖曳欄位到列或欄區域來分組資料</li>
-                                        <li>選擇不同的彙總函數（總和、平均、計數等）</li>
-                                        <li>使用篩選器來過濾資料</li>
-                                        <li>點擊表格標題來排序</li>
-                                    </ul>
                                 </div>
                                 
                                 <div id="pivotContainer"></div>
@@ -2511,13 +2498,6 @@ function exportPageAsHTML() {
             <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
             <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
         </div>
-    </div>
-
-    <!-- 浮動按鈕 -->
-    <div class="fab-container">
-        <button class="fab-filter" onclick="toggleFilterPanel()" title="資料篩選器" id="fabFilter">
-            <i class="fas fa-filter"></i>
-        </button>
     </div>
 
     <!-- JavaScript 程式碼 -->
@@ -2652,6 +2632,323 @@ function exportPageAsHTML() {
         console.error('匯出 HTML 錯誤:', error);
         alert('匯出失敗：' + error.message);
     }
+}
+
+// 完整版 getRequiredOfflineFunctions 函數 - 替換你現有的
+function getRequiredOfflineFunctions() {
+    let code = `
+        // 全域變數
+        let currentData = null;
+        let currentSheet = null;
+        let pivotMode = false;
+        let filters = {};
+        let sortOrder = {};
+        let searchTerm = '';
+        let taskId = '';
+        let pivotData = null;
+        let pivotConfig = null;
+        let pivotInitialData = null;
+        let pivotInitialConfig = null;
+        let areasVisible = true;
+        let customFilterCurrentElement = null;
+        let customFilterCurrentData = [];
+        let pivotFilterStates = {};
+        let currentFilterField = null;
+        
+        // 確保 jQuery 和 PivotTable 已載入
+        if (typeof $ === 'undefined') {
+            console.error('jQuery 未正確載入');
+        }
+        if (typeof $.pivotUtilities === 'undefined') {
+            console.warn('PivotTable.js 未正確載入，樞紐分析功能可能不可用');
+        }
+        
+        // ===== 添加所有缺失的函數定義 =====
+        
+        function updateClearButton(column) {
+            const select = document.querySelector(\`select[data-column="\${column}"]\`);
+            const clearBtn = document.querySelector(\`.clear-filter-btn[data-column="\${column}"]\`);
+            
+            if (select && clearBtn) {
+                const hasSelection = select.selectedOptions.length > 0;
+                clearBtn.style.display = hasSelection ? 'inline-flex' : 'none';
+            }
+        }
+        
+        function initializePivotFilterModal() {
+            // 離線模式下的空實現
+            console.log('initializePivotFilterModal: 離線模式下已跳過');
+        }
+        
+        function interceptPivotDropdowns() {
+            // 離線模式下的空實現
+            console.log('interceptPivotDropdowns: 離線模式下已跳過');
+        }
+        
+        function formatMultiLineContent(value, compareValue, fileType) {
+            if (!value) return value;
+            if (!compareValue) return value;
+            
+            const lines = value.split('\\n');
+            const compareLines = compareValue.split('\\n');
+            
+            const compareMap = {};
+            compareLines.forEach(line => {
+                if (line.startsWith('P_GIT_')) {
+                    const gitId = line.split(';')[0];
+                    compareMap[gitId] = line;
+                } else if (line.includes(':')) {
+                    const key = line.split(':')[0].trim();
+                    compareMap[key] = line;
+                } else {
+                    compareMap[line.substring(0, 20)] = line;
+                }
+            });
+            
+            let formattedLines = [];
+            
+            lines.forEach((line) => {
+                let formattedLine = line;
+                
+                if (line.startsWith('P_GIT_')) {
+                    const gitId = line.split(';')[0];
+                    const compareLine = compareMap[gitId] || '';
+                    
+                    if (compareLine) {
+                        const parts1 = line.split(';');
+                        const parts2 = compareLine.split(';');
+                        
+                        if (parts1.length >= 5 && parts2.length >= 5) {
+                            let result = '';
+                            for (let i = 0; i < parts1.length; i++) {
+                                if (i > 0) result += ';';
+                                
+                                if ((i === 3 || i === 4) && parts1[i] !== parts2[i]) {
+                                    result += \`<span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">\${parts1[i]}</span>\`;
+                                } else {
+                                    result += parts1[i];
+                                }
+                            }
+                            formattedLine = result;
+                        }
+                    }
+                } else if (line.includes(':')) {
+                    const key = line.split(':')[0].trim();
+                    const compareLine = compareMap[key] || '';
+                    
+                    if (compareLine) {
+                        const val1 = line.split(':')[1]?.trim() || '';
+                        const val2 = compareLine.split(':')[1]?.trim() || '';
+                        
+                        if (val1 !== val2) {
+                            formattedLine = \`\${key}: <span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">\${val1}</span>\`;
+                        }
+                    }
+                }
+                
+                formattedLines.push(formattedLine);
+            });
+            
+            return formattedLines.join('<br>');
+        }
+        
+        function formatFHashContent(value1, value2) {
+            if (!value1 || !value2) return value1;
+            
+            const notFoundPattern = /F_HASH:\\s*\\(not found\\)/i;
+            const hashPattern = /F_HASH:\\s*([a-f0-9]+)/i;
+            
+            const hasNotFound1 = notFoundPattern.test(value1);
+            const hasNotFound2 = notFoundPattern.test(value2);
+            
+            if (hasNotFound1 || hasNotFound2) {
+                if (hasNotFound1 && !hasNotFound2) {
+                    return value1.replace('(not found)', '<span class="highlight-red" style="color: #dc3545 !important;">(not found)</span>');
+                } else if (!hasNotFound1 && hasNotFound2) {
+                    const match1 = value1.match(hashPattern);
+                    if (match1) {
+                        return value1.replace(match1[1], \`<span class="highlight-red" style="color: #dc3545 !important;">\${match1[1]}</span>\`);
+                    }
+                }
+                return value1;
+            }
+            
+            const match1 = value1.match(hashPattern);
+            const match2 = value2.match(hashPattern);
+            
+            if (match1 && match2) {
+                const hash1 = match1[1];
+                const hash2 = match2[1];
+                
+                if (hash1 !== hash2) {
+                    return value1.replace(hash1, \`<span class="highlight-red" style="color: #dc3545 !important;">\${hash1}</span>\`);
+                }
+            }
+            
+            return value1;
+        }
+        
+        function formatColonContent(value1, value2) {
+            if (!value1 || !value2) return value1;
+            
+            if (value1.startsWith('P_GIT_')) {
+                return formatMultiLineContent(value1, value2);
+            }
+            
+            const colonIndex1 = value1.indexOf(':');
+            const colonIndex2 = value2.indexOf(':');
+            
+            if (colonIndex1 === -1 || colonIndex2 === -1) {
+                return value1;
+            }
+            
+            const key1 = value1.substring(0, colonIndex1).trim();
+            const key2 = value2.substring(0, colonIndex2).trim();
+            
+            if (key1 !== key2) {
+                return value1;
+            }
+            
+            const val1 = value1.substring(colonIndex1 + 1).trim();
+            const val2 = value2.substring(colonIndex2 + 1).trim();
+            
+            if (val1 !== val2) {
+                return \`\${key1}: <span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">\${val1}</span>\`;
+            }
+            
+            return value1;
+        }
+        
+        function enableTableFeatures() {
+            console.log('表格功能已啟用（離線模式）');
+        }
+        
+        function resetPivotTable() {
+            if (!pivotData) {
+                alert('沒有資料可重置');
+                return;
+            }
+            
+            try {
+                const container = document.getElementById('pivotContainer');
+                if (container && typeof $ !== 'undefined' && $.pivotUtilities) {
+                    $(container).empty();
+                    $(container).pivotUI(pivotData, {
+                        rows: [],
+                        cols: [],
+                        vals: [],
+                        aggregatorName: "Count",
+                        rendererName: "Table"
+                    });
+                }
+            } catch (error) {
+                console.error('重置失敗:', error);
+            }
+        }
+        
+        function exportPivotTable() {
+            alert('離線模式下無法匯出樞紐分析表');
+        }
+        
+        function showConfirmDialog(title, message, onConfirm, onCancel) {
+            if (confirm(message)) {
+                if (onConfirm) onConfirm();
+            } else {
+                if (onCancel) onCancel();
+            }
+        }
+        
+        function showAlertDialog(title, message, type) {
+            alert(message);
+        }
+        
+        function showCenteredToast(message, type) {
+            showToast(message, type);
+        }
+        
+    `;
+    
+    // 只包含確實存在的函數
+    const existingFunctions = [
+        'getSheetDisplayName',
+        'loadSheet', 
+        'renderDataTable',
+        'renderPivotTable',
+        'updateStatistics',
+        'updateTableStats',
+        'generateFilters',
+        'applyFilters',
+        'clearFilters',
+        'applyDataFilters',
+        'togglePivotMode',
+        'toggleFilterPanel',
+        'initializeSearch',
+        'highlightText',
+        'rowMatchesSearch',
+        'sortTable',
+        'getColumnWidth',
+        'debounce',
+        'drawDataCharts',
+        'showToast',
+        'togglePivotFullscreen',
+        'togglePivotAreas',
+        'adjustPivotContainerSize'
+    ];
+    
+    // 添加現有函數的定義
+    existingFunctions.forEach(funcName => {
+        if (window[funcName] && typeof window[funcName] === 'function') {
+            try {
+                code += window[funcName].toString() + '\n\n';
+            } catch (error) {
+                console.warn(`無法序列化函數: \${funcName}`, error);
+            }
+        }
+    });
+    
+    // 最後添加所有函數的 window 綁定
+    code += `
+        // 綁定所有函數到 window 物件
+        window.getSheetDisplayName = getSheetDisplayName;
+        window.loadSheet = loadSheet;
+        window.renderDataTable = renderDataTable;
+        window.renderPivotTable = renderPivotTable;
+        window.updateStatistics = updateStatistics;
+        window.updateTableStats = updateTableStats;
+        window.generateFilters = generateFilters;
+        window.applyFilters = applyFilters;
+        window.clearFilters = clearFilters;
+        window.applyDataFilters = applyDataFilters;
+        window.togglePivotMode = togglePivotMode;
+        window.toggleFilterPanel = toggleFilterPanel;
+        window.initializeSearch = initializeSearch;
+        window.highlightText = highlightText;
+        window.rowMatchesSearch = rowMatchesSearch;
+        window.sortTable = sortTable;
+        window.getColumnWidth = getColumnWidth;
+        window.debounce = debounce;
+        window.drawDataCharts = drawDataCharts;
+        window.showToast = showToast;
+        window.togglePivotFullscreen = togglePivotFullscreen;
+        window.togglePivotAreas = togglePivotAreas;
+        window.adjustPivotContainerSize = adjustPivotContainerSize;
+        window.updateClearButton = updateClearButton;
+        window.formatMultiLineContent = formatMultiLineContent;
+        window.formatFHashContent = formatFHashContent;
+        window.formatColonContent = formatColonContent;
+        window.enableTableFeatures = enableTableFeatures;
+        window.initializePivotFilterModal = initializePivotFilterModal;
+        window.interceptPivotDropdowns = interceptPivotDropdowns;
+        window.resetPivotTable = resetPivotTable;
+        window.exportPivotTable = exportPivotTable;
+        window.showConfirmDialog = showConfirmDialog;
+        window.showAlertDialog = showAlertDialog;
+        window.showCenteredToast = showCenteredToast;
+        
+        console.log('所有函數已載入並綁定到 window');
+    `;
+    
+    return code;
 }
 
 function getAllRequiredFunctions() {
@@ -3064,60 +3361,13 @@ function togglePivotFullscreen() {
                     // 觸發 window resize 事件
                     window.dispatchEvent(new Event('resize'));
                     
-                    // 強制重新計算樞紐分析表大小
-                    const pivotContainer = document.getElementById('pivotContainer');
-                    if (!pivotContainer) {
-                        console.warn('找不到 pivotContainer');
-                        return;
-                    }
+                    // 調用統一的大小調整函數
+                    adjustPivotContainerSize();
                     
-                    // 直接使用已知存在的 pivotView
-                    const stepHeader = pivotView.querySelector('.step-header');
-                    const pivotControls = pivotView.querySelector('.pivot-controls');
-                    const instructions = pivotView.querySelector('.pivot-instructions');
-                    
-                    // 計算已使用高度
-                    let usedHeight = 0;
-                    if (stepHeader) {
-                        usedHeight += stepHeader.offsetHeight || 0;
-                    }
-                    if (pivotControls) {
-                        usedHeight += pivotControls.offsetHeight || 0;
-                    }
-                    if (instructions && window.getComputedStyle(instructions).display !== 'none') {
-                        usedHeight += instructions.offsetHeight || 0;
-                    }
-                    
-                    // 設定容器高度 (留 20px 緩衝)
-                    const availableHeight = Math.max(window.innerHeight - usedHeight - 20, 300); // 最小高度 300px
-                    
-                    pivotContainer.style.height = `${availableHeight}px`;
-                    pivotContainer.style.maxHeight = `${availableHeight}px`;
-                    
-                    // 如果有樞紐分析表實例，強制重新渲染
-                    if (window.$ && typeof window.$.fn.pivotUI === 'function') {
-                        const $container = window.$('#pivotContainer');
-                        const pivotOptions = $container.data("pivotUIOptions");
-                        
-                        if (pivotOptions && pivotOptions.data) {
-                            // 暫存當前配置
-                            const currentConfig = {
-                                rows: pivotOptions.rows || [],
-                                cols: pivotOptions.cols || [],
-                                vals: pivotOptions.vals || [],
-                                aggregatorName: pivotOptions.aggregatorName || "Count",
-                                rendererName: pivotOptions.rendererName || "Table"
-                            };
-                            
-                            // 重新初始化
-                            $container.empty();
-                            $container.pivotUI(pivotOptions.data, Object.assign({}, pivotOptions, currentConfig));
-                        }
-                    }
                 } catch (error) {
                     console.error('調整全螢幕大小時發生錯誤:', error);
                 }
-            }, 150); // 稍微延長等待時間
+            }, 200);
             
         }).catch(err => {
             console.error('無法進入全螢幕:', err);
@@ -3135,17 +3385,11 @@ function togglePivotFullscreen() {
             icon.classList.add('fa-expand');
             text.textContent = '全螢幕';
             
-            // 退出全螢幕後恢復原始高度
-            const pivotContainer = document.getElementById('pivotContainer');
-            if (pivotContainer) {
-                pivotContainer.style.height = '600px';
-                pivotContainer.style.maxHeight = '600px';
-            }
-            
-            // 退出全螢幕後也觸發 resize
+            // 退出全螢幕後調整大小
             setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-            }, 100);
+                adjustPivotContainerSize();
+            }, 200);
+            
         }).catch(err => {
             console.error('退出全螢幕時發生錯誤:', err);
         });
@@ -3183,6 +3427,14 @@ function togglePivotAreas() {
         icon.classList.add('fa-eye-slash');
         text.textContent = '隱藏拖曳區';
         pivotContainer.classList.remove('areas-hidden');
+        
+        // 恢復原始樣式
+        if (document.fullscreenElement) {
+            setTimeout(() => {
+                adjustPivotContainerSize();
+            }, 150);
+        }
+        
     } else {
         // 隱藏拖曳區域和控制區
         $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
@@ -3191,6 +3443,201 @@ function togglePivotAreas() {
         icon.classList.add('fa-eye');
         text.textContent = '顯示拖曳區';
         pivotContainer.classList.add('areas-hidden');
+        
+        // 隱藏拖曳區後立即調整佈局
+        setTimeout(() => {
+            adjustPivotContainerSize();
+            
+            // 【額外修復】強制重新佈局樞紐分析表
+            if (document.fullscreenElement) {
+                const pvtUi = pivotContainer.querySelector('.pvtUi');
+                const pvtRendererArea = pivotContainer.querySelector('.pvtRendererArea');
+                const pvtTable = pivotContainer.querySelector('.pvtTable');
+                
+                if (pvtUi) {
+                    pvtUi.style.width = '100vw';
+                    pvtUi.style.maxWidth = '100vw';
+                    pvtUi.style.margin = '0';
+                    pvtUi.style.padding = '0';
+                }
+                
+                if (pvtRendererArea) {
+                    pvtRendererArea.style.width = '100%';
+                    pvtRendererArea.style.maxWidth = '100%';
+                }
+                
+                if (pvtTable) {
+                    pvtTable.style.width = '100%';
+                    pvtTable.style.maxWidth = '100%';
+                    pvtTable.style.minWidth = '100%';
+                    
+                    // 強制重新渲染表格
+                    const originalDisplay = pvtTable.style.display;
+                    pvtTable.style.display = 'none';
+                    setTimeout(() => {
+                        pvtTable.style.display = originalDisplay || '';
+                        
+                        // 再次確保所有單元格正確佈局
+                        const cells = pvtTable.querySelectorAll('td, th');
+                        cells.forEach(cell => {
+                            cell.style.maxWidth = 'none';
+                            cell.style.whiteSpace = 'nowrap';
+                        });
+                    }, 20);
+                }
+                
+                // 觸發視窗 resize 事件
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                }, 200);
+            }
+            
+        }, 150);
+    }
+    
+    console.log(`拖曳區域 ${areasVisible ? '顯示' : '隱藏'}，全屏模式: ${!!document.fullscreenElement}`);
+}
+
+// 增強版 adjustPivotContainerSize 函數 - 替換你現有的
+function adjustPivotContainerSize() {
+    const pivotContainer = document.getElementById('pivotContainer');
+    const pivotView = document.getElementById('pivotView');
+    
+    if (!pivotContainer || !pivotView) return;
+    
+    try {
+        if (document.fullscreenElement) {
+            // 全屏模式下的調整
+            const stepHeader = pivotView.querySelector('.step-header');
+            const pivotControls = pivotView.querySelector('.pivot-controls');
+            const instructions = pivotView.querySelector('.pivot-instructions');
+            
+            // 計算已使用的高度
+            let usedHeight = 0;
+            
+            if (stepHeader) {
+                usedHeight += stepHeader.offsetHeight || 0;
+            }
+            
+            if (pivotControls) {
+                usedHeight += pivotControls.offsetHeight || 0;
+            }
+            
+            if (instructions && window.getComputedStyle(instructions).display !== 'none') {
+                usedHeight += instructions.offsetHeight || 0;
+            }
+            
+            // 如果隱藏了拖曳區，需要額外考慮節省的空間
+            let savedSpace = 0;
+            if (!areasVisible) {
+                // 估算隱藏拖曳區節省的空間
+                const hiddenElements = $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals');
+                hiddenElements.each(function() {
+                    savedSpace += $(this).outerHeight(true) || 0;
+                });
+                
+                // 額外添加一些空間補償
+                savedSpace += 50;
+            }
+            
+            // 計算可用高度
+            const availableHeight = Math.max(
+                window.innerHeight - usedHeight + savedSpace - 40, // 40px 緩衝
+                400 // 最小高度
+            );
+            
+            // 設定容器高度和寬度
+            pivotContainer.style.height = `${availableHeight}px`;
+            pivotContainer.style.maxHeight = `${availableHeight}px`;
+            
+            // 【關鍵修復】強制設定橫向填滿
+            if (!areasVisible) {
+                // 隱藏拖曳區時，使用全螢幕寬度
+                pivotContainer.style.width = '100vw';
+                pivotContainer.style.maxWidth = '100vw';
+                pivotContainer.style.margin = '0';
+                pivotContainer.style.padding = '0';
+                
+                // 強制設定樞紐分析表的寬度
+                setTimeout(() => {
+                    const pvtUi = pivotContainer.querySelector('.pvtUi');
+                    if (pvtUi) {
+                        pvtUi.style.width = '100%';
+                        pvtUi.style.maxWidth = '100%';
+                        pvtUi.style.minWidth = '100%';
+                    }
+                    
+                    const pvtRendererArea = pivotContainer.querySelector('.pvtRendererArea');
+                    if (pvtRendererArea) {
+                        pvtRendererArea.style.width = '100%';
+                        pvtRendererArea.style.maxWidth = '100%';
+                        pvtRendererArea.style.overflowX = 'auto';
+                        pvtRendererArea.style.overflowY = 'auto';
+                        pvtRendererArea.style.maxHeight = `${availableHeight - 50}px`;
+                    }
+                    
+                    const pvtTable = pivotContainer.querySelector('.pvtTable');
+                    if (pvtTable) {
+                        pvtTable.style.width = '100%';
+                        pvtTable.style.maxWidth = '100%';
+                        pvtTable.style.minWidth = '100%';
+                        pvtTable.style.tableLayout = 'auto';
+                    }
+                    
+                    // 強制重新計算表格佈局
+                    const allCells = pivotContainer.querySelectorAll('.pvtTable td, .pvtTable th');
+                    allCells.forEach(cell => {
+                        cell.style.maxWidth = 'none';
+                        cell.style.whiteSpace = 'nowrap';
+                        cell.style.overflow = 'hidden';
+                        cell.style.textOverflow = 'ellipsis';
+                    });
+                    
+                }, 100);
+            } else {
+                // 顯示拖曳區時，恢復正常寬度
+                pivotContainer.style.width = '';
+                pivotContainer.style.maxWidth = '';
+            }
+            
+            console.log(`調整樞紐容器大小: 使用高度=${usedHeight}, 節省空間=${savedSpace}, 可用高度=${availableHeight}, 隱藏拖曳區=${!areasVisible}`);
+            
+        } else {
+            // 非全屏模式下的調整
+            if (!areasVisible) {
+                // 隱藏拖曳區時，給樞紐表更多空間
+                pivotContainer.style.height = '700px';
+                pivotContainer.style.maxHeight = '700px';
+                pivotContainer.style.width = '100%';
+                pivotContainer.style.maxWidth = '100%';
+            } else {
+                // 顯示拖曳區時，恢復正常高度
+                pivotContainer.style.height = '600px';
+                pivotContainer.style.maxHeight = '600px';
+                pivotContainer.style.width = '';
+                pivotContainer.style.maxWidth = '';
+            }
+        }
+        
+        // 觸發重新佈局
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+            
+            // 【額外修復】強制重新渲染樞紐分析表
+            if (!areasVisible && document.fullscreenElement) {
+                const pvtTable = pivotContainer.querySelector('.pvtTable');
+                if (pvtTable) {
+                    // 觸發表格重新計算
+                    pvtTable.style.display = 'none';
+                    setTimeout(() => {
+                        pvtTable.style.display = '';
+                    }, 10);
+                }
+            }
+        }, 100);
+        
+    } catch (error) {
+        console.error('調整樞紐容器大小時發生錯誤:', error);
     }
 }
 
@@ -4309,3 +4756,4 @@ window.showCustomFilterModal = showCustomFilterModal;
 window.createCustomFilterModal = createCustomFilterModal;
 window.bindCustomFilterEvents = bindCustomFilterEvents;
 window.applyCustomFilter = applyCustomFilter;
+window.adjustPivotContainerSize = adjustPivotContainerSize;

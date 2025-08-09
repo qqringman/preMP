@@ -3649,3 +3649,204 @@ body > .pvtFilterBox {
     color: white;
     border-color: #007bff;
 }
+
+/* 在 results.css 中添加這些樣式 */
+
+/* 樞紐分析表拖曳區隱藏時的佈局調整 */
+#pivotContainer.areas-hidden {
+    padding-top: 10px;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* 全屏模式下的樞紐分析表調整 */
+.fullscreen #pivotContainer {
+    width: 100%;
+    height: calc(100vh - 150px);
+    max-height: calc(100vh - 150px);
+    overflow: auto;
+}
+
+.fullscreen #pivotContainer.areas-hidden {
+    height: calc(100vh - 100px);
+    max-height: calc(100vh - 100px);
+}
+
+/* 樞紐表格在隱藏拖曳區時的調整 */
+#pivotContainer.areas-hidden .pvtTable {
+    width: 100%;
+    max-width: 100%;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea {
+    overflow: auto;
+    max-height: calc(100% - 20px);
+}
+
+/* 確保表格內容填滿可用空間 */
+.fullscreen .pvtRendererArea {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.fullscreen.areas-hidden .pvtRendererArea {
+    max-height: calc(100vh - 120px);
+}
+
+/* 調整樞紐分析表的響應式佈局 */
+@media (max-width: 768px) {
+    #pivotContainer.areas-hidden {
+        padding: 5px;
+    }
+    
+    .fullscreen #pivotContainer.areas-hidden {
+        height: calc(100vh - 80px);
+    }
+}
+
+/* 在 results.css 中添加/替換這些樣式 - 增強版 */
+
+/* 樞紐分析表拖曳區隱藏時的佈局調整 */
+#pivotContainer.areas-hidden {
+    padding: 10px 0;
+    width: 100%;
+    max-width: 100%;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 全屏模式下的樞紐分析表調整 */
+.fullscreen #pivotContainer {
+    width: 100vw;
+    max-width: 100vw;
+    height: calc(100vh - 150px);
+    max-height: calc(100vh - 150px);
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.fullscreen #pivotContainer.areas-hidden {
+    height: calc(100vh - 100px);
+    max-height: calc(100vh - 100px);
+    width: 100vw;
+    max-width: 100vw;
+}
+
+/* 樞紐分析表核心表格的橫向填滿 */
+.fullscreen #pivotContainer.areas-hidden .pvtTable {
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
+    table-layout: auto;
+}
+
+.fullscreen #pivotContainer.areas-hidden .pvtUi {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+}
+
+/* 確保樞紐分析表的每個元素都填滿橫向空間 */
+.fullscreen.areas-hidden .pvtUi > tbody > tr > td {
+    width: auto !important;
+    max-width: none !important;
+}
+
+.fullscreen.areas-hidden .pvtRendererArea {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+}
+
+/* 強制樞紐分析表使用全寬 */
+.fullscreen #pivotContainer.areas-hidden .pvtTable,
+.fullscreen #pivotContainer.areas-hidden .pvtTable tbody,
+.fullscreen #pivotContainer.areas-hidden .pvtTable tr {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* 樞紐分析表單元格的寬度分配 */
+.fullscreen #pivotContainer.areas-hidden .pvtTable td,
+.fullscreen #pivotContainer.areas-hidden .pvtTable th {
+    max-width: none !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 非全屏模式下的調整 */
+#pivotContainer.areas-hidden .pvtTable {
+    width: 100%;
+    max-width: 100%;
+}
+
+#pivotContainer.areas-hidden .pvtUi {
+    width: 100% !important;
+}
+
+#pivotContainer.areas-hidden .pvtRendererArea {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100% - 20px);
+    width: 100% !important;
+}
+
+/* 確保在任何情況下都填滿橫向空間 */
+.pivot-view.fullscreen .section-body {
+    width: 100vw;
+    max-width: 100vw;
+    margin: 0;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+/* 調整樞紐分析表的響應式佈局 */
+@media (max-width: 768px) {
+    #pivotContainer.areas-hidden {
+        padding: 5px;
+        width: 100%;
+    }
+    
+    .fullscreen #pivotContainer.areas-hidden {
+        height: calc(100vh - 80px);
+        width: 100vw;
+    }
+}
+
+/* 修復樞紐分析表在隱藏拖曳區時的佈局問題 */
+.fullscreen #pivotContainer.areas-hidden {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: calc(100vh - 100px);
+}
+
+.fullscreen #pivotContainer.areas-hidden > * {
+    flex-shrink: 0;
+}
+
+.fullscreen #pivotContainer.areas-hidden .pvtRendererArea {
+    flex: 1;
+    overflow: auto;
+    width: 100%;
+}
+
+/* 確保樞紐分析表內容區域使用完整寬度 */
+.fullscreen #pivotContainer.areas-hidden .pvtUi {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
