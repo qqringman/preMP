@@ -25,12 +25,19 @@ from copy import copy
 import io
 from excel_handler import ExcelHandler
 from metadata_manager import metadata_manager
+from functools import wraps
 
 # 初始化 Flask 應用
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # 請更改為安全的密鑰
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 最大檔案大小
+
+# 設定 session 密鑰
+app.secret_key = getattr(config, 'SECRET_KEY', 'your-secret-key-change-this-in-production')
+
+# 設定 session 過期時間
+app.permanent_session_lifetime = getattr(config, 'SESSION_TIMEOUT', 3600)
 
 # 在檔案開頭的 import 區段加入
 from admin_routes import admin_bp
@@ -838,28 +845,52 @@ def save_task_results(task_id, results):
     if task_id in processing_status:
         processing_status[task_id]['results'] = results
 
+def global_login_required(f):
+    """全域登入檢查裝飾器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 如果沒有啟用登入功能，直接通過
+        if not getattr(config, 'ENABLE_LOGIN', False):
+            return f(*args, **kwargs)
+        
+        # 如果是全域登入模式
+        if getattr(config, 'LOGIN_MODE', 'admin_only') == 'global':
+            # 檢查登入狀態
+            if 'logged_in' not in session or not session['logged_in']:
+                if request.is_json:
+                    return jsonify({'error': '請先登入', 'redirect': '/login'}), 401
+                return redirect(url_for('admin.login_page', redirect=request.url))
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
 # 路由定義
 @app.route('/')
+@global_login_required
 def index():
     """首頁"""
     return render_template('index.html')
 
 @app.route('/download')
+@global_login_required
 def download_page():
     """下載頁面"""
     return render_template('download.html')
 
 @app.route('/compare')
+@global_login_required
 def compare_page():
     """比較頁面"""
     return render_template('compare.html')
 
 @app.route('/one-step')
+@global_login_required
 def one_step_page():
     """一步到位頁面"""
     return render_template('one_step.html')
 
 @app.route('/results/<task_id>')
+@global_login_required
 def results_page(task_id):
     """結果頁面"""
     return render_template('results.html', task_id=task_id)

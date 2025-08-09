@@ -32,6 +32,14 @@ let filterText = '';
 let dbVersionsCache = {}; // 快取 DB 版本資訊
 let currentResultSource = null
 
+// 動態篩選計數器
+let filterTypeCounter = 1;
+let chipFilterCounter = 1;
+let dbFilterCounter = 1;
+
+// Mapping 檔案來源
+let mappingSource = 'default'; // 'default' 或 'upload'
+
 // 在檔案開頭加入
 let resultCache = {
     'chip-mapping': null,
@@ -57,35 +65,341 @@ const STANDARD_COLUMNS = [
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
+    checkLoginStatus();
     initializeFileUploads();
     loadQuickPaths();
     initializeSearch();
-    setupDBSelectors();
     setupQuickPathListeners();
+    initializeDynamicFilters();
 });
 
-// 設定 DB 選擇器
-function setupDBSelectors() {
-    const dbSelect = document.getElementById('dbFilter');
-    const versionSelect = document.getElementById('dbVersion');
-    const versionGroup = document.getElementById('dbVersionGroup');
+// 檢查登入狀態
+async function checkLoginStatus() {
+    try {
+        // 這裡可以調用 API 檢查登入狀態
+        // 如果需要登入但未登入，重定向到登入頁面
+    } catch (error) {
+        console.warn('登入狀態檢查失敗:', error);
+    }
+}
+
+// 初始化動態篩選器
+function initializeDynamicFilters() {
+    // 為動態項目設置事件監聽器
+    updateRemoveButtons('filterType');
+    updateRemoveButtons('chipFilter');  
+    updateRemoveButtons('dbFilter');
+}
+
+// Mapping 來源切換
+function toggleMappingSource() {
+    const useDefault = document.getElementById('useDefaultMapping').checked;
+    const useUpload = document.getElementById('useUploadMapping').checked;
     
-    // 監聽 DB 選擇變化
-    dbSelect.addEventListener('change', async (e) => {
-        const selectedDB = e.target.value;
+    const defaultArea = document.getElementById('defaultFileArea');
+    const uploadArea = document.getElementById('mappingUploadArea');
+    
+    if (useDefault) {
+        mappingSource = 'default';
+        defaultArea.style.display = 'block';
+        uploadArea.style.display = 'none';
         
-        if (selectedDB && selectedDB !== 'all') {
-            // 顯示版本選擇器
-            versionGroup.style.display = 'block';
+        // 清除上傳的檔案
+        selectedMappingFile = null;
+        document.getElementById('mappingFileList').innerHTML = '';
+    } else if (useUpload) {
+        mappingSource = 'upload';
+        defaultArea.style.display = 'none';
+        uploadArea.style.display = 'block';
+        
+        // 清除預設檔案
+        selectedMappingFile = null;
+        document.getElementById('mappingFileList').innerHTML = '';
+    }
+}
+
+// 載入預設 Mapping Table
+async function loadDefaultMappingTable() {
+    try {
+        showLoading('載入預設檔案...');
+        
+        const response = await utils.apiRequest('/api/admin/get-default-mapping-table');
+        
+        if (response.success) {
+            selectedMappingFile = response.file_path;
             
-            // 載入版本
-            await loadDBVersions(selectedDB);
+            // 顯示檔案資訊
+            displaySelectedFile('mappingFileList', response.file_info.name, {
+                path: response.file_path,
+                size: response.file_info.size,
+                isServer: true
+            });
+            
+            // 更新 DB 選項
+            if (response.analysis) {
+                updateDBOptions(response.analysis);
+            }
+            
+            utils.showNotification('預設檔案載入成功', 'success');
         } else {
-            // 隱藏版本選擇器
-            versionGroup.style.display = 'none';
-            versionSelect.innerHTML = '<option value="">選擇版本...</option>';
+            utils.showNotification('載入預設檔案失敗: ' + response.error, 'error');
+        }
+        
+    } catch (error) {
+        utils.showNotification('載入預設檔案失敗: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// 添加 Filter 類型
+function addFilterType() {
+    const container = document.getElementById('filterTypeItems');
+    const index = filterTypeCounter++;
+    
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'dynamic-item';
+    itemDiv.setAttribute('data-index', index);
+    
+    itemDiv.innerHTML = `
+        <select class="form-select" name="filterType" data-index="${index}">
+            <option value="all">All</option>
+            <option value="master_vs_premp">Master vs PreMP</option>
+            <option value="premp_vs_mp">PreMP vs MP</option>
+            <option value="mp_vs_mpbackup">MP vs MP Backup</option>
+        </select>
+        <button class="btn-remove" onclick="removeFilterType(${index})">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(itemDiv);
+    updateRemoveButtons('filterType');
+}
+
+// 移除 Filter 類型
+function removeFilterType(index) {
+    const item = document.querySelector(`#filterTypeItems .dynamic-item[data-index="${index}"]`);
+    if (item) {
+        item.remove();
+        updateRemoveButtons('filterType');
+    }
+}
+
+// 添加 Chip Filter
+function addChipFilter() {
+    const container = document.getElementById('chipFilterItems');
+    const index = chipFilterCounter++;
+    
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'dynamic-item';
+    itemDiv.setAttribute('data-index', index);
+    
+    // 複製現有的選項
+    const firstSelect = container.querySelector('select[name="chipFilter"]');
+    let optionsHtml = '<option value="all">All Chips</option>';
+    
+    if (firstSelect) {
+        for (let i = 1; i < firstSelect.options.length; i++) {
+            const option = firstSelect.options[i];
+            optionsHtml += `<option value="${option.value}">${option.textContent}</option>`;
+        }
+    }
+    
+    itemDiv.innerHTML = `
+        <select class="form-select" name="chipFilter" data-index="${index}">
+            ${optionsHtml}
+        </select>
+        <button class="btn-remove" onclick="removeChipFilter(${index})">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(itemDiv);
+    updateRemoveButtons('chipFilter');
+}
+
+// 移除 Chip Filter
+function removeChipFilter(index) {
+    const item = document.querySelector(`#chipFilterItems .dynamic-item[data-index="${index}"]`);
+    if (item) {
+        item.remove();
+        updateRemoveButtons('chipFilter');
+    }
+}
+
+// 添加 DB Filter
+function addDBFilter() {
+    const container = document.getElementById('dbFilterItems');
+    const index = dbFilterCounter++;
+    
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'dynamic-item';
+    itemDiv.setAttribute('data-index', index);
+    
+    // 複製現有的選項
+    const firstSelect = container.querySelector('select[name="dbFilter"]');
+    let optionsHtml = '<option value="all">All</option>';
+    
+    if (firstSelect) {
+        for (let i = 1; i < firstSelect.options.length; i++) {
+            const option = firstSelect.options[i];
+            optionsHtml += `<option value="${option.value}">${option.textContent}</option>`;
+        }
+    }
+    
+    itemDiv.innerHTML = `
+        <select class="form-select" name="dbFilter" data-index="${index}" onchange="handleDBSelection(this)">
+            ${optionsHtml}
+        </select>
+        <button class="btn-remove" onclick="removeDBFilter(${index})">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(itemDiv);
+    updateRemoveButtons('dbFilter');
+}
+
+// 移除 DB Filter
+function removeDBFilter(index) {
+    const item = document.querySelector(`#dbFilterItems .dynamic-item[data-index="${index}"]`);
+    if (item) {
+        item.remove();
+        updateRemoveButtons('dbFilter');
+        updateDBVersionSelectors();
+    }
+}
+
+// 更新移除按鈕顯示狀態
+function updateRemoveButtons(type) {
+    const container = document.getElementById(`${type}Items`);
+    const items = container.querySelectorAll('.dynamic-item');
+    
+    items.forEach((item, index) => {
+        const removeBtn = item.querySelector('.btn-remove');
+        if (removeBtn) {
+            // 只有一個項目時隱藏移除按鈕
+            removeBtn.style.display = items.length > 1 ? 'flex' : 'none';
         }
     });
+}
+
+// 處理 DB 選擇變化
+function handleDBSelection(selectElement) {
+    updateDBVersionSelectors();
+}
+
+// 更新 DB 版本選擇器
+function updateDBVersionSelectors() {
+    const dbSelects = document.querySelectorAll('select[name="dbFilter"]');
+    const versionContainer = document.getElementById('dbVersionSelectors');
+    const versionGroup = document.getElementById('dbVersionGroup');
+    
+    // 收集所有選中的 DB（除了 'all'）
+    const selectedDBs = [];
+    dbSelects.forEach(select => {
+        if (select.value && select.value !== 'all') {
+            selectedDBs.push(select.value);
+        }
+    });
+    
+    if (selectedDBs.length === 0) {
+        versionGroup.style.display = 'none';
+        versionContainer.innerHTML = '';
+        return;
+    }
+    
+    // 顯示版本選擇區域
+    versionGroup.style.display = 'block';
+    
+    // 為每個選中的 DB 創建版本選擇器
+    versionContainer.innerHTML = '';
+    
+    selectedDBs.forEach(async (dbName) => {
+        const versionItem = document.createElement('div');
+        versionItem.className = 'db-version-item';
+        versionItem.innerHTML = `
+            <div class="db-name">${dbName}</div>
+            <select class="form-select" id="dbVersion_${dbName}">
+                <option value="">載入版本中...</option>
+            </select>
+        `;
+        versionContainer.appendChild(versionItem);
+        
+        // 載入該 DB 的版本
+        await loadDBVersionsForDB(dbName);
+    });
+}
+
+// 為特定 DB 載入版本
+async function loadDBVersionsForDB(dbName) {
+    try {
+        const versionSelect = document.getElementById(`dbVersion_${dbName}`);
+        if (!versionSelect) return;
+        
+        // 檢查快取
+        if (dbVersionsCache[dbName]) {
+            displayVersionOptionsForDB(dbName, dbVersionsCache[dbName]);
+            return;
+        }
+        
+        // 從伺服器獲取版本
+        const response = await utils.apiRequest('/api/admin/get-db-versions', {
+            method: 'POST',
+            body: JSON.stringify({
+                db_name: dbName,
+                mapping_file: selectedMappingFile
+            })
+        });
+        
+        if (response.success && response.versions) {
+            // 快取結果
+            dbVersionsCache[dbName] = response.versions;
+            displayVersionOptionsForDB(dbName, response.versions);
+        } else {
+            versionSelect.innerHTML = '<option value="">無可用版本</option>';
+        }
+        
+    } catch (error) {
+        console.error(`載入 ${dbName} 版本失敗:`, error);
+        const versionSelect = document.getElementById(`dbVersion_${dbName}`);
+        if (versionSelect) {
+            versionSelect.innerHTML = '<option value="">載入失敗</option>';
+        }
+    }
+}
+
+// 為特定 DB 顯示版本選項
+function displayVersionOptionsForDB(dbName, versions) {
+    const versionSelect = document.getElementById(`dbVersion_${dbName}`);
+    if (!versionSelect) return;
+    
+    // 清空並添加預設選項
+    versionSelect.innerHTML = '<option value="">選擇版本 (可選)</option>';
+    versionSelect.innerHTML += '<option value="latest">最新版本</option>';
+    
+    if (versions && versions.length > 0) {
+        // 添加分隔線
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '─────────────';
+        versionSelect.appendChild(separator);
+        
+        // 添加版本選項
+        versions.forEach((version, index) => {
+            const option = document.createElement('option');
+            option.value = version;
+            option.textContent = version;
+            
+            // 標記第一個（最新）版本
+            if (index === 0) {
+                option.textContent += ' (最新)';
+            }
+            
+            versionSelect.appendChild(option);
+        });
+    }
 }
 
 // 切換功能
@@ -152,7 +466,7 @@ function showResultSourceHint() {
 
 // 初始化檔案上傳
 function initializeFileUploads() {
-    // Chip Mapping 檔案上傳
+    // Chip Mapping 檔案上傳（只有在上傳模式時才啟用）
     setupFileUpload('mappingUploadArea', 'mappingFileInput', handleMappingFile);
     
     // Prebuild Mapping 檔案上傳
@@ -200,7 +514,7 @@ function setupFileUpload(areaId, inputId, handler) {
     });
 }
 
-// 處理 Mapping Table 檔案
+// 處理 Mapping Table 檔案 - 更新以支援來源選擇
 async function handleMappingFile(file) {
     if (!validateFile(file)) return;
     
@@ -212,7 +526,10 @@ async function handleMappingFile(file) {
         selectedMappingFile = uploadResult.filepath;
         
         // 顯示已選擇的檔案
-        displaySelectedFile('mappingFileList', file.name);
+        displaySelectedFile('mappingFileList', file.name, {
+            size: file.size,
+            isServer: false
+        });
         
         // 分析檔案內容
         showLoading('分析檔案內容...');
@@ -246,290 +563,94 @@ async function analyzeMapping(filepath) {
     return response;
 }
 
-// 更新 DB 選項
+// 更新 DB 選項 - 支援動態更新所有選擇器
 function updateDBOptions(analysis) {
-    const dbSelect = document.getElementById('dbFilter');
-    const versionGroup = document.getElementById('dbVersionGroup');
-    const chipFilter = document.getElementById('chipFilter');
-    
-    // 清空現有選項
-    dbSelect.innerHTML = '<option value="all">All</option>';
-    
-    // 更新 Chip Filter
-    if (chipFilter && analysis.modules) {
-        chipFilter.innerHTML = '<option value="all">All Chips</option>';
-        analysis.modules.forEach(module => {
-            const option = document.createElement('option');
-            option.value = module.toLowerCase();
-            option.textContent = module;
-            chipFilter.appendChild(option);
-        });
-    }
+    const allDBSelects = document.querySelectorAll('select[name="dbFilter"]');
+    const chipSelects = document.querySelectorAll('select[name="chipFilter"]');
     
     // 清空版本快取
     dbVersionsCache = {};
     
-    // 添加 DB 選項
-    if (analysis.db_list && analysis.db_list.length > 0) {
-        analysis.db_list.forEach(db => {
-            const option = document.createElement('option');
-            option.value = db;
-            
-            // 建立顯示文字
-            let displayText = db;
-            if (analysis.db_info && analysis.db_info[db]) {
-                const info = analysis.db_info[db];
+    // 更新所有 DB 選擇器
+    allDBSelects.forEach(dbSelect => {
+        // 保存當前選中的值
+        const currentValue = dbSelect.value;
+        
+        // 清空現有選項
+        dbSelect.innerHTML = '<option value="all">All</option>';
+        
+        // 添加 DB 選項
+        if (analysis.db_list && analysis.db_list.length > 0) {
+            analysis.db_list.forEach(db => {
+                const option = document.createElement('option');
+                option.value = db;
                 
-                // 顯示 DB 類型
-                if (info.types && info.types.length > 0) {
-                    displayText = `${db} (${info.types.join('/')})`;
+                // 建立顯示文字
+                let displayText = db;
+                if (analysis.db_info && analysis.db_info[db]) {
+                    const info = analysis.db_info[db];
+                    
+                    // 顯示 DB 類型
+                    if (info.types && info.types.length > 0) {
+                        displayText = `${db} (${info.types.join('/')})`;
+                    }
                 }
-            }
+                
+                option.textContent = displayText;
+                dbSelect.appendChild(option);
+            });
             
-            option.textContent = displayText;
-            dbSelect.appendChild(option);
-        });
-        
-        // 顯示 DB 選擇提示
-        const dbGroup = document.querySelector('.param-group:has(#dbFilter)');
-        if (dbGroup) {
-            let hint = dbGroup.querySelector('.form-hint');
-            if (!hint) {
-                hint = document.createElement('div');
-                hint.className = 'form-hint';
-                dbGroup.appendChild(hint);
+            // 恢復選中值
+            if (currentValue && analysis.db_list.includes(currentValue)) {
+                dbSelect.value = currentValue;
             }
-            hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${analysis.db_list.length} 個 DB`;
-        }
-    } else {
-        // 沒有找到 DB
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = '(未找到 DB 資訊)';
-        option.disabled = true;
-        dbSelect.appendChild(option);
-    }
-    
-    // 確保版本選擇器隱藏
-    if (versionGroup) {
-        versionGroup.style.display = 'none';
-    }
-}
-
-// 載入 DB 版本
-async function loadDBVersions(dbName) {
-    try {
-        const versionSelect = document.getElementById('dbVersion');
-        
-        // 顯示載入中
-        versionSelect.innerHTML = '<option value="">載入版本中...</option>';
-        versionSelect.disabled = true;
-        
-        // 檢查快取
-        if (dbVersionsCache[dbName]) {
-            displayVersionOptions(dbVersionsCache[dbName]);
-            return;
-        }
-        
-        // 從伺服器獲取版本
-        const response = await utils.apiRequest('/api/admin/get-db-versions', {
-            method: 'POST',
-            body: JSON.stringify({
-                db_name: dbName,
-                mapping_file: selectedMappingFile
-            })
-        });
-        
-        if (response.success && response.versions) {
-            // 快取結果
-            dbVersionsCache[dbName] = response.versions;
-            displayVersionOptions(response.versions);
         } else {
-            versionSelect.innerHTML = '<option value="">無可用版本</option>';
-        }
-        
-    } catch (error) {
-        console.error('載入版本失敗:', error);
-        const versionSelect = document.getElementById('dbVersion');
-        versionSelect.innerHTML = '<option value="">載入失敗</option>';
-        utils.showNotification('載入版本失敗: ' + error.message, 'error');
-    } finally {
-        const versionSelect = document.getElementById('dbVersion');
-        versionSelect.disabled = false;
-    }
-}
-
-// 顯示版本選項
-function displayVersionOptions(versions) {
-    const versionSelect = document.getElementById('dbVersion');
-    
-    // 清空並添加預設選項
-    versionSelect.innerHTML = '<option value="">選擇版本 (可選)</option>';
-    versionSelect.innerHTML += '<option value="latest">最新版本</option>';
-    
-    if (versions && versions.length > 0) {
-        // 添加分隔線
-        const separator = document.createElement('option');
-        separator.disabled = true;
-        separator.textContent = '─────────────';
-        versionSelect.appendChild(separator);
-        
-        // 添加版本選項
-        versions.forEach((version, index) => {
+            // 沒有找到 DB
             const option = document.createElement('option');
-            option.value = version;
-            option.textContent = version;
-            
-            // 標記第一個（最新）版本
-            if (index === 0) {
-                option.textContent += ' (最新)';
-            }
-            
-            versionSelect.appendChild(option);
-        });
-        
-        // 顯示版本數量提示
-        const versionGroup = document.getElementById('dbVersionGroup');
-        const hint = versionGroup.querySelector('.form-hint');
-        if (!hint) {
-            const hintDiv = document.createElement('div');
-            hintDiv.className = 'form-hint';
-            hintDiv.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${versions.length} 個版本`;
-            versionGroup.appendChild(hintDiv);
+            option.value = '';
+            option.textContent = '(未找到 DB 資訊)';
+            option.disabled = true;
+            dbSelect.appendChild(option);
         }
+    });
+    
+    // 更新所有 Chip Filter
+    chipSelects.forEach(chipSelect => {
+        // 保存當前選中的值
+        const currentValue = chipSelect.value;
+        
+        // 清空現有選項
+        chipSelect.innerHTML = '<option value="all">All Chips</option>';
+        
+        if (analysis.modules && analysis.modules.length > 0) {
+            analysis.modules.forEach(module => {
+                const option = document.createElement('option');
+                option.value = module.toLowerCase();
+                option.textContent = module;
+                chipSelect.appendChild(option);
+            });
+            
+            // 恢復選中值
+            if (currentValue && analysis.modules.map(m => m.toLowerCase()).includes(currentValue)) {
+                chipSelect.value = currentValue;
+            }
+        }
+    });
+    
+    // 顯示分析結果提示
+    const dbGroup = document.querySelector('.dynamic-param-group:has(#dbFilterItems)');
+    if (dbGroup) {
+        let hint = dbGroup.querySelector('.form-hint');
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'form-hint';
+            dbGroup.appendChild(hint);
+        }
+        hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${analysis.db_list ? analysis.db_list.length : 0} 個 DB，${analysis.modules ? analysis.modules.length : 0} 個模組`;
     }
 }
 
-// 處理 Prebuild 檔案 - 修正版本，使用 utils.uploadFile
-async function handlePrebuildFile(type, file) {
-    if (!validateFile(file)) return;
-    
-    try {
-        showLoading('上傳檔案中...');
-        
-        // 使用 utils.uploadFile 上傳檔案
-        const uploadResult = await utils.uploadFile(file);
-        selectedPrebuildFiles[type] = uploadResult.filepath;
-        
-        // 更新狀態
-        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle"></i>';
-        document.getElementById(`${type}Status`).classList.add('success');
-        
-        // 顯示已選擇的檔案（修正這裡）
-        const selectedDiv = document.getElementById(`${type}Selected`);
-        selectedDiv.innerHTML = `
-            <div class="file-name">${file.name}</div>
-            <button class="btn-remove" onclick="removePrebuildFile('${type}')">
-                <i class="fas fa-times"></i> 移除
-            </button>
-        `;
-        selectedDiv.style.display = 'flex';
-        selectedDiv.style.justifyContent = 'space-between';
-        selectedDiv.style.alignItems = 'center';
-        selectedDiv.style.padding = '10px 15px';
-        selectedDiv.style.background = 'var(--success-light)';
-        selectedDiv.style.borderTop = '1px solid var(--border-light)';
-        
-        // 更新篩選預覽
-        updateFilterPreview();
-        
-        hideLoading();
-        utils.showNotification('檔案上傳成功', 'success');
-        
-    } catch (error) {
-        hideLoading();
-        utils.showNotification('檔案上傳失敗: ' + error.message, 'error');
-    }
-}
-
-function removePrebuildFile(type) {
-    // 清除檔案
-    selectedPrebuildFiles[type] = null;
-    
-    // 更新 UI
-    document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-cloud-upload-alt"></i>';
-    document.getElementById(`${type}Status`).classList.remove('success');
-    document.getElementById(`${type}Selected`).style.display = 'none';
-    document.getElementById(`${type}Selected`).innerHTML = '';
-    
-    // 更新篩選預覽
-    updateFilterPreview();
-    
-    utils.showNotification(`已移除 ${type.toUpperCase()} 檔案`, 'info');
-}
-
-// 驗證檔案
-function validateFile(file) {
-    const allowedExtensions = ['xlsx', 'xls', 'csv'];
-    const extension = file.name.split('.').pop().toLowerCase();
-    
-    if (!allowedExtensions.includes(extension)) {
-        utils.showNotification('不支援的檔案格式，請選擇 Excel 或 CSV 檔案', 'error');
-        return false;
-    }
-    
-    // 檢查檔案大小（最大 50MB）
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-        utils.showNotification('檔案太大，請選擇小於 50MB 的檔案', 'error');
-        return false;
-    }
-    
-    return true;
-}
-
-// 顯示已選擇的檔案
-function displaySelectedFile(containerId, filename) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="file-list-container">
-            <div class="file-list-header">
-                <h4 class="file-list-title">
-                    <i class="fas fa-check-circle" style="color:white"></i>
-                    已選擇的檔案
-                </h4>
-            </div>
-            <div class="file-items">
-                <div class="file-item-card">
-                    <div class="file-icon-wrapper">
-                        <i class="fas fa-file-excel"></i>
-                    </div>
-                    <div class="file-details">
-                        <div class="file-name">${filename}</div>
-                        <div class="file-meta">準備就緒</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// 更新篩選預覽
-function updateFilterPreview() {
-    const filters = [];
-    
-    if (selectedPrebuildFiles.master && selectedPrebuildFiles.premp) {
-        filters.push('master_vs_premp');
-    }
-    if (selectedPrebuildFiles.premp && selectedPrebuildFiles.mp) {
-        filters.push('premp_vs_mp');
-    }
-    if (selectedPrebuildFiles.mp && selectedPrebuildFiles.mpbackup) {
-        filters.push('mp_vs_mpbackup');
-    }
-    
-    const preview = document.getElementById('filterPreview');
-    if (filters.length > 0) {
-        preview.textContent = `-filter ${filters.join(',')}`;
-        preview.style.display = 'block';
-    } else {
-        preview.style.display = 'none';
-    }
-}
-
-// 執行 Chip Mapping 時組合 filter 參數
+// 執行 Chip Mapping - 支援多選
 async function runChipMapping() {
     if (!selectedMappingFile) {
         utils.showNotification('請先選擇 Mapping Table 檔案', 'error');
@@ -539,36 +660,51 @@ async function runChipMapping() {
     try {
         showLoading('執行 Chip Mapping 中...');
         
-        // 組合 filter 參數
-        const filterType = document.getElementById('filterType').value;
-        const chipFilter = document.getElementById('chipFilter').value;
-        
-        let filterParam = filterType;
-        if (chipFilter !== 'all') {
-            if (filterType !== 'all') {
-                filterParam = `${chipFilter},${filterType}`;
-            } else {
-                filterParam = chipFilter;
+        // 收集所有 Filter 類型
+        const filterTypes = [];
+        document.querySelectorAll('select[name="filterType"]').forEach(select => {
+            if (select.value && select.value !== 'all') {
+                filterTypes.push(select.value);
             }
-        }
+        });
+        
+        // 收集所有 Chip Filter
+        const chipFilters = [];
+        document.querySelectorAll('select[name="chipFilter"]').forEach(select => {
+            if (select.value && select.value !== 'all') {
+                chipFilters.push(select.value);
+            }
+        });
+        
+        // 收集所有 DB Filter
+        const dbFilters = [];
+        document.querySelectorAll('select[name="dbFilter"]').forEach(select => {
+            if (select.value && select.value !== 'all') {
+                let dbValue = select.value;
+                
+                // 檢查是否有對應的版本選擇
+                const versionSelect = document.getElementById(`dbVersion_${select.value}`);
+                if (versionSelect && versionSelect.value && versionSelect.value !== 'latest') {
+                    dbValue = `${select.value}#${versionSelect.value}`;
+                }
+                
+                dbFilters.push(dbValue);
+            }
+        });
+        
+        // 如果所有都是 'all'，則保持為 ['all']
+        if (filterTypes.length === 0) filterTypes.push('all');
+        if (chipFilters.length === 0) chipFilters.push('all');
+        if (dbFilters.length === 0) dbFilters.push('all');
         
         // 收集參數
         const params = {
             mapping_file: selectedMappingFile,
-            filter_type: filterParam,
-            db_filter: document.getElementById('dbFilter').value,
+            filter_types: filterTypes,
+            chip_filters: chipFilters,
+            db_filters: dbFilters,
             output_path: document.getElementById('chipOutputPath').value
         };
-        
-        // 處理 DB 版本參數
-        if (params.db_filter !== 'all') {
-            const dbVersion = document.getElementById('dbVersion').value;
-            
-            if (dbVersion && dbVersion !== 'latest') {
-                // 如果選擇了特定版本，使用 DB#版本 格式
-                params.db_filter = `${params.db_filter}#${dbVersion}`;
-            }
-        }
         
         console.log('執行參數:', params);
         
@@ -595,7 +731,6 @@ async function runChipMapping() {
 
 // 修改 displayResults 函數
 function displayResults(response) {
-
     console.log('收到的回應:', response);
     console.log('欄位:', response.columns);
     console.log('資料範例:', response.data ? response.data[0] : '無資料');
@@ -903,6 +1038,196 @@ function clearResult() {
     document.getElementById('searchInput').value = '';
 }
 
+// 處理 Prebuild 檔案 - 修正版本，使用 utils.uploadFile
+async function handlePrebuildFile(type, file) {
+    if (!validateFile(file)) return;
+    
+    try {
+        showLoading('上傳檔案中...');
+        
+        // 使用 utils.uploadFile 上傳檔案
+        const uploadResult = await utils.uploadFile(file);
+        selectedPrebuildFiles[type] = uploadResult.filepath;
+        
+        // 更新狀態
+        document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-check-circle"></i>';
+        document.getElementById(`${type}Status`).classList.add('success');
+        
+        // 顯示已選擇的檔案（修正這裡）
+        const selectedDiv = document.getElementById(`${type}Selected`);
+        selectedDiv.innerHTML = `
+            <div class="file-name">${file.name}</div>
+            <button class="btn-remove" onclick="removePrebuildFile('${type}')">
+                <i class="fas fa-times"></i> 移除
+            </button>
+        `;
+        selectedDiv.style.display = 'flex';
+        selectedDiv.style.justifyContent = 'space-between';
+        selectedDiv.style.alignItems = 'center';
+        selectedDiv.style.padding = '10px 15px';
+        selectedDiv.style.background = 'var(--success-light)';
+        selectedDiv.style.borderTop = '1px solid var(--border-light)';
+        
+        // 更新篩選預覽
+        updateFilterPreview();
+        
+        hideLoading();
+        utils.showNotification('檔案上傳成功', 'success');
+        
+    } catch (error) {
+        hideLoading();
+        utils.showNotification('檔案上傳失敗: ' + error.message, 'error');
+    }
+}
+
+function removePrebuildFile(type) {
+    // 清除檔案
+    selectedPrebuildFiles[type] = null;
+    
+    // 更新 UI
+    document.getElementById(`${type}Status`).innerHTML = '<i class="fas fa-cloud-upload-alt"></i>';
+    document.getElementById(`${type}Status`).classList.remove('success');
+    document.getElementById(`${type}Selected`).style.display = 'none';
+    document.getElementById(`${type}Selected`).innerHTML = '';
+    
+    // 更新篩選預覽
+    updateFilterPreview();
+    
+    utils.showNotification(`已移除 ${type.toUpperCase()} 檔案`, 'info');
+}
+
+// 驗證檔案
+function validateFile(file) {
+    const allowedExtensions = ['xlsx', 'xls', 'csv'];
+    const extension = file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedExtensions.includes(extension)) {
+        utils.showNotification('不支援的檔案格式，請選擇 Excel 或 CSV 檔案', 'error');
+        return false;
+    }
+    
+    // 檢查檔案大小（最大 50MB）
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+        utils.showNotification('檔案太大，請選擇小於 50MB 的檔案', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+// 顯示已選擇的檔案 - 支援伺服器檔案
+function displaySelectedFile(containerId, filename, options = {}) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const isServer = options.isServer || false;
+    const filePath = options.path || '';
+    const fileSize = options.size || 0;
+    
+    container.innerHTML = `
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h4 class="file-list-title">
+                    <i class="fas fa-check-circle"></i>
+                    已選擇的檔案
+                </h4>
+                ${!isServer ? `<button class="btn btn-small btn-danger" onclick="removeFile('${containerId}')">
+                    <i class="fas fa-trash"></i> 移除
+                </button>` : ''}
+            </div>
+            <div class="file-items">
+                <div class="file-item-card">
+                    <div class="file-icon-wrapper">
+                        <i class="fas fa-${isServer ? 'server' : 'file-excel'}"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">${filename}</div>
+                        <div class="file-meta">
+                            ${isServer ? `<span class="file-path">${filePath}</span>` : '準備就緒'}
+                            ${fileSize > 0 ? ` • ${utils.formatFileSize(fileSize)}` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 更新篩選預覽
+function updateFilterPreview() {
+    const filters = [];
+    
+    if (selectedPrebuildFiles.master && selectedPrebuildFiles.premp) {
+        filters.push('master_vs_premp');
+    }
+    if (selectedPrebuildFiles.premp && selectedPrebuildFiles.mp) {
+        filters.push('premp_vs_mp');
+    }
+    if (selectedPrebuildFiles.mp && selectedPrebuildFiles.mpbackup) {
+        filters.push('mp_vs_mpbackup');
+    }
+    
+    const preview = document.getElementById('filterPreview');
+    if (filters.length > 0) {
+        preview.textContent = `-filter ${filters.join(',')}`;
+        preview.style.display = 'block';
+    } else {
+        preview.style.display = 'none';
+    }
+}
+
+// 執行 Prebuild Mapping
+async function runPrebuildMapping() {
+    // 檢查至少有兩個檔案
+    const validFiles = {};
+    let fileCount = 0;
+    
+    for (const [type, path] of Object.entries(selectedPrebuildFiles)) {
+        if (path && path !== null && path !== 'null') {
+            validFiles[type] = path;
+            fileCount++;
+        }
+    }
+    
+    if (fileCount < 2) {
+        utils.showNotification('請至少選擇兩個檔案', 'error');
+        return;
+    }
+    
+    try {
+        showLoading('執行 Prebuild Mapping 中...');
+        
+        const params = {
+            files: validFiles,  // 只傳遞有效的檔案
+            output_path: document.getElementById('prebuildOutputPath').value
+        };
+        
+        console.log('執行參數:', params);
+        
+        const response = await utils.apiRequest('/api/admin/run-prebuild-mapping', {
+            method: 'POST',
+            body: JSON.stringify(params)
+        });
+        
+        hideLoading();
+        
+        if (response.success) {
+            currentResultSource = 'prebuild-mapping';  // 記錄結果來源
+            displayResults(response);
+            utils.showNotification('執行成功', 'success');
+        } else {
+            console.error('執行失敗:', response);
+            utils.showNotification('執行失敗: ' + (response.error || '未知錯誤'), 'error');
+        }
+        
+    } catch (error) {
+        hideLoading();
+        console.error('執行錯誤:', error);
+        utils.showNotification('執行失敗: ' + error.message, 'error');
+    }
+}
+
 // 載入快速路徑 - 修正版本，包含 DEFAULT_OUTPUT_DIR
 async function loadQuickPaths() {
     try {
@@ -1106,185 +1431,6 @@ function browseOutputPath(type) {
     }
 }
 
-// 切換 Mapping 來源
-let mappingSource = 'local';
-let mappingServerPath = '/home/vince_lin/ai/preMP';
-let mappingServerFiles = [];
-
-function switchMappingSource(source) {
-    mappingSource = source;
-    
-    // 更新標籤狀態
-    document.querySelectorAll('.source-tabs .tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.currentTarget.classList.add('active');
-    
-    // 切換內容
-    document.getElementById('mapping-local-tab').classList.toggle('active', source === 'local');
-    document.getElementById('mapping-server-tab').classList.toggle('active', source === 'server');
-    
-    // 如果切換到伺服器，載入檔案
-    if (source === 'server' && !mappingServerFiles.length) {
-        loadMappingServerFiles();
-    }
-}
-
-// 載入伺服器檔案
-async function loadMappingServerFiles() {
-    const browser = document.getElementById('mappingServerBrowser');
-    browser.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 載入中...</div>';
-    
-    try {
-        const response = await utils.apiRequest(`/api/browse-server?path=${encodeURIComponent(mappingServerPath)}`);
-        displayMappingServerFiles(response);
-    } catch (error) {
-        browser.innerHTML = `<div class="error-message">載入失敗: ${error.message}</div>`;
-    }
-}
-
-// 顯示伺服器檔案
-function displayMappingServerFiles(data) {
-    const browser = document.getElementById('mappingServerBrowser');
-    const { files = [], folders = [] } = data;
-    
-    let html = '<div class="file-grid">';
-    
-    // 返回上層
-    if (mappingServerPath !== '/') {
-        html += `
-            <div class="file-item folder" onclick="navigateMappingParent()">
-                <i class="fas fa-level-up-alt"></i>
-                <span class="file-name">..</span>
-            </div>
-        `;
-    }
-    
-    // 資料夾
-    folders.forEach(folder => {
-        html += `
-            <div class="file-item folder" onclick="navigateMappingTo('${folder.path}')">
-                <i class="fas fa-folder"></i>
-                <span class="file-name">${folder.name}</span>
-            </div>
-        `;
-    });
-    
-    // Excel/CSV 檔案
-    files.filter(f => f.name.endsWith('.xlsx') || f.name.endsWith('.xls') || f.name.endsWith('.csv'))
-        .forEach(file => {
-            html += `
-                <div class="file-item file" onclick="selectMappingServerFile('${file.path}', '${file.name}')">
-                    <i class="fas fa-file-excel"></i>
-                    <span class="file-name">${file.name}</span>
-                    <span class="file-size">${utils.formatFileSize(file.size)}</span>
-                </div>
-            `;
-        });
-    
-    html += '</div>';
-    browser.innerHTML = html;
-}
-
-// 導航到資料夾
-function navigateMappingTo(path) {
-    mappingServerPath = path;
-    document.getElementById('mappingServerPath').value = path;
-    loadMappingServerFiles();
-}
-
-// 返回上層
-function navigateMappingParent() {
-    const parentPath = mappingServerPath.substring(0, mappingServerPath.lastIndexOf('/')) || '/';
-    navigateMappingTo(parentPath);
-}
-
-// 前往路徑
-function goToMappingPath() {
-    const path = document.getElementById('mappingServerPath').value;
-    if (path) {
-        mappingServerPath = path;
-        loadMappingServerFiles();
-    }
-}
-
-// 重新整理
-function refreshMappingFiles() {
-    loadMappingServerFiles();
-}
-
-// 選擇伺服器檔案
-async function selectMappingServerFile(path, name) {
-    selectedMappingFile = path;
-    
-    // 顯示已選擇
-    document.getElementById('mappingServerSelected').innerHTML = `
-        <div class="file-list-container">
-            <div class="file-list-header">
-                <h4 class="file-list-title">
-                    <i class="fas fa-check-circle" style="color:white"></i>
-                    已選擇的檔案
-                </h4>
-            </div>
-            <div class="file-items">
-                <div class="file-item-card">
-                    <div class="file-icon-wrapper">
-                        <i class="fas fa-file-excel"></i>
-                    </div>
-                    <div class="file-details">
-                        <div class="file-name">${name}</div>
-                        <div class="file-meta">
-                            <span class="file-path">${path}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // 分析檔案
-    try {
-        showLoading('分析檔案中...');
-        const analysis = await analyzeMapping(path);
-        updateDBOptions(analysis);
-        hideLoading();
-        utils.showNotification('檔案選擇成功', 'success');
-    } catch (error) {
-        hideLoading();
-        utils.showNotification('檔案分析失敗: ' + error.message, 'error');
-    }
-}
-
-// 顯示載入中
-function showLoading(text = '處理中...') {
-    const overlay = document.getElementById('loadingOverlay');
-    const loadingText = document.getElementById('loadingText');
-    
-    if (overlay && loadingText) {
-        loadingText.textContent = text;
-        overlay.classList.remove('hidden');
-    }
-}
-
-// 隱藏載入中
-function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.classList.add('hidden');
-    }
-}
-
-// 關閉資料夾瀏覽器
-function closeFolderBrowser() {
-    document.getElementById('folderBrowserModal').classList.add('hidden');
-}
-
-// 選擇資料夾
-function selectFolder() {
-    // 實作資料夾選擇邏輯
-    closeFolderBrowser();
-}
-
 // 切換快速路徑開關
 function toggleQuickPath(type) {
     const toggle = document.getElementById(`${type}UseQuickPath`);
@@ -1331,86 +1477,34 @@ function updateQuickPath(type) {
     }
 }
 
-// 執行 Prebuild Mapping
-async function runPrebuildMapping() {
-    // 檢查至少有兩個檔案
-    const validFiles = {};
-    let fileCount = 0;
+// 顯示載入中
+function showLoading(text = '處理中...') {
+    const overlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
     
-    for (const [type, path] of Object.entries(selectedPrebuildFiles)) {
-        if (path && path !== null && path !== 'null') {
-            validFiles[type] = path;
-            fileCount++;
-        }
-    }
-    
-    if (fileCount < 2) {
-        utils.showNotification('請至少選擇兩個檔案', 'error');
-        return;
-    }
-    
-    try {
-        showLoading('執行 Prebuild Mapping 中...');
-        
-        const params = {
-            files: validFiles,  // 只傳遞有效的檔案
-            output_path: document.getElementById('prebuildOutputPath').value
-        };
-        
-        console.log('執行參數:', params);
-        
-        const response = await utils.apiRequest('/api/admin/run-prebuild-mapping', {
-            method: 'POST',
-            body: JSON.stringify(params)
-        });
-        
-        hideLoading();
-        
-        if (response.success) {
-            currentResultSource = 'prebuild-mapping';  // 記錄結果來源
-            displayResults(response);
-            utils.showNotification('執行成功', 'success');
-        } else {
-            console.error('執行失敗:', response);
-            utils.showNotification('執行失敗: ' + (response.error || '未知錯誤'), 'error');
-        }
-        
-    } catch (error) {
-        hideLoading();
-        console.error('執行錯誤:', error);
-        utils.showNotification('執行失敗: ' + error.message, 'error');
+    if (overlay && loadingText) {
+        loadingText.textContent = text;
+        overlay.classList.remove('hidden');
     }
 }
 
-// 顯示已選擇的檔案（加入刪除功能）
-function displaySelectedFile(containerId, filename) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="file-list-container">
-            <div class="file-list-header">
-                <h4 class="file-list-title">
-                    <i class="fas fa-check-circle"></i>
-                    已選擇的檔案
-                </h4>
-                <button class="btn btn-small btn-danger" onclick="removeFile('${containerId}')">
-                    <i class="fas fa-trash"></i> 刪除
-                </button>
-            </div>
-            <div class="file-items">
-                <div class="file-item-card">
-                    <div class="file-icon-wrapper">
-                        <i class="fas fa-file-excel"></i>
-                    </div>
-                    <div class="file-details">
-                        <div class="file-name">${filename}</div>
-                        <div class="file-meta">準備就緒</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+// 隱藏載入中
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+// 關閉資料夾瀏覽器
+function closeFolderBrowser() {
+    document.getElementById('folderBrowserModal').classList.add('hidden');
+}
+
+// 選擇資料夾
+function selectFolder() {
+    // 實作資料夾選擇邏輯
+    closeFolderBrowser();
 }
 
 // 新增刪除檔案函數
@@ -1423,11 +1517,28 @@ function removeFile(containerId) {
     // 清除相關的檔案變數
     if (containerId === 'mappingFileList') {
         selectedMappingFile = null;
-        // 清空 DB 選項
-        const dbSelect = document.getElementById('dbFilter');
-        dbSelect.innerHTML = '<option value="all">All</option>';
-        const chipFilter = document.getElementById('chipFilter');
-        chipFilter.innerHTML = '<option value="all">All Chips</option>';
+        
+        // 重置來源選擇
+        document.getElementById('useDefaultMapping').checked = true;
+        document.getElementById('useUploadMapping').checked = false;
+        toggleMappingSource();
+        
+        // 清空 DB 和 Chip 選項
+        const allDBSelects = document.querySelectorAll('select[name="dbFilter"]');
+        const allChipSelects = document.querySelectorAll('select[name="chipFilter"]');
+        
+        allDBSelects.forEach(select => {
+            select.innerHTML = '<option value="all">All</option><option value="" disabled>請先載入 Mapping Table</option>';
+        });
+        
+        allChipSelects.forEach(select => {
+            select.innerHTML = '<option value="all">All Chips</option>';
+        });
+        
+        // 隱藏版本選擇器
+        document.getElementById('dbVersionGroup').style.display = 'none';
+        document.getElementById('dbVersionSelectors').innerHTML = '';
+        
         utils.showNotification('已移除 Mapping Table 檔案', 'info');
     }
 }

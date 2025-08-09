@@ -88,3 +88,60 @@ DEFAULT_FILTER = 'all'     # 預設處理所有資料
 
 # SFTP 版本排序設定
 VERSION_SORT_REVERSE = True  # True = 最新版本優先
+
+# =====================================
+# ===== 登入系統設定 =====
+# =====================================
+
+# 登入功能開關
+ENABLE_LOGIN = True  # 是否啟用登入功能
+
+# 登入模式設定
+LOGIN_MODE = 'admin_only'  # 'global' = 全站登入, 'admin_only' = 僅後台登入
+
+# 管理員帳號設定
+ADMIN_USERS = {
+    'admin': 'admin123',
+    'vince': 'vince123'
+}
+
+# Session 設定
+SECRET_KEY = 'your-secret-key-change-this-in-production'
+SESSION_TIMEOUT = 3600  # Session 過期時間（秒）
+
+# =====================================
+# ===== Admin 後台管理設定 =====
+# =====================================
+
+# Chip Mapping 設定
+DEFAULT_MAPPING_TABLE_PATH = '/home/vince_lin/ai/preMP/vp_lib/all_chip_mapping_table.xlsx'
+USE_DEFAULT_MAPPING_TABLE = True  # 預設是否使用 server 上的檔案
+
+# 預設輸出資料夾
+DEFAULT_CHIP_OUTPUT_DIR = './output/chip_mapping'
+DEFAULT_PREBUILD_OUTPUT_DIR = './output/prebuild_mapping'
+
+# DB 版本設定
+MAX_DB_VERSIONS = 50  # 最大顯示版本數，設為 'max' 則顯示全部
+
+# =====================================
+# ===== 動態篩選設定 =====
+# =====================================
+
+# Filter 類型預設選項
+FILTER_TYPE_OPTIONS = [
+    ('all', 'All'),
+    ('master_vs_premp', 'Master vs PreMP'),
+    ('premp_vs_mp', 'PreMP vs MP'),
+    ('mp_vs_mpbackup', 'MP vs MP Backup')
+]
+
+# Chip Filter 預設選項（會從 mapping table 動態載入）
+DEFAULT_CHIP_OPTIONS = [
+    ('all', 'All Chips')
+]
+
+# DB 選擇預設選項（會從 mapping table 動態載入）
+DEFAULT_DB_OPTIONS = [
+    ('all', 'All')
+]

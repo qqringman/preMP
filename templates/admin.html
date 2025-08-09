@@ -33,12 +33,52 @@
                 <div class="step-number">1</div>
                 <div class="step-content">
                     <h2 class="step-title">選擇 Mapping Table</h2>
-                    <p class="step-subtitle">上傳 all_chip_mapping_table.xlsx 檔案</p>
+                    <p class="step-subtitle">選擇來源方式</p>
                 </div>
             </div>
             
             <div class="section-body">
-                <div class="upload-container" id="mappingUploadArea">
+                <!-- 來源選擇開關 -->
+                <div class="source-selector">
+                    <div class="source-option">
+                        <label class="switch-label">
+                            <input type="radio" name="mappingSource" value="default" id="useDefaultMapping" checked onchange="toggleMappingSource()">
+                            <span class="radio-text">使用預設檔案 (伺服器)</span>
+                        </label>
+                        <div class="source-description">
+                            使用伺服器上的預設 all_chip_mapping_table.xlsx
+                        </div>
+                    </div>
+                    
+                    <div class="source-option">
+                        <label class="switch-label">
+                            <input type="radio" name="mappingSource" value="upload" id="useUploadMapping" onchange="toggleMappingSource()">
+                            <span class="radio-text">上傳檔案</span>
+                        </label>
+                        <div class="source-description">
+                            上傳自己的 mapping table 檔案
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 預設檔案區域 -->
+                <div class="default-file-area" id="defaultFileArea">
+                    <div class="default-file-card">
+                        <div class="file-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div class="file-details">
+                            <div class="file-name">all_chip_mapping_table.xlsx</div>
+                            <div class="file-path">{{ config.DEFAULT_MAPPING_TABLE_PATH or '/home/vince_lin/ai/preMP/vp_lib/' }}</div>
+                        </div>
+                        <button class="btn btn-primary" id="loadDefaultFile" onclick="loadDefaultMappingTable()">
+                            <i class="fas fa-download"></i> 載入檔案
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 上傳檔案區域 -->
+                <div class="upload-container" id="mappingUploadArea" style="display: none;">
                     <input type="file" id="mappingFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
                     <div class="upload-icon-wrapper">
                         <i class="fas fa-file-excel fa-4x"></i>
@@ -67,58 +107,94 @@
                 <div class="step-number">2</div>
                 <div class="step-content">
                     <h2 class="step-title">設定參數</h2>
-                    <p class="step-subtitle">選擇 Filter 類型和 DB 版本</p>
+                    <p class="step-subtitle">選擇 Filter 類型和 DB 版本 (支援多選)</p>
                 </div>
             </div>
             
             <div class="section-body">
-                <div class="params-grid">
-                    <div class="param-group">
-                        <label class="form-label">
-                            <i class="fas fa-filter"></i> Filter 類型
-                        </label>
-                        <select class="form-select" id="filterType">
-                            <option value="all">All</option>
-                            <option value="master_vs_premp">Master vs PreMP</option>
-                            <option value="premp_vs_mp">PreMP vs MP</option>
-                            <option value="mp_vs_mpbackup">MP vs MP Backup</option>
-                        </select>
-                        <div class="form-hint mt-2">
-                            <i class="fas fa-info-circle"></i>
-                            <span>選擇要比對的類型</span>
+                <!-- Filter 類型 -->
+                <div class="dynamic-param-group">
+                    <label class="form-label">
+                        <i class="fas fa-filter"></i> Filter 類型
+                        <button class="btn-add" onclick="addFilterType()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </label>
+                    <div class="dynamic-items" id="filterTypeItems">
+                        <div class="dynamic-item" data-index="0">
+                            <select class="form-select" name="filterType" data-index="0">
+                                <option value="all">All</option>
+                                <option value="master_vs_premp">Master vs PreMP</option>
+                                <option value="premp_vs_mp">PreMP vs MP</option>
+                                <option value="mp_vs_mpbackup">MP vs MP Backup</option>
+                            </select>
+                            <button class="btn-remove" onclick="removeFilterType(0)" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                     </div>
-                    
-                    <div class="param-group">
-                        <label class="form-label">
-                            <i class="fas fa-microchip"></i> Chip Filter
-                        </label>
-                        <select class="form-select" id="chipFilter">
-                            <option value="all">All Chips</option>
-                        </select>
-                        <div class="form-hint mt-2">
-                            <i class="fas fa-info-circle"></i>
-                            <span>選擇特定的晶片類型</span>
+                    <div class="form-hint mt-2">
+                        <i class="fas fa-info-circle"></i>
+                        <span>多個條件將使用 OR 邏輯連接</span>
+                    </div>
+                </div>
+
+                <!-- Chip Filter -->
+                <div class="dynamic-param-group">
+                    <label class="form-label">
+                        <i class="fas fa-microchip"></i> Chip Filter
+                        <button class="btn-add" onclick="addChipFilter()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </label>
+                    <div class="dynamic-items" id="chipFilterItems">
+                        <div class="dynamic-item" data-index="0">
+                            <select class="form-select" name="chipFilter" data-index="0">
+                                <option value="all">All Chips</option>
+                            </select>
+                            <button class="btn-remove" onclick="removeChipFilter(0)" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                     </div>
-                    
-                    <div class="param-group">
-                        <label class="form-label">
-                            <i class="fas fa-database"></i> DB 選擇
-                        </label>
-                        <select class="form-select" id="dbFilter">
-                            <option value="all">All</option>
-                            <option value="" disabled>請先上傳 Mapping Table</option>
-                        </select>
+                    <div class="form-hint mt-2">
+                        <i class="fas fa-info-circle"></i>
+                        <span>選擇特定的晶片類型</span>
                     </div>
-                    
-                    <div class="param-group" id="dbVersionGroup" style="display: none;">
-                        <label class="form-label">
-                            <i class="fas fa-code-branch"></i> DB 版本
-                        </label>
-                        <select class="form-select" id="dbVersion">
-                            <option value="">選擇版本...</option>
-                        </select>
+                </div>
+
+                <!-- DB 選擇 -->
+                <div class="dynamic-param-group">
+                    <label class="form-label">
+                        <i class="fas fa-database"></i> DB 選擇
+                        <button class="btn-add" onclick="addDBFilter()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </label>
+                    <div class="dynamic-items" id="dbFilterItems">
+                        <div class="dynamic-item" data-index="0">
+                            <select class="form-select" name="dbFilter" data-index="0" onchange="handleDBSelection(this)">
+                                <option value="all">All</option>
+                                <option value="" disabled>請先載入 Mapping Table</option>
+                            </select>
+                            <button class="btn-remove" onclick="removeDBFilter(0)" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-hint mt-2">
+                        <i class="fas fa-info-circle"></i>
+                        <span>可選擇多個 DB 進行處理</span>
+                    </div>
+                </div>
+
+                <!-- DB 版本選擇 -->
+                <div class="param-group" id="dbVersionGroup" style="display: none;">
+                    <label class="form-label">
+                        <i class="fas fa-code-branch"></i> DB 版本選擇
+                    </label>
+                    <div id="dbVersionSelectors">
+                        <!-- 動態生成版本選擇器 -->
                     </div>
                 </div>
             </div>
@@ -145,7 +221,7 @@
                                 class="form-input" 
                                 id="chipOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="./output/chip_mapping">
+                                value="{{ config.DEFAULT_CHIP_OUTPUT_DIR or './output/chip_mapping' }}">
                             <button class="btn btn-secondary" onclick="browseOutputPath('chip')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
@@ -302,7 +378,7 @@
                                 class="form-input" 
                                 id="prebuildOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="./output/prebuild_mapping">
+                                value="{{ config.DEFAULT_PREBUILD_OUTPUT_DIR or './output/prebuild_mapping' }}">
                             <button class="btn btn-secondary" onclick="browseOutputPath('prebuild')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
@@ -324,6 +400,20 @@
                             <select class="form-select" id="prebuildQuickPath" onchange="updateQuickPath('prebuild')">
                                 <option value="">-- 選擇目錄 --</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <!-- 執行說明 -->
+                    <div class="execution-hint">
+                        <i class="fas fa-info-circle"></i>
+                        <div class="hint-content">
+                            <strong>執行說明：</strong>
+                            <ul>
+                                <li>master + premp → PrebuildFW_master_vs_premp_mapping.xlsx</li>
+                                <li>premp + mp → PrebuildFW_premp_vs_mp_mapping.xlsx</li>
+                                <li>mp + mpbackup → PrebuildFW_mp_vs_mpbackup_mapping.xlsx</li>
+                            </ul>
+                            <p>系統會根據上傳的檔案組合自動執行相應的比對</p>
                         </div>
                     </div>
                 </div>
@@ -426,6 +516,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 {% endblock %}
