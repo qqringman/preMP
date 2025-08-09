@@ -162,11 +162,10 @@
                         <span>選擇特定的晶片類型</span>
                     </div>
                 </div>
-
-                <!-- DB 選擇 -->
+                <!-- DB 選擇與版本設定 -->
                 <div class="dynamic-param-group">
                     <label class="form-label">
-                        <i class="fas fa-database"></i> DB 選擇
+                        <i class="fas fa-database"></i> DB 選擇與版本設定
                         <button class="btn-add" onclick="addDBFilter()">
                             <i class="fas fa-plus"></i>
                         </button>
@@ -182,19 +181,21 @@
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- DB 版本選擇 -->
+                    <div id="dbVersionGroup" style="display: none; margin-top: 20px;">
+                        <div class="db-version-header">
+                            <i class="fas fa-code-branch"></i>
+                            <span>版本選擇（可選）</span>
+                        </div>
+                        <div id="dbVersionSelectors">
+                            <!-- 動態生成版本選擇器 -->
+                        </div>
+                    </div>
+                    
                     <div class="form-hint mt-2">
                         <i class="fas fa-info-circle"></i>
-                        <span>可選擇多個 DB 進行處理</span>
-                    </div>
-                </div>
-
-                <!-- DB 版本選擇 -->
-                <div class="param-group" id="dbVersionGroup" style="display: none;">
-                    <label class="form-label">
-                        <i class="fas fa-code-branch"></i> DB 版本選擇
-                    </label>
-                    <div id="dbVersionSelectors">
-                        <!-- 動態生成版本選擇器 -->
+                        <span>可選擇多個 DB 進行處理，並指定特定版本</span>
                     </div>
                 </div>
             </div>
@@ -211,36 +212,35 @@
             </div>
             
             <div class="section-body">
-                <div class="output-selector">
-                    <div class="form-group">
-                        <label class="form-label">
+                <div class="output-config">
+                    <div class="output-path-group">
+                        <label class="output-label">
                             <i class="fas fa-folder"></i> 輸出路徑
                         </label>
-                        <div class="path-input-group">
+                        <div class="output-input-wrapper">
                             <input type="text" 
-                                class="form-input" 
+                                class="output-input" 
                                 id="chipOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="{{ config.DEFAULT_CHIP_OUTPUT_DIR if config.DEFAULT_CHIP_OUTPUT_DIR else './output/chip_mapping' }}">
-                            <button class="btn btn-secondary" onclick="browseOutputPath('chip')">
+                                value="./output/chip_mapping">
+                            <button class="output-browse-btn" onclick="browseOutputPath('chip')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
                         </div>
                     </div>
                     
-                    <div class="quick-select">
-                        <div class="quick-select-header">
+                    <div class="quick-directory-section">
+                        <div class="quick-directory-header">
                             <label class="form-label">
                                 <i class="fas fa-history"></i> 使用已下載的目錄
                             </label>
-                            <!-- 切換開關 -->
-                            <label class="toggle-switch">
+                            <label class="directory-toggle">
                                 <input type="checkbox" id="chipUseQuickPath" onchange="toggleQuickPath('chip')">
-                                <span class="toggle-slider"></span>
+                                <span class="toggle-indicator"></span>
                             </label>
                         </div>
-                        <div class="quick-path-select" id="chipQuickPathGroup" style="display: none;">
-                            <select class="form-select" id="chipQuickPath" onchange="updateQuickPath('chip')">
+                        <div class="quick-directory-content" id="chipQuickPathGroup" style="display: none;">
+                            <select class="directory-select" id="chipQuickPath" onchange="updateQuickPath('chip')">
                                 <option value="">-- 選擇目錄 --</option>
                             </select>
                         </div>
@@ -485,8 +485,8 @@
                 </div>
 
                 <!-- 結果表格 -->
-                <div class="result-table-container">
-                    <table class="result-table" id="resultTable">
+                <div class="table-wrapper">
+                    <table class="data-table" id="resultTable">
                         <thead id="resultTableHead">
                             <!-- 動態生成表頭 -->
                         </thead>

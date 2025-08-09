@@ -404,6 +404,16 @@ function displayVersionOptionsForDB(dbName, versions) {
 
 // 切換功能
 function switchFunction(func) {
+    // 保存當前功能的結果
+    if (currentResult && currentFunction) {
+        if (currentFunction === 'chip-mapping') {
+            chipMappingResult = { ...currentResult };
+        } else if (currentFunction === 'prebuild-mapping') {
+            prebuildMappingResult = { ...currentResult };
+        }
+    }
+    
+    // 切換到新功能
     currentFunction = func;
     
     // 更新標籤狀態
@@ -412,31 +422,52 @@ function switchFunction(func) {
     });
     event.currentTarget.classList.add('active');
     
-    // 切換內容
+    // 切換內容 - 確保正確隱藏/顯示
     document.querySelectorAll('.function-content').forEach(content => {
         content.classList.remove('active');
+        content.style.display = 'none';
     });
-    document.getElementById(`${func}-content`).classList.add('active');
+    
+    const activeContent = document.getElementById(`${func}-content`);
+    if (activeContent) {
+        activeContent.classList.add('active');
+        activeContent.style.display = 'block';
+    }
     
     // 顯示對應功能的結果
     const resultSection = document.getElementById('resultSection');
     
-    if (func === 'chip-mapping' && chipMappingResult.data.length > 0) {
+    if (func === 'chip-mapping' && chipMappingResult.data && chipMappingResult.data.length > 0) {
         currentResult = chipMappingResult;
+        currentResultSource = 'chip-mapping';
         resultSection.classList.remove('hidden');
-        document.getElementById('totalRows').textContent = chipMappingResult.totalRows;
-        document.getElementById('filteredRows').textContent = chipMappingResult.totalRows;
-        buildResultTable(chipMappingResult.columns);
-    } else if (func === 'prebuild-mapping' && prebuildMappingResult.data.length > 0) {
+        document.getElementById('totalRows').textContent = chipMappingResult.totalRows || 0;
+        document.getElementById('filteredRows').textContent = chipMappingResult.totalRows || 0;
+        buildResultTable(chipMappingResult.columns || []);
+        showResultSourceHint();
+    } else if (func === 'prebuild-mapping' && prebuildMappingResult.data && prebuildMappingResult.data.length > 0) {
         currentResult = prebuildMappingResult;
+        currentResultSource = 'prebuild-mapping';
         resultSection.classList.remove('hidden');
-        document.getElementById('totalRows').textContent = prebuildMappingResult.totalRows;
-        document.getElementById('filteredRows').textContent = prebuildMappingResult.totalRows;
-        buildResultTable(prebuildMappingResult.columns);
+        document.getElementById('totalRows').textContent = prebuildMappingResult.totalRows || 0;
+        document.getElementById('filteredRows').textContent = prebuildMappingResult.totalRows || 0;
+        buildResultTable(prebuildMappingResult.columns || []);
+        showResultSourceHint();
     } else {
         // 如果該功能沒有結果，隱藏結果區域
         resultSection.classList.add('hidden');
         currentResult = null;
+        currentResultSource = null;
+    }
+    
+    // 重置搜尋和分頁
+    currentPage = 1;
+    sortColumn = null;
+    sortDirection = 'asc';
+    filterText = '';
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.value = '';
     }
 }
 
@@ -563,7 +594,7 @@ async function analyzeMapping(filepath) {
     return response;
 }
 
-// 更新 DB 選項 - 支援動態更新所有選擇器
+// 更新 DB 選項 - 支援動態更新所有選擇器，並正確顯示 DB 資訊
 function updateDBOptions(analysis) {
     const allDBSelects = document.querySelectorAll('select[name="dbFilter"]');
     const chipSelects = document.querySelectorAll('select[name="chipFilter"]');
@@ -585,18 +616,24 @@ function updateDBOptions(analysis) {
                 const option = document.createElement('option');
                 option.value = db;
                 
-                // 建立顯示文字
+                // 建立顯示文字 - 修正格式
                 let displayText = db;
                 if (analysis.db_info && analysis.db_info[db]) {
                     const info = analysis.db_info[db];
                     
-                    // 顯示 DB 類型
+                    // 顯示 DB 類型，格式：DB2302 (master/premp)
                     if (info.types && info.types.length > 0) {
                         displayText = `${db} (${info.types.join('/')})`;
+                    }
+                    
+                    // 如果有模組資訊，也可以加入
+                    if (info.modules && info.modules.length > 0 && info.modules.length <= 3) {
+                        displayText += ` • ${info.modules.slice(0, 2).join(', ')}${info.modules.length > 2 ? '...' : ''}`;
                     }
                 }
                 
                 option.textContent = displayText;
+                option.title = displayText; // 添加 tooltip
                 dbSelect.appendChild(option);
             });
             
@@ -646,7 +683,12 @@ function updateDBOptions(analysis) {
             hint.className = 'form-hint';
             dbGroup.appendChild(hint);
         }
-        hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${analysis.db_list ? analysis.db_list.length : 0} 個 DB，${analysis.modules ? analysis.modules.length : 0} 個模組`;
+        
+        const dbCount = analysis.db_list ? analysis.db_list.length : 0;
+        const moduleCount = analysis.modules ? analysis.modules.length : 0;
+        const totalRows = analysis.total_rows || 0;
+        
+        hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${dbCount} 個 DB，${moduleCount} 個模組，共 ${totalRows} 筆資料`;
     }
 }
 
@@ -1443,32 +1485,48 @@ function browseOutputPath(type) {
 function toggleQuickPath(type) {
     const toggle = document.getElementById(`${type}UseQuickPath`);
     const quickPathGroup = document.getElementById(`${type}QuickPathGroup`);
-    const quickSelect = quickPathGroup.parentElement;
     const outputPath = document.getElementById(`${type}OutputPath`);
-    const browseBtn = outputPath.nextElementSibling;
+    const browseBtn = outputPath ? outputPath.nextElementSibling : null;
     const quickPathSelect = document.getElementById(`${type}QuickPath`);
+    
+    if (!toggle || !quickPathGroup || !outputPath) {
+        console.error(`Missing elements for ${type} quick path toggle`);
+        return;
+    }
     
     if (toggle.checked) {
         // 開啟快速路徑
         quickPathGroup.style.display = 'block';
-        quickSelect.classList.add('active');
         
         // 如果已選擇路徑，套用到輸入框
-        if (quickPathSelect.value) {
+        if (quickPathSelect && quickPathSelect.value) {
             outputPath.value = quickPathSelect.value;
         }
         
         // 停用手動輸入
         outputPath.disabled = true;
-        browseBtn.disabled = true;
+        outputPath.style.backgroundColor = '#f5f5f5';
+        outputPath.style.cursor = 'not-allowed';
+        
+        if (browseBtn) {
+            browseBtn.disabled = true;
+            browseBtn.style.opacity = '0.6';
+            browseBtn.style.cursor = 'not-allowed';
+        }
     } else {
         // 關閉快速路徑
         quickPathGroup.style.display = 'none';
-        quickSelect.classList.remove('active');
         
         // 恢復手動輸入
         outputPath.disabled = false;
-        browseBtn.disabled = false;
+        outputPath.style.backgroundColor = '';
+        outputPath.style.cursor = '';
+        
+        if (browseBtn) {
+            browseBtn.disabled = false;
+            browseBtn.style.opacity = '';
+            browseBtn.style.cursor = '';
+        }
     }
 }
 
@@ -1477,6 +1535,11 @@ function updateQuickPath(type) {
     const toggle = document.getElementById(`${type}UseQuickPath`);
     const quickPathSelect = document.getElementById(`${type}QuickPath`);
     const outputPath = document.getElementById(`${type}OutputPath`);
+    
+    if (!toggle || !quickPathSelect || !outputPath) {
+        console.error(`Missing elements for ${type} quick path update`);
+        return;
+    }
     
     // 只有在開關開啟時才更新
     if (toggle.checked && quickPathSelect.value) {
