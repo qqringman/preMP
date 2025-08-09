@@ -7,17 +7,48 @@ let pivotMode = false;
 let filters = {};
 let sortOrder = {};
 let searchTerm = '';
+let currentScenario = 'all';
 
 console.log('Task ID:', taskId);
 
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('頁面載入完成，開始載入資料...');
+    // 初始化情境選擇器
+    initializeScenarioSelector();
+    
+    // 載入資料
     loadPivotData();
     
     // 初始化搜尋功能
     initializeSearch();
 });
+
+// 確保情境選擇器正確設置 data-scenario 屬性
+function initializeScenarioSelector() {
+    const scenarioTabs = document.querySelectorAll('.scenario-tab');
+    
+    // 確認每個按鈕的 data-scenario 屬性
+    scenarioTabs.forEach(tab => {
+        console.log(`Scenario tab: ${tab.textContent.trim()}, data-scenario: ${tab.dataset.scenario}`);
+        
+        tab.addEventListener('click', function() {
+            // 移除所有 active 類
+            scenarioTabs.forEach(t => t.classList.remove('active'));
+            
+            // 添加 active 類到當前選中的標籤
+            this.classList.add('active');
+            
+            // 更新當前情境
+            const newScenario = this.dataset.scenario;
+            console.log(`切換情境: ${currentScenario} -> ${newScenario}`);
+            currentScenario = newScenario;
+            
+            // 重新載入資料
+            loadPivotData();
+        });
+    });
+}
 
 // 初始化搜尋功能
 function initializeSearch() {
@@ -45,22 +76,34 @@ function debounce(func, wait) {
     };
 }
 
-// 載入樞紐分析資料
+// 修改 loadPivotData 函數以支援情境
 async function loadPivotData() {
     try {
         showLoading();
         
-        console.log(`正在載入任務 ${taskId} 的資料...`);
+        console.log(`=== 載入資料 ===`);
+        console.log(`Task ID: ${taskId}`);
+        console.log(`Current Scenario: ${currentScenario}`);
         
-        const response = await fetch(`/api/pivot-data/${taskId}`);
+        // 根據情境構建 API URL
+        let apiUrl = `/api/pivot-data/${taskId}`;
+        if (currentScenario !== 'all') {
+            apiUrl += `?scenario=${currentScenario}`;
+        }
+        
+        console.log(`API URL: ${apiUrl}`);
+        
+        const response = await fetch(apiUrl);
         console.log('API 回應狀態:', response.status);
         
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API 錯誤回應:', errorText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('收到的資料:', data);
+        console.log('收到的資料鍵值:', Object.keys(data));
         
         if (!data || Object.keys(data).length === 0) {
             console.log('沒有找到資料');
@@ -71,43 +114,88 @@ async function loadPivotData() {
         currentData = data;
         console.log('資料載入成功，工作表數量:', Object.keys(data).length);
         
+        // 更新頁面標題以顯示當前情境
+        updatePageHeader();
+        
         // 填充資料表選項
-        const selector = document.getElementById('sheetSelector');
-        selector.innerHTML = '';
-        
-        // 按照特定順序顯示資料表
-        const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對', '摘要'];
-        const orderedSheets = [];
-        
-        sheetOrder.forEach(sheetName => {
-            if (data[sheetName]) {
-                orderedSheets.push(sheetName);
-            }
-        });
-        
-        Object.keys(data).forEach(sheetName => {
-            if (!orderedSheets.includes(sheetName)) {
-                orderedSheets.push(sheetName);
-            }
-        });
-        
-        orderedSheets.forEach(sheetName => {
-            const option = document.createElement('option');
-            option.value = sheetName;
-            option.textContent = getSheetDisplayName(sheetName);
-            selector.appendChild(option);
-        });
+        populateSheetSelector(data);
         
         // 載入第一個資料表
-        if (orderedSheets.length > 0) {
-            console.log('載入第一個資料表:', orderedSheets[0]);
-            loadSheet(orderedSheets[0]);
+        const sheets = Object.keys(data);
+        if (sheets.length > 0) {
+            console.log('載入第一個資料表:', sheets[0]);
+            loadSheet(sheets[0]);
         }
         
     } catch (error) {
         console.error('載入資料錯誤:', error);
         showErrorMessage(error.message);
     }
+}
+
+// 取得情境的顯示名稱
+function getScenarioDisplayName(scenario) {
+    const displayNames = {
+        'all': '全部情境',
+        'master_vs_premp': 'Master vs PreMP',
+        'premp_vs_wave': 'PreMP vs Wave', 
+        'wave_vs_backup': 'Wave vs Backup'
+    };
+    return displayNames[scenario] || scenario;
+}
+
+// 更新頁面標題以顯示當前情境
+function updatePageHeader() {
+    const pageSubtitle = document.querySelector('.page-subtitle');
+    if (pageSubtitle && currentScenario !== 'all') {
+        // 檢查是否已有情境指示器
+        let indicator = pageSubtitle.querySelector('.current-scenario-indicator');
+        if (!indicator) {
+            indicator = document.createElement('span');
+            indicator.className = 'current-scenario-indicator';
+            pageSubtitle.appendChild(indicator);
+        }
+        
+        indicator.innerHTML = `
+            <i class="fas fa-filter"></i>
+            ${getScenarioDisplayName(currentScenario)}
+        `;
+    } else if (pageSubtitle) {
+        // 移除情境指示器
+        const indicator = pageSubtitle.querySelector('.current-scenario-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+}
+
+// 填充資料表選擇器
+function populateSheetSelector(data) {
+    const selector = document.getElementById('sheetSelector');
+    selector.innerHTML = '';
+    
+    // 按照特定順序顯示資料表
+    const sheetOrder = ['revision_diff', 'branch_error', 'lost_project', 'version_diff', '無法比對', '摘要'];
+    const orderedSheets = [];
+    
+    sheetOrder.forEach(sheetName => {
+        if (data[sheetName]) {
+            orderedSheets.push(sheetName);
+        }
+    });
+    
+    Object.keys(data).forEach(sheetName => {
+        if (!orderedSheets.includes(sheetName)) {
+            orderedSheets.push(sheetName);
+        }
+    });
+    
+    orderedSheets.forEach(sheetName => {
+        const option = document.createElement('option');
+        option.value = sheetName;
+        option.textContent = getSheetDisplayName(sheetName);
+        selector.appendChild(option);
+    });
 }
 
 // 顯示載入中
@@ -131,13 +219,21 @@ function showNoDataMessage() {
     tbody.innerHTML = `
         <tr>
             <td colspan="100%" class="empty-message">
-                <div class="no-data-message">
-                    <i class="fas fa-inbox"></i>
+                <div class="no-data-container">
+                    <div class="no-data-icon">
+                        <i class="fas fa-database"></i>
+                        <i class="fas fa-slash"></i>
+                    </div>
                     <h3>暫無資料可顯示</h3>
                     <p>此任務可能還在處理中，或尚未產生報表。</p>
-                    <button class="btn-refresh">
-                        <span>重新整理</span>
-                    </button>
+                    <div class="no-data-actions">
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            <i class="fas fa-sync-alt"></i> 重新整理
+                        </button>
+                        <button class="btn btn-outline" onclick="window.history.back()">
+                            <i class="fas fa-arrow-left"></i> 返回上一頁
+                        </button>
+                    </div>
                 </div>
             </td>
         </tr>
@@ -151,28 +247,44 @@ function showNoDataMessage() {
     }
 }
 
-// 顯示錯誤訊息
-function showErrorMessage(message = '無法載入報表資料') {
+// 顯示錯誤訊息 - 簡潔版本
+function showErrorMessage(message = '無法載入資料') {
     const tbody = document.getElementById('tableBody');
+    
+    // 提取 HTTP 錯誤碼
+    let errorCode = '';
+    if (message.includes('404')) {
+        errorCode = 'HTTP 404';
+    } else if (message.includes('500')) {
+        errorCode = 'HTTP 500';
+    }
+    
     tbody.innerHTML = `
         <tr>
-            <td colspan="100%" class="empty-message">
-                <div class="error-message">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <h3>載入資料失敗</h3>
-                    <p>${message}</p>
-                    <div class="action-buttons">
-                        <button class="btn-refresh" onclick="location.reload()">
-                            <span>重試</span>
-                        </button>
-                        <button class="btn btn-outline" onclick="window.history.back()">
-                            <i class="fas fa-arrow-left"></i> 返回
-                        </button>
+            <td colspan="100%" style="padding: 0; border: none;">
+                <div class="simple-error">
+                    <div class="simple-error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
                     </div>
+                    <div class="simple-error-title">找不到資料</div>
+                    <div class="simple-error-message">請確認資料檔案是否存在</div>
+                    ${errorCode ? `<div class="simple-error-code">${errorCode}</div>` : ''}
+                    <button class="simple-error-action" onclick="location.reload()">
+                        <i class="fas fa-redo"></i> 重試
+                    </button>
                 </div>
             </td>
         </tr>
     `;
+    
+    // 清空統計資料
+    document.getElementById('statsGrid').innerHTML = '';
+    
+    // 移除統計條
+    const statsBar = document.querySelector('.table-stats-bar');
+    if (statsBar) {
+        statsBar.remove();
+    }
 }
 
 // 取得資料表顯示名稱
@@ -936,7 +1048,6 @@ function updateTableStats(total, displayed, searchMatches) {
 let pivotInitialData = null;
 let pivotInitialConfig = null;
 
-// 修改 renderPivotTable 函數
 function renderPivotTable(sheetData) {
     const container = document.getElementById('pivotContainer');
     container.innerHTML = '';
@@ -1001,6 +1112,7 @@ function renderPivotTable(sheetData) {
     
     try {
         $(container).pivotUI(pivotInitialData, pivotInitialConfig);
+        // 移除 fixPivotDropdownPosition 調用
     } catch (error) {
         console.error('樞紐分析錯誤:', error);
         container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
@@ -1316,9 +1428,15 @@ function exportPivotToHTML(table) {
     }
 }
 
-// 顯示提示訊息
-function showToast(message, type = 'info') {
-    // 創建提示元素
+// 顯示提示訊息 - 支援置中顯示
+function showToast(message, type = 'info', centered = false) {
+    // 如果是切換情境的訊息，使用置中顯示
+    if (message.includes('切換至') || centered) {
+        showCenteredToast(message, type);
+        return;
+    }
+    
+    // 原有的底部提示邏輯
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `
@@ -1326,21 +1444,61 @@ function showToast(message, type = 'info') {
         <span>${message}</span>
     `;
     
-    // 添加到頁面
     document.body.appendChild(toast);
     
-    // 顯示動畫
     setTimeout(() => {
         toast.classList.add('show');
     }, 10);
     
-    // 3秒後移除
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => {
             document.body.removeChild(toast);
         }, 300);
     }, 3000);
+}
+
+// 顯示置中的提示訊息
+function showCenteredToast(message, type = 'info') {
+    // 創建遮罩層
+    const overlay = document.createElement('div');
+    overlay.className = 'toast-overlay';
+    
+    // 創建提示元素
+    const toast = document.createElement('div');
+    toast.className = `toast-center toast-${type}`;
+    
+    const iconMap = {
+        'info': 'fa-info-circle',
+        'success': 'fa-check-circle',
+        'warning': 'fa-exclamation-triangle',
+        'error': 'fa-times-circle'
+    };
+    
+    toast.innerHTML = `
+        <i class="fas ${iconMap[type]}"></i>
+        <span>${message}</span>
+    `;
+    
+    // 添加到頁面
+    document.body.appendChild(overlay);
+    document.body.appendChild(toast);
+    
+    // 顯示動畫
+    setTimeout(() => {
+        overlay.classList.add('show');
+        toast.classList.add('show');
+    }, 10);
+    
+    // 1.5秒後移除
+    setTimeout(() => {
+        overlay.classList.remove('show');
+        toast.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(overlay);
+            document.body.removeChild(toast);
+        }, 300);
+    }, 1500);
 }
 
 // 匯出函數
@@ -1924,7 +2082,7 @@ function toggleFilterPanel() {
     document.getElementById('filterPanel').classList.toggle('show');
 }
 
-// 匯出當前檢視
+// 修改匯出函數以包含情境資訊
 async function exportCurrentView(format) {
     if (!currentData || !currentSheet) {
         alert('請先選擇資料表');
@@ -1935,8 +2093,13 @@ async function exportCurrentView(format) {
         if (format === 'excel') {
             showExportLoading();
             
-            // 從後端獲取原始 Excel 檔案，只保留當前資料表
-            const response = await fetch(`/api/export-excel-single/${taskId}/${currentSheet}`, {
+            // 構建 API URL，包含情境參數
+            let apiUrl = `/api/export-excel-single/${taskId}/${currentSheet}`;
+            if (currentScenario !== 'all') {
+                apiUrl += `?scenario=${currentScenario}`;
+            }
+            
+            const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1954,7 +2117,15 @@ async function exportCurrentView(format) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${currentSheet}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            
+            // 根據情境調整檔案名稱
+            let filename = `${currentSheet}_${new Date().toISOString().slice(0, 10)}`;
+            if (currentScenario !== 'all') {
+                filename += `_${currentScenario}`;
+            }
+            filename += '.xlsx';
+            
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -2948,6 +3119,92 @@ function togglePivotAreas() {
         text.textContent = '顯示拖曳區';
         pivotContainer.classList.add('areas-hidden');
     }
+}
+
+// 顯示情境載入中
+function showScenarioLoading() {
+    const scenarioTabs = document.querySelectorAll('.scenario-tab');
+    scenarioTabs.forEach(tab => {
+        tab.disabled = true;
+        tab.style.opacity = '0.6';
+    });
+}
+
+// 隱藏情境載入中
+function hideScenarioLoading() {
+    const scenarioTabs = document.querySelectorAll('.scenario-tab');
+    scenarioTabs.forEach(tab => {
+        tab.disabled = false;
+        tab.style.opacity = '1';
+    });
+}
+
+// 修正樞紐分析表下拉選單位置
+function fixPivotDropdownPosition() {
+    // 使用 MutationObserver 監控 DOM 變化
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList') {
+                // 檢查是否有新的下拉選單出現
+                $('.pvtFilterBox:visible').each(function() {
+                    const $filterBox = $(this);
+                    const $dropdown = $filterBox.closest('.pvtDropdown');
+                    
+                    if ($dropdown.length) {
+                        // 獲取下拉按鈕的位置
+                        const dropdownOffset = $dropdown.offset();
+                        const dropdownHeight = $dropdown.outerHeight();
+                        const dropdownWidth = $dropdown.outerWidth();
+                        
+                        // 計算視窗邊界
+                        const windowHeight = $(window).height();
+                        const windowWidth = $(window).width();
+                        const scrollTop = $(window).scrollTop();
+                        
+                        // 設定篩選框的位置
+                        let top = dropdownOffset.top - scrollTop + dropdownHeight + 5;
+                        let left = dropdownOffset.left;
+                        
+                        // 檢查是否超出下方邊界
+                        const filterBoxHeight = $filterBox.outerHeight();
+                        if (top + filterBoxHeight > windowHeight) {
+                            // 顯示在上方
+                            top = dropdownOffset.top - scrollTop - filterBoxHeight - 5;
+                        }
+                        
+                        // 檢查是否超出右邊界
+                        const filterBoxWidth = $filterBox.outerWidth();
+                        if (left + filterBoxWidth > windowWidth) {
+                            left = windowWidth - filterBoxWidth - 10;
+                        }
+                        
+                        $filterBox.css({
+                            position: 'fixed',
+                            top: top + 'px',
+                            left: left + 'px',
+                            'z-index': 999999,
+                            'max-height': '300px',
+                            'overflow-y': 'auto'
+                        });
+                    }
+                });
+            }
+        });
+    });
+    
+    // 開始觀察
+    const config = { childList: true, subtree: true };
+    const targetNode = document.getElementById('pivotContainer');
+    if (targetNode) {
+        observer.observe(targetNode, config);
+    }
+    
+    // 點擊其他地方關閉下拉選單
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.pvtDropdown').length) {
+            $('.pvtFilterBox').hide();
+        }
+    });
 }
 
 // 匯出函數

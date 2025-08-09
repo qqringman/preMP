@@ -2975,3 +2975,359 @@ body {
 .table-view[data-sheet="revision_diff"] td:nth-child(8) { width: 200px; } /* compare_revision */
 .table-view[data-sheet="revision_diff"] th:nth-child(9),
 .table-view[data-sheet="revision_diff"] td:nth-child(9) { width: 100px; } /* has_wave */
+
+/* 情境選擇器樣式 */
+.scenario-selector-container {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: #F8F9FA;
+    border-radius: 12px;
+    border: 1px solid #E3E7ED;
+}
+
+.scenario-selector-container .form-label {
+    display: block;
+    margin-bottom: 12px;
+    color: #1A237E;
+    font-weight: 600;
+}
+
+.scenario-tabs {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.scenario-tab {
+    padding: 10px 20px;
+    border: 2px solid #E3E7ED;
+    background: white;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #5C6BC0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scenario-tab:hover {
+    border-color: #2196F3;
+    color: #2196F3;
+    background: #F5F9FF;
+}
+
+.scenario-tab.active {
+    background: #2196F3;
+    color: white;
+    border-color: #2196F3;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
+}
+
+.scenario-tab i {
+    font-size: 1rem;
+}
+
+/* 情境指示器 */
+.current-scenario-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: #E3F2FD;
+    color: #1976D2;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-left: 12px;
+}
+
+/* 無資料時的美化樣式 */
+.no-data-container {
+    text-align: center;
+    padding: 80px 40px;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.no-data-icon {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 24px;
+}
+
+.no-data-icon .fa-database {
+    font-size: 64px;
+    color: #E0E7FF;
+}
+
+.no-data-icon .fa-slash {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 72px;
+    color: #C7D2FE;
+}
+
+.no-data-container h3 {
+    font-size: 1.5rem;
+    color: #1A237E;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.no-data-container p {
+    color: #5C6BC0;
+    font-size: 1rem;
+    margin-bottom: 32px;
+    line-height: 1.6;
+}
+
+.no-data-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.no-data-actions .btn {
+    min-width: 140px;
+}
+
+/* 錯誤訊息美化 */
+.error-message {
+    text-align: center;
+    padding: 60px 40px;
+}
+
+.error-message .fa-exclamation-triangle {
+    font-size: 64px;
+    color: #FCA5A5;
+    margin-bottom: 24px;
+}
+
+.error-message h3 {
+    font-size: 1.5rem;
+    color: #DC2626;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.error-message p {
+    color: #7F1D1D;
+    font-size: 1rem;
+    margin-bottom: 32px;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+.error-message .action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+/* 樞紐分析表下拉選單修復 */
+.pvtFilterBox {
+    position: absolute !important;
+    z-index: 9999 !important;
+    background: white !important;
+    border: 1px solid #ddd !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    min-width: 200px !important;
+}
+
+/* 確保下拉選單在正確位置 */
+.pvtAttrDropdown {
+    position: relative !important;
+}
+
+/* 提高樞紐分析容器的 z-index */
+#pivotContainer {
+    position: relative;
+    z-index: 10;
+}
+
+/* 修復下拉選單的定位 */
+.pvtUi {
+    position: relative;
+}
+
+/* 確保篩選框不被遮擋 */
+.pvtFilterBox {
+    margin-top: 2px !important;
+    left: auto !important;
+    right: auto !important;
+}
+
+/* 強制顯示在最上層 */
+.pvtRendererArea,
+.pvtVals,
+.pvtRows,
+.pvtCols {
+    z-index: 1;
+}
+
+/* 下拉選單展開時的樣式 */
+.pvtDropdown.pvtOpen .pvtFilterBox {
+    display: block !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    margin-top: 5px !important;
+    z-index: 10000 !important;
+}
+
+/* 修復全螢幕模式下的 z-index */
+.pivot-view.fullscreen .pvtFilterBox {
+    z-index: 10001 !important;
+}
+
+/* 確保遮罩層不會擋住下拉選單 */
+.pvtUi .pvtFilterBox {
+    position: fixed !important;
+    z-index: 999999 !important;
+}
+
+/* 下拉選單內容樣式 */
+.pvtFilterBox label {
+    display: block;
+    padding: 4px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pvtFilterBox label:hover {
+    background-color: #f5f5f5;
+}
+
+.pvtFilterBox input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+/* 搜尋框樣式 */
+.pvtFilterBox .pvtSearch {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.pvtFilterBox .pvtSearch input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* 全選/取消全選按鈕 */
+.pvtFilterBox .pvtFilterButtons {
+    padding: 8px;
+    border-top: 1px solid #eee;
+    text-align: center;
+}
+
+.pvtFilterBox .pvtFilterButtons button {
+    margin: 0 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.pvtFilterBox .pvtFilterButtons button:hover {
+    background: #f5f5f5;
+}
+
+/* 樞紐分析表下拉選單修復 - 簡化版本 */
+.pvtFilterBox {
+    position: absolute !important;
+    z-index: 999999 !important;
+    background: white !important;
+    border: 1px solid #ddd !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    min-width: 200px !important;
+    margin-top: 5px !important;
+}
+
+/* 確保父容器定位正確 */
+.pvtDropdown {
+    position: relative !important;
+}
+
+/* 確保下拉選單顯示 */
+.pvtDropdown.open .pvtFilterBox,
+.pvtDropdown .pvtFilterBox:not(:empty) {
+    display: block !important;
+}
+
+/* 修復 z-index 層級 */
+#pivotContainer {
+    position: relative;
+}
+
+#pivotContainer * {
+    max-z-index: 9998;
+}
+
+/* 強制最高層級 */
+body > .pvtFilterBox {
+    z-index: 999999 !important;
+}
+
+/* 簡潔的錯誤訊息樣式 */
+.simple-error {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.simple-error-icon {
+    font-size: 48px;
+    color: #E57373;
+    margin-bottom: 24px;
+}
+
+.simple-error-title {
+    font-size: 20px;
+    color: #424242;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.simple-error-message {
+    font-size: 14px;
+    color: #757575;
+    margin-bottom: 32px;
+}
+
+.simple-error-code {
+    font-size: 12px;
+    color: #9E9E9E;
+    font-family: monospace;
+    margin-bottom: 24px;
+}
+
+.simple-error-action {
+    display: inline-block;
+    padding: 8px 24px;
+    background: #2196F3;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+}
+
+.simple-error-action:hover {
+    background: #1976D2;
+}
