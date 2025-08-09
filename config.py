@@ -101,8 +101,8 @@ LOGIN_MODE = 'admin_only'  # 'global' = 全站登入, 'admin_only' = 僅後台�
 
 # 管理員帳號設定
 ADMIN_USERS = {
-    'admin': 'admin123',
-    'vince': 'vince123'
+    'admin': 'admin',
+    'vince_lin': 'vince_lin'
 }
 
 # Session 設定
@@ -122,7 +122,7 @@ DEFAULT_CHIP_OUTPUT_DIR = './output/chip_mapping'
 DEFAULT_PREBUILD_OUTPUT_DIR = './output/prebuild_mapping'
 
 # DB 版本設定
-MAX_DB_VERSIONS = 50  # 最大顯示版本數，設為 'max' 則顯示全部
+MAX_DB_VERSIONS = 5  # 最大顯示版本數，設為 'max' 則顯示全部
 
 # =====================================
 # ===== 動態篩選設定 =====

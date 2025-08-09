@@ -1293,7 +1293,7 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// 更新快速路徑下拉選單 - 修正版本
+// 更新快速路徑下拉選單 - 適配新的 CSS 類別
 function updateQuickPathSelect(selectId, directories) {
     const select = document.getElementById(selectId);
     if (!select) return;
@@ -1305,7 +1305,15 @@ function updateQuickPathSelect(selectId, directories) {
         // 分組顯示目錄
         const rootDir = directories.filter(d => d.type === 'download-root');
         const taskDirs = directories.filter(d => d.type === 'task');
-        const downloadDirs = directories.filter(d => d.type === 'download');
+        
+        // 過濾第1層 download 目錄 - 只顯示直接子目錄
+        const downloadDirs = directories.filter(d => {
+            if (d.type !== 'download') return false;
+            
+            // 檢查是否為第1層目錄 - 只包含一個 '/' 分隔符
+            const pathParts = d.name.split('/');
+            return pathParts.length === 2 && pathParts[0] === 'downloads';
+        });
         
         // 添加 downloads 根目錄
         if (rootDir.length > 0) {
@@ -1338,10 +1346,10 @@ function updateQuickPathSelect(selectId, directories) {
             select.appendChild(taskGroup);
         }
         
-        // 添加 download 子目錄
+        // 添加第1層 download 子目錄
         if (downloadDirs.length > 0) {
             const downloadGroup = document.createElement('optgroup');
-            downloadGroup.label = 'Downloads 子目錄';
+            downloadGroup.label = 'Downloads 第1層目錄';
             
             downloadDirs.forEach(dir => {
                 const option = document.createElement('option');

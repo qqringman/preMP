@@ -221,7 +221,7 @@
                                 class="form-input" 
                                 id="chipOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="{{ config.DEFAULT_CHIP_OUTPUT_DIR or './output/chip_mapping' }}">
+                                value="{{ config.DEFAULT_CHIP_OUTPUT_DIR if config.DEFAULT_CHIP_OUTPUT_DIR else './output/chip_mapping' }}">
                             <button class="btn btn-secondary" onclick="browseOutputPath('chip')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
@@ -378,7 +378,7 @@
                                 class="form-input" 
                                 id="prebuildOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="{{ config.DEFAULT_PREBUILD_OUTPUT_DIR or './output/prebuild_mapping' }}">
+                                value="{{ config.DEFAULT_PREBUILD_OUTPUT_DIR if config.DEFAULT_PREBUILD_OUTPUT_DIR else './output/prebuild_mapping' }}">
                             <button class="btn btn-secondary" onclick="browseOutputPath('prebuild')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>

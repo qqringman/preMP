@@ -45,6 +45,27 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@admin_bp.route('/api/user-status', methods=['GET'])
+def get_user_status():
+    """獲取用戶登入狀態"""
+    # 如果沒有啟用登入功能
+    if not getattr(config, 'ENABLE_LOGIN', False):
+        return jsonify({
+            'logged_in': False,
+            'login_enabled': False,
+            'username': None
+        })
+    
+    # 檢查登入狀態
+    is_logged_in = 'logged_in' in session and session['logged_in']
+    username = session.get('username') if is_logged_in else None
+    
+    return jsonify({
+        'logged_in': is_logged_in,
+        'login_enabled': True,
+        'username': username
+    })
+
 @admin_bp.route('/login')
 def login_page():
     """登入頁面"""
@@ -208,7 +229,7 @@ def get_default_mapping_table():
                 'error': f'預設檔案不存在: {default_path}'
             }), 404
         
-        # 分析檔案
+        # 分析檔案 - 修復 coroutine 錯誤，移除 async
         analysis_result = analyze_mapping_file(default_path)
         
         return jsonify({
@@ -226,8 +247,8 @@ def get_default_mapping_table():
         logger.error(f"取得預設 mapping table 失敗: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-async def analyze_mapping_file(file_path):
-    """分析 mapping 檔案的輔助函數"""
+def analyze_mapping_file(file_path):
+    """分析 mapping 檔案的輔助函數 - 修復：移除 async"""
     # 讀取 Excel 檔案
     df = pd.read_excel(file_path)
     
@@ -613,7 +634,7 @@ def export_result():
 @admin_bp.route('/api/admin/get-download-dirs', methods=['GET'])
 @login_required
 def get_download_dirs():
-    """獲取已下載的目錄列表"""
+    """獲取已下載的目錄列表 - 修復：只列出第1層子目錄"""
     try:
         import config
         import re
@@ -655,34 +676,66 @@ def get_download_dirs():
                         'type': 'task'
                     })
         
-        # 掃描 downloads 目錄（如果存在）
+        # 掃描 downloads 目錄（如果存在）- 修復：只列出第1層
         if os.path.exists(download_base):
-            # 掃描 downloads 下的所有子目錄
-            for root, directories, files in os.walk(download_base):
-                for dir_name in directories:
-                    dir_path = os.path.join(root, dir_name)
-                    rel_path = os.path.relpath(dir_path, download_base)
+            # 添加 downloads 根目錄本身
+            root_file_count = 0
+            root_total_size = 0
+            
+            # 只掃描第1層子目錄
+            try:
+                for item in os.listdir(download_base):
+                    item_path = os.path.join(download_base, item)
                     
-                    # 計算目錄資訊
-                    file_count = 0
-                    total_size = 0
-                    for sub_root, _, sub_files in os.walk(dir_path):
-                        file_count += len(sub_files)
-                        for f in sub_files:
-                            try:
-                                total_size += os.path.getsize(os.path.join(sub_root, f))
-                            except:
-                                pass
+                    if os.path.isfile(item_path):
+                        # 計算根目錄中的檔案
+                        try:
+                            root_total_size += os.path.getsize(item_path)
+                            root_file_count += 1
+                        except:
+                            pass
+                    elif os.path.isdir(item_path):
+                        # 這是第1層子目錄，計算其統計資訊
+                        dir_file_count = 0
+                        dir_total_size = 0
+                        
+                        # 遞迴計算這個子目錄的所有檔案
+                        for root, _, files in os.walk(item_path):
+                            dir_file_count += len(files)
+                            for f in files:
+                                try:
+                                    dir_total_size += os.path.getsize(os.path.join(root, f))
+                                except:
+                                    pass
+                        
+                        # 只有當目錄有檔案時才添加
+                        if dir_file_count > 0:
+                            dirs.append({
+                                'name': f'downloads/{item}',
+                                'path': item_path,
+                                'file_count': dir_file_count,
+                                'size': dir_total_size,
+                                'size_formatted': format_file_size(dir_total_size),
+                                'type': 'download'
+                            })
+                        
+                        # 累計到根目錄統計
+                        root_file_count += dir_file_count
+                        root_total_size += dir_total_size
+                
+                # 將 downloads 根目錄添加到列表開頭（如果有檔案）
+                if root_file_count > 0:
+                    dirs.insert(0, {
+                        'name': 'downloads (根目錄)',
+                        'path': download_base,
+                        'file_count': root_file_count,
+                        'size': root_total_size,
+                        'size_formatted': format_file_size(root_total_size),
+                        'type': 'download-root'
+                    })
                     
-                    if file_count > 0:  # 只顯示有檔案的目錄
-                        dirs.append({
-                            'name': f'downloads/{rel_path}',
-                            'path': dir_path,
-                            'file_count': file_count,
-                            'size': total_size,
-                            'size_formatted': format_file_size(total_size),
-                            'type': 'download'
-                        })
+            except Exception as e:
+                logger.warning(f"掃描 downloads 目錄失敗: {str(e)}")
         
         # 按名稱排序
         dirs.sort(key=lambda x: x['name'])
