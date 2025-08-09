@@ -646,6 +646,7 @@ async function analyzeMapping(filepath) {
 }
 
 // 更新 DB 選項 - 支援動態更新所有選擇器，並正確顯示 DB 資訊
+// 更新 DB 選項 - 支援動態更新所有選擇器，並正確顯示 DB 資訊，按照類型排序
 function updateDBOptions(analysis) {
     const allDBSelects = document.querySelectorAll('select[name="dbFilter"]');
     const chipSelects = document.querySelectorAll('select[name="chipFilter"]');
@@ -697,22 +698,49 @@ function updateDBOptions(analysis) {
         // 清空現有選項
         dbSelect.innerHTML = '<option value="all">All</option>';
         
-        // 添加 DB 選項
+        // 添加 DB 選項 - 按照 primary_type 排序
         if (analysis.db_list && Array.isArray(analysis.db_list) && analysis.db_list.length > 0) {
-            analysis.db_list.forEach(db => {
+            // 創建 DB 信息數組並排序
+            const dbInfoArray = analysis.db_list.map(db => {
+                const info = analysis.db_info && analysis.db_info[db] ? analysis.db_info[db] : {};
+                return {
+                    db: db,
+                    info: info,
+                    primary_type: info.primary_type || 'unknown'
+                };
+            });
+            
+            // 定義排序優先級
+            const typePriority = {
+                'master': 1,
+                'premp': 2,
+                'mp': 3,
+                'mpbackup': 4,
+                'unknown': 99
+            };
+            
+            // 按照 primary_type 排序，相同類型按 DB 名稱排序
+            dbInfoArray.sort((a, b) => {
+                const priorityA = typePriority[a.primary_type] || 99;
+                const priorityB = typePriority[b.primary_type] || 99;
+                
+                if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                }
+                
+                // 相同優先級按 DB 名稱排序
+                return a.db.localeCompare(b.db);
+            });
+            
+            // 添加排序後的選項
+            dbInfoArray.forEach(({ db, info }) => {
                 const option = document.createElement('option');
                 option.value = db;
                 
                 // 使用後端提供的 display_name 或自行構建
                 let displayText = db;
                 
-                if (analysis.db_info && 
-                    typeof analysis.db_info === 'object' && 
-                    analysis.db_info[db] && 
-                    typeof analysis.db_info[db] === 'object') {
-                    
-                    const info = analysis.db_info[db];
-                    
+                if (info && typeof info === 'object') {
                     // 優先使用後端提供的 display_name
                     if (info.display_name) {
                         displayText = info.display_name;
@@ -796,7 +824,7 @@ function updateDBOptions(analysis) {
         hint.innerHTML = `<i class="fas fa-info-circle"></i> ${hintText.replace('\n', '<br>')}`;
     }
     
-    console.log('DB 選項更新完成，共', analysis.db_list ? analysis.db_list.length : 0, '個 DB'); // 調試用
+    console.log('DB 選項更新完成，共', analysis.db_list ? analysis.db_list.length : 0, '個 DB，已按類型排序'); // 調試用
 }
 
 function updateFilterTypeAvailability(possibleComparisons) {
