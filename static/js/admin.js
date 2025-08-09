@@ -616,24 +616,30 @@ function updateDBOptions(analysis) {
                 const option = document.createElement('option');
                 option.value = db;
                 
-                // 建立顯示文字 - 修正格式
+                // 建立顯示文字 - 格式：DB2302(master) 或 DB2575(mp)
                 let displayText = db;
                 if (analysis.db_info && analysis.db_info[db]) {
                     const info = analysis.db_info[db];
                     
-                    // 顯示 DB 類型，格式：DB2302 (master/premp)
+                    // 顯示主要類型（取第一個類型）
                     if (info.types && info.types.length > 0) {
-                        displayText = `${db} (${info.types.join('/')})`;
-                    }
-                    
-                    // 如果有模組資訊，也可以加入
-                    if (info.modules && info.modules.length > 0 && info.modules.length <= 3) {
-                        displayText += ` • ${info.modules.slice(0, 2).join(', ')}${info.modules.length > 2 ? '...' : ''}`;
+                        // 優先顯示順序：master > premp > mp > mpbackup
+                        const typeOrder = ['master', 'premp', 'mp', 'mpbackup'];
+                        let primaryType = info.types[0];
+                        
+                        for (const type of typeOrder) {
+                            if (info.types.includes(type)) {
+                                primaryType = type;
+                                break;
+                            }
+                        }
+                        
+                        displayText = `${db}(${primaryType})`;
                     }
                 }
                 
                 option.textContent = displayText;
-                option.title = displayText; // 添加 tooltip
+                option.title = `${displayText} - 模組: ${analysis.db_info[db]?.modules?.join(', ') || 'N/A'}`; // 詳細 tooltip
                 dbSelect.appendChild(option);
             });
             
@@ -653,10 +659,7 @@ function updateDBOptions(analysis) {
     
     // 更新所有 Chip Filter
     chipSelects.forEach(chipSelect => {
-        // 保存當前選中的值
         const currentValue = chipSelect.value;
-        
-        // 清空現有選項
         chipSelect.innerHTML = '<option value="all">All Chips</option>';
         
         if (analysis.modules && analysis.modules.length > 0) {
@@ -667,7 +670,6 @@ function updateDBOptions(analysis) {
                 chipSelect.appendChild(option);
             });
             
-            // 恢復選中值
             if (currentValue && analysis.modules.map(m => m.toLowerCase()).includes(currentValue)) {
                 chipSelect.value = currentValue;
             }

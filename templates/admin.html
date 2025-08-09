@@ -170,6 +170,8 @@
                             <i class="fas fa-plus"></i>
                         </button>
                     </label>
+                    
+                    <!-- DB 選擇器列表 -->
                     <div class="dynamic-items" id="dbFilterItems">
                         <div class="dynamic-item" data-index="0">
                             <select class="form-select" name="dbFilter" data-index="0" onchange="handleDBSelection(this)">
@@ -182,18 +184,18 @@
                         </div>
                     </div>
                     
-                    <!-- DB 版本選擇 -->
-                    <div id="dbVersionGroup" style="display: none; margin-top: 20px;">
+                    <!-- DB 版本選擇區域 -->
+                    <div id="dbVersionGroup" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
                         <div class="db-version-header">
                             <i class="fas fa-code-branch"></i>
                             <span>版本選擇（可選）</span>
                         </div>
-                        <div id="dbVersionSelectors">
+                        <div id="dbVersionSelectors" class="db-version-list">
                             <!-- 動態生成版本選擇器 -->
                         </div>
                     </div>
                     
-                    <div class="form-hint mt-2">
+                    <div class="form-hint">
                         <i class="fas fa-info-circle"></i>
                         <span>可選擇多個 DB 進行處理，並指定特定版本</span>
                     </div>
@@ -357,7 +359,7 @@
             </div>
         </div>
 
-        <!-- Step 2: 輸出設定 -->
+        <!-- Prebuild Mapping 功能的 Step 2: 輸出設定 -->
         <div class="step-section">
             <div class="step-header">
                 <div class="step-number">2</div>
@@ -368,52 +370,65 @@
             </div>
             
             <div class="section-body">
-                <div class="output-selector">
-                    <div class="form-group">
-                        <label class="form-label">
+                <div class="output-config">
+                    <!-- 輸出路徑設定 -->
+                    <div class="output-path-group">
+                        <label class="output-label">
                             <i class="fas fa-folder"></i> 輸出路徑
                         </label>
-                        <div class="path-input-group">
+                        <div class="output-input-wrapper">
                             <input type="text" 
-                                class="form-input" 
+                                class="output-input" 
                                 id="prebuildOutputPath" 
                                 placeholder="輸入路徑或選擇目錄..."
-                                value="{{ config.DEFAULT_PREBUILD_OUTPUT_DIR if config.DEFAULT_PREBUILD_OUTPUT_DIR else './output/prebuild_mapping' }}">
-                            <button class="btn btn-secondary" onclick="browseOutputPath('prebuild')">
+                                value="./output/prebuild_mapping">
+                            <button class="output-browse-btn" onclick="browseOutputPath('prebuild')">
                                 <i class="fas fa-folder-open"></i> 瀏覽
                             </button>
                         </div>
                     </div>
                     
-                    <div class="quick-select">
-                        <div class="quick-select-header">
+                    <!-- 快速目錄選擇 -->
+                    <div class="quick-directory-section">
+                        <div class="quick-directory-header">
                             <label class="form-label">
                                 <i class="fas fa-history"></i> 使用已下載的目錄
                             </label>
-                            <!-- 切換開關 -->
-                            <label class="toggle-switch">
+                            <label class="directory-toggle">
                                 <input type="checkbox" id="prebuildUseQuickPath" onchange="toggleQuickPath('prebuild')">
-                                <span class="toggle-slider"></span>
+                                <span class="toggle-indicator"></span>
                             </label>
                         </div>
-                        <div class="quick-path-select" id="prebuildQuickPathGroup" style="display: none;">
-                            <select class="form-select" id="prebuildQuickPath" onchange="updateQuickPath('prebuild')">
+                        <div class="quick-directory-content" id="prebuildQuickPathGroup" style="display: none;">
+                            <select class="directory-select" id="prebuildQuickPath" onchange="updateQuickPath('prebuild')">
                                 <option value="">-- 選擇目錄 --</option>
                             </select>
                         </div>
                     </div>
-
+                    
                     <!-- 執行說明 -->
-                    <div class="execution-hint">
-                        <i class="fas fa-info-circle"></i>
-                        <div class="hint-content">
-                            <strong>執行說明：</strong>
-                            <ul>
-                                <li>master + premp → PrebuildFW_master_vs_premp_mapping.xlsx</li>
-                                <li>premp + mp → PrebuildFW_premp_vs_mp_mapping.xlsx</li>
-                                <li>mp + mpbackup → PrebuildFW_mp_vs_mpbackup_mapping.xlsx</li>
-                            </ul>
-                            <p>系統會根據上傳的檔案組合自動執行相應的比對</p>
+                    <div class="execution-info">
+                        <div class="info-header">
+                            <i class="fas fa-info-circle"></i>
+                            <span>執行說明</span>
+                        </div>
+                        <div class="info-content">
+                            <div class="info-item">
+                                <span class="mapping-type">master + premp</span>
+                                <i class="mapping-arrow fas fa-arrow-right"></i>
+                                <span class="output-file">PrebuildFW_master_vs_premp_mapping.xlsx</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="mapping-type">premp + mp</span>
+                                <i class="mapping-arrow fas fa-arrow-right"></i>
+                                <span class="output-file">PrebuildFW_premp_vs_mp_mapping.xlsx</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="mapping-type">mp + mpbackup</span>
+                                <i class="mapping-arrow fas fa-arrow-right"></i>
+                                <span class="output-file">PrebuildFW_mp_vs_mpbackup_mapping.xlsx</span>
+                            </div>
+                            <div class="info-note">系統會根據上傳的檔案組合自動執行相應的比對</div>
                         </div>
                     </div>
                 </div>

@@ -130,7 +130,7 @@ def admin_page():
 @admin_bp.route('/api/admin/analyze-mapping-table', methods=['POST'])
 @login_required
 def analyze_mapping_table():
-    """分析 all_chip_mapping_table.xlsx 檔案"""
+    """分析 all_chip_mapping_table.xlsx 檔案 - 修正版本"""
     try:
         data = request.json
         file_path = data.get('file_path')
@@ -168,17 +168,19 @@ def analyze_mapping_table():
                             db_details[db_num] = {
                                 'types': set(),
                                 'modules': set(),
-                                'paths': []
+                                'paths': [],
+                                'full_info': db_val  # 保存完整資訊
                             }
                         
-                        # 分析 DB 類型
-                        if 'master' in col.lower():
+                        # 分析 DB 類型 - 更精確的判斷
+                        col_lower = col.lower()
+                        if 'master' in col_lower:
                             db_details[db_num]['types'].add('master')
-                        elif 'premp' in col.lower():
+                        elif 'premp' in col_lower or 'pre' in col_lower:
                             db_details[db_num]['types'].add('premp')
-                        elif 'mpbackup' in col.lower():
+                        elif 'mpbackup' in col_lower or 'backup' in col_lower:
                             db_details[db_num]['types'].add('mpbackup')
-                        elif 'mp' in col.lower():
+                        elif 'mp' in col_lower and 'backup' not in col_lower:
                             db_details[db_num]['types'].add('mp')
                         
                         # 添加模組資訊
@@ -199,7 +201,8 @@ def analyze_mapping_table():
             db_info[db] = {
                 'types': sorted(list(details['types'])),
                 'modules': sorted(list(details['modules'])),
-                'paths': details['paths'][:5]  # 限制路徑數量
+                'paths': details['paths'][:5],  # 限制路徑數量
+                'display_types': list(details['types'])  # 用於顯示
             }
         
         return jsonify({
@@ -597,12 +600,15 @@ def run_prebuild_mapping():
 @admin_bp.route('/api/admin/export-result', methods=['POST'])
 @login_required
 def export_result():
-    """匯出結果為 Excel - 修正公式錯誤問題"""
+    """匯出結果為 Excel - 修正 xlsxwriter 參數錯誤"""
     try:
         data = request.json
         result_data = data.get('data', [])
         columns = data.get('columns', [])
         filename = data.get('filename', 'export.xlsx')
+        
+        if not result_data or not columns:
+            return jsonify({'error': '沒有資料可匯出'}), 400
         
         # 建立 DataFrame
         df = pd.DataFrame(result_data, columns=columns)
@@ -615,15 +621,20 @@ def export_result():
                     'nan': '',
                     'None': '',
                     'NaT': '',
-                    'null': ''
+                    'null': '',
+                    'NULL': ''
                 })
                 # 移除可能導致 Excel 解釋為公式的前綴
                 df[col] = df[col].apply(lambda x: x if not str(x).startswith('=') else "'" + str(x))
         
         # 建立臨時檔案
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
-            # 使用 xlsxwriter 引擎以避免公式問題
-            with pd.ExcelWriter(tmp.name, engine='xlsxwriter', options={'strings_to_formulas': False}) as writer:
+            try:
+                # 修正：使用正確的 xlsxwriter 參數方式
+                writer = pd.ExcelWriter(tmp.name, engine='xlsxwriter')
+                # 設定不要將字串轉換為公式
+                writer.book.strings_to_formulas = False
+                
                 df.to_excel(writer, index=False, sheet_name='Result')
                 
                 # 獲取工作簿和工作表對象
@@ -635,14 +646,7 @@ def export_result():
                     'bold': True,
                     'text_wrap': True,
                     'valign': 'top',
-                    'fg_color': '#D7E4BC',
-                    'border': 1
-                })
-                
-                # 設置數據格式
-                data_format = workbook.add_format({
-                    'text_wrap': True,
-                    'valign': 'top',
+                    'fg_color': '#E3F2FD',
                     'border': 1
                 })
                 
@@ -652,15 +656,29 @@ def export_result():
                 
                 # 自動調整列寬
                 for col_num, column in enumerate(df.columns):
-                    column_width = max(len(column), 15)
+                    column_width = min(max(len(str(column)), 10), 50)
                     worksheet.set_column(col_num, col_num, column_width)
+                
+                writer.close()
+                        
+            except ImportError:
+                # 如果沒有 xlsxwriter，使用預設引擎
+                logger.warning("xlsxwriter not available, using default engine")
+                df.to_excel(tmp.name, index=False)
+            except Exception as e:
+                logger.error(f"xlsxwriter error: {str(e)}")
+                # 回退到基本的 pandas 匯出
+                df.to_excel(tmp.name, index=False)
             
             tmp_path = tmp.name
         
         # 讀取檔案並刪除臨時檔案
-        with open(tmp_path, 'rb') as f:
-            file_data = f.read()
-        os.unlink(tmp_path)
+        try:
+            with open(tmp_path, 'rb') as f:
+                file_data = f.read()
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
         
         # 返回檔案
         from flask import Response
@@ -674,7 +692,9 @@ def export_result():
         
     except Exception as e:
         logger.error(f"匯出結果失敗: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'匯出失敗: {str(e)}'}), 500
 
 @admin_bp.route('/api/admin/get-download-dirs', methods=['GET'])
 @login_required
