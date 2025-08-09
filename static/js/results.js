@@ -1538,7 +1538,12 @@ function showCenteredToast(message, type = 'info') {
     `;
     
     // 添加到頁面
-    document.body.appendChild(overlay);
+    const fullscreenElement = document.fullscreenElement || document.querySelector('.fullscreen');
+    if (fullscreenElement) {
+        fullscreenElement.appendChild(overlay);
+    } else {
+        document.body.appendChild(overlay);
+    }
     document.body.appendChild(toast);
     
     // 顯示動畫
@@ -2099,54 +2104,132 @@ function drawDataCharts(sheetData) {
     }
     
     const trendCanvas = document.getElementById('trendChart');
-    if (trendCanvas && currentSheet === 'revision_diff') {
+    if (trendCanvas) {
         const trendCtx = trendCanvas.getContext('2d');
         
-        const moduleData = {};
-        sheetData.data.forEach(row => {
-            const module = row.module;
-            if (module) {
-                if (!moduleData[module]) {
-                    moduleData[module] = 0;
+        let chartData = {};
+        let chartTitle = '趨勢分析';
+        
+        // 根據不同資料表類型產生趨勢圖
+        if (currentSheet === 'revision_diff') {
+            // Revision差異的模組分析
+            sheetData.data.forEach(row => {
+                const module = row.module;
+                if (module) {
+                    chartData[module] = (chartData[module] || 0) + 1;
                 }
-                moduleData[module]++;
+            });
+            chartTitle = '模組差異統計';
+            
+        } else if (currentSheet === 'branch_error') {
+            // 分支錯誤分析
+            sheetData.data.forEach(row => {
+                const hasWave = row.has_wave || 'N';
+                const module = row.module || '未知模組';
+                const key = `${module} (${hasWave === 'Y' ? '有Wave' : '缺少Wave'})`;
+                chartData[key] = (chartData[key] || 0) + 1;
+            });
+            chartTitle = '分支錯誤分析';
+            
+        } else if (currentSheet === 'lost_project' || currentSheet === '新增/刪除專案') {
+            // 專案變更分析
+            sheetData.data.forEach(row => {
+                const status = row['狀態'] || '未知';
+                chartData[status] = (chartData[status] || 0) + 1;
+            });
+            chartTitle = '專案變更統計';
+            
+        } else if (currentSheet === '摘要') {
+            // 摘要數據分析
+            sheetData.data.forEach(row => {
+                const scenario = row['比對情境'] || row['scenario'] || '未知情境';
+                if (scenario !== '總計' && scenario.toLowerCase() !== 'total') {
+                    const successCount = parseInt(row['成功模組數'] || row['success_count'] || 0);
+                    const failedCount = parseInt(row['失敗模組數'] || row['failed_count'] || 0);
+                    
+                    if (!isNaN(successCount) && successCount > 0) {
+                        chartData[scenario + ' (成功)'] = successCount;
+                    }
+                    if (!isNaN(failedCount) && failedCount > 0) {
+                        chartData[scenario + ' (失敗)'] = failedCount;
+                    }
+                }
+            });
+            chartTitle = '比對情境統計';
+            
+        } else {
+            // 通用分析：使用第一個字串欄位
+            const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+            const firstStringCol = columns.find(col => {
+                const firstValue = sheetData.data[0] && sheetData.data[0][col];
+                return typeof firstValue === 'string' && col !== 'path' && !col.includes('content');
+            });
+            
+            if (firstStringCol) {
+                sheetData.data.forEach(row => {
+                    const value = row[firstStringCol];
+                    if (value && typeof value === 'string') {
+                        chartData[value] = (chartData[value] || 0) + 1;
+                    }
+                });
+                chartTitle = `${firstStringCol} 分布`;
             }
-        });
+        }
         
-        const sortedModules = Object.entries(moduleData)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10);
-        
-        window.trendChartInstance = new Chart(trendCtx, {
-            type: 'bar',
-            data: {
-                labels: sortedModules.map(item => item[0]),
-                datasets: [{
-                    label: '差異數量',
-                    data: sortedModules.map(item => item[1]),
-                    backgroundColor: '#2196F3',
-                    borderColor: '#1976D2',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
+        // 如果有資料，繪製圖表
+        if (Object.keys(chartData).length > 0) {
+            // 排序並取前10項
+            const sortedData = Object.entries(chartData)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            window.trendChartInstance = new Chart(trendCtx, {
+                type: 'bar',
+                data: {
+                    labels: sortedData.map(item => item[0]),
+                    datasets: [{
+                        label: '數量',
+                        data: sortedData.map(item => item[1]),
+                        backgroundColor: '#2196F3',
+                        borderColor: '#1976D2',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 0
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartTitle
+                        },
+                        legend: {
+                            display: false
                         }
                     }
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    }
                 }
-            }
-        });
+            });
+        } else {
+            // 沒有資料時顯示提示
+            trendCtx.font = '16px Arial';
+            trendCtx.fillStyle = '#666';
+            trendCtx.textAlign = 'center';
+            trendCtx.fillText('暫無資料可分析', trendCanvas.width / 2, trendCanvas.height / 2);
+        }
     }
 }
 
@@ -2676,13 +2759,140 @@ function getRequiredOfflineFunctions() {
         }
         
         function initializePivotFilterModal() {
-            // 離線模式下的空實現
-            console.log('initializePivotFilterModal: 離線模式下已跳過');
+            // 如果彈出視窗已存在，直接返回
+            if (document.getElementById('pivotFilterModal')) {
+                return;
+            }
+            
+            // 創建彈出視窗 HTML
+            const modalHtml = \`
+                <div id="pivotFilterModal" class="pivot-filter-modal">
+                    <div class="pivot-filter-content">
+                        <div class="pivot-filter-header">
+                            <h3 class="pivot-filter-title">篩選項目</h3>
+                            <button class="pivot-filter-close" onclick="closePivotFilterModal()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="pivot-filter-search">
+                            <input type="text" id="pivotFilterSearch" placeholder="搜尋...">
+                        </div>
+                        <div class="pivot-filter-list" id="pivotFilterList">
+                            <!-- 動態生成的篩選項目 -->
+                        </div>
+                        <div class="pivot-filter-footer">
+                            <button class="pivot-filter-btn pivot-filter-btn-secondary" onclick="selectAllPivotFilters()">
+                                全選
+                            </button>
+                            <button class="pivot-filter-btn pivot-filter-btn-secondary" onclick="clearAllPivotFilters()">
+                                清除
+                            </button>
+                            <button class="pivot-filter-btn pivot-filter-btn-primary" onclick="applyPivotFilters()">
+                                確定
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            \`;
+            
+            // 添加到頁面
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // 點擊遮罩層關閉
+            document.getElementById('pivotFilterModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closePivotFilterModal();
+                }
+            });
+            
+            // 搜尋功能
+            document.getElementById('pivotFilterSearch').addEventListener('input', function(e) {
+                filterPivotItems(e.target.value);
+            });
         }
         
         function interceptPivotDropdowns() {
-            // 離線模式下的空實現
-            console.log('interceptPivotDropdowns: 離線模式下已跳過');
+            console.log('設定篩選器攔截（離線模式）...');
+            
+            setTimeout(() => {
+                // 清除舊事件
+                $('.pvtTriangle').off('click.customFilter');
+                
+                // 為每個 Triangle 單獨綁定事件
+                $('.pvtTriangle').each(function(triangleIndex) {
+                    const $triangle = $(this);
+                    const $container = $triangle.parent();
+                    
+                    $triangle.on('click.customFilter', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        console.log(\`Triangle \${triangleIndex} 被點擊\`);
+                        
+                        // 尋找對應的篩選框
+                        let $specificFilterBox = $container.find('.pvtFilterBox').first();
+                        
+                        if ($specificFilterBox.length === 0) {
+                            $specificFilterBox = $container.parent().find('.pvtFilterBox').eq(triangleIndex);
+                        }
+                        
+                        if ($specificFilterBox.length === 0) {
+                            const $allFilterBoxes = $('.pvtFilterBox');
+                            if ($allFilterBoxes.length > triangleIndex) {
+                                $specificFilterBox = $allFilterBoxes.eq(triangleIndex);
+                            }
+                        }
+                        
+                        if ($specificFilterBox && $specificFilterBox.length > 0 && $specificFilterBox.find('input[type="checkbox"]').length > 0) {
+                            console.log(\`Triangle \${triangleIndex} 對應篩選框找到\`);
+                            
+                            let fieldName = \`欄位_\${triangleIndex}\`;
+                            
+                            const firstCheckbox = $specificFilterBox.find('input[type="checkbox"]').first();
+                            if (firstCheckbox.length > 0) {
+                                const firstLabel = firstCheckbox.closest('label').text().trim();
+                                if (firstLabel && firstLabel !== 'Select All' && firstLabel !== '全選') {
+                                    if (firstLabel.includes('Master') || firstLabel.includes('PreMP') || firstLabel.includes('Wave')) {
+                                        fieldName = '比對情境';
+                                    } else if (firstLabel.match(/^\\\d+\\\(\\\d+\\\)$/)) {
+                                        fieldName = 'Revision差異';
+                                    } else {
+                                        fieldName = \`\${firstLabel.substring(0, 10)}...\`;
+                                    }
+                                }
+                            }
+                            
+                            customFilterCurrentElement = $specificFilterBox;
+                            currentFilterField = fieldName;
+                            customFilterCurrentData = [];
+                            
+                            $specificFilterBox.find('input[type="checkbox"]').each(function() {
+                                const $cb = $(this);
+                                const $label = $cb.closest('label');
+                                const labelText = $label.text().trim();
+                                
+                                if (labelText && labelText !== 'Select All' && labelText !== '全選') {
+                                    customFilterCurrentData.push({
+                                        value: labelText,
+                                        checked: $cb.prop('checked')
+                                    });
+                                }
+                            });
+                            
+                            console.log(\`\${fieldName} 的選項:\`, customFilterCurrentData);
+                            showCustomFilterModal(fieldName);
+                        } else {
+                            console.log(\`Triangle \${triangleIndex} 找不到對應的篩選框\`);
+                            alert('找不到篩選選項');
+                        }
+                        
+                        return false;
+                    });
+                });
+                
+                console.log(\`已為 \${$('.pvtTriangle').length} 個 Triangle 設定攔截器\`);
+                
+            }, 500);
         }
         
         function formatMultiLineContent(value, compareValue, fileType) {
@@ -3552,25 +3762,38 @@ function adjustPivotContainerSize() {
             
             // 【關鍵修復】強制設定橫向填滿
             if (!areasVisible) {
-                // 隱藏拖曳區時，使用全螢幕寬度
+                // 隱藏拖曳區時，強制使用全螢幕寬度
                 pivotContainer.style.width = '100vw';
                 pivotContainer.style.maxWidth = '100vw';
                 pivotContainer.style.margin = '0';
                 pivotContainer.style.padding = '0';
+                pivotContainer.style.boxSizing = 'border-box';
+                
+                // 【加強】立即設定父容器寬度
+                const sectionBody = pivotContainer.closest('.section-body');
+                if (sectionBody) {
+                    sectionBody.style.width = '100vw';
+                    sectionBody.style.maxWidth = '100vw';
+                    sectionBody.style.margin = '0';
+                    sectionBody.style.padding = '0';
+                }
                 
                 // 強制設定樞紐分析表的寬度
                 setTimeout(() => {
                     const pvtUi = pivotContainer.querySelector('.pvtUi');
                     if (pvtUi) {
-                        pvtUi.style.width = '100%';
-                        pvtUi.style.maxWidth = '100%';
-                        pvtUi.style.minWidth = '100%';
+                        pvtUi.style.width = '100vw !important';
+                        pvtUi.style.maxWidth = '100vw !important';
+                        pvtUi.style.minWidth = '100vw !important';
+                        pvtUi.style.margin = '0';
+                        pvtUi.style.padding = '0';
                     }
                     
                     const pvtRendererArea = pivotContainer.querySelector('.pvtRendererArea');
                     if (pvtRendererArea) {
-                        pvtRendererArea.style.width = '100%';
-                        pvtRendererArea.style.maxWidth = '100%';
+                        pvtRendererArea.style.width = '100vw';
+                        pvtRendererArea.style.maxWidth = '100vw';
+                        pvtRendererArea.style.minWidth = '100vw';
                         pvtRendererArea.style.overflowX = 'auto';
                         pvtRendererArea.style.overflowY = 'auto';
                         pvtRendererArea.style.maxHeight = `${availableHeight - 50}px`;
@@ -3579,25 +3802,54 @@ function adjustPivotContainerSize() {
                     const pvtTable = pivotContainer.querySelector('.pvtTable');
                     if (pvtTable) {
                         pvtTable.style.width = '100%';
-                        pvtTable.style.maxWidth = '100%';
+                        pvtTable.style.maxWidth = 'none';
                         pvtTable.style.minWidth = '100%';
                         pvtTable.style.tableLayout = 'auto';
+                        
+                        // 【新增】強制表格使用所有可用寬度
+                        pvtTable.style.display = 'table';
+                        pvtTable.style.borderCollapse = 'collapse';
                     }
                     
-                    // 強制重新計算表格佈局
+                    // 【加強】確保表格單元格使用完整寬度
                     const allCells = pivotContainer.querySelectorAll('.pvtTable td, .pvtTable th');
-                    allCells.forEach(cell => {
-                        cell.style.maxWidth = 'none';
-                        cell.style.whiteSpace = 'nowrap';
-                        cell.style.overflow = 'hidden';
-                        cell.style.textOverflow = 'ellipsis';
-                    });
+                    const totalCells = allCells.length;
+                    if (totalCells > 0) {
+                        // 計算每個單元格的基礎寬度
+                        const cellWidth = Math.max(100, Math.floor(window.innerWidth / 10));
+                        
+                        allCells.forEach((cell, index) => {
+                            cell.style.minWidth = cellWidth + 'px';
+                            cell.style.maxWidth = 'none';
+                            cell.style.whiteSpace = 'nowrap';
+                            cell.style.overflow = 'hidden';
+                            cell.style.textOverflow = 'ellipsis';
+                            cell.style.padding = '12px 20px';
+                        });
+                    }
+                    
+                    // 【新增】觸發表格重新渲染
+                    if (pvtTable) {
+                        const originalDisplay = pvtTable.style.display;
+                        pvtTable.style.display = 'none';
+                        setTimeout(() => {
+                            pvtTable.style.display = originalDisplay || 'table';
+                        }, 50);
+                    }
                     
                 }, 100);
             } else {
-                // 顯示拖曳區時，恢復正常寬度
+                // 【修復】顯示拖曳區時，恢復正常寬度
                 pivotContainer.style.width = '';
                 pivotContainer.style.maxWidth = '';
+                
+                const sectionBody = pivotContainer.closest('.section-body');
+                if (sectionBody) {
+                    sectionBody.style.width = '';
+                    sectionBody.style.maxWidth = '';
+                    sectionBody.style.margin = '';
+                    sectionBody.style.padding = '';
+                }
             }
             
             console.log(`調整樞紐容器大小: 使用高度=${usedHeight}, 節省空間=${savedSpace}, 可用高度=${availableHeight}, 隱藏拖曳區=${!areasVisible}`);

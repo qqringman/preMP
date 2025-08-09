@@ -3343,23 +3343,22 @@ body > .pvtFilterBox {
     display: none;
     align-items: center;
     justify-content: center;
-    z-index: 999999;
+    z-index: 2147483647; /* 提高到最大值 */
 }
 
 .pivot-filter-modal.show {
     display: flex;
 }
 
+/* 全屏模式下的特殊處理 */
+.fullscreen .pivot-filter-modal {
+    z-index: 2147483647 !important;
+    position: fixed !important;
+}
+
 .pivot-filter-content {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-    width: 400px;
-    max-width: 90%;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    z-index: 2147483647;
+    position: relative;
 }
 
 .pivot-filter-header {
