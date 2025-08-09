@@ -130,7 +130,7 @@ def admin_page():
 @admin_bp.route('/api/admin/analyze-mapping-table', methods=['POST'])
 @login_required
 def analyze_mapping_table():
-    """分析 all_chip_mapping_table.xlsx 檔案 - 修正版本"""
+    """分析 all_chip_mapping_table.xlsx 檔案 - 修正版本，正確解析 DB 類型"""
     try:
         data = request.json
         file_path = data.get('file_path')
@@ -150,49 +150,67 @@ def analyze_mapping_table():
         if 'Module' in df.columns:
             modules_set = set(df['Module'].dropna().unique())
         
-        # 檢查所有包含 DB_Info 的欄位
-        db_info_columns = [col for col in df.columns if 'DB_Info' in col]
+        # 定義 DB 類型和對應的 Info 欄位配對
+        db_type_mappings = [
+            ('DB_Type', 'DB_Info', 'master'),
+            ('premp_DB_Type', 'premp_DB_Info', 'premp'), 
+            ('mp_DB_Type', 'mp_DB_Info', 'mp'),
+            ('mpbackup_DB_Type', 'mpbackup_DB_Info', 'mpbackup')
+        ]
         
+        # 處理每一行資料
         for idx, row in df.iterrows():
-            for col in db_info_columns:
-                if col in df.columns and pd.notna(row.get(col)):
-                    db_val = str(row[col]).strip()
-                    # 使用正則表達式匹配 DB 編號
-                    match = re.match(r'(DB\d+)', db_val)
-                    if match:
-                        db_num = match.group(1)
-                        db_set.add(db_num)
+            for type_col, info_col, type_name in db_type_mappings:
+                # 檢查兩個欄位都存在
+                if type_col in df.columns and info_col in df.columns:
+                    type_val = row.get(type_col)
+                    info_val = row.get(info_col)
+                    
+                    # 檢查兩個值都不為空
+                    if pd.notna(type_val) and pd.notna(info_val):
+                        type_str = str(type_val).strip().lower()
+                        info_str = str(info_val).strip()
                         
-                        # 初始化 DB 詳細資訊
-                        if db_num not in db_details:
-                            db_details[db_num] = {
-                                'types': set(),
-                                'modules': set(),
-                                'paths': [],
-                                'full_info': db_val  # 保存完整資訊
-                            }
-                        
-                        # 分析 DB 類型 - 更精確的判斷
-                        col_lower = col.lower()
-                        if 'master' in col_lower:
-                            db_details[db_num]['types'].add('master')
-                        elif 'premp' in col_lower or 'pre' in col_lower:
-                            db_details[db_num]['types'].add('premp')
-                        elif 'mpbackup' in col_lower or 'backup' in col_lower:
-                            db_details[db_num]['types'].add('mpbackup')
-                        elif 'mp' in col_lower and 'backup' not in col_lower:
-                            db_details[db_num]['types'].add('mp')
-                        
-                        # 添加模組資訊
-                        if 'Module' in row and pd.notna(row['Module']):
-                            db_details[db_num]['modules'].add(str(row['Module']))
-                        
-                        # 添加路徑資訊
-                        path_col = col.replace('DB_Info', 'SftpPath')
-                        if path_col in df.columns and pd.notna(row.get(path_col)):
-                            db_details[db_num]['paths'].append(str(row[path_col]))
+                        # 驗證類型值是否符合預期
+                        if type_str == type_name.lower():
+                            # 使用正則表達式匹配 DB 編號
+                            match = re.match(r'(DB\d+)', info_str)
+                            if match:
+                                db_num = match.group(1)
+                                db_set.add(db_num)
+                                
+                                # 初始化或更新 DB 詳細資訊
+                                if db_num not in db_details:
+                                    db_details[db_num] = {
+                                        'types': set(),
+                                        'modules': set(),
+                                        'paths': [],
+                                        'primary_type': None  # 記錄主要類型
+                                    }
+                                
+                                # 添加類型
+                                db_details[db_num]['types'].add(type_name)
+                                
+                                # 設定主要類型（按優先順序：master > premp > mp > mpbackup）
+                                current_primary = db_details[db_num]['primary_type']
+                                type_priority = {'master': 1, 'premp': 2, 'mp': 3, 'mpbackup': 4}
+                                
+                                if (current_primary is None or 
+                                    type_priority.get(type_name, 5) < type_priority.get(current_primary, 5)):
+                                    db_details[db_num]['primary_type'] = type_name
+                                
+                                # 添加模組資訊
+                                if 'Module' in row and pd.notna(row['Module']):
+                                    db_details[db_num]['modules'].add(str(row['Module']))
+                                
+                                # 添加路徑資訊（查找對應的 SftpPath 欄位）
+                                path_col = info_col.replace('DB_Info', 'SftpPath')
+                                if path_col in df.columns and pd.notna(row.get(path_col)):
+                                    path_str = str(row[path_col])
+                                    if path_str not in db_details[db_num]['paths']:
+                                        db_details[db_num]['paths'].append(path_str)
         
-        # 轉換 set 為 list
+        # 轉換 set 為 list 並排序
         db_list = sorted(list(db_set))
         
         # 格式化 DB 資訊
@@ -200,10 +218,13 @@ def analyze_mapping_table():
         for db, details in db_details.items():
             db_info[db] = {
                 'types': sorted(list(details['types'])),
+                'primary_type': details['primary_type'],
                 'modules': sorted(list(details['modules'])),
                 'paths': details['paths'][:5],  # 限制路徑數量
-                'display_types': list(details['types'])  # 用於顯示
+                'display_name': f"{db}({details['primary_type']})" if details['primary_type'] else db
             }
+        
+        logger.info(f"成功解析 {len(db_list)} 個 DB，{len(modules_set)} 個模組")
         
         return jsonify({
             'success': True,
@@ -216,6 +237,8 @@ def analyze_mapping_table():
         
     except Exception as e:
         logger.error(f"分析 mapping table 失敗: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/api/admin/get-default-mapping-table', methods=['GET'])
@@ -251,28 +274,76 @@ def get_default_mapping_table():
         return jsonify({'error': str(e)}), 500
 
 def analyze_mapping_file(file_path):
-    """分析 mapping 檔案的輔助函數 - 修復：移除 async"""
+    """分析 mapping 檔案的輔助函數 - 使用與主函數相同的邏輯"""
     # 讀取 Excel 檔案
     df = pd.read_excel(file_path)
     
-    # 提取 DB 和模組資訊（重複使用現有邏輯）
+    # 提取 DB 和模組資訊（使用與主函數相同的邏輯）
     db_set = set()
+    db_details = {}
     modules_set = set()
     
     if 'Module' in df.columns:
         modules_set = set(df['Module'].dropna().unique())
     
-    db_info_columns = [col for col in df.columns if 'DB_Info' in col]
+    # 定義 DB 類型和對應的 Info 欄位配對
+    db_type_mappings = [
+        ('DB_Type', 'DB_Info', 'master'),
+        ('premp_DB_Type', 'premp_DB_Info', 'premp'), 
+        ('mp_DB_Type', 'mp_DB_Info', 'mp'),
+        ('mpbackup_DB_Type', 'mpbackup_DB_Info', 'mpbackup')
+    ]
+    
+    # 處理每一行資料
     for idx, row in df.iterrows():
-        for col in db_info_columns:
-            if col in df.columns and pd.notna(row.get(col)):
-                db_val = str(row[col]).strip()
-                match = re.match(r'(DB\d+)', db_val)
-                if match:
-                    db_set.add(match.group(1))
+        for type_col, info_col, type_name in db_type_mappings:
+            # 檢查兩個欄位都存在
+            if type_col in df.columns and info_col in df.columns:
+                type_val = row.get(type_col)
+                info_val = row.get(info_col)
+                
+                # 檢查兩個值都不為空
+                if pd.notna(type_val) and pd.notna(info_val):
+                    type_str = str(type_val).strip().lower()
+                    info_str = str(info_val).strip()
+                    
+                    # 驗證類型值是否符合預期
+                    if type_str == type_name.lower():
+                        # 使用正則表達式匹配 DB 編號
+                        match = re.match(r'(DB\d+)', info_str)
+                        if match:
+                            db_num = match.group(1)
+                            db_set.add(db_num)
+                            
+                            # 初始化或更新 DB 詳細資訊
+                            if db_num not in db_details:
+                                db_details[db_num] = {
+                                    'types': set(),
+                                    'primary_type': None
+                                }
+                            
+                            # 添加類型
+                            db_details[db_num]['types'].add(type_name)
+                            
+                            # 設定主要類型（按優先順序）
+                            current_primary = db_details[db_num]['primary_type']
+                            type_priority = {'master': 1, 'premp': 2, 'mp': 3, 'mpbackup': 4}
+                            
+                            if (current_primary is None or 
+                                type_priority.get(type_name, 5) < type_priority.get(current_primary, 5)):
+                                db_details[db_num]['primary_type'] = type_name
+    
+    # 格式化返回的 DB 列表，包含類型資訊
+    db_list_with_types = []
+    for db in sorted(list(db_set)):
+        if db in db_details and db_details[db]['primary_type']:
+            db_list_with_types.append(f"{db}({db_details[db]['primary_type']})")
+        else:
+            db_list_with_types.append(db)
     
     return {
         'db_list': sorted(list(db_set)),
+        'db_list_with_types': db_list_with_types,  # 新增：包含類型的列表
         'modules': sorted(list(modules_set)),
         'total_rows': len(df)
     }
@@ -352,13 +423,13 @@ def get_db_versions():
 @admin_bp.route('/api/admin/run-chip-mapping', methods=['POST'])
 @login_required
 def run_chip_mapping():
-    """執行 chip-mapping 命令"""
+    """執行 chip-mapping 命令 - 修復參數處理邏輯"""
     try:
         data = request.json
         mapping_file = data.get('mapping_file')
-        filter_types = data.get('filter_types', ['all'])  # 改為列表
-        chip_filters = data.get('chip_filters', ['all'])  # 改為列表
-        db_filters = data.get('db_filters', ['all'])  # 改為列表
+        filter_types = data.get('filter_types', ['all'])
+        chip_filters = data.get('chip_filters', ['all'])
+        db_filters = data.get('db_filters', ['all'])
         output_path = data.get('output_path', getattr(config, 'DEFAULT_CHIP_OUTPUT_DIR', './output/chip_mapping'))
         
         if not mapping_file or not os.path.exists(mapping_file):
@@ -368,32 +439,41 @@ def run_chip_mapping():
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         
-        # 組合 filter 參數 - 使用 OR 邏輯連接
-        filter_parts = []
+        logger.info(f"收到參數: filter_types={filter_types}, chip_filters={chip_filters}, db_filters={db_filters}")
         
-        # 組合所有篩選條件
-        for filter_type in filter_types:
-            if filter_type != 'all':
-                filter_parts.append(filter_type)
+        # 修復：處理 filter 參數邏輯
+        # 1. 處理 filter_types - 如果包含 'all'，則不添加特定 filter
+        filter_param = 'all'
+        if filter_types and filter_types != ['all'] and 'all' not in filter_types:
+            # 只有當明確指定非 'all' 的 filter 時才使用
+            filter_param = ','.join(filter_types)
+            logger.info(f"使用特定 filter: {filter_param}")
+        else:
+            logger.info("使用 'all' filter")
         
-        for chip_filter in chip_filters:
-            if chip_filter != 'all':
-                filter_parts.append(chip_filter)
+        # 2. 處理 chip_filters
+        chip_param_parts = []
+        if chip_filters and chip_filters != ['all'] and 'all' not in chip_filters:
+            chip_param_parts.extend(chip_filters)
         
-        # 如果沒有特定篩選條件，使用 'all'
-        filter_param = ','.join(filter_parts) if filter_parts else 'all'
+        # 3. 組合最終的 filter 參數
+        if chip_param_parts:
+            if filter_param == 'all':
+                filter_param = ','.join(chip_param_parts)
+            else:
+                filter_param = filter_param + ',' + ','.join(chip_param_parts)
         
-        # 處理 DB 參數 - 支援多個 DB
+        # 4. 處理 DB 參數
         db_param_list = []
-        for db_filter in db_filters:
-            if db_filter != 'all':
-                db_param_list.append(db_filter)
-        
-        # 為每個 DB 組合執行命令
-        all_results = []
-        
-        if not db_param_list:
+        if db_filters and db_filters != ['all'] and 'all' not in db_filters:
+            db_param_list = db_filters
+        else:
             db_param_list = ['all']
+        
+        logger.info(f"最終參數: filter={filter_param}, db_list={db_param_list}")
+        
+        # 為每個 DB 組合執行命令（如果有多個 DB）
+        all_results = []
         
         for db_param in db_param_list:
             # 組合命令
@@ -404,7 +484,7 @@ def run_chip_mapping():
                 '-o', output_path
             ]
             
-            # 添加 DB 參數
+            # 添加 DB 參數（除非是 'all'）
             if db_param != 'all':
                 cmd.extend(['-db', db_param])
             
@@ -413,68 +493,143 @@ def run_chip_mapping():
             # 執行命令
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
             
+            logger.info(f"命令執行結果: return_code={result.returncode}")
+            if result.stdout:
+                logger.info(f"標準輸出: {result.stdout}")
+            if result.stderr:
+                logger.error(f"錯誤輸出: {result.stderr}")
+            
             if result.returncode != 0:
-                logger.error(f"執行失敗: stdout={result.stdout}, stderr={result.stderr}")
+                error_msg = f"執行失敗 (return_code: {result.returncode})"
+                if result.stderr:
+                    error_msg += f"\n錯誤信息: {result.stderr}"
+                if result.stdout:
+                    error_msg += f"\n輸出信息: {result.stdout}"
+                    
+                logger.error(error_msg)
                 return jsonify({
                     'error': '執行失敗',
+                    'details': error_msg,
                     'stdout': result.stdout,
                     'stderr': result.stderr,
-                    'command': ' '.join(cmd)
+                    'command': ' '.join(cmd),
+                    'return_code': result.returncode
                 }), 500
         
         # 查找輸出的 Excel 檔案
         output_files = glob.glob(os.path.join(output_path, '*.xlsx'))
         
-        # 讀取結果檔案
+        # 修復：即使沒有輸出檔案，也應該返回空結果而不是錯誤
         result_data = []
-        columns = []
-        if output_files:
-            # 合併所有結果檔案
-            all_data = []
+        columns = ['SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+                  'DB_Folder', 'DB_Version', 'SftpPath',
+                  'compare_DB_Type', 'compare_DB_Info', 
+                  'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath']
+        
+        if not output_files:
+            logger.warning(f"沒有找到輸出檔案，可能是因為選擇的篩選條件沒有對應的數據")
+            logger.warning(f"輸出路徑: {output_path}")
+            logger.warning(f"篩選條件: filter={filter_param}, db={db_param_list}")
             
-            for file_path in output_files:
+            # 返回空結果而不是錯誤
+            return jsonify({
+                'success': True,
+                'output_files': [],
+                'data': [],
+                'total_rows': 0,
+                'columns': columns,
+                'message': '沒有找到符合篩選條件的數據',
+                'debug_info': {
+                    'filter_param': filter_param,
+                    'db_param_list': db_param_list,
+                    'output_path': output_path,
+                    'files_found': 0,
+                    'note': '這可能是因為選擇的篩選類型在數據中沒有對應的記錄可以比較'
+                }
+            })
+        
+        # 讀取結果檔案
+        all_data = []
+        
+        for file_path in output_files:
+            try:
                 df = pd.read_excel(file_path, dtype=str)
                 df = df.fillna('')
                 all_data.append(df)
+                logger.info(f"成功讀取檔案: {file_path}, 行數: {len(df)}")
+            except Exception as e:
+                logger.error(f"讀取檔案失敗 {file_path}: {str(e)}")
+                continue
+        
+        if all_data:
+            # 合併所有 DataFrame
+            combined_df = pd.concat(all_data, ignore_index=True)
             
-            if all_data:
-                # 合併所有 DataFrame
-                combined_df = pd.concat(all_data, ignore_index=True)
-                
-                # 確保 SN 是數字字串
-                if 'SN' in combined_df.columns:
-                    combined_df['SN'] = combined_df['SN'].astype(str)
-                
-                # 預期的欄位順序
-                expected_columns = [
-                    'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
-                    'DB_Folder', 'DB_Version', 'SftpPath',
-                    'compare_DB_Type', 'compare_DB_Info', 
-                    'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
-                ]
-                
-                # 確保欄位存在且順序正確
-                available_columns = [col for col in expected_columns if col in combined_df.columns]
-                
-                if available_columns:
-                    combined_df = combined_df[available_columns]
-                
-                result_data = combined_df.replace({pd.NA: '', pd.NaT: '', float('nan'): ''}).to_dict('records')
-                columns = list(combined_df.columns)
+            # 確保 SN 是數字字串
+            if 'SN' in combined_df.columns:
+                combined_df['SN'] = combined_df['SN'].astype(str)
+            
+            # 預期的欄位順序
+            expected_columns = [
+                'SN', 'RootFolder', 'Module', 'DB_Type', 'DB_Info', 
+                'DB_Folder', 'DB_Version', 'SftpPath',
+                'compare_DB_Type', 'compare_DB_Info', 
+                'compare_DB_Folder', 'compare_DB_Version', 'compare_SftpPath'
+            ]
+            
+            # 確保欄位存在且順序正確
+            available_columns = [col for col in expected_columns if col in combined_df.columns]
+            
+            if available_columns:
+                combined_df = combined_df[available_columns]
+            
+            result_data = combined_df.replace({pd.NA: '', pd.NaT: '', float('nan'): ''}).to_dict('records')
+            columns = list(combined_df.columns)
+            
+            logger.info(f"成功處理數據: {len(result_data)} 行, {len(columns)} 列")
+        else:
+            logger.warning("無法讀取任何輸出檔案")
+            # 即使讀取失敗，也返回空結果
+            return jsonify({
+                'success': True,
+                'output_files': output_files,
+                'data': [],
+                'total_rows': 0,
+                'columns': columns,
+                'message': '檔案讀取失敗或檔案為空',
+                'debug_info': {
+                    'filter_param': filter_param,
+                    'db_param_list': db_param_list,
+                    'output_path': output_path,
+                    'files_found': len(output_files)
+                }
+            })
         
         return jsonify({
             'success': True,
             'output_files': output_files,
             'data': result_data[:100],  # 限制返回的資料量
             'total_rows': len(result_data),
-            'columns': columns
+            'columns': columns,
+            'debug_info': {
+                'filter_param': filter_param,
+                'db_param_list': db_param_list,
+                'output_path': output_path,
+                'files_found': len(output_files)
+            }
         })
         
     except Exception as e:
         logger.error(f"執行 chip-mapping 失敗: {str(e)}")
         import traceback
-        logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        error_trace = traceback.format_exc()
+        logger.error(error_trace)
+        
+        return jsonify({
+            'error': str(e),
+            'traceback': error_trace,
+            'received_data': data if 'data' in locals() else None
+        }), 500
 
 @admin_bp.route('/api/admin/run-prebuild-mapping', methods=['POST'])
 @login_required

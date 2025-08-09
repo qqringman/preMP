@@ -71,6 +71,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSearch();
     setupQuickPathListeners();
     initializeDynamicFilters();
+    
+    // 初始化 DB 選擇器的提示文字
+    const dbSelects = document.querySelectorAll('select[name="dbFilter"]');
+    dbSelects.forEach(select => {
+        if (select.children.length <= 1) {
+            select.innerHTML = '<option value="all">All</option><option value="" disabled>請先載入 Mapping Table</option>';
+        }
+    });
 });
 
 // 檢查登入狀態
@@ -135,17 +143,27 @@ async function loadDefaultMappingTable() {
                 isServer: true
             });
             
-            // 更新 DB 選項
-            if (response.analysis) {
-                updateDBOptions(response.analysis);
-            }
+            // 分析檔案以獲取完整的 DB 資訊
+            showLoading('分析檔案內容...');
+            const analysis = await analyzeMapping(response.file_path);
             
-            utils.showNotification('預設檔案載入成功', 'success');
+            if (analysis && analysis.success) {
+                // 更新 DB 選項
+                updateDBOptions(analysis);
+                utils.showNotification('預設檔案載入成功，已解析 DB 類型資訊', 'success');
+            } else {
+                // 回退到基本資訊
+                if (response.analysis) {
+                    updateDBOptions(response.analysis);
+                }
+                utils.showNotification('預設檔案載入成功', 'success');
+            }
         } else {
             utils.showNotification('載入預設檔案失敗: ' + response.error, 'error');
         }
         
     } catch (error) {
+        console.error('載入預設檔案錯誤:', error);
         utils.showNotification('載入預設檔案失敗: ' + error.message, 'error');
     } finally {
         hideLoading();
@@ -200,6 +218,7 @@ function addChipFilter() {
     let optionsHtml = '<option value="all">All Chips</option>';
     
     if (firstSelect) {
+        // 複製所有選項（除了第一個 All 選項）
         for (let i = 1; i < firstSelect.options.length; i++) {
             const option = firstSelect.options[i];
             optionsHtml += `<option value="${option.value}">${option.textContent}</option>`;
@@ -242,9 +261,12 @@ function addDBFilter() {
     let optionsHtml = '<option value="all">All</option>';
     
     if (firstSelect) {
+        // 複製所有選項（除了第一個 All 選項）
         for (let i = 1; i < firstSelect.options.length; i++) {
             const option = firstSelect.options[i];
-            optionsHtml += `<option value="${option.value}">${option.textContent}</option>`;
+            if (!option.disabled) {  // 跳過 disabled 選項
+                optionsHtml += `<option value="${option.value}" title="${option.title || ''}">${option.textContent}</option>`;
+            }
         }
     }
     
@@ -556,6 +578,8 @@ async function handleMappingFile(file) {
         const uploadResult = await utils.uploadFile(file);
         selectedMappingFile = uploadResult.filepath;
         
+        console.log('檔案上傳成功:', uploadResult.filepath);
+        
         // 顯示已選擇的檔案
         displaySelectedFile('mappingFileList', file.name, {
             size: file.size,
@@ -566,32 +590,59 @@ async function handleMappingFile(file) {
         showLoading('分析檔案內容...');
         const analysis = await analyzeMapping(uploadResult.filepath);
         
-        // 更新 DB 選項
-        updateDBOptions(analysis);
+        console.log('分析結果:', analysis);
         
-        hideLoading();
-        utils.showNotification('檔案上傳成功', 'success');
+        if (analysis && analysis.success) {
+            // 更新 DB 選項
+            updateDBOptions(analysis);
+            
+            utils.showNotification(
+                `檔案上傳成功！找到 ${analysis.db_list ? analysis.db_list.length : 0} 個 DB`, 
+                'success'
+            );
+        } else {
+            throw new Error(analysis ? analysis.error : '分析失敗');
+        }
         
     } catch (error) {
+        console.error('檔案處理錯誤:', error);
+        utils.showNotification('檔案處理失敗: ' + error.message, 'error');
+        
+        // 清除已設定的檔案
+        selectedMappingFile = null;
+        document.getElementById('mappingFileList').innerHTML = '';
+    } finally {
         hideLoading();
-        console.error('檔案上傳錯誤:', error);
-        utils.showNotification('檔案上傳失敗: ' + error.message, 'error');
     }
 }
 
 // 分析 Mapping Table
 async function analyzeMapping(filepath) {
-    console.log('分析檔案路徑:', filepath);
+    console.log('開始分析檔案路徑:', filepath);
     
-    const requestBody = JSON.stringify({ file_path: filepath });
-    console.log('請求內容:', requestBody);
-    
-    const response = await utils.apiRequest('/api/admin/analyze-mapping-table', {
-        method: 'POST',
-        body: requestBody
-    });
-    
-    return response;
+    try {
+        const requestBody = JSON.stringify({ file_path: filepath });
+        console.log('請求內容:', requestBody);
+        
+        const response = await utils.apiRequest('/api/admin/analyze-mapping-table', {
+            method: 'POST',
+            body: requestBody
+        });
+        
+        console.log('API 回應:', response);
+        
+        if (response && response.success) {
+            console.log('分析成功，DB 列表:', response.db_list);
+            console.log('DB 詳細資訊:', response.db_info);
+            return response;
+        } else {
+            throw new Error(response ? response.error : '未收到有效回應');
+        }
+        
+    } catch (error) {
+        console.error('分析檔案失敗:', error);
+        throw error;
+    }
 }
 
 // 更新 DB 選項 - 支援動態更新所有選擇器，並正確顯示 DB 資訊
@@ -608,6 +659,36 @@ function updateDBOptions(analysis) {
         return;
     }
     
+    console.log('收到的分析結果:', analysis); // 調試用
+    
+    // 分析可用的比較類型
+    let availableTypes = new Set();
+    if (analysis.db_info) {
+        for (const [db, info] of Object.entries(analysis.db_info)) {
+            if (info.types && Array.isArray(info.types)) {
+                info.types.forEach(type => availableTypes.add(type));
+            }
+        }
+    }
+    
+    // 檢查哪些比較組合是可能的
+    const possibleComparisons = [];
+    if (availableTypes.has('master') && availableTypes.has('premp')) {
+        possibleComparisons.push('master_vs_premp');
+    }
+    if (availableTypes.has('premp') && availableTypes.has('mp')) {
+        possibleComparisons.push('premp_vs_mp');
+    }
+    if (availableTypes.has('mp') && availableTypes.has('mpbackup')) {
+        possibleComparisons.push('mp_vs_mpbackup');
+    }
+    
+    console.log('可用的 DB 類型:', Array.from(availableTypes));
+    console.log('可能的比較組合:', possibleComparisons);
+    
+    // 更新 Filter Type 選項的可用性
+    updateFilterTypeAvailability(possibleComparisons);
+    
     // 更新所有 DB 選擇器
     allDBSelects.forEach(dbSelect => {
         // 保存當前選中的值
@@ -622,10 +703,9 @@ function updateDBOptions(analysis) {
                 const option = document.createElement('option');
                 option.value = db;
                 
-                // 建立顯示文字 - 格式：DB2302(master) 或 DB2575(mp)
+                // 使用後端提供的 display_name 或自行構建
                 let displayText = db;
                 
-                // 安全地檢查 db_info
                 if (analysis.db_info && 
                     typeof analysis.db_info === 'object' && 
                     analysis.db_info[db] && 
@@ -633,29 +713,28 @@ function updateDBOptions(analysis) {
                     
                     const info = analysis.db_info[db];
                     
-                    // 顯示主要類型（取第一個類型）
-                    if (info.types && Array.isArray(info.types) && info.types.length > 0) {
-                        // 優先顯示順序：master > premp > mp > mpbackup
-                        const typeOrder = ['master', 'premp', 'mp', 'mpbackup'];
-                        let primaryType = info.types[0];
-                        
-                        for (const type of typeOrder) {
-                            if (info.types.includes(type)) {
-                                primaryType = type;
-                                break;
-                            }
-                        }
-                        
-                        displayText = `${db}(${primaryType})`;
+                    // 優先使用後端提供的 display_name
+                    if (info.display_name) {
+                        displayText = info.display_name;
+                    } else if (info.primary_type) {
+                        // 如果沒有 display_name，使用 primary_type
+                        displayText = `${db}(${info.primary_type})`;
+                    } else if (info.types && Array.isArray(info.types) && info.types.length > 0) {
+                        // 回退到第一個類型
+                        displayText = `${db}(${info.types[0]})`;
                     }
                     
-                    // 安全地設置 tooltip
+                    // 設置 tooltip 顯示詳細資訊
                     const modules = (info.modules && Array.isArray(info.modules)) 
                         ? info.modules.join(', ') 
                         : 'N/A';
-                    option.title = `${displayText} - 模組: ${modules}`;
+                    const allTypes = (info.types && Array.isArray(info.types))
+                        ? info.types.join(', ')
+                        : 'N/A';
+                    
+                    option.title = `${displayText}\n類型: ${allTypes}\n模組: ${modules}`;
                 } else {
-                    option.title = `${displayText} - 模組: N/A`;
+                    option.title = `${displayText} - 資訊: N/A`;
                 }
                 
                 option.textContent = displayText;
@@ -709,8 +788,55 @@ function updateDBOptions(analysis) {
         const moduleCount = (analysis.modules && Array.isArray(analysis.modules)) ? analysis.modules.length : 0;
         const totalRows = analysis.total_rows || 0;
         
-        hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${dbCount} 個 DB，${moduleCount} 個模組，共 ${totalRows} 筆資料`;
+        let hintText = `找到 ${dbCount} 個 DB，${moduleCount} 個模組，共 ${totalRows} 筆資料`;
+        if (possibleComparisons.length > 0) {
+            hintText += `\n可用比較類型: ${possibleComparisons.join(', ')}`;
+        }
+        
+        hint.innerHTML = `<i class="fas fa-info-circle"></i> ${hintText.replace('\n', '<br>')}`;
     }
+    
+    console.log('DB 選項更新完成，共', analysis.db_list ? analysis.db_list.length : 0, '個 DB'); // 調試用
+}
+
+function updateFilterTypeAvailability(possibleComparisons) {
+    const filterTypeSelects = document.querySelectorAll('select[name="filterType"]');
+    
+    filterTypeSelects.forEach(select => {
+        // 重新生成選項
+        const currentValue = select.value;
+        select.innerHTML = '<option value="all">All</option>';
+        
+        // 添加可用的比較類型
+        const comparisonOptions = [
+            { value: 'master_vs_premp', label: 'Master vs PreMP' },
+            { value: 'premp_vs_mp', label: 'PreMP vs MP' },
+            { value: 'mp_vs_mpbackup', label: 'MP vs MP Backup' }
+        ];
+        
+        comparisonOptions.forEach(({ value, label }) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            
+            // 如果這個比較類型不可用，添加提示並禁用
+            if (!possibleComparisons.includes(value)) {
+                option.disabled = true;
+                option.textContent += ' (無可用數據)';
+                option.style.color = '#9CA3AF';
+            }
+            
+            select.appendChild(option);
+        });
+        
+        // 恢復選中值（如果還可用的話）
+        if (currentValue && (currentValue === 'all' || possibleComparisons.includes(currentValue))) {
+            select.value = currentValue;
+        } else if (currentValue !== 'all' && !possibleComparisons.includes(currentValue)) {
+            // 如果之前選中的選項不再可用，重置為 'all'
+            select.value = 'all';
+        }
+    });
 }
 
 // 執行 Chip Mapping - 支援多選
@@ -755,21 +881,24 @@ async function runChipMapping() {
             }
         });
         
-        // 如果所有都是 'all'，則保持為 ['all']
-        if (filterTypes.length === 0) filterTypes.push('all');
-        if (chipFilters.length === 0) chipFilters.push('all');
-        if (dbFilters.length === 0) dbFilters.push('all');
+        // 修復邏輯：統一處理 'all' 的情況
+        const finalFilterTypes = filterTypes.length > 0 ? filterTypes : ['all'];
+        const finalChipFilters = chipFilters.length > 0 ? chipFilters : ['all'];
+        const finalDbFilters = dbFilters.length > 0 ? dbFilters : ['all'];
         
         // 收集參數
         const params = {
             mapping_file: selectedMappingFile,
-            filter_types: filterTypes,
-            chip_filters: chipFilters,
-            db_filters: dbFilters,
+            filter_types: finalFilterTypes,
+            chip_filters: finalChipFilters,
+            db_filters: finalDbFilters,
             output_path: document.getElementById('chipOutputPath').value
         };
         
-        console.log('執行參數:', params);
+        console.log('執行參數 (修復後):', params);
+        console.log('Filter Types:', finalFilterTypes);
+        console.log('Chip Filters:', finalChipFilters);
+        console.log('DB Filters:', finalDbFilters);
         
         const response = await utils.apiRequest('/api/admin/run-chip-mapping', {
             method: 'POST',
@@ -779,15 +908,84 @@ async function runChipMapping() {
         hideLoading();
         
         if (response.success) {
-            currentResultSource = 'chip-mapping';  // 記錄結果來源
+            currentResultSource = 'chip-mapping';
             displayResults(response);
-            utils.showNotification('執行成功', 'success');
+            
+            // 顯示調試信息（如果有的話）
+            if (response.debug_info) {
+                console.log('執行成功的調試信息:', response.debug_info);
+            }
+            
+            // 檢查是否有數據
+            if (response.total_rows === 0) {
+                let message = '執行成功，但沒有找到符合條件的數據';
+                if (response.message) {
+                    message = response.message;
+                }
+                
+                // 如果有調試信息中的提示，顯示更詳細的說明
+                if (response.debug_info && response.debug_info.note) {
+                    message += '\n\n' + response.debug_info.note;
+                }
+                
+                utils.showNotification(message, 'warning');
+                
+                // 在控制台顯示詳細信息
+                console.group('Chip Mapping 執行成功但無數據');
+                console.warn('可能原因: 選擇的篩選類型在數據中沒有對應的記錄');
+                console.log('篩選參數:', {
+                    filter_types: finalFilterTypes,
+                    chip_filters: finalChipFilters,
+                    db_filters: finalDbFilters
+                });
+                if (response.debug_info) {
+                    console.log('調試信息:', response.debug_info);
+                }
+                console.groupEnd();
+            } else {
+                utils.showNotification(`執行成功，找到 ${response.total_rows} 筆數據`, 'success');
+            }
         } else {
-            utils.showNotification('執行失敗: ' + (response.error || '未知錯誤'), 'error');
+            console.error('執行失敗詳細信息:', response);
+            
+            let errorMessage = response.error || '未知錯誤';
+            
+            // 添加詳細錯誤信息
+            if (response.details) {
+                errorMessage += '\n\n詳細信息:\n' + response.details;
+            }
+            
+            if (response.stderr) {
+                console.error('CLI 錯誤輸出:', response.stderr);
+                errorMessage += '\n\n錯誤輸出:\n' + response.stderr;
+            }
+            
+            if (response.stdout) {
+                console.log('CLI 標準輸出:', response.stdout);
+            }
+            
+            if (response.command) {
+                console.error('執行的命令:', response.command);
+                errorMessage += '\n\n執行命令:\n' + response.command;
+            }
+            
+            if (response.return_code) {
+                errorMessage += '\n\n返回碼: ' + response.return_code;
+            }
+            
+            // 顯示詳細錯誤信息
+            utils.showNotification(errorMessage, 'error');
+            
+            // 在控制台顯示更多調試信息
+            console.group('Chip Mapping 執行失敗詳細信息');
+            console.error('錯誤回應:', response);
+            console.error('請求參數:', params);
+            console.groupEnd();
         }
         
     } catch (error) {
         hideLoading();
+        console.error('執行異常:', error);
         utils.showNotification('執行失敗: ' + error.message, 'error');
     }
 }

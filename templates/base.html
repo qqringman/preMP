@@ -237,6 +237,267 @@
         .user-info {
             justify-self: end;
         }
+
+        /* 導航列調整 - 移除用戶信息 */
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            min-height: 64px;
+        }
+        
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary, #1A237E);
+        }
+        
+        .nav-brand i {
+            color: var(--nordic-blue, #2196F3);
+            font-size: 1.5rem;
+        }
+        
+        .nav-menu {
+            display: flex;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            gap: 0.5rem;
+        }
+        
+        /* 獨立的用戶信息容器 - 綠框位置 */
+        .user-info-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1001;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 2px solid #10B981;
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
+            min-width: 180px;
+        }
+        
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 0.875rem;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        .user-details {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            flex: 1;
+        }
+        
+        .user-name {
+            color: #374151;
+            font-weight: 700;
+            font-size: 0.875rem;
+            line-height: 1;
+        }
+        
+        .user-status {
+            color: #10B981;
+            font-size: 0.75rem;
+            line-height: 1;
+            font-weight: 600;
+        }
+        
+        .auth-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-auth {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-login {
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-login:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        
+        .btn-logout {
+            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-logout:hover {
+            background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        
+        /* 系統模式樣式 */
+        .system-mode {
+            padding: 12px 16px;
+            background: rgba(107, 114, 128, 0.1);
+            border-radius: 12px;
+            border: 2px solid #9CA3AF;
+            box-shadow: 0 4px 20px rgba(107, 114, 128, 0.15);
+        }
+        
+        .system-mode .user-status {
+            color: #6B7280;
+            font-size: 0.875rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 響應式設計調整 */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 1rem;
+                flex-direction: column;
+                gap: 1rem;
+                min-height: auto;
+                padding-top: 1rem;
+                padding-bottom: 1rem;
+            }
+            
+            .nav-brand {
+                order: 1;
+            }
+            
+            .nav-menu {
+                order: 2;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 0.25rem;
+            }
+            
+            .nav-item .nav-link {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.875rem;
+            }
+            
+            /* 移動設備上的用戶信息調整 */
+            .user-info-container {
+                top: 10px;
+                right: 10px;
+            }
+            
+            .user-info {
+                padding: 8px 12px;
+                min-width: 150px;
+            }
+            
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 0.75rem;
+            }
+            
+            .user-details {
+                font-size: 0.8rem;
+            }
+            
+            .user-name {
+                font-size: 0.8rem;
+            }
+            
+            .user-status {
+                font-size: 0.7rem;
+            }
+            
+            .btn-auth {
+                padding: 6px 8px;
+                font-size: 0.7rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .nav-container {
+                padding: 0 0.5rem;
+            }
+            
+            .nav-brand {
+                font-size: 1rem;
+            }
+            
+            .nav-brand i {
+                font-size: 1.25rem;
+            }
+            
+            .nav-menu {
+                gap: 0.125rem;
+            }
+            
+            .nav-item .nav-link {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.8rem;
+            }
+            
+            /* 小屏幕上的用戶信息進一步簡化 */
+            .user-info-container {
+                top: 5px;
+                right: 5px;
+            }
+            
+            .user-info {
+                padding: 6px 10px;
+                min-width: 120px;
+                gap: 8px;
+            }
+            
+            .user-details {
+                display: none; /* 在很小的屏幕上隱藏用戶詳情 */
+            }
+            
+            .system-mode .user-status {
+                font-size: 0.7rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -278,13 +539,15 @@
                     </a>
                 </li>
             </ul>
-            
-            <!-- 用戶信息區域 - 靠右 -->
-            <div class="user-info" id="userInfo">
-                <!-- 動態載入用戶信息 -->
-            </div>
         </div>
     </nav>
+
+    <!-- 用戶信息區域 - 獨立放置在右上角 -->
+    <div class="user-info-container" id="userInfoContainer">
+        <div class="user-info" id="userInfo">
+            <!-- 動態載入用戶信息 -->
+        </div>
+    </div>
 
     <!-- 主要內容 -->
     <main class="main-content">
@@ -329,41 +592,62 @@
                 if (response.ok) {
                     const data = await response.json();
                     
-                    if (data.logged_in) {
+                    if (data.login_enabled && data.logged_in) {
                         // 已登入狀態
                         userInfoContainer.innerHTML = `
                             <div class="user-avatar">${data.username ? data.username.charAt(0).toUpperCase() : 'U'}</div>
                             <div class="user-details">
                                 <div class="user-name">${data.username || '使用者'}</div>
-                                <div class="user-status">已登入</div>
+                                <div class="user-status">
+                                    <i class="fas fa-shield-alt"></i> 管理員
+                                </div>
                             </div>
                             <button class="btn-auth btn-logout" onclick="logout()">
-                                <i class="fas fa-sign-out-alt"></i> 登出
+                                <i class="fas fa-sign-out-alt"></i>
                             </button>
                         `;
-                    } else {
-                        // 未登入狀態
+                    } else if (data.login_enabled && !data.logged_in) {
+                        // 有登入功能但未登入
                         userInfoContainer.innerHTML = `
+                            <div class="user-avatar">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="user-details">
+                                <div class="user-name">訪客</div>
+                                <div class="user-status">
+                                    <i class="fas fa-lock"></i> 未登入
+                                </div>
+                            </div>
                             <a href="/login" class="btn-auth btn-login">
-                                <i class="fas fa-sign-in-alt"></i> 登入
+                                <i class="fas fa-sign-in-alt"></i>
                             </a>
+                        `;
+                    } else {
+                        // 登入功能未啟用 - 顯示系統模式
+                        userInfoContainer.className = 'system-mode';
+                        userInfoContainer.innerHTML = `
+                            <div class="user-status">
+                                <i class="fas fa-desktop"></i> 系統模式
+                            </div>
                         `;
                     }
                 } else {
-                    // 登入功能未啟用或錯誤
+                    // API 錯誤，顯示系統模式
+                    userInfoContainer.className = 'system-mode';
                     userInfoContainer.innerHTML = `
-                        <div class="user-details">
-                            <div class="user-status">系統模式</div>
+                        <div class="user-status">
+                            <i class="fas fa-desktop"></i> 系統模式
                         </div>
                     `;
                 }
             } catch (error) {
                 console.log('無法獲取用戶狀態:', error);
-                // 預設顯示登入按鈕
+                // 網路錯誤，顯示系統模式
+                userInfoContainer.className = 'system-mode';
                 userInfoContainer.innerHTML = `
-                    <a href="/login" class="btn-auth btn-login">
-                        <i class="fas fa-sign-in-alt"></i> 登入
-                    </a>
+                    <div class="user-status">
+                        <i class="fas fa-desktop"></i> 系統模式
+                    </div>
                 `;
             }
         }
