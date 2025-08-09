@@ -777,7 +777,11 @@ class FileComparator:
                     self.logger.info(f"使用 DailyBuild mapping table")
                 # 檢查是否有 PrebuildFW mapping
                 elif 'prebuild' in self.mapping_tables or 'prebuildffw' in self.mapping_tables:
-                    mapping_df = self.mapping_tables.get('prebuild') or self.mapping_tables.get('prebuildffw')
+                    # 修正 DataFrame 判斷邏輯
+                    if 'prebuild' in self.mapping_tables:
+                        mapping_df = self.mapping_tables['prebuild']
+                    else:
+                        mapping_df = self.mapping_tables['prebuildffw']
                     self.logger.info(f"使用 PrebuildFW mapping table")
                 # 使用通用 mapping
                 elif 'general' in self.mapping_tables:
@@ -2448,14 +2452,6 @@ class FileComparator:
     def _find_comparison_pairs_from_mapping(self, mapping_df: pd.DataFrame, source_dir: str, scenario: str) -> List[Dict[str, Any]]:
         """
         根據 mapping table 找出需要比對的檔案對
-        
-        Args:
-            mapping_df: Mapping DataFrame
-            source_dir: 來源目錄
-            scenario: 比對情境
-            
-        Returns:
-            比對對列表
         """
         comparison_pairs = []
         
@@ -2464,13 +2460,13 @@ class FileComparator:
             expected_columns = {
                 'db_type': ['DB_Type', 'db_type', 'Type', 'type'],
                 'db_info': ['DB_Info', 'db_info', 'Info', 'info', 'Module', 'module'],
-                'db_folder': ['DB_Folder', 'db_folder', 'Folder', 'folder'],  # 新增
+                'db_folder': ['DB_Folder', 'db_folder', 'Folder', 'folder'],
                 'sftp_path': ['SftpPath', 'sftp_path', 'Path', 'path', 'LocalPath', 'local_path'],
                 'compare_db_type': ['compare_DB_Type', 'compare_db_type', 'Compare_Type', 'compare_type'],
                 'compare_db_info': ['compare_DB_Info', 'compare_db_info', 'Compare_Info', 'compare_info'],
-                'compare_db_folder': ['compare_DB_Folder', 'compare_db_folder', 'Compare_Folder', 'compare_folder'],  # 新增
+                'compare_db_folder': ['compare_DB_Folder', 'compare_db_folder', 'Compare_Folder', 'compare_folder'],
                 'compare_sftp_path': ['compare_SftpPath', 'compare_sftp_path', 'Compare_Path', 'compare_path'],
-                'module': ['Module', 'module', 'ModuleName', 'module_name']  # 新增 Module 欄位
+                'module': ['Module', 'module', 'ModuleName', 'module_name']
             }
             
             # 找出實際存在的欄位名稱
@@ -2482,6 +2478,7 @@ class FileComparator:
                         break
             
             self.logger.info(f"找到的 mapping 欄位: {actual_columns}")
+            self.logger.info(f"正在處理情境: {scenario}")
             
             # 遍歷每一行
             for idx, row in mapping_df.iterrows():
@@ -2489,25 +2486,33 @@ class FileComparator:
                     # 取得基礎資訊
                     db_type = row.get(actual_columns.get('db_type', ''), '')
                     db_info = row.get(actual_columns.get('db_info', ''), '')
-                    db_folder = row.get(actual_columns.get('db_folder', ''), '')  # 新增
+                    db_folder = row.get(actual_columns.get('db_folder', ''), '')
                     sftp_path = row.get(actual_columns.get('sftp_path', ''), '')
-                    module_name = row.get(actual_columns.get('module', ''), '')  # 新增
+                    module_name = row.get(actual_columns.get('module', ''), '')
                     
                     # 取得比對資訊
                     compare_db_type = row.get(actual_columns.get('compare_db_type', ''), '')
                     compare_db_info = row.get(actual_columns.get('compare_db_info', ''), '')
-                    compare_db_folder = row.get(actual_columns.get('compare_db_folder', ''), '')  # 新增
+                    compare_db_folder = row.get(actual_columns.get('compare_db_folder', ''), '')
                     compare_sftp_path = row.get(actual_columns.get('compare_sftp_path', ''), '')
+                    
+                    self.logger.info(f"行 {idx}: DB_Type='{db_type}', compare_DB_Type='{compare_db_type}'")
+                    self.logger.info(f"行 {idx}: DB_Info='{db_info}', DB_Folder='{db_folder}'")
+                    self.logger.info(f"行 {idx}: compare_DB_Info='{compare_db_info}', compare_DB_Folder='{compare_db_folder}'")
                     
                     # 檢查是否符合當前情境
                     if not self._match_scenario(db_type, compare_db_type, scenario):
+                        self.logger.info(f"行 {idx}: 不符合情境 {scenario}，跳過")
                         continue
                     
-                    self.logger.info(f"處理 mapping 行 {idx}: {db_info}({db_folder}) vs {compare_db_info}({compare_db_folder})")
+                    self.logger.info(f"行 {idx}: 符合情境 {scenario}，開始尋找本地路徑")
                     
-                    # 在 source_dir 中尋找對應的本地路徑（傳入 db_folder）
+                    # 在 source_dir 中尋找對應的本地路徑
                     base_local_path = self._find_local_path(source_dir, sftp_path, db_info, db_folder)
                     compare_local_path = self._find_local_path(source_dir, compare_sftp_path, compare_db_info, compare_db_folder)
+                    
+                    self.logger.info(f"行 {idx}: base_local_path = {base_local_path}")
+                    self.logger.info(f"行 {idx}: compare_local_path = {compare_local_path}")
                     
                     if base_local_path and compare_local_path:
                         # 使用 module_name 或從路徑提取
@@ -2531,11 +2536,9 @@ class FileComparator:
                             'db_type': db_type,
                             'compare_db_type': compare_db_type
                         })
-                        self.logger.info(f"找到比對對: {db_info} ({db_type}) vs {compare_db_info} ({compare_db_type})")
-                        self.logger.info(f"  Base路徑: {base_local_path}")
-                        self.logger.info(f"  Compare路徑: {compare_local_path}")
+                        self.logger.info(f"成功建立比對對: {module_name} - {db_info} vs {compare_db_info}")
                     else:
-                        self.logger.warning(f"無法找到本地路徑 - Base: {base_local_path}, Compare: {compare_local_path}")
+                        self.logger.warning(f"行 {idx}: 無法找到完整的路徑對 - Base: {base_local_path}, Compare: {compare_local_path}")
                         
                 except Exception as e:
                     self.logger.warning(f"處理 mapping 行 {idx} 時出錯: {str(e)}")
@@ -2543,19 +2546,12 @@ class FileComparator:
         except Exception as e:
             self.logger.error(f"解析 mapping table 失敗: {str(e)}")
             
+        self.logger.info(f"總共找到 {len(comparison_pairs)} 對需要比對的資料")
         return comparison_pairs
     
     def _match_scenario(self, db_type: str, compare_db_type: str, scenario: str) -> bool:
         """
         檢查 DB 類型是否符合比對情境
-        
-        Args:
-            db_type: 基礎 DB 類型
-            compare_db_type: 比對 DB 類型
-            scenario: 比對情境
-            
-        Returns:
-            是否符合
         """
         db_type = str(db_type).lower().strip()
         compare_db_type = str(compare_db_type).lower().strip()
@@ -2598,46 +2594,41 @@ class FileComparator:
     def _find_local_path(self, source_dir: str, sftp_path: str, db_info: str, db_folder: str = None) -> Optional[str]:
         """
         根據 SFTP 路徑、DB 資訊和 DB Folder 找出本地路徑
-        
-        Args:
-            source_dir: 來源目錄
-            sftp_path: SFTP 路徑
-            db_info: DB 資訊
-            db_folder: DB 資料夾名稱（新增參數）
-            
-        Returns:
-            本地路徑或 None
         """
         try:
             # 策略 0: 如果有 db_folder，優先使用它來匹配
             if db_folder:
+                self.logger.info(f"嘗試使用 DB_Folder 匹配: {db_folder}")
                 for root, dirs, files in os.walk(source_dir):
                     for dir_name in dirs:
                         # 完全匹配 db_folder
                         if dir_name == db_folder:
                             dir_path = os.path.join(root, dir_name)
                             if self._has_target_files(dir_path):
-                                self.logger.info(f"通過 DB_Folder 找到路徑: {dir_path}")
+                                self.logger.info(f"通過 DB_Folder 完全匹配找到路徑: {dir_path}")
                                 return dir_path
-                        # 部分匹配（去除版本號後綴）
-                        if db_folder.split('_')[0] in dir_name:
+                        # 部分匹配 - 檢查 db_folder 是否包含在 dir_name 中
+                        if db_folder in dir_name or dir_name in db_folder:
                             dir_path = os.path.join(root, dir_name)
                             if self._has_target_files(dir_path):
                                 self.logger.info(f"通過 DB_Folder 部分匹配找到路徑: {dir_path}")
                                 return dir_path
             
             # 策略 1: 直接匹配 DB 資訊
-            for root, dirs, files in os.walk(source_dir):
-                for dir_name in dirs:
-                    # 檢查目錄名稱是否包含 DB 資訊
-                    if db_info and db_info in dir_name:
-                        dir_path = os.path.join(root, dir_name)
-                        if self._has_target_files(dir_path):
-                            self.logger.info(f"通過 DB_Info 找到路徑: {dir_path}")
-                            return dir_path
+            if db_info:
+                self.logger.info(f"嘗試使用 DB_Info 匹配: {db_info}")
+                for root, dirs, files in os.walk(source_dir):
+                    for dir_name in dirs:
+                        # 檢查目錄名稱是否包含 DB 資訊
+                        if db_info in dir_name:
+                            dir_path = os.path.join(root, dir_name)
+                            if self._has_target_files(dir_path):
+                                self.logger.info(f"通過 DB_Info 找到路徑: {dir_path}")
+                                return dir_path
             
             # 策略 2: 從 SFTP 路徑提取關鍵資訊
             if sftp_path:
+                self.logger.info(f"嘗試從 SFTP 路徑匹配: {sftp_path}")
                 # 處理 Windows 和 Linux 路徑分隔符
                 sftp_path = sftp_path.replace('\\', '/')
                 path_parts = sftp_path.strip('/').split('/')
@@ -2657,25 +2648,6 @@ class FileComparator:
                                 dir_path = os.path.join(root, dir_name)
                                 if self._has_target_files(dir_path):
                                     self.logger.info(f"通過 SFTP 路徑部分 '{path_part}' 找到路徑: {dir_path}")
-                                    return dir_path
-            
-            # 策略 3: 模糊匹配
-            # 嘗試用 DB 或 RDDB 編號匹配
-            if db_info and ('DB' in db_info or 'RDDB' in db_info):
-                # 提取編號部分
-                import re
-                match = re.search(r'(R?D+B)-?(\d+)', db_info)
-                if match:
-                    db_prefix = match.group(1)
-                    db_number = match.group(2)
-                    
-                    for root, dirs, files in os.walk(source_dir):
-                        for dir_name in dirs:
-                            # 檢查是否包含相同的 DB 編號
-                            if f"{db_prefix}-{db_number}" in dir_name or f"{db_prefix}{db_number}" in dir_name:
-                                dir_path = os.path.join(root, dir_name)
-                                if self._has_target_files(dir_path):
-                                    self.logger.info(f"通過 DB 編號匹配找到路徑: {dir_path}")
                                     return dir_path
             
             self.logger.warning(f"無法找到本地路徑 - DB_Info: {db_info}, DB_Folder: {db_folder}, SFTP: {sftp_path}")
