@@ -2998,6 +2998,24 @@ def get_results_structure(task_id):
     except Exception as e:
         app.logger.error(f'Get results structure error: {e}')
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/check-scenarios/<task_id>')
+def check_scenarios(task_id):
+    """檢查情境檔案是否存在"""
+    base_path = f"compare_results/{task_id}"
+    
+    files_to_check = {
+        'all': f"{base_path}/all_scenarios_summary.xlsx",
+        'master_vs_premp': f"{base_path}/master_vs_premp/all_scenarios_compare.xlsx", 
+        'premp_vs_wave': f"{base_path}/premp_vs_wave/all_scenarios_compare.xlsx",
+        'wave_vs_backup': f"{base_path}/wave_vs_backup/all_scenarios_compare.xlsx"
+    }
+    
+    scenario_status = {}
+    for scenario, file_path in files_to_check.items():
+        scenario_status[scenario] = os.path.exists(file_path)
+    
+    return jsonify(scenario_status)
     
 if __name__ == '__main__':
     # 開發模式執行

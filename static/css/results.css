@@ -3616,3 +3616,36 @@ body > .pvtFilterBox {
     flex-direction: column;
     overflow: hidden;
 }
+
+.scenario-selector-container {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    display: none; /* JavaScript 控制顯示 */
+}
+
+.scenario-tabs {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.scenario-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.scenario-tab.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}

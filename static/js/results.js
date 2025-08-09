@@ -26,29 +26,79 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSearch();
 });
 
-// 確保情境選擇器正確設置 data-scenario 屬性
-function initializeScenarioSelector() {
-    const scenarioTabs = document.querySelectorAll('.scenario-tab');
+// 添加這些新函數
+async function initializeScenarioSelector() {
+    try {
+        const response = await fetch(`/api/check-scenarios/${taskId}`);
+        const scenarioStatus = await response.json();
+        updateScenarioButtons(scenarioStatus);
+    } catch (error) {
+        console.error('檢查情境失敗:', error);
+        document.querySelector('.scenario-selector-container').style.display = 'none';
+    }
+}
+
+function updateScenarioButtons(scenarioStatus) {
+    let hasAnyScenario = false;
     
-    // 確認每個按鈕的 data-scenario 屬性
-    scenarioTabs.forEach(tab => {
-        console.log(`Scenario tab: ${tab.textContent.trim()}, data-scenario: ${tab.dataset.scenario}`);
-        
-        tab.addEventListener('click', function() {
-            // 移除所有 active 類
-            scenarioTabs.forEach(t => t.classList.remove('active'));
+    for (const [scenario, exists] of Object.entries(scenarioStatus)) {
+        const button = document.querySelector(`[data-scenario="${scenario}"]`);
+        if (button) {
+            if (exists) {
+                button.style.display = 'flex';
+                button.disabled = false;
+                hasAnyScenario = true;
+            } else {
+                button.style.display = 'none';
+            }
+        }
+    }
+    
+    const container = document.querySelector('.scenario-selector-container');
+    if (container) {
+        container.style.display = hasAnyScenario ? 'block' : 'none';
+    }
+    
+    // 設定預設選中的情境
+    if (scenarioStatus.all) {
+        currentScenario = 'all';
+        setActiveScenarioButton('all');
+    } else {
+        for (const [scenario, exists] of Object.entries(scenarioStatus)) {
+            if (exists) {
+                currentScenario = scenario;
+                setActiveScenarioButton(scenario);
+                break;
+            }
+        }
+    }
+    
+    // 重新綁定點擊事件
+    rebindScenarioEvents();
+}
+
+function setActiveScenarioButton(activeScenario) {
+    document.querySelectorAll('.scenario-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    const activeButton = document.querySelector(`[data-scenario="${activeScenario}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+}
+
+function rebindScenarioEvents() {
+    document.querySelectorAll('.scenario-tab').forEach(tab => {
+        tab.onclick = function() {
+            if (this.style.display === 'none') return;
             
-            // 添加 active 類到當前選中的標籤
+            document.querySelectorAll('.scenario-tab').forEach(t => t.classList.remove('active'));
             this.classList.add('active');
             
-            // 更新當前情境
             const newScenario = this.dataset.scenario;
-            console.log(`切換情境: ${currentScenario} -> ${newScenario}`);
             currentScenario = newScenario;
-            
-            // 重新載入資料
-            loadPivotData();
-        });
+            loadPivotData(); // 您現有的載入資料函數
+        };
     });
 }
 
