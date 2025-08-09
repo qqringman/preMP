@@ -1,4 +1,4 @@
-"""
+﻿"""
 檔案比較模組（增強版 - 支援 Mapping Table）
 處理 manifest.xml, F_Version.txt, Version.txt 的差異比較
 支援一次執行所有比對情境
@@ -1379,9 +1379,11 @@ class FileComparator:
             has_wave_col = None
             for idx, col in enumerate(df.columns):
                 if col == 'problem':
-                    problem_col = idx + 1
+                    problem_col = idx
+                    print("problem_col:", problem_col)
                 elif col == 'has_wave':
-                    has_wave_col = idx + 1
+                    has_wave_col = idx + 2
+                    print("has_wave_col:", has_wave_col)
             
             if problem_col:
                 # 設定深紅底白字
@@ -1409,7 +1411,8 @@ class FileComparator:
                 has_wave_values = df['has_wave'].unique().tolist()
                 
                 # 建立篩選器，注意 colId 是從 0 開始的
-                has_wave_df_index = df.columns.get_loc('has_wave')
+                has_wave_df_index = df.columns.get_loc('has_wave') + 1
+                print("has_wave_df_index:", has_wave_df_index)
                 filter_column = FilterColumn(colId=has_wave_df_index)
                 filter_column.filters = Filters()
                 filter_column.filters.filter = ['N']
@@ -1484,7 +1487,7 @@ class FileComparator:
             
             for idx, col in enumerate(df.columns):
                 if col in target_columns:
-                    column_indices[col] = idx + 1
+                    column_indices[col] = idx + 2
             
             # 設定標題為深紅底白字（只有 base_content 和 compare_content）
             for col_name, col_idx in column_indices.items():
