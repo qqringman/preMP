@@ -8,6 +8,8 @@ let filters = {};
 let sortOrder = {};
 let searchTerm = '';
 let currentScenario = 'all';
+let currentPivotDropdown = null;
+const filterStates = {}; // 動態儲存每個篩選框的狀態
 
 console.log('Task ID:', taskId);
 
@@ -1505,7 +1507,7 @@ function showCenteredToast(message, type = 'info') {
 window.resetPivotTable = resetPivotTable;
 window.exportPivotTable = exportPivotTable;
 
-// 切換樞紐分析模式
+// 同時檢查 togglePivotMode 函數，確保正確呼叫
 function togglePivotMode() {
     pivotMode = !pivotMode;
     
@@ -1527,14 +1529,30 @@ function togglePivotMode() {
         pivotIcon.classList.remove('fa-chart-pie');
         pivotIcon.classList.add('fa-table');
         pivotIcon.parentElement.classList.add('active');
+        
+        // 確保有資料才載入樞紐分析
+        if (currentSheet && currentData && currentData[currentSheet]) {
+            console.log('切換到樞紐分析模式，載入資料表:', currentSheet);
+            renderPivotTable(currentData[currentSheet]);
+        } else {
+            console.warn('沒有選擇資料表或資料不存在');
+            const container = document.getElementById('pivotContainer');
+            container.innerHTML = `
+                <div class="no-data-message">
+                    <i class="fas fa-table"></i>
+                    <h3>請先選擇資料表</h3>
+                </div>
+            `;
+        }
     } else {
         pivotIcon.classList.remove('fa-table');
         pivotIcon.classList.add('fa-chart-pie');
         pivotIcon.parentElement.classList.remove('active');
-    }
-    
-    if (currentSheet) {
-        loadSheet(currentSheet);
+        
+        // 切換回表格模式時重新載入資料
+        if (currentSheet) {
+            loadSheet(currentSheet);
+        }
     }
 }
 
@@ -3207,8 +3225,13 @@ function fixPivotDropdownPosition() {
     });
 }
 
-// 初始化樞紐分析篩選器彈出視窗
+// 初始化樞紐分析表篩選器彈出視窗
 function initializePivotFilterModal() {
+    // 如果彈出視窗已存在，直接返回
+    if (document.getElementById('pivotFilterModal')) {
+        return;
+    }
+    
     // 創建彈出視窗 HTML
     const modalHtml = `
         <div id="pivotFilterModal" class="pivot-filter-modal">
@@ -3241,9 +3264,7 @@ function initializePivotFilterModal() {
     `;
     
     // 添加到頁面
-    if (!document.getElementById('pivotFilterModal')) {
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-    }
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
     
     // 點擊遮罩層關閉
     document.getElementById('pivotFilterModal').addEventListener('click', function(e) {
@@ -3258,115 +3279,123 @@ function initializePivotFilterModal() {
     });
 }
 
-// 初始化樞紐分析篩選器彈出視窗
-function initializePivotFilterModal() {
-    // 創建彈出視窗 HTML
-    const modalHtml = `
-        <div id="pivotFilterModal" class="pivot-filter-modal">
-            <div class="pivot-filter-content">
-                <div class="pivot-filter-header">
-                    <h3 class="pivot-filter-title">篩選項目</h3>
-                    <button class="pivot-filter-close" onclick="closePivotFilterModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="pivot-filter-search">
-                    <input type="text" id="pivotFilterSearch" placeholder="搜尋...">
-                </div>
-                <div class="pivot-filter-list" id="pivotFilterList">
-                    <!-- 動態生成的篩選項目 -->
-                </div>
-                <div class="pivot-filter-footer">
-                    <button class="pivot-filter-btn pivot-filter-btn-secondary" onclick="selectAllPivotFilters()">
-                        全選
-                    </button>
-                    <button class="pivot-filter-btn pivot-filter-btn-secondary" onclick="clearAllPivotFilters()">
-                        清除
-                    </button>
-                    <button class="pivot-filter-btn pivot-filter-btn-primary" onclick="applyPivotFilters()">
-                        確定
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // 添加到頁面
-    if (!document.getElementById('pivotFilterModal')) {
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-    }
-    
-    // 點擊遮罩層關閉
-    document.getElementById('pivotFilterModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closePivotFilterModal();
-        }
-    });
-    
-    // 搜尋功能
-    document.getElementById('pivotFilterSearch').addEventListener('input', function(e) {
-        filterPivotItems(e.target.value);
-    });
-}
-
-// 攔截樞紐分析表的下拉點擊事件
+// 改進的攔截函數，確保記錄正確的篩選框參考
 function interceptPivotDropdowns() {
-    $(document).on('click', '.pvtDropdown', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const $dropdown = $(this);
-        const attrName = $dropdown.attr('data-attr') || $dropdown.find('.pvtAttrDropdownValue').text();
-        
-        // 獲取當前選中的值
-        const $filterBox = $dropdown.find('.pvtFilterBox');
-        const selectedValues = [];
-        $filterBox.find('input:checked').each(function() {
-            selectedValues.push($(this).val());
-        });
-        
-        // 獲取所有可能的值
-        const allValues = [];
-        $filterBox.find('input[type="checkbox"]').each(function() {
-            allValues.push({
-                value: $(this).val(),
-                label: $(this).parent().text().trim(),
-                checked: $(this).is(':checked')
+    console.log('開始設定樞紐分析表下拉攔截...');
+    
+    setTimeout(() => {
+        $('.pvtFilterBox').each(function(index) {
+            const $filterBox = $(this);
+            const $trigger = $filterBox.prev();
+            const attrName = $trigger.text().trim();
+            
+            console.log(`設定篩選框 ${index}: ${attrName}`);
+            
+            // 綁定點擊事件到觸發器
+            $trigger.off('click.pivotFilter').on('click.pivotFilter', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('點擊了觸發器:', attrName);
+                
+                // 確保篩選框是顯示的
+                $filterBox.show();
+                
+                // 等待篩選框完全顯示
+                setTimeout(() => {
+                    // 收集當前的篩選值
+                    const values = [];
+                    $filterBox.find('label').each(function() {
+                        const $label = $(this);
+                        const $checkbox = $label.find('input[type="checkbox"]');
+                        const text = $label.text().trim();
+                        
+                        values.push({
+                            value: $checkbox.val() || text,
+                            label: text,
+                            checked: $checkbox.prop('checked')
+                        });
+                    });
+                    
+                    console.log(`收集到 ${values.length} 個篩選項`);
+                    
+                    // 儲存當前的篩選框參考（重要！）
+                    currentPivotDropdown = $filterBox.parent();
+                    
+                    // 隱藏原生篩選框
+                    $filterBox.hide();
+                    
+                    // 顯示自定義彈出視窗
+                    showPivotFilterModal(attrName, values);
+                }, 50);
+                
+                return false;
             });
         });
         
-        // 顯示彈出視窗
-        showPivotFilterModal(attrName, allValues, $dropdown);
-    });
+        // 攔截原生的下拉點擊
+        $('#pivotContainer').off('click.pivotIntercept').on('click.pivotIntercept', 'span', function(e) {
+            const $this = $(this);
+            const $nextFilterBox = $this.next('.pvtFilterBox');
+            
+            if ($nextFilterBox.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                $this.trigger('click.pivotFilter');
+                return false;
+            }
+        });
+        
+    }, 500);
 }
 
-// 顯示彈出視窗
-function showPivotFilterModal(attrName, values, $dropdown) {
+// 修改 showPivotFilterModal，加入全選檢查
+function showPivotFilterModal(attrName, values) {
     const modal = document.getElementById('pivotFilterModal');
     const list = document.getElementById('pivotFilterList');
     const title = modal.querySelector('.pivot-filter-title');
-    
-    // 儲存當前的下拉選單引用
-    modal.dataset.dropdown = $dropdown.attr('id') || Math.random().toString(36).substr(2, 9);
-    $dropdown.attr('id', modal.dataset.dropdown);
+    const searchInput = document.getElementById('pivotFilterSearch');
     
     // 設定標題
     title.textContent = `篩選 - ${attrName}`;
     
+    // 清空搜尋
+    searchInput.value = '';
+    
+    // 檢查是否所有項目都未選中
+    const checkedCount = values.filter(v => v.checked).length;
+    if (checkedCount === 0 && values.length > 0) {
+        console.warn('警告：沒有任何選中的項目，自動選擇全部');
+        values.forEach(v => v.checked = true);
+    }
+    
     // 生成篩選項目
     list.innerHTML = values.map((item, index) => `
         <div class="pivot-filter-item">
-            <input type="checkbox" id="pivotFilter${index}" value="${item.value}" ${item.checked ? 'checked' : ''}>
-            <label for="pivotFilter${index}">${item.label || item.value}</label>
+            <label>
+                <input type="checkbox" value="${item.value}" ${item.checked ? 'checked' : ''}>
+                <span>${item.label || item.value}</span>
+            </label>
         </div>
     `).join('');
+    
+    // 顯示選中統計
+    const updateStats = () => {
+        const total = list.querySelectorAll('input[type="checkbox"]').length;
+        const checked = list.querySelectorAll('input[type="checkbox"]:checked').length;
+        console.log(`篩選視窗: ${checked}/${total} 已選`);
+    };
+    
+    // 監聽變化
+    list.addEventListener('change', updateStats);
+    updateStats();
     
     // 顯示彈出視窗
     modal.classList.add('show');
     
     // 聚焦搜尋框
     setTimeout(() => {
-        document.getElementById('pivotFilterSearch').focus();
+        searchInput.focus();
     }, 100);
 }
 
@@ -3375,14 +3404,17 @@ function closePivotFilterModal() {
     const modal = document.getElementById('pivotFilterModal');
     modal.classList.remove('show');
     document.getElementById('pivotFilterSearch').value = '';
+    currentPivotDropdown = null;
 }
 
 // 篩選項目
 function filterPivotItems(searchTerm) {
     const items = document.querySelectorAll('.pivot-filter-item');
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    
     items.forEach(item => {
-        const label = item.querySelector('label').textContent.toLowerCase();
-        item.style.display = label.includes(searchTerm.toLowerCase()) ? '' : 'none';
+        const label = item.querySelector('span').textContent.toLowerCase();
+        item.style.display = label.includes(lowerSearchTerm) ? '' : 'none';
     });
 }
 
@@ -3390,7 +3422,7 @@ function filterPivotItems(searchTerm) {
 function selectAllPivotFilters() {
     const checkboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
     checkboxes.forEach(cb => {
-        if (cb.parentElement.style.display !== 'none') {
+        if (cb.parentElement.parentElement.style.display !== 'none') {
             cb.checked = true;
         }
     });
@@ -3406,61 +3438,361 @@ function clearAllPivotFilters() {
     });
 }
 
-// 應用篩選
+// 修正版 applyPivotFilters - 確保正確同步狀態
 function applyPivotFilters() {
-    const modal = document.getElementById('pivotFilterModal');
-    const dropdownId = modal.dataset.dropdown;
-    const $dropdown = $(`#${dropdownId}`);
+    if (!currentPivotDropdown) {
+        closePivotFilterModal();
+        return;
+    }
     
-    if ($dropdown.length) {
-        const $filterBox = $dropdown.find('.pvtFilterBox');
+    const $dropdown = currentPivotDropdown;
+    const $filterBox = $dropdown.find('.pvtFilterBox');
+    
+    // 確保篩選框是可見的
+    $filterBox.show();
+    
+    // 獲取彈出視窗中的選擇狀態
+    const modalCheckboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
+    const originalCheckboxes = $filterBox.find('input[type="checkbox"]');
+    
+    console.log('=== 同步篩選狀態 ===');
+    console.log('彈出視窗 checkbox 數量:', modalCheckboxes.length);
+    console.log('原始篩選框 checkbox 數量:', originalCheckboxes.length);
+    
+    // 記錄選中的數量
+    let checkedCount = 0;
+    
+    // 同步每個 checkbox 的狀態
+    modalCheckboxes.forEach((modalCb, index) => {
+        if (index < originalCheckboxes.length) {
+            const $originalCb = $(originalCheckboxes[index]);
+            const shouldBeChecked = modalCb.checked;
+            
+            if (shouldBeChecked) {
+                checkedCount++;
+            }
+            
+            // 直接設定狀態
+            $originalCb.prop('checked', shouldBeChecked);
+            
+            console.log(`Checkbox ${index}: 值="${modalCb.value}", 應該選中=${shouldBeChecked}`);
+        }
+    });
+    
+    console.log(`總共選中: ${checkedCount} 個項目`);
+    
+    // 如果沒有任何選中的項目，警告使用者
+    if (checkedCount === 0) {
+        console.warn('警告：沒有選中任何項目，這會導致空資料！');
+    }
+    
+    // 關閉自定義彈出視窗
+    closePivotFilterModal();
+    
+    // 點擊 Apply 按鈕（根據你的截圖，第一個按鈕是 "Apply"）
+    setTimeout(() => {
+        const $buttons = $filterBox.find('button');
+        console.log(`找到 ${$buttons.length} 個按鈕`);
         
-        // 同步選中狀態
-        const checkboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
-        checkboxes.forEach((cb, index) => {
-            const $originalCb = $filterBox.find(`input[type="checkbox"]`).eq(index);
-            if ($originalCb.length) {
-                $originalCb.prop('checked', cb.checked);
+        // 根據按鈕文字找到 Apply 按鈕
+        let $applyButton = null;
+        
+        $buttons.each(function() {
+            const btnText = $(this).text().trim();
+            console.log(`檢查按鈕: "${btnText}"`);
+            
+            if (btnText.toLowerCase() === 'apply' || btnText === '套用' || btnText === '確定') {
+                $applyButton = $(this);
+                return false; // 找到就停止
             }
         });
         
-        // 觸發樞紐分析表更新
-        $filterBox.find('input[type="checkbox"]').first().trigger('change');
-    }
-    
-    closePivotFilterModal();
+        // 如果沒找到 Apply，使用第一個按鈕
+        if (!$applyButton && $buttons.length > 0) {
+            $applyButton = $buttons.first();
+        }
+        
+        if ($applyButton) {
+            console.log(`點擊按鈕: "${$applyButton.text()}"`);
+            $applyButton[0].click();
+            
+            // 隱藏篩選框
+            setTimeout(() => {
+                $filterBox.hide();
+            }, 100);
+        }
+        
+    }, 100);
 }
 
-// 修改 renderPivotTable 函數
+// 強制更新樞紐分析表（包含篩選）
+function forceRefreshPivotWithFilter() {
+    console.log('執行強制更新...');
+    
+    try {
+        const $container = $('#pivotContainer');
+        
+        // 方法1：觸發任意一個 checkbox 的 change 事件
+        const $anyCheckbox = $('.pvtFilterBox input[type="checkbox"]').first();
+        if ($anyCheckbox.length > 0) {
+            console.log('觸發 checkbox change 事件');
+            $anyCheckbox.trigger('change');
+        }
+        
+        // 方法2：切換渲染器
+        setTimeout(() => {
+            const $renderer = $('.pvtRenderer');
+            if ($renderer.length > 0) {
+                const currentVal = $renderer.val();
+                console.log('切換渲染器來強制更新');
+                
+                // 找一個不同的渲染器
+                const options = $renderer.find('option');
+                let differentVal = currentVal;
+                
+                options.each(function() {
+                    if ($(this).val() !== currentVal) {
+                        differentVal = $(this).val();
+                        return false;
+                    }
+                });
+                
+                // 切換並立即切回
+                $renderer.val(differentVal).trigger('change');
+                setTimeout(() => {
+                    $renderer.val(currentVal).trigger('change');
+                }, 50);
+            }
+        }, 100);
+        
+    } catch (error) {
+        console.error('強制更新失敗:', error);
+    }
+}
+
+// 檢查是否有可見的資料
+function hasVisibleData($table) {
+    const visibleRows = $table.find('tbody tr:visible');
+    return visibleRows.length > 0;
+}
+
+// 強制重新整理樞紐分析表
+function forceRefreshPivot() {
+    try {
+        const $container = $('#pivotContainer');
+        const pivotUIOptions = $container.data("pivotUIOptions");
+        
+        if (!pivotUIOptions || !pivotUIOptions.data) {
+            console.error('無法獲取樞紐分析表配置');
+            return;
+        }
+        
+        console.log('執行強制重新整理...');
+        
+        // 保存當前配置
+        const currentConfig = {
+            rows: pivotUIOptions.rows || [],
+            cols: pivotUIOptions.cols || [],
+            vals: pivotUIOptions.vals || [],
+            aggregatorName: pivotUIOptions.aggregatorName || "Count",
+            rendererName: pivotUIOptions.rendererName || "Table"
+        };
+        
+        // 清空並重新渲染
+        $container.empty();
+        
+        // 重新初始化，保持原有配置
+        $container.pivotUI(pivotUIOptions.data, $.extend({}, pivotUIOptions, currentConfig));
+        
+        // 重新綁定事件
+        setTimeout(() => {
+            interceptPivotDropdowns();
+            
+            // 如果拖曳區是隱藏的，重新隱藏
+            if (!areasVisible) {
+                $('.pvtUnused, .pvtRows, .pvtCols, .pvtVals').hide();
+                $('.pvtRenderer, .pvtAggregator, .pvtAttrDropdown').parent().hide();
+            }
+        }, 200);
+        
+    } catch (error) {
+        console.error('強制重新整理失敗:', error);
+    }
+}
+
 function renderPivotTable(sheetData) {
     const container = document.getElementById('pivotContainer');
     container.innerHTML = '';
     
-    if (!sheetData.data || sheetData.data.length === 0) {
-        container.innerHTML = '<div class="empty-message">沒有資料可供分析</div>';
+    if (!sheetData || !sheetData.data || sheetData.data.length === 0) {
+        container.innerHTML = `
+            <div class="no-data-message">
+                <i class="fas fa-inbox"></i>
+                <h3>沒有資料可供分析</h3>
+                <p>請先選擇包含資料的工作表</p>
+            </div>
+        `;
         return;
     }
     
-    // ... 其他程式碼保持不變 ...
-    
     try {
-        $(container).pivotUI(pivotInitialData, pivotInitialConfig);
+        // 確保資料是正確的陣列格式
+        let processedData = [];
         
-        // 初始化篩選器彈出視窗
+        // 檢查資料格式並處理
+        if (Array.isArray(sheetData.data)) {
+            processedData = sheetData.data.map((row, index) => {
+                // 確保每一行都是物件格式
+                if (typeof row === 'object' && row !== null) {
+                    // 移除可能造成問題的特殊欄位
+                    const cleanRow = {};
+                    for (let key in row) {
+                        // 跳過可能有問題的欄位
+                        if (key === '_id' || key === '__v' || key === '$$hashKey') {
+                            continue;
+                        }
+                        
+                        // 處理特殊值
+                        let value = row[key];
+                        
+                        // 處理 null、undefined
+                        if (value === null || value === undefined) {
+                            cleanRow[key] = '';
+                        }
+                        // 處理陣列和物件（轉為字串）
+                        else if (typeof value === 'object') {
+                            cleanRow[key] = JSON.stringify(value);
+                        }
+                        // 處理布林值
+                        else if (typeof value === 'boolean') {
+                            cleanRow[key] = value ? 'Y' : 'N';
+                        }
+                        // 處理數字和字串
+                        else {
+                            cleanRow[key] = String(value);
+                        }
+                    }
+                    return cleanRow;
+                } else {
+                    console.warn(`第 ${index + 1} 行資料格式不正確:`, row);
+                    return null;
+                }
+            }).filter(row => row !== null); // 移除無效的行
+        } else {
+            console.error('資料不是陣列格式:', sheetData.data);
+            throw new Error('資料格式錯誤：預期為陣列');
+        }
+        
+        // 檢查處理後的資料
+        if (processedData.length === 0) {
+            container.innerHTML = `
+                <div class="no-data-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>資料處理失敗</h3>
+                    <p>無法正確解析資料格式</p>
+                </div>
+            `;
+            return;
+        }
+        
+        console.log('處理後的資料筆數:', processedData.length);
+        console.log('資料範例:', processedData[0]);
+        
+        // 儲存原始資料和配置
+        pivotData = processedData;
+        pivotInitialData = JSON.parse(JSON.stringify(processedData)); // 深拷貝
+        
+        // 定義初始配置（移除 filter 屬性）
+        pivotInitialConfig = {
+            rows: [],
+            cols: [],
+            vals: [],
+            aggregatorName: "Count",
+            rendererName: "Table",
+            unusedAttrsVertical: true,
+            renderers: $.pivotUtilities.renderers,
+            aggregators: $.pivotUtilities.aggregators,
+            derivedAttributes: {},
+            hiddenAttributes: [],
+            localeStrings: {
+                renderError: "結果計算錯誤",
+                computeError: "資料計算錯誤",
+                uiRenderError: "介面繪製錯誤",
+                selectAll: "全選",
+                selectNone: "取消全選",
+                tooMany: "(太多項目無法顯示)",
+                filterResults: "篩選結果",
+                totals: "總計",
+                vs: "vs",
+                by: "by",
+                aggregators: {
+                    "Count": "計數",
+                    "Count Unique Values": "計數唯一值",
+                    "List Unique Values": "列出唯一值",
+                    "Sum": "總和",
+                    "Integer Sum": "整數總和",
+                    "Average": "平均",
+                    "Median": "中位數",
+                    "Sample Variance": "樣本變異數",
+                    "Sample Standard Deviation": "樣本標準差",
+                    "Minimum": "最小值",
+                    "Maximum": "最大值",
+                    "First": "第一個",
+                    "Last": "最後一個",
+                    "Sum over Sum": "總和比例",
+                    "Sum as Fraction of Total": "總和佔比",
+                    "Sum as Fraction of Rows": "列總和佔比",
+                    "Sum as Fraction of Columns": "欄總和佔比",
+                    "Count as Fraction of Total": "計數佔比",
+                    "Count as Fraction of Rows": "列計數佔比",
+                    "Count as Fraction of Columns": "欄計數佔比"
+                },
+                renderers: {
+                    "Table": "表格",
+                    "Table Barchart": "表格長條圖",
+                    "Heatmap": "熱圖",
+                    "Row Heatmap": "列熱圖",
+                    "Col Heatmap": "欄熱圖"
+                }
+            },
+            onRefresh: function(config) {
+                pivotConfig = config;
+                console.log('樞紐分析表已更新');
+            }
+        };
+        
+        // 渲染樞紐分析表
+        $(container).pivotUI(processedData, pivotInitialConfig);
+        
+        // 初始化彈出視窗
         initializePivotFilterModal();
         
-        // 攔截下拉點擊事件
+        // 延遲初始化攔截，確保 DOM 已完全載入
         setTimeout(() => {
             interceptPivotDropdowns();
         }, 500);
         
     } catch (error) {
-        console.error('樞紐分析錯誤:', error);
-        container.innerHTML = '<div class="error-message">樞紐分析表載入失敗</div>';
+        console.error('樞紐分析錯誤詳情:', error);
+        console.error('錯誤堆疊:', error.stack);
+        
+        // 顯示詳細的錯誤訊息
+        container.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>樞紐分析表載入失敗</h3>
+                <p>${error.message || '未知錯誤'}</p>
+                <div class="action-buttons">
+                    <button class="btn btn-refresh" onclick="location.reload()">
+                        <i class="fas fa-sync-alt"></i> 重新整理頁面
+                    </button>
+                </div>
+            </div>
+        `;
     }
 }
 
-// 匯出到 window 物件
+// 將函數綁定到 window
 window.closePivotFilterModal = closePivotFilterModal;
 window.selectAllPivotFilters = selectAllPivotFilters;
 window.clearAllPivotFilters = clearAllPivotFilters;
