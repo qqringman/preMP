@@ -602,6 +602,12 @@ function updateDBOptions(analysis) {
     // 清空版本快取
     dbVersionsCache = {};
     
+    // 檢查分析結果
+    if (!analysis || typeof analysis !== 'object') {
+        console.error('無效的分析結果:', analysis);
+        return;
+    }
+    
     // 更新所有 DB 選擇器
     allDBSelects.forEach(dbSelect => {
         // 保存當前選中的值
@@ -611,18 +617,24 @@ function updateDBOptions(analysis) {
         dbSelect.innerHTML = '<option value="all">All</option>';
         
         // 添加 DB 選項
-        if (analysis.db_list && analysis.db_list.length > 0) {
+        if (analysis.db_list && Array.isArray(analysis.db_list) && analysis.db_list.length > 0) {
             analysis.db_list.forEach(db => {
                 const option = document.createElement('option');
                 option.value = db;
                 
                 // 建立顯示文字 - 格式：DB2302(master) 或 DB2575(mp)
                 let displayText = db;
-                if (analysis.db_info && analysis.db_info[db]) {
+                
+                // 安全地檢查 db_info
+                if (analysis.db_info && 
+                    typeof analysis.db_info === 'object' && 
+                    analysis.db_info[db] && 
+                    typeof analysis.db_info[db] === 'object') {
+                    
                     const info = analysis.db_info[db];
                     
                     // 顯示主要類型（取第一個類型）
-                    if (info.types && info.types.length > 0) {
+                    if (info.types && Array.isArray(info.types) && info.types.length > 0) {
                         // 優先顯示順序：master > premp > mp > mpbackup
                         const typeOrder = ['master', 'premp', 'mp', 'mpbackup'];
                         let primaryType = info.types[0];
@@ -636,10 +648,17 @@ function updateDBOptions(analysis) {
                         
                         displayText = `${db}(${primaryType})`;
                     }
+                    
+                    // 安全地設置 tooltip
+                    const modules = (info.modules && Array.isArray(info.modules)) 
+                        ? info.modules.join(', ') 
+                        : 'N/A';
+                    option.title = `${displayText} - 模組: ${modules}`;
+                } else {
+                    option.title = `${displayText} - 模組: N/A`;
                 }
                 
                 option.textContent = displayText;
-                option.title = `${displayText} - 模組: ${analysis.db_info[db]?.modules?.join(', ') || 'N/A'}`; // 詳細 tooltip
                 dbSelect.appendChild(option);
             });
             
@@ -662,7 +681,7 @@ function updateDBOptions(analysis) {
         const currentValue = chipSelect.value;
         chipSelect.innerHTML = '<option value="all">All Chips</option>';
         
-        if (analysis.modules && analysis.modules.length > 0) {
+        if (analysis.modules && Array.isArray(analysis.modules) && analysis.modules.length > 0) {
             analysis.modules.forEach(module => {
                 const option = document.createElement('option');
                 option.value = module.toLowerCase();
@@ -686,8 +705,8 @@ function updateDBOptions(analysis) {
             dbGroup.appendChild(hint);
         }
         
-        const dbCount = analysis.db_list ? analysis.db_list.length : 0;
-        const moduleCount = analysis.modules ? analysis.modules.length : 0;
+        const dbCount = (analysis.db_list && Array.isArray(analysis.db_list)) ? analysis.db_list.length : 0;
+        const moduleCount = (analysis.modules && Array.isArray(analysis.modules)) ? analysis.modules.length : 0;
         const totalRows = analysis.total_rows || 0;
         
         hint.innerHTML = `<i class="fas fa-info-circle"></i> 找到 ${dbCount} 個 DB，${moduleCount} 個模組，共 ${totalRows} 筆資料`;
