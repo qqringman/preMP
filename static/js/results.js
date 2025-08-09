@@ -10,6 +10,8 @@ let searchTerm = '';
 let currentScenario = 'all';
 let currentPivotDropdown = null;
 const filterStates = {}; // 動態儲存每個篩選框的狀態
+let pivotFilterStates = {}; // 儲存每個欄位的篩選狀態
+let currentFilterField = null; // 當前正在篩選的欄位
 
 console.log('Task ID:', taskId);
 
@@ -3331,7 +3333,7 @@ function initializePivotFilterModal() {
 
 // 改進的攔截函數，確保記錄正確的篩選框參考
 function interceptPivotDropdowns() {
-    console.log('開始設定樞紐分析表下拉攔截...');
+    console.log('開始設定改進的樞紐分析表下拉攔截...');
     
     setTimeout(() => {
         $('.pvtFilterBox').each(function(index) {
@@ -3341,35 +3343,22 @@ function interceptPivotDropdowns() {
             
             console.log(`設定篩選框 ${index}: ${attrName}`);
             
-            // 綁定點擊事件到觸發器
             $trigger.off('click.pivotFilter').on('click.pivotFilter', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                console.log('點擊了觸發器:', attrName);
+                console.log('攔截點擊:', attrName);
                 
-                // 確保篩選框是顯示的
+                // 【重要】先讓原生篩選框顯示，確保內容是最新的
                 $filterBox.show();
                 
-                // 等待篩選框完全顯示
                 setTimeout(() => {
-                    // 收集當前的篩選值
-                    const values = [];
-                    $filterBox.find('label').each(function() {
-                        const $label = $(this);
-                        const $checkbox = $label.find('input[type="checkbox"]');
-                        const text = $label.text().trim();
-                        
-                        values.push({
-                            value: $checkbox.val() || text,
-                            label: text,
-                            checked: $checkbox.prop('checked')
-                        });
-                    });
+                    // 【修復】確保我們收集的是正確欄位的值
+                    const values = collectCorrectFieldValues($filterBox, attrName);
                     
-                    console.log(`收集到 ${values.length} 個篩選項`);
+                    console.log(`為欄位 ${attrName} 收集到 ${values.length} 個值:`, values);
                     
-                    // 儲存當前的篩選框參考（重要！）
+                    // 儲存當前的篩選框參考
                     currentPivotDropdown = $filterBox.parent();
                     
                     // 隱藏原生篩選框
@@ -3377,26 +3366,112 @@ function interceptPivotDropdowns() {
                     
                     // 顯示自定義彈出視窗
                     showPivotFilterModal(attrName, values);
-                }, 50);
+                }, 200); // 增加等待時間確保內容載入
                 
                 return false;
             });
         });
+    }, 800); // 增加初始等待時間
+}
+
+function collectCorrectFieldValues($filterBox, attrName) {
+    const values = [];
+    const seenValues = new Set(); // 防止重複
+    
+    console.log(`開始收集欄位 "${attrName}" 的值...`);
+    
+    // 方法1：從篩選框的 label 中收集
+    $filterBox.find('label').each(function(index) {
+        const $label = $(this);
+        const $checkbox = $label.find('input[type="checkbox"]');
+        const labelText = $label.text().trim();
         
-        // 攔截原生的下拉點擊
-        $('#pivotContainer').off('click.pivotIntercept').on('click.pivotIntercept', 'span', function(e) {
-            const $this = $(this);
-            const $nextFilterBox = $this.next('.pvtFilterBox');
+        // 跳過控制項目（如 Select All）
+        if (labelText && 
+            labelText !== 'Select All' && 
+            labelText !== '全選' && 
+            labelText !== 'selectAll' &&
+            !seenValues.has(labelText)) {
             
-            if ($nextFilterBox.length > 0) {
-                e.preventDefault();
-                e.stopPropagation();
-                $this.trigger('click.pivotFilter');
-                return false;
+            seenValues.add(labelText);
+            
+            values.push({
+                value: labelText,
+                label: labelText,
+                checked: $checkbox.prop('checked'),
+                index: index
+            });
+            
+            console.log(`  收集值 ${index}: "${labelText}" (checked: ${$checkbox.prop('checked')})`);
+        }
+    });
+    
+    console.log(`方法1收集到 ${values.length} 個值`);
+    
+    // 方法2：如果方法1沒收集到值，嘗試從資料中直接收集
+    if (values.length === 0) {
+        console.log('方法1無結果，嘗試從樞紐資料收集...');
+        
+        if (window.pivotData && Array.isArray(window.pivotData)) {
+            const uniqueValues = new Set();
+            
+            window.pivotData.forEach(row => {
+                const fieldValue = row[attrName];
+                if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+                    const strValue = String(fieldValue);
+                    if (!uniqueValues.has(strValue)) {
+                        uniqueValues.add(strValue);
+                        values.push({
+                            value: strValue,
+                            label: strValue,
+                            checked: true, // 預設全選
+                            index: values.length
+                        });
+                    }
+                }
+            });
+            
+            console.log(`方法2從樞紐資料收集到 ${values.length} 個值`);
+        }
+    }
+    
+    // 方法3：最後備案 - 從篩選框的所有文字內容收集
+    if (values.length === 0) {
+        console.log('方法2也無結果，使用備案方法...');
+        
+        $filterBox.find('*').each(function() {
+            const text = $(this).text().trim();
+            if (text && 
+                text.length < 100 && // 避免長文字
+                !text.includes('Select') &&
+                !text.includes('全選') &&
+                !seenValues.has(text)) {
+                
+                seenValues.add(text);
+                values.push({
+                    value: text,
+                    label: text,
+                    checked: true,
+                    index: values.length
+                });
             }
         });
         
-    }, 500);
+        console.log(`方法3收集到 ${values.length} 個值`);
+    }
+    
+    // 如果還是沒有值，創建預設值
+    if (values.length === 0) {
+        console.warn(`欄位 "${attrName}" 沒有收集到任何值，創建預設值`);
+        values.push({
+            value: '無資料',
+            label: '無資料',
+            checked: true,
+            index: 0
+        });
+    }
+    
+    return values;
 }
 
 // 修改 showPivotFilterModal，加入全選檢查
@@ -3406,55 +3481,117 @@ function showPivotFilterModal(attrName, values) {
     const title = modal.querySelector('.pivot-filter-title');
     const searchInput = document.getElementById('pivotFilterSearch');
     
+    // 設定當前篩選的欄位
+    currentFilterField = attrName;
+    
     // 設定標題
     title.textContent = `篩選 - ${attrName}`;
     
     // 清空搜尋
     searchInput.value = '';
     
-    // 檢查是否所有項目都未選中
-    const checkedCount = values.filter(v => v.checked).length;
-    if (checkedCount === 0 && values.length > 0) {
-        console.warn('警告：沒有任何選中的項目，自動選擇全部');
-        values.forEach(v => v.checked = true);
-    }
+    console.log(`=== 顯示篩選彈出視窗 ===`);
+    console.log(`欄位: ${attrName}`);
+    console.log(`值數量: ${values.length}`);
     
-    // 生成篩選項目
-    list.innerHTML = values.map((item, index) => `
-        <div class="pivot-filter-item">
+    // 【關鍵修復】載入該欄位之前保存的狀態
+    const savedState = pivotFilterStates[attrName];
+    console.log(`載入 ${attrName} 的保存狀態:`, savedState);
+    
+    // 處理值並應用保存的狀態
+    const processedValues = values.map((item, index) => {
+        const value = String(item.value || item.label || item || `item_${index}`);
+        const label = String(item.label || item.value || item || `項目 ${index + 1}`);
+        
+        // 【關鍵】檢查是否有保存的狀態
+        let checked = true; // 預設選中
+        
+        if (savedState && savedState.selectedValues) {
+            // 如果有保存狀態，使用保存的選中狀態
+            checked = savedState.selectedValues.includes(value);
+        } else {
+            // 如果沒有保存狀態，使用原始狀態
+            checked = item.checked !== undefined ? item.checked : true;
+        }
+        
+        return {
+            value: value,
+            label: label,
+            checked: checked,
+            index: index
+        };
+    });
+    
+    // 生成篩選項目HTML
+    list.innerHTML = processedValues.map((item, index) => `
+        <div class="pivot-filter-item" data-original-index="${item.index}">
             <label>
-                <input type="checkbox" value="${item.value}" ${item.checked ? 'checked' : ''}>
-                <span>${item.label || item.value}</span>
+                <input type="checkbox" 
+                       value="${escapeHtml(item.value)}" 
+                       data-label="${escapeHtml(item.label)}"
+                       data-index="${index}"
+                       ${item.checked ? 'checked' : ''}>
+                <span>${escapeHtml(item.label)}</span>
             </label>
         </div>
     `).join('');
     
-    // 顯示選中統計
+    // 顯示統計
     const updateStats = () => {
         const total = list.querySelectorAll('input[type="checkbox"]').length;
         const checked = list.querySelectorAll('input[type="checkbox"]:checked').length;
-        console.log(`篩選視窗: ${checked}/${total} 已選`);
+        console.log(`${attrName} 篩選視窗統計: ${checked}/${total} 已選中`);
     };
     
-    // 監聽變化
     list.addEventListener('change', updateStats);
     updateStats();
     
     // 顯示彈出視窗
     modal.classList.add('show');
+    setTimeout(() => searchInput.focus(), 100);
+}
+
+function collectValuesFromDOM(attrName) {
+    if (!currentPivotDropdown) return [];
     
-    // 聚焦搜尋框
-    setTimeout(() => {
-        searchInput.focus();
-    }, 100);
+    const $filterBox = currentPivotDropdown.find('.pvtFilterBox');
+    const values = [];
+    
+    $filterBox.find('label').each(function(index) {
+        const $label = $(this);
+        const $checkbox = $label.find('input[type="checkbox"]');
+        const text = $label.text().trim();
+        
+        if (text && text !== 'Select All' && text !== '全選') {
+            values.push({
+                value: text, // 使用文字作為值
+                label: text,
+                checked: $checkbox.prop('checked'),
+                index: index
+            });
+        }
+    });
+    
+    console.log(`從DOM收集到 ${values.length} 個值:`, values);
+    return values;
 }
 
 // 關閉彈出視窗
 function closePivotFilterModal() {
     const modal = document.getElementById('pivotFilterModal');
     modal.classList.remove('show');
-    document.getElementById('pivotFilterSearch').value = '';
+    
+    // 清空搜尋
+    const searchInput = document.getElementById('pivotFilterSearch');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    // 清理當前參考（但保留狀態）
     currentPivotDropdown = null;
+    currentFilterField = null;
+    
+    console.log('篩選彈出視窗已關閉');
 }
 
 // 篩選項目
@@ -3490,11 +3627,13 @@ function clearAllPivotFilters() {
 
 // 修正版 applyPivotFilters - 確保正確同步狀態
 function applyPivotFilters() {
-    if (!currentPivotDropdown) {
+    if (!currentPivotDropdown || !currentFilterField) {
+        console.error('沒有當前的篩選框參考或欄位名稱');
         closePivotFilterModal();
         return;
     }
     
+    const fieldName = currentFilterField;
     const $dropdown = currentPivotDropdown;
     const $filterBox = $dropdown.find('.pvtFilterBox');
     
@@ -3503,76 +3642,87 @@ function applyPivotFilters() {
     
     // 獲取彈出視窗中的選擇狀態
     const modalCheckboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
-    const originalCheckboxes = $filterBox.find('input[type="checkbox"]');
     
-    console.log('=== 同步篩選狀態 ===');
+    console.log(`=== 套用 ${fieldName} 篩選 ===`);
     console.log('彈出視窗 checkbox 數量:', modalCheckboxes.length);
-    console.log('原始篩選框 checkbox 數量:', originalCheckboxes.length);
     
-    // 記錄選中的數量
-    let checkedCount = 0;
+    // 【關鍵】收集並保存當前欄位的選中狀態
+    const selectedValues = [];
+    const allValues = [];
     
-    // 同步每個 checkbox 的狀態
-    modalCheckboxes.forEach((modalCb, index) => {
-        if (index < originalCheckboxes.length) {
-            const $originalCb = $(originalCheckboxes[index]);
-            const shouldBeChecked = modalCb.checked;
-            
-            if (shouldBeChecked) {
-                checkedCount++;
-            }
-            
-            // 直接設定狀態
-            $originalCb.prop('checked', shouldBeChecked);
-            
-            console.log(`Checkbox ${index}: 值="${modalCb.value}", 應該選中=${shouldBeChecked}`);
+    modalCheckboxes.forEach((modalCb) => {
+        const value = modalCb.getAttribute('data-label') || modalCb.value;
+        allValues.push(value);
+        
+        if (modalCb.checked) {
+            selectedValues.push(value);
         }
     });
     
-    console.log(`總共選中: ${checkedCount} 個項目`);
+    // 【重要】保存該欄位的篩選狀態
+    pivotFilterStates[fieldName] = {
+        selectedValues: [...selectedValues], // 深拷貝
+        allValues: [...allValues],
+        timestamp: Date.now()
+    };
     
-    // 如果沒有任何選中的項目，警告使用者
-    if (checkedCount === 0) {
-        console.warn('警告：沒有選中任何項目，這會導致空資料！');
-    }
+    console.log(`保存 ${fieldName} 的篩選狀態:`, pivotFilterStates[fieldName]);
+    console.log('選中的值:', selectedValues);
     
-    // 關閉自定義彈出視窗
+    // 在原始篩選框中應用選擇
+    let syncedCount = 0;
+    $filterBox.find('input[type="checkbox"]').each(function() {
+        const $originalCb = $(this);
+        const $label = $originalCb.closest('label');
+        const labelText = $label.text().trim();
+        
+        // 精確匹配文字內容
+        const shouldBeChecked = selectedValues.includes(labelText);
+        
+        if ($originalCb.prop('checked') !== shouldBeChecked) {
+            $originalCb.prop('checked', shouldBeChecked);
+            console.log(`  更新 "${labelText}": ${shouldBeChecked}`);
+        }
+        
+        if (shouldBeChecked) {
+            syncedCount++;
+        }
+    });
+    
+    console.log(`${fieldName} 成功同步 ${syncedCount} 個選項`);
+    
+    // 關閉彈出視窗
     closePivotFilterModal();
     
-    // 點擊 Apply 按鈕（根據你的截圖，第一個按鈕是 "Apply"）
+    // 觸發樞紐分析表更新
     setTimeout(() => {
-        const $buttons = $filterBox.find('button');
-        console.log(`找到 ${$buttons.length} 個按鈕`);
-        
-        // 根據按鈕文字找到 Apply 按鈕
-        let $applyButton = null;
-        
-        $buttons.each(function() {
-            const btnText = $(this).text().trim();
-            console.log(`檢查按鈕: "${btnText}"`);
-            
-            if (btnText.toLowerCase() === 'apply' || btnText === '套用' || btnText === '確定') {
-                $applyButton = $(this);
-                return false; // 找到就停止
-            }
+        const $applyBtn = $filterBox.find('button').filter(function() {
+            const btnText = $(this).text().trim().toLowerCase();
+            return btnText === 'apply' || btnText === '套用' || btnText === 'ok';
         });
         
-        // 如果沒找到 Apply，使用第一個按鈕
-        if (!$applyButton && $buttons.length > 0) {
-            $applyButton = $buttons.first();
+        if ($applyBtn.length > 0) {
+            console.log(`點擊 ${fieldName} 的 Apply 按鈕`);
+            $applyBtn[0].click();
+        } else {
+            console.log(`${fieldName} 找不到Apply按鈕，點擊第一個按鈕`);
+            $filterBox.find('button').first().click();
         }
         
-        if ($applyButton) {
-            console.log(`點擊按鈕: "${$applyButton.text()}"`);
-            $applyButton[0].click();
-            
-            // 隱藏篩選框
-            setTimeout(() => {
-                $filterBox.hide();
-            }, 100);
-        }
-        
+        // 隱藏篩選框
+        setTimeout(() => {
+            $filterBox.hide();
+        }, 100);
     }, 100);
+}
+
+function escapeHtml(text) {
+    if (typeof text !== 'string') {
+        text = String(text);
+    }
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // 強制更新樞紐分析表（包含篩選）
