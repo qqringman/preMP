@@ -2745,7 +2745,296 @@ function getRequiredOfflineFunctions() {
         if (typeof $.pivotUtilities === 'undefined') {
             console.warn('PivotTable.js 未正確載入，樞紐分析功能可能不可用');
         }
-        
+                
+        // ===== 自定義篩選器完整函數系統 =====
+
+        function showCustomFilterModal(fieldName = '篩選選項') {
+            // 確保彈出視窗存在
+            if ($('#customFilterModal').length === 0) {
+                createCustomFilterModal();
+            }
+            
+            // 更新選項列表
+            const optionsHTML = customFilterCurrentData.map((item) => \`
+                <div class="filter-option" style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" value="\${item.value}" \${item.checked ? 'checked' : ''} 
+                            style="margin-right: 10px; transform: scale(1.2);">
+                        <span style="font-size: 14px; color: #333;">\${item.value}</span>
+                    </label>
+                </div>
+            \`).join('');
+            
+            $('#customFilterOptions').html(optionsHTML);
+            
+            // 使用傳入的欄位名稱更新標題
+            $('#customFilterTitle').text(\`\${fieldName}\`);
+            
+            $('#customFilterSearch').val('');
+            $('#customFilterModal').css('display', 'flex');
+            
+            console.log(\`顯示 \${fieldName} 的篩選器，共 \${customFilterCurrentData.length} 個選項\`);
+        }
+
+        function createCustomFilterModal() {
+            const modalHTML = \`
+                <div id="customFilterModal" style="
+                    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(0, 0, 0, 0.7); z-index: 2147483647; display: none;
+                    align-items: center; justify-content: center; font-family: Arial, sans-serif;
+                ">
+                    <div style="
+                        background: white; border-radius: 12px; padding: 25px;
+                        max-width: 500px; max-height: 80vh; overflow-y: auto;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin: 20px;
+                        z-index: 2147483648; position: relative;
+                    ">
+                        <div style="
+                            display: flex; justify-content: space-between; align-items: center;
+                            margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #2196F3;
+                        ">
+                            <h3 id="customFilterTitle" style="margin: 0; color: #333; font-size: 20px;">篩選選項</h3>
+                            <button id="customFilterClose" style="
+                                background: #ff4444; color: white; border: none; border-radius: 50%;
+                                width: 30px; height: 30px; cursor: pointer; font-size: 18px; font-weight: bold;
+                            ">×</button>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <input type="text" id="customFilterSearch" placeholder="搜尋選項..." style="
+                                width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 6px;
+                                font-size: 14px; box-sizing: border-box;
+                            ">
+                        </div>
+                        
+                        <div id="customFilterOptions" style="
+                            max-height: 300px; overflow-y: auto; border: 1px solid #eee;
+                            border-radius: 6px; padding: 10px;
+                        "></div>
+                        
+                        <div style="
+                            display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;
+                        ">
+                            <button id="customFilterSelectAll" style="
+                                background: #4CAF50; color: white; border: none; padding: 10px 15px;
+                                border-radius: 6px; cursor: pointer; font-size: 14px;
+                            ">全選</button>
+                            <button id="customFilterClearAll" style="
+                                background: #FF9800; color: white; border: none; padding: 10px 15px;
+                                border-radius: 6px; cursor: pointer; font-size: 14px;
+                            ">清除</button>
+                            <button id="customFilterCancel" style="
+                                background: #666; color: white; border: none; padding: 10px 15px;
+                                border-radius: 6px; cursor: pointer; font-size: 14px;
+                            ">取消</button>
+                            <button id="customFilterApply" style="
+                                background: #2196F3; color: white; border: none; padding: 10px 20px;
+                                border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;
+                            ">確定</button>
+                        </div>
+                    </div>
+                </div>
+            \`;
+            
+            $('body').append(modalHTML);
+            bindCustomFilterEvents();
+        }
+
+        function bindCustomFilterEvents() {
+            // 關閉事件
+            $('#customFilterClose, #customFilterCancel').click(function() {
+                $('#customFilterModal').hide();
+            });
+            
+            // 點擊遮罩關閉
+            $('#customFilterModal').click(function(e) {
+                if (e.target === this) {
+                    $(this).hide();
+                }
+            });
+            
+            // 搜尋功能
+            $('#customFilterSearch').on('input', function() {
+                const searchTerm = $(this).val().toLowerCase();
+                $('#customFilterOptions .filter-option').each(function() {
+                    const text = $(this).find('span').text().toLowerCase();
+                    $(this).toggle(text.includes(searchTerm));
+                });
+            });
+            
+            // 全選/清除
+            $('#customFilterSelectAll').click(function() {
+                $('#customFilterOptions input[type="checkbox"]:visible').prop('checked', true);
+            });
+            
+            $('#customFilterClearAll').click(function() {
+                $('#customFilterOptions input[type="checkbox"]:visible').prop('checked', false);
+            });
+            
+            // 確定按鈕
+            $('#customFilterApply').click(function() {
+                applyCustomFilter();
+            });
+        }
+
+        function applyCustomFilter() {
+            if (!customFilterCurrentElement || !currentFilterField) {
+                $('#customFilterModal').hide();
+                return;
+            }
+            
+            const fieldName = currentFilterField;
+            console.log(\`套用 \${fieldName} 的篩選\`);
+            
+            // 建立狀態映射
+            const desiredStates = new Map();
+            const selectedValues = [];
+            
+            $('#customFilterOptions input[type="checkbox"]').each(function() {
+                const value = $(this).val().trim();
+                const checked = $(this).prop('checked');
+                desiredStates.set(value, checked);
+                
+                if (checked) {
+                    selectedValues.push(value);
+                }
+            });
+            
+            // 保存到全域篩選狀態
+            if (!window.pivotFilterStates) {
+                window.pivotFilterStates = {};
+            }
+            
+            window.pivotFilterStates[fieldName] = {
+                selectedValues: selectedValues,
+                allValues: Array.from(desiredStates.keys()),
+                timestamp: Date.now()
+            };
+            
+            console.log(\`\${fieldName} 狀態已保存:\`, window.pivotFilterStates[fieldName]);
+            console.log('套用篩選狀態:', Array.from(desiredStates.entries()));
+            
+            // 顯示原始篩選框
+            const $filterBox = customFilterCurrentElement;
+            $filterBox.show();
+            
+            // 同步狀態
+            let updateCount = 0;
+            $filterBox.find('input[type="checkbox"]').each(function() {
+                const $cb = $(this);
+                const $label = $cb.closest('label');
+                const labelText = $label.text().trim();
+                
+                if (labelText && labelText !== 'Select All' && labelText !== '全選') {
+                    if (desiredStates.has(labelText)) {
+                        const targetState = desiredStates.get(labelText);
+                        const currentState = $cb.prop('checked');
+                        
+                        if (currentState !== targetState) {
+                            console.log(\`更新 \${labelText}: \${currentState} -> \${targetState}\`);
+                            $cb[0].checked = targetState;
+                            $cb.prop('checked', targetState);
+                            $cb.trigger('change');
+                            updateCount++;
+                        }
+                    }
+                }
+            });
+            
+            console.log(\`\${fieldName} 更新了 \${updateCount} 個選項\`);
+            
+            // 觸發更新
+            setTimeout(() => {
+                // 尋找 Apply 按鈕
+                const $applyBtn = $filterBox.find('button').filter(function() {
+                    const text = $(this).text().toLowerCase();
+                    return text.includes('apply') || text.includes('ok');
+                });
+                
+                if ($applyBtn.length > 0) {
+                    console.log(\`\${fieldName} 點擊 Apply 按鈕\`);
+                    $applyBtn.first().click();
+                } else {
+                    console.log(\`\${fieldName} 使用備用更新方法\`);
+                    // 備用方法：觸發第一個 checkbox 的 change 事件
+                    $filterBox.find('input[type="checkbox"]').first().trigger('change');
+                }
+                
+                setTimeout(() => {
+                    $filterBox.hide();
+                    console.log(\`\${fieldName} 篩選套用完成\`);
+                }, 100);
+            }, 100);
+            
+            $('#customFilterModal').hide();
+        }
+
+        function closePivotFilterModal() {
+            const modal = document.getElementById('pivotFilterModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+            
+            // 也關閉自定義篩選器
+            $('#customFilterModal').hide();
+            
+            // 清空搜尋
+            const searchInput = document.getElementById('pivotFilterSearch');
+            if (searchInput) {
+                searchInput.value = '';
+            }
+            
+            // 清理當前參考（但保留狀態）
+            currentPivotDropdown = null;
+            currentFilterField = null;
+            
+            console.log('篩選彈出視窗已關閉');
+        }
+
+        // ===== 樞紐分析篩選器輔助函數 =====
+
+        function filterPivotItems(searchTerm) {
+            const items = document.querySelectorAll('.pivot-filter-item');
+            const lowerSearchTerm = searchTerm.toLowerCase();
+            
+            items.forEach(item => {
+                const label = item.querySelector('span').textContent.toLowerCase();
+                item.style.display = label.includes(lowerSearchTerm) ? '' : 'none';
+            });
+        }
+
+        function selectAllPivotFilters() {
+            const checkboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                if (cb.parentElement.parentElement.style.display !== 'none') {
+                    cb.checked = true;
+                }
+            });
+        }
+
+        function clearAllPivotFilters() {
+            const checkboxes = document.querySelectorAll('#pivotFilterList input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                if (cb.parentElement.style.display !== 'none') {
+                    cb.checked = false;
+                }
+            });
+        }
+
+        function applyPivotFilters() {
+            console.log('applyPivotFilters 被調用（離線模式）');
+            $('#pivotFilterModal').hide();
+        }
+
+        function escapeHtml(text) {
+            if (typeof text !== 'string') {
+                text = String(text);
+            }
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+                    
         // ===== 添加所有缺失的函數定義 =====
         
         function updateClearButton(column) {
@@ -2848,18 +3137,92 @@ function getRequiredOfflineFunctions() {
                             
                             let fieldName = \`欄位_\${triangleIndex}\`;
                             
-                            const firstCheckbox = $specificFilterBox.find('input[type="checkbox"]').first();
-                            if (firstCheckbox.length > 0) {
-                                const firstLabel = firstCheckbox.closest('label').text().trim();
-                                if (firstLabel && firstLabel !== 'Select All' && firstLabel !== '全選') {
-                                    if (firstLabel.includes('Master') || firstLabel.includes('PreMP') || firstLabel.includes('Wave')) {
+                            // 方法1：嘗試從DOM結構獲取真實欄位名稱
+                            const $parentContainer = $triangle.closest('.pvtAxisContainer, .pvtVals, .pvtRows, .pvtCols');
+                            const $fieldLabel = $parentContainer.find('.pvtAttr, .pvtVal').eq(triangleIndex);
+                            
+                            if ($fieldLabel.length > 0) {
+                                const actualFieldName = $fieldLabel.text().trim();
+                                if (actualFieldName && actualFieldName !== '') {
+                                    fieldName = actualFieldName;
+                                    console.log(\`從DOM獲取到真實欄位名稱: \${fieldName}\`);
+                                }
+                            }
+                            
+                            // 方法2：如果方法1失敗，從篩選框附近的元素獲取
+                            if (fieldName.startsWith('欄位_')) {
+                                const $nearbyElements = $triangle.parent().find('*').addBack();
+                                $nearbyElements.each(function() {
+                                    const text = $(this).text().trim();
+                                    // 跳過明顯的控制文字和數據值
+                                    if (text && 
+                                        text.length < 30 && 
+                                        !text.includes('Select') && 
+                                        !text.includes('全選') &&
+                                        !text.match(/^\\\d+$/) && 
+                                        !text.match(/^\\\d+\\\(\\\d+\\\)$/) &&
+                                        !text.includes('(') &&
+                                        text !== fieldName) {
+                                        
+                                        fieldName = text;
+                                        console.log(\`從附近元素獲取到欄位名稱: \${fieldName}\`);
+                                        return false; // 跳出 each 循環
+                                    }
+                                });
+                            }
+                            
+                            // 方法3：作為最後手段，從篩選內容智能推斷
+                            if (fieldName.startsWith('欄位_')) {
+                                const firstCheckbox = $specificFilterBox.find('input[type="checkbox"]').first();
+                                if (firstCheckbox.length > 0) {
+                                    // 收集前幾個選項來做更智能的判斷
+                                    const sampleLabels = [];
+                                    $specificFilterBox.find('input[type="checkbox"]').slice(0, 5).each(function() {
+                                        const label = $(this).closest('label').text().trim();
+                                        if (label && label !== 'Select All' && label !== '全選') {
+                                            sampleLabels.push(label);
+                                        }
+                                    });
+                                    
+                                    console.log(\`樣本標籤:\`, sampleLabels);
+                                    
+                                    // 根據樣本標籤的特徵來判斷欄位類型
+                                    const allLabels = sampleLabels.join(' ');
+                                    
+                                    if (allLabels.includes('Master') || allLabels.includes('PreMP') || allLabels.includes('Wave')) {
                                         fieldName = '比對情境';
-                                    } else if (firstLabel.match(/^\\\d+\\\(\\\d+\\\)$/)) {
+                                    } else if (sampleLabels.every(label => label.match(/^[a-zA-Z_]+[\\/\\\\]/))) {
+                                        fieldName = '模組路徑';
+                                    } else if (sampleLabels.every(label => label.match(/^\\\d+\\\(\\\d+\\\)$/))) {
                                         fieldName = 'Revision差異';
+                                    } else if (sampleLabels.every(label => label === 'Y' || label === 'N')) {
+                                        fieldName = '布林欄位';
+                                    } else if (sampleLabels.every(label => label.includes('/'))) {
+                                        fieldName = '路徑欄位';
+                                    } else if (sampleLabels.some(label => label.includes('新增') || label.includes('刪除') || label.includes('修改'))) {
+                                        fieldName = '狀態';
                                     } else {
-                                        fieldName = \`\${firstLabel.substring(0, 10)}...\`;
+                                        // 使用第一個較短的、看起來像欄位值的標籤
+                                        const representativeLabel = sampleLabels.find(label => 
+                                            label.length < 20 && 
+                                            !label.includes('/') && 
+                                            !label.match(/^\\\d+$/)
+                                        ) || sampleLabels[0];
+                                        
+                                        if (representativeLabel) {
+                                            if (representativeLabel.length <= 15) {
+                                                fieldName = representativeLabel;
+                                            } else {
+                                                fieldName = representativeLabel.substring(0, 12) + '...';
+                                            }
+                                        }
                                     }
                                 }
+                            }
+                            
+                            // 最終備案：使用索引
+                            if (fieldName.startsWith('欄位_') || !fieldName) {
+                                fieldName = \`欄位 \${triangleIndex + 1}\`;
                             }
                             
                             customFilterCurrentElement = $specificFilterBox;
@@ -3154,7 +3517,16 @@ function getRequiredOfflineFunctions() {
         window.showConfirmDialog = showConfirmDialog;
         window.showAlertDialog = showAlertDialog;
         window.showCenteredToast = showCenteredToast;
-        
+        window.showCustomFilterModal = showCustomFilterModal;
+        window.createCustomFilterModal = createCustomFilterModal;
+        window.bindCustomFilterEvents = bindCustomFilterEvents;
+        window.applyCustomFilter = applyCustomFilter;
+        window.closePivotFilterModal = closePivotFilterModal;
+        window.filterPivotItems = filterPivotItems;
+        window.selectAllPivotFilters = selectAllPivotFilters;
+        window.clearAllPivotFilters = clearAllPivotFilters;
+        window.applyPivotFilters = applyPivotFilters;
+        window.escapeHtml = escapeHtml;        
         console.log('所有函數已載入並綁定到 window');
     `;
     
@@ -4087,23 +4459,98 @@ function interceptPivotDropdowns() {
                 if ($specificFilterBox && $specificFilterBox.length > 0 && $specificFilterBox.find('input[type="checkbox"]').length > 0) {
                     console.log(`Triangle ${triangleIndex} 對應篩選框找到，checkbox 數量: ${$specificFilterBox.find('input[type="checkbox"]').length}`);
                     
-                    // 推斷欄位名稱
                     let fieldName = `欄位_${triangleIndex}`;
-                    
-                    // 嘗試從篩選框內容推斷欄位名稱
-                    const firstCheckbox = $specificFilterBox.find('input[type="checkbox"]').first();
-                    if (firstCheckbox.length > 0) {
-                        const firstLabel = firstCheckbox.closest('label').text().trim();
-                        if (firstLabel && firstLabel !== 'Select All' && firstLabel !== '全選') {
-                            // 從第一個選項推斷可能的欄位類型
-                            if (firstLabel.includes('Master') || firstLabel.includes('PreMP') || firstLabel.includes('Wave')) {
-                                fieldName = '比對情境';
-                            } else if (firstLabel.match(/^\d+\(\d+\)$/)) {
-                                fieldName = 'Revision差異';
-                            } else {
-                                fieldName = `${firstLabel.substring(0, 10)}...`;
+
+                    // 方法1：嘗試從DOM結構獲取真實欄位名稱
+                    const $parentContainer = $triangle.closest('.pvtAxisContainer, .pvtVals, .pvtRows, .pvtCols');
+                    const $fieldLabel = $parentContainer.find('.pvtAttr, .pvtVal').eq(triangleIndex);
+
+                    if ($fieldLabel.length > 0) {
+                        const actualFieldName = $fieldLabel.text().trim();
+                        if (actualFieldName && actualFieldName !== '') {
+                            fieldName = actualFieldName;
+                            console.log(`從DOM獲取到真實欄位名稱: ${fieldName}`);
+                        }
+                    }
+
+                    // 方法2：如果方法1失敗，從篩選框附近的元素獲取
+                    if (fieldName.startsWith('欄位_')) {
+                        const $nearbyElements = $triangle.parent().find('*').addBack();
+                        $nearbyElements.each(function() {
+                            const text = $(this).text().trim();
+                            // 跳過明顯的控制文字和數據值
+                            if (text && 
+                                text.length < 30 && 
+                                !text.includes('Select') && 
+                                !text.includes('全選') &&
+                                !text.match(/^\d+$/) && 
+                                !text.match(/^\d+\(\d+\)$/) &&
+                                !text.includes('(') &&
+                                text !== fieldName) {
+                                
+                                fieldName = text;
+                                console.log(`從附近元素獲取到欄位名稱: ${fieldName}`);
+                                return false; // 跳出 each 循環
+                            }
+                        });
+                    }
+
+                    // 方法3：作為最後手段，從篩選內容智能推斷
+                    if (fieldName.startsWith('欄位_')) {
+                        const firstCheckbox = $specificFilterBox.find('input[type="checkbox"]').first();
+                        if (firstCheckbox.length > 0) {
+                            const firstLabel = firstCheckbox.closest('label').text().trim();
+                            if (firstLabel && firstLabel !== 'Select All' && firstLabel !== '全選') {
+                                
+                                // 收集前幾個選項來做更智能的判斷
+                                const sampleLabels = [];
+                                $specificFilterBox.find('input[type="checkbox"]').slice(0, 5).each(function() {
+                                    const label = $(this).closest('label').text().trim();
+                                    if (label && label !== 'Select All' && label !== '全選') {
+                                        sampleLabels.push(label);
+                                    }
+                                });
+                                
+                                console.log(`樣本標籤:`, sampleLabels);
+                                
+                                // 根據樣本標籤的特徵來判斷欄位類型
+                                const allLabels = sampleLabels.join(' ');
+                                
+                                if (allLabels.includes('Master') || allLabels.includes('PreMP') || allLabels.includes('Wave')) {
+                                    fieldName = '比對情境';
+                                } else if (sampleLabels.every(label => label.match(/^[a-zA-Z_]+[\/\\]/))) {
+                                    fieldName = '模組路徑';
+                                } else if (sampleLabels.every(label => label.match(/^\d+\(\d+\)$/))) {
+                                    fieldName = 'Revision差異';
+                                } else if (sampleLabels.every(label => label === 'Y' || label === 'N')) {
+                                    fieldName = '布林欄位';
+                                } else if (sampleLabels.every(label => label.includes('/'))) {
+                                    fieldName = '路徑欄位';
+                                } else if (sampleLabels.some(label => label.includes('新增') || label.includes('刪除') || label.includes('修改'))) {
+                                    fieldName = '狀態';
+                                } else {
+                                    // 使用第一個較短的、看起來像欄位值的標籤
+                                    const representativeLabel = sampleLabels.find(label => 
+                                        label.length < 20 && 
+                                        !label.includes('/') && 
+                                        !label.match(/^\d+$/)
+                                    ) || sampleLabels[0];
+                                    
+                                    if (representativeLabel) {
+                                        if (representativeLabel.length <= 15) {
+                                            fieldName = representativeLabel;
+                                        } else {
+                                            fieldName = representativeLabel.substring(0, 12) + '...';
+                                        }
+                                    }
+                                }
                             }
                         }
+                    }
+
+                    // 最終備案：使用索引
+                    if (fieldName.startsWith('欄位_') || !fieldName) {
+                        fieldName = `欄位 ${triangleIndex + 1}`;
                     }
                     
                     console.log(`欄位名稱: ${fieldName}`);
@@ -4151,6 +4598,25 @@ function showCustomFilterModal(fieldName = '篩選選項') {
         createCustomFilterModal();
     }
     
+    // 檢查是否在全屏模式
+    const modal = document.getElementById('customFilterModal');
+    const fullscreenElement = document.fullscreenElement;
+    
+    if (fullscreenElement) {
+        // 全屏模式：附加到全屏元素內，並使用最高 z-index
+        if (modal.parentNode !== fullscreenElement) {
+            fullscreenElement.appendChild(modal);
+        }
+        modal.style.zIndex = '2147483647';
+        modal.style.position = 'absolute'; // 在全屏內使用 absolute
+    } else {
+        // 正常模式：附加到 body
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.style.position = 'fixed';
+    }
+    
     // 更新選項列表
     const optionsHTML = customFilterCurrentData.map((item) => `
         <div class="filter-option" style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
@@ -4165,7 +4631,7 @@ function showCustomFilterModal(fieldName = '篩選選項') {
     $('#customFilterOptions').html(optionsHTML);
     
     // 使用傳入的欄位名稱更新標題
-    $('#customFilterTitle').text(`${fieldName} - 篩選選項 (${customFilterCurrentData.length} 項)`);
+    $('#customFilterTitle').text(`${fieldName}`);
     
     $('#customFilterSearch').val('');
     $('#customFilterModal').css('display', 'flex');
