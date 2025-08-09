@@ -404,8 +404,8 @@ class FileComparator:
             if value1 != value2:
                 differences.append({
                     'line': key,
-                    'file1': line1 if line1 else '(不存在)',
-                    'file2': line2 if line2 else '(不存在)',
+                    'file1': line1 if line1 else '(檔案不存在)',
+                    'file2': line2 if line2 else '(檔案不存在)',
                     'content1': content1,
                     'content2': content2
                 })
