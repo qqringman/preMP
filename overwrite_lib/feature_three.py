@@ -165,7 +165,7 @@ class FeatureThree:
         return filename_mapping.get(process_type, 'manifest.xml')
     
     def _compare_with_gerrit(self, result: Dict, process_type: str) -> Dict:
-        """與 Gerrit 上的檔案進行比較"""
+        """與 Gerrit 上的檔案進行比較 - 支援 XML 格式化比較"""
         comparison_result = result.copy()
         comparison_result.update({
             'gerrit_link': '',
@@ -182,22 +182,45 @@ class FeatureThree:
                 comparison_result['comparison_message'] = '無對應的 Gerrit 連結'
                 return comparison_result
             
-            # 下載 Gerrit 上的檔案進行比較
+            self.logger.info(f"開始比較 Gerrit 檔案: {gerrit_link}")
+            
+            # 下載 Gerrit 檔案
             gerrit_content = self._download_gerrit_file_content(gerrit_link)
-            local_content = self._read_local_file_content(result['output_file'])
             
             if gerrit_content is None:
-                comparison_result['comparison_status'] = '下載失敗'
-                comparison_result['comparison_message'] = '無法下載 Gerrit 檔案'
-            elif local_content is None:
+                comparison_result['comparison_status'] = 'Gerrit檔案無法存取'
+                comparison_result['comparison_message'] = 'Gerrit 檔案不存在或無法下載'
+                return comparison_result
+            
+            # 讀取本地檔案
+            local_content = self._read_local_file_content(result['output_file'])
+            
+            if local_content is None:
                 comparison_result['comparison_status'] = '讀取失敗'
                 comparison_result['comparison_message'] = '無法讀取本地檔案'
-            elif gerrit_content == local_content:
+                return comparison_result
+            
+            # 格式化兩個檔案以便比較
+            gerrit_formatted = self._normalize_xml_for_comparison(gerrit_content)
+            local_formatted = self._normalize_xml_for_comparison(local_content)
+            
+            # 比較格式化後的內容
+            if gerrit_formatted == local_formatted:
                 comparison_result['comparison_status'] = '相同'
                 comparison_result['comparison_message'] = '檔案內容相同'
             else:
                 comparison_result['comparison_status'] = '不同'
-                comparison_result['comparison_message'] = '檔案內容不同'
+                
+                # 提供更詳細的差異資訊
+                gerrit_lines = len(gerrit_content.split('\n'))
+                local_lines = len(local_content.split('\n'))
+                gerrit_formatted_lines = len(gerrit_formatted.split('\n'))
+                local_formatted_lines = len(local_formatted.split('\n'))
+                
+                comparison_result['comparison_message'] = (
+                    f'檔案內容不同 (Gerrit: {gerrit_lines}→{gerrit_formatted_lines} 行, '
+                    f'本地: {local_lines}→{local_formatted_lines} 行)'
+                )
             
             self.logger.info(f"比較結果: {comparison_result['comparison_status']} - {result['output_filename']}")
             
@@ -207,7 +230,47 @@ class FeatureThree:
             self.logger.error(comparison_result['comparison_message'])
         
         return comparison_result
-    
+
+    def _normalize_xml_for_comparison(self, xml_content: str) -> str:
+        """標準化 XML 內容以便比較"""
+        try:
+            import xml.etree.ElementTree as ET
+            
+            # 解析 XML
+            root = ET.fromstring(xml_content)
+            
+            # 移除所有空白和縮排，重新格式化為一致的格式
+            def remove_whitespace(element):
+                if element.text:
+                    element.text = element.text.strip() or None
+                if element.tail:
+                    element.tail = element.tail.strip() or None
+                for child in element:
+                    remove_whitespace(child)
+            
+            remove_whitespace(root)
+            
+            # 重新格式化為統一格式
+            rough_string = ET.tostring(root, encoding='unicode')
+            
+            # 重新解析並格式化
+            reparsed = ET.fromstring(rough_string)
+            formatted = ET.tostring(reparsed, encoding='unicode')
+            
+            # 使用 minidom 進行一致的格式化
+            from xml.dom import minidom
+            dom = minidom.parseString(formatted)
+            pretty = dom.toprettyxml(indent="  ")
+            
+            # 移除空行
+            lines = [line for line in pretty.split('\n') if line.strip()]
+            
+            return '\n'.join(lines)
+            
+        except Exception as e:
+            self.logger.warning(f"XML 標準化失敗，使用原始內容比較: {str(e)}")
+            return xml_content.strip()
+            
     def _get_gerrit_link(self, process_type: str) -> str:
         """取得對應的 Gerrit 連結"""
         base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master"
@@ -219,24 +282,53 @@ class FeatureThree:
             'mpbackup': f"{base_url}/atv-google-refplus-wave-backup.xml"
         }
         
-        return link_mapping.get(process_type, '')
+        gerrit_link = link_mapping.get(process_type, '')
+        
+        if gerrit_link:
+            self.logger.info(f"建立 Gerrit 比較連結: {gerrit_link}")
+        else:
+            self.logger.warning(f"無法為類型 '{process_type}' 建立 Gerrit 連結")
+        
+        return gerrit_link
     
     def _download_gerrit_file_content(self, gerrit_link: str) -> Optional[str]:
-        """下載 Gerrit 檔案內容"""
+        """下載 Gerrit 檔案內容 - 自動格式化 XML"""
         try:
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                success = self.gerrit_manager.download_file_from_link(gerrit_link, temp_file.name)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as temp_file:
+                temp_path = temp_file.name
+            
+            try:
+                # 下載檔案
+                success = self.gerrit_manager.download_file_from_link(gerrit_link, temp_path)
                 
-                if success:
-                    with open(temp_file.name, 'r', encoding='utf-8') as f:
+                if success and os.path.exists(temp_path):
+                    # 檢查檔案大小
+                    file_size = os.path.getsize(temp_path)
+                    if file_size == 0:
+                        self.logger.warning(f"下載的檔案為空: {gerrit_link}")
+                        return None
+                    
+                    with open(temp_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    os.unlink(temp_file.name)
+                    
+                    # 統計行數
+                    line_count = len(content.split('\n'))
+                    self.logger.info(f"成功下載 Gerrit 檔案內容 ({file_size} bytes, {line_count} 行)")
+                    
                     return content
                 else:
-                    if os.path.exists(temp_file.name):
-                        os.unlink(temp_file.name)
+                    self.logger.warning(f"下載 Gerrit 檔案失敗")
                     return None
+                    
+            finally:
+                # 清理臨時檔案
+                try:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except Exception as cleanup_error:
+                    self.logger.debug(f"清理臨時檔案失敗: {str(cleanup_error)}")
                     
         except Exception as e:
             self.logger.error(f"下載 Gerrit 檔案內容失敗: {str(e)}")
@@ -252,7 +344,7 @@ class FeatureThree:
             return None
     
     def _generate_excel_report(self, results: List[Dict], comparison_results: List[Dict],
-                             output_folder: str, process_type: str, excel_filename: Optional[str]) -> str:
+                         output_folder: str, process_type: str, excel_filename: Optional[str]) -> str:
         """產生 Excel 報告"""
         try:
             # 決定 Excel 檔名
@@ -297,6 +389,10 @@ class FeatureThree:
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
+                    
+                    # 特別格式化比較結果欄位
+                    if sheet_name == '比較結果':
+                        self._format_comparison_status_column(worksheet)
             
             self.logger.info(f"成功產生 Excel 報告: {excel_file}")
             return excel_file
@@ -304,3 +400,45 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
+
+    def _format_comparison_status_column(self, worksheet):
+        """格式化比較狀態欄位"""
+        try:
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.utils import get_column_letter
+            
+            # 狀態顏色設定
+            status_colors = {
+                '相同': {'fill': PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                        'font': Font(color="006100", bold=True)},
+                '不同': {'fill': PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                        'font': Font(color="9C0006", bold=True)},
+                'Gerrit檔案不存在': {'fill': PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid"),
+                                'font': Font(color="9C6500", bold=True)},
+                '下載失敗': {'fill': PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                            'font': Font(color="9C0006", bold=True)}
+            }
+            
+            # 找到 comparison_status 欄位
+            status_col = None
+            for col_num, cell in enumerate(worksheet[1], 1):
+                if cell.value == 'comparison_status':
+                    status_col = col_num
+                    break
+            
+            if status_col:
+                col_letter = get_column_letter(status_col)
+                
+                # 格式化資料列
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    status = str(cell.value) if cell.value else ''
+                    
+                    if status in status_colors:
+                        cell.fill = status_colors[status]['fill']
+                        cell.font = status_colors[status]['font']
+                
+                self.logger.info("已設定比較狀態欄位格式")
+            
+        except Exception as e:
+            self.logger.error(f"格式化比較狀態欄位失敗: {str(e)}")

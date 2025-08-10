@@ -13,6 +13,37 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+def format_xml_content(xml_content: str) -> str:
+    """格式化 XML 內容為多行縮排格式"""
+    try:
+        import xml.etree.ElementTree as ET
+        from xml.dom import minidom
+        
+        # 解析 XML
+        root = ET.fromstring(xml_content)
+        
+        # 轉換為格式化的字串
+        rough_string = ET.tostring(root, encoding='unicode')
+        reparsed = minidom.parseString(rough_string)
+        
+        # 格式化輸出（包含縮排和換行）
+        formatted = reparsed.toprettyxml(indent="  ")
+        
+        # 移除多餘的空行
+        lines = [line for line in formatted.split('\n') if line.strip()]
+        
+        return '\n'.join(lines)
+        
+    except Exception as e:
+        # 如果格式化失敗，返回原始內容
+        logger = setup_logger(__name__)
+        logger.warning(f"XML 格式化失敗，使用原始內容: {str(e)}")
+        return xml_content
+
+def is_xml_file(file_path: str) -> bool:
+    """判斷是否為 XML 檔案"""
+    return file_path.lower().endswith(('.xml', '.XML'))
+
 def setup_logger(name: str) -> logging.Logger:
     """設定日誌記錄器"""
     logger = logging.getLogger(name)

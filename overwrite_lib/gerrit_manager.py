@@ -422,8 +422,8 @@ class GerritManager:
         return alternatives
     
     def _save_response_to_file(self, response: requests.Response, output_path: str, 
-                              source_url: str, is_base64: bool = None) -> bool:
-        """儲存回應內容到檔案"""
+                          source_url: str, is_base64: bool = None) -> bool:
+        """儲存回應內容到檔案 - 支援 XML 格式化"""
         try:
             # 確保輸出目錄存在
             utils.ensure_dir(os.path.dirname(output_path))
@@ -438,60 +438,77 @@ class GerritManager:
                 try:
                     # 嘗試 base64 解碼
                     decoded_content = base64.b64decode(content)
-                    with open(output_path, 'wb') as f:
-                        f.write(decoded_content)
-                    self.logger.info(f"成功儲存檔案 (base64 解碼): {output_path}")
-                    return True
-                    
+                    content = decoded_content.decode('utf-8')
+                    self.logger.info(f"成功解碼 base64 內容")
                 except Exception as decode_error:
-                    self.logger.warning(f"Base64 解碼失敗，嘗試直接儲存: {str(decode_error)}")
-                    # 如果 base64 解碼失敗，嘗試直接儲存
-                    with open(output_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    self.logger.info(f"成功儲存檔案 (直接文字): {output_path}")
-                    return True
-            else:
-                # 直接儲存文字內容
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                self.logger.info(f"成功儲存檔案 (文字): {output_path}")
-                return True
-                
+                    self.logger.warning(f"Base64 解碼失敗，使用原始內容: {str(decode_error)}")
+                    # content 保持原樣
+            
+            # 如果是 XML 檔案，進行格式化
+            if utils.is_xml_file(output_path):
+                try:
+                    formatted_content = utils.format_xml_content(content)
+                    content = formatted_content
+                    self.logger.info(f"XML 檔案已格式化為多行")
+                except Exception as format_error:
+                    self.logger.warning(f"XML 格式化失敗，保持原始格式: {str(format_error)}")
+            
+            # 儲存檔案
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 統計行數
+            line_count = len(content.split('\n'))
+            self.logger.info(f"成功儲存檔案: {output_path} ({line_count} 行)")
+            return True
+                    
         except Exception as e:
             self.logger.error(f"儲存檔案失敗: {str(e)}")
             return False
     
     def check_file_exists(self, file_link: str) -> bool:
         """
-        檢查 Gerrit 上的檔案是否存在
-        
-        Args:
-            file_link: Gerrit 檔案連結
-            
-        Returns:
-            檔案是否存在
+        檢查 Gerrit 上的檔案是否存在 - 改進版
+        參考 download_file_from_link 的成功策略
         """
         try:
-            # 先嘗試無認證
-            no_auth_session = requests.Session()
-            no_auth_session.headers.update(self.session.headers)
-            response = no_auth_session.head(file_link, timeout=30)
+            self.logger.info(f"檢查檔案是否存在: {file_link}")
             
-            if response.status_code == 200:
-                self.logger.info(f"檔案存在 (無認證): {file_link}")
-                return True
+            # 策略 1: 直接檢查（無認證）
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                }
+                
+                response = requests.head(file_link, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    self.logger.info(f"檔案存在 (無認證): {file_link}")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"無認證檢查失敗: {str(e)}")
             
-            # 再嘗試有認證
-            response = self._make_request(file_link, method='HEAD', timeout=30)
-            exists = response.status_code == 200
+            # 策略 2: 使用認證檢查（參考下載成功的方式）
+            try:
+                response = self._make_request(file_link, method='HEAD', timeout=10)
+                if response.status_code == 200:
+                    self.logger.info(f"檔案存在 (有認證): {file_link}")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"認證檢查失敗: {str(e)}")
             
-            if exists:
-                self.logger.info(f"檔案存在 (有認證): {file_link}")
-            else:
-                self.logger.warning(f"檔案不存在: {file_link}")
+            # 策略 3: 嘗試 GET 請求（有些伺服器不支援 HEAD）
+            try:
+                response = self._make_request(file_link, timeout=10)
+                if response.status_code == 200:
+                    self.logger.info(f"檔案存在 (GET請求): {file_link}")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"GET 請求檢查失敗: {str(e)}")
             
-            return exists
-            
+            self.logger.warning(f"檔案不存在或無法存取: {file_link}")
+            return False
+                
         except Exception as e:
             self.logger.error(f"檢查檔案存在性失敗: {str(e)}")
             return False

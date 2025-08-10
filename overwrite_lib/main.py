@@ -342,30 +342,30 @@ class MainApplication:
             if not process_type:
                 return
             
+            # 取得輸出資料夾
+            output_folder = input("請輸入輸出資料夾路徑 (預設: ./output): ").strip()
+            if not output_folder:
+                output_folder = "./output"
+            
             # 取得輸出檔案名稱
             default_output = f"manifest_{process_type}.xlsx"
             output_file = input(f"請輸入輸出檔案名稱 (預設: {default_output}): ").strip()
             if not output_file:
                 output_file = default_output
             
-            # 新增：確保輸出檔案有完整路徑
-            if not os.path.dirname(output_file):
-                output_folder = "./output"
-                utils.ensure_dir(output_folder)
-                output_file = os.path.join(output_folder, output_file)
-            
-            # 選擇是否去重複
+            # 選擇選項
             remove_duplicates = self._get_yes_no_input("是否去除重複資料？", False)
-            
-            # 選擇是否建立分支
             create_branches = self._get_yes_no_input("是否建立分支？", False)
+            check_branch_exists = self._get_yes_no_input("是否檢查分支存在性？(會比較慢)", False)
             
             print(f"\n📋 處理參數:")
             print(f"  輸入檔案: {input_file}")
             print(f"  處理類型: {process_type}")
+            print(f"  輸出資料夾: {output_folder}")
             print(f"  輸出檔案: {output_file}")
             print(f"  去除重複: {'是' if remove_duplicates else '否'}")
             print(f"  建立分支: {'是' if create_branches else '否'}")
+            print(f"  檢查分支存在性: {'是' if check_branch_exists else '否'}")
             
             if not self._confirm_execution():
                 return
@@ -373,12 +373,12 @@ class MainApplication:
             print("\n🔄 開始處理...")
             success = self.feature_two.process(
                 input_file, process_type, output_file, 
-                remove_duplicates, create_branches
+                remove_duplicates, create_branches, check_branch_exists, output_folder
             )
             
             if success:
                 print("\n✅ 功能二執行成功！")
-                print(f"📁 結果檔案: {output_file}")
+                print(f"📁 結果檔案: {os.path.join(output_folder, output_file)}")
             else:
                 print("\n❌ 功能二執行失敗")
                 

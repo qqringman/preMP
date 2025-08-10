@@ -40,7 +40,8 @@ class FeatureTwo:
         self.gerrit_manager = GerritManager()
     
     def process(self, input_file: str, process_type: str, output_file: str, 
-                remove_duplicates: bool = False, create_branches: bool = False) -> bool:
+            remove_duplicates: bool = False, create_branches: bool = False,
+            check_branch_exists: bool = False, output_folder: str = None) -> bool:
         """
         處理功能二的主要邏輯
         
@@ -50,6 +51,8 @@ class FeatureTwo:
             output_file: 輸出檔案名稱
             remove_duplicates: 是否去除重複
             create_branches: 是否建立分支
+            check_branch_exists: 是否檢查分支存在性
+            output_folder: 輸出資料夾路徑 (新增)
             
         Returns:
             是否處理成功
@@ -59,6 +62,8 @@ class FeatureTwo:
             self.logger.info(f"輸入檔案: {input_file}")
             self.logger.info(f"處理類型: {process_type}")
             self.logger.info(f"輸出檔案: {output_file}")
+            self.logger.info(f"輸出資料夾: {output_folder or '預設'}")
+            self.logger.info(f"檢查分支存在性: {'是' if check_branch_exists else '否'}")
             
             # 解析 manifest.xml
             projects = self._parse_manifest(input_file)
@@ -69,7 +74,7 @@ class FeatureTwo:
             self.logger.info(f"成功解析 {len(projects)} 個專案")
             
             # 轉換分支名稱
-            converted_projects = self._convert_projects(projects, process_type)
+            converted_projects = self._convert_projects(projects, process_type, check_branch_exists)
             
             # 處理重複資料
             final_projects, duplicate_projects = self._handle_duplicates(
@@ -77,11 +82,11 @@ class FeatureTwo:
             )
             
             # 寫入 Excel
-            self._write_excel(final_projects, duplicate_projects, output_file)
+            self._write_excel(final_projects, duplicate_projects, output_file, output_folder)
             
             # 建立分支（如果需要）
             if create_branches:
-                self._create_branches(final_projects, output_file)
+                self._create_branches(final_projects, output_file, output_folder)
             
             self.logger.info(f"=== 功能二執行完成，輸出檔案：{output_file} ===")
             return True
@@ -116,7 +121,7 @@ class FeatureTwo:
             self.logger.error(f"解析 manifest 檔案失敗: {str(e)}")
             return []
     
-    def _convert_projects(self, projects: List[Dict], process_type: str) -> List[Dict]:
+    def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False) -> List[Dict]:
         """轉換專案的分支名稱"""
         converted_projects = []
         
@@ -131,21 +136,25 @@ class FeatureTwo:
             target_branch = self._convert_branch_by_type(project, process_type)
             converted_project['target_branch'] = target_branch
             
-            # 檢查目標分支是否存在並取得 revision
-            if target_branch:
+            # 根據參數決定是否檢查分支存在性
+            if check_branch_exists and target_branch:
                 exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch)
                 converted_project['target_branch_exists'] = exists_info['exists_status']
                 converted_project['target_branch_revision'] = exists_info['revision']
             else:
-                converted_project['target_branch_exists'] = 'N'
-                converted_project['target_branch_revision'] = ''
+                converted_project['target_branch_exists'] = '-'  # 未檢查
+                converted_project['target_branch_revision'] = '-'  # 未檢查
             
             converted_projects.append(converted_project)
+            
+            # 每100個項目顯示進度
+            if check_branch_exists and i % 100 == 0:
+                self.logger.info(f"已處理 {i}/{len(projects)} 個專案的分支檢查")
         
         return converted_projects
 
     def _check_target_branch_exists(self, project_name: str, target_branch: str) -> Dict[str, str]:
-        """檢查目標分支是否存在並取得 revision - 改進版"""
+        """檢查目標分支是否存在並取得 revision - 簡化版"""
         result = {
             'exists_status': 'N',
             'revision': ''
@@ -155,23 +164,52 @@ class FeatureTwo:
             if not project_name or not target_branch:
                 return result
             
-            # 使用新的檢查方法
-            branch_info = self.gerrit_manager.check_branch_exists_and_get_revision(project_name, target_branch)
+            # 直接使用最可靠的方法
+            branch_info = self._query_branch_direct(project_name, target_branch)
             
             if branch_info['exists']:
                 result['exists_status'] = 'Y'
-                result['revision'] = branch_info['revision'] if branch_info['revision'] else 'Unknown'
-                
-                self.logger.debug(f"分支存在: {project_name} - {target_branch} ({result['revision']}) via {branch_info['method']}")
-            else:
-                self.logger.debug(f"分支不存在: {project_name} - {target_branch}")
-                
+                result['revision'] = branch_info['revision']
+            
         except Exception as e:
-            self.logger.warning(f"檢查分支存在性失敗: {project_name} - {target_branch}: {str(e)}")
-            result['exists_status'] = 'N'
+            self.logger.debug(f"檢查分支失敗: {project_name} - {target_branch}: {str(e)}")
         
         return result
 
+    def _query_branch_direct(self, project_name: str, branch_name: str) -> Dict[str, Any]:
+        """直接查詢分支 - 使用最可靠的方法"""
+        try:
+            import urllib.parse
+            
+            # URL 編碼
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_branch = urllib.parse.quote(f"refs/heads/{branch_name}", safe='')
+            
+            # 使用最成功的 API 路徑
+            api_url = f"{self.gerrit_manager.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}"
+            
+            response = self.gerrit_manager._make_request(api_url, timeout=5)
+            
+            if response.status_code == 200:
+                content = response.text
+                if content.startswith(")]}'\n"):
+                    content = content[5:]
+                
+                import json
+                branch_info = json.loads(content)
+                revision = branch_info.get('revision', '')
+                
+                return {
+                    'exists': True,
+                    'revision': revision[:8] if revision else 'Unknown'
+                }
+            else:
+                return {'exists': False, 'revision': ''}
+                
+        except Exception as e:
+            self.logger.debug(f"查詢分支異常: {str(e)}")
+            return {'exists': False, 'revision': ''}
+        
     def _get_branch_revision(self, project_name: str, branch_name: str) -> str:
         """取得分支的 revision"""
         try:
@@ -287,25 +325,34 @@ class FeatureTwo:
         
         return unique_projects, duplicate_projects
     
-    def _write_excel(self, projects: List[Dict], duplicate_projects: List[Dict], output_file: str):
+    def _write_excel(self, projects: List[Dict], duplicate_projects: List[Dict], 
+                output_file: str, output_folder: str = None):
         """寫入 Excel 檔案"""
         try:
             # 處理輸出檔案路徑
             if not output_file:
                 raise ValueError("輸出檔案名稱不能為空")
             
-            # 如果沒有指定目錄，使用當前目錄
-            output_dir = os.path.dirname(output_file)
-            if not output_dir:
-                output_file = os.path.join('.', output_file)
-                output_dir = '.'
+            # 處理輸出資料夾
+            if output_folder:
+                # 確保輸出資料夾存在
+                utils.ensure_dir(output_folder)
+                # 組合完整路徑
+                full_output_path = os.path.join(output_folder, output_file)
+            else:
+                # 如果沒有指定資料夾，檢查檔案名稱是否包含路徑
+                output_dir = os.path.dirname(output_file)
+                if not output_dir:
+                    output_file = os.path.join('.', output_file)
+                    output_dir = '.'
+                
+                # 確保輸出目錄存在
+                utils.ensure_dir(output_dir)
+                full_output_path = output_file
             
-            # 確保輸出目錄存在
-            utils.ensure_dir(output_dir)
+            self.logger.info(f"寫入 Excel 檔案: {full_output_path}")
             
-            self.logger.info(f"寫入 Excel 檔案: {output_file}")
-            
-            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            with pd.ExcelWriter(full_output_path, engine='openpyxl') as writer:
                 # 主要資料頁籤
                 if projects:
                     df_main = pd.DataFrame(projects)
@@ -361,7 +408,7 @@ class FeatureTwo:
             if duplicate_projects:
                 created_sheets.append('重覆')
             
-            self.logger.info(f"成功寫入 Excel 檔案: {output_file}")
+            self.logger.info(f"成功寫入 Excel 檔案: {full_output_path}")
             self.logger.info(f"建立的頁籤: {', '.join(created_sheets)}")
             
         except Exception as e:
@@ -369,20 +416,19 @@ class FeatureTwo:
             raise
 
     def _format_target_branch_columns(self, worksheet):
-        """格式化目標分支相關欄位"""
+        """格式化目標分支相關欄位 - 只有標頭綠底白字"""
         try:
             from openpyxl.styles import PatternFill, Font
             from openpyxl.utils import get_column_letter
             
-            # 綠色底白字樣式（用於三個目標分支欄位）
+            # 標頭樣式：綠色底白字
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
             white_font = Font(color="FFFFFF", bold=True)
             
-            # Y 的綠字樣式
-            green_font = Font(color="00B050", bold=True)
-            
-            # N 的紅字樣式  
-            red_font = Font(color="FF0000", bold=True)
+            # 內容樣式
+            green_font = Font(color="00B050", bold=True)  # Y 的綠字
+            red_font = Font(color="FF0000", bold=True)    # N 的紅字
+            black_font = Font(color="000000")             # 一般文字
             
             # 找到目標欄位的位置
             target_columns = {}
@@ -390,45 +436,43 @@ class FeatureTwo:
                 if cell.value in ['target_branch', 'target_branch_exists', 'target_branch_revision']:
                     target_columns[cell.value] = col_num
             
-            # 格式化 target_branch 和 target_branch_revision 欄位（綠色底白字）
-            for col_name in ['target_branch', 'target_branch_revision']:
-                if col_name in target_columns:
-                    col_letter = get_column_letter(target_columns[col_name])
-                    
-                    for row_num in range(1, worksheet.max_row + 1):
-                        cell = worksheet[f"{col_letter}{row_num}"]
-                        cell.fill = green_fill
-                        cell.font = white_font
-                    
-                    self.logger.info(f"已將 {col_name} 欄位 ({col_letter}) 設定為綠色底白字")
-            
-            # 特別格式化 target_branch_exists 欄位
-            if 'target_branch_exists' in target_columns:
-                col_letter = get_column_letter(target_columns['target_branch_exists'])
-                
-                # 標題列：綠色底白字
+            # 格式化標頭（綠色底白字）
+            for col_name, col_num in target_columns.items():
+                col_letter = get_column_letter(col_num)
                 header_cell = worksheet[f"{col_letter}1"]
                 header_cell.fill = green_fill
                 header_cell.font = white_font
+            
+            # 特別處理 target_branch_exists 欄位的內容
+            if 'target_branch_exists' in target_columns:
+                col_letter = get_column_letter(target_columns['target_branch_exists'])
                 
                 # 資料列：根據 Y/N 設定不同顏色
                 for row_num in range(2, worksheet.max_row + 1):
                     cell = worksheet[f"{col_letter}{row_num}"]
-                    cell.fill = green_fill  # 背景還是綠色
                     
                     if cell.value == 'Y':
-                        cell.font = Font(color="FFFFFF", bold=True)  # Y 用白字
+                        cell.font = green_font  # Y 用綠字
                     elif cell.value == 'N':
-                        cell.font = Font(color="FFFF00", bold=True)   # N 用黃字（在綠底上比較明顯）
+                        cell.font = red_font    # N 用紅字
                     else:
-                        cell.font = white_font
-                
-                self.logger.info(f"已將 target_branch_exists 欄位 ({col_letter}) 設定特殊格式")
+                        cell.font = black_font  # 其他用黑字（如 '-'）
+            
+            # 其他兩個欄位的內容保持黑字
+            for col_name in ['target_branch', 'target_branch_revision']:
+                if col_name in target_columns:
+                    col_letter = get_column_letter(target_columns[col_name])
+                    
+                    for row_num in range(2, worksheet.max_row + 1):
+                        cell = worksheet[f"{col_letter}{row_num}"]
+                        cell.font = black_font
+            
+            self.logger.info("已設定目標分支欄位格式：標頭綠底白字，內容依值設定顏色")
                 
         except Exception as e:
             self.logger.error(f"格式化目標分支欄位失敗: {str(e)}")
                 
-    def _create_branches(self, projects: List[Dict], output_file: str):
+    def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None):
         """建立分支並記錄結果"""
         try:
             self.logger.info("開始建立分支...")
@@ -463,7 +507,12 @@ class FeatureTwo:
                     self.logger.info(f"已處理 {len(branch_results)} 個分支建立")
             
             # 更新 Excel 檔案，加入分支建立狀態頁籤
-            self._add_branch_status_sheet(output_file, branch_results)
+            if output_folder:
+                full_output_path = os.path.join(output_folder, output_file)
+            else:
+                full_output_path = output_file
+                
+            self._add_branch_status_sheet(full_output_path, branch_results)
             
             self.logger.info(f"分支建立完成，共處理 {len(branch_results)} 個分支")
             
