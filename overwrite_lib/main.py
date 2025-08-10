@@ -348,6 +348,12 @@ class MainApplication:
             if not output_file:
                 output_file = default_output
             
+            # 新增：確保輸出檔案有完整路徑
+            if not os.path.dirname(output_file):
+                output_folder = "./output"
+                utils.ensure_dir(output_folder)
+                output_file = os.path.join(output_folder, output_file)
+            
             # 選擇是否去重複
             remove_duplicates = self._get_yes_no_input("是否去除重複資料？", False)
             

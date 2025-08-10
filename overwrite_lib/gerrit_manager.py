@@ -613,13 +613,7 @@ class GerritManager:
     
     def query_branches(self, project_name: str) -> List[str]:
         """
-        查詢專案的所有分支
-        
-        Args:
-            project_name: 專案名稱
-            
-        Returns:
-            分支列表
+        查詢專案的所有分支 - 改進版
         """
         try:
             # URL 編碼專案名稱
@@ -628,15 +622,15 @@ class GerritManager:
             
             # 嘗試多個可能的 API 路徑
             api_paths = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/",
                 f"{self.api_url}/projects/{encoded_project}/branches/",
-                f"{self.base_url}/a/projects/{encoded_project}/branches/",
-                f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/"
+                f"{self.base_url}/a/projects/{encoded_project}/branches/"
             ]
             
             for api_path in api_paths:
                 try:
-                    self.logger.info(f"嘗試查詢路徑: {api_path}")
-                    response = self._make_request(api_path, timeout=30)
+                    self.logger.debug(f"嘗試查詢路徑: {api_path}")
+                    response = self._make_request(api_path, timeout=10)
                     
                     if response.status_code == 200:
                         # Gerrit API 返回的 JSON 可能以 )]}' 開頭，需要移除
@@ -648,22 +642,203 @@ class GerritManager:
                         branches_data = json.loads(content)
                         
                         branches = [branch['ref'].replace('refs/heads/', '') for branch in branches_data]
-                        self.logger.info(f"查詢到 {len(branches)} 個分支")
+                        self.logger.debug(f"查詢到 {len(branches)} 個分支: {project_name}")
                         return branches
+                    elif response.status_code == 404:
+                        self.logger.debug(f"專案不存在或無權限: {project_name}")
+                        continue
                     else:
-                        self.logger.warning(f"查詢分支失敗 - HTTP {response.status_code}: {api_path}")
-                        
+                        self.logger.debug(f"查詢分支失敗 - HTTP {response.status_code}: {api_path}")
+                        continue
+                            
                 except Exception as e:
-                    self.logger.warning(f"查詢路徑失敗 {api_path}: {str(e)}")
+                    self.logger.debug(f"查詢路徑異常 {api_path}: {str(e)}")
                     continue
                     
-            self.logger.warning("所有查詢路徑都失敗")
-            return []
-            
+            # 如果所有 API 都失敗，嘗試 gitiles 方法
+            return self._query_branches_via_gitiles(project_name)
+                
         except Exception as e:
             self.logger.error(f"查詢分支失敗: {str(e)}")
             return []
-    
+
+    def _query_branches_via_gitiles(self, project_name: str) -> List[str]:
+        """透過 gitiles 查詢分支"""
+        try:
+            self.logger.debug(f"嘗試透過 gitiles 查詢分支: {project_name}")
+            
+            # gitiles refs URL
+            gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+refs"
+            
+            response = self._make_request(gitiles_url, timeout=10)
+            
+            if response.status_code == 200:
+                # 解析 HTML 回應中的分支資訊
+                import re
+                
+                # 尋找 refs/heads/ 的分支
+                branch_pattern = r'refs/heads/([^"<>\s]+)'
+                matches = re.findall(branch_pattern, response.text)
+                
+                branches = list(set(matches))  # 去重複
+                self.logger.debug(f"透過 gitiles 找到 {len(branches)} 個分支: {project_name}")
+                return branches
+            else:
+                self.logger.debug(f"gitiles 查詢失敗 - HTTP {response.status_code}")
+                return []
+                
+        except Exception as e:
+            self.logger.debug(f"gitiles 查詢異常: {str(e)}")
+            return []
+
+    def check_branch_exists_and_get_revision(self, project_name: str, branch_name: str) -> Dict[str, Any]:
+        """
+        檢查分支是否存在並取得 revision - 新方法
+        
+        Returns:
+            {
+                'exists': bool,
+                'revision': str,
+                'method': str  # 查詢成功的方法
+            }
+        """
+        result = {
+            'exists': False,
+            'revision': '',
+            'method': ''
+        }
+        
+        try:
+            # 方法 1: 直接查詢特定分支 API
+            branch_info = self._get_branch_info_api(project_name, branch_name)
+            if branch_info['success']:
+                result['exists'] = True
+                result['revision'] = branch_info['revision']
+                result['method'] = 'Branch API'
+                return result
+            
+            # 方法 2: 查詢所有分支然後找目標分支
+            branches = self.query_branches(project_name)
+            if branch_name in branches:
+                result['exists'] = True
+                result['method'] = 'Branches List'
+                
+                # 嘗試取得 revision
+                revision = self._get_branch_revision_alternative(project_name, branch_name)
+                result['revision'] = revision
+                return result
+            
+            # 方法 3: 透過 gitiles commit 查詢
+            revision = self._get_revision_via_gitiles(project_name, branch_name)
+            if revision:
+                result['exists'] = True
+                result['revision'] = revision
+                result['method'] = 'Gitiles'
+                return result
+            
+            self.logger.debug(f"分支不存在: {project_name} - {branch_name}")
+            
+        except Exception as e:
+            self.logger.debug(f"檢查分支存在性失敗: {project_name} - {branch_name}: {str(e)}")
+        
+        return result
+
+    def _get_revision_via_gitiles(self, project_name: str, branch_name: str) -> str:
+        """透過 gitiles 取得 revision"""
+        try:
+            # gitiles commit URL
+            gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/heads/{branch_name}"
+            
+            response = self._make_request(gitiles_url, timeout=5)
+            
+            if response.status_code == 200:
+                # 從回應中解析 commit hash
+                import re
+                
+                # 多種可能的 commit hash 模式
+                patterns = [
+                    r'commit\s+([a-f0-9]{40})',
+                    r'<span[^>]*>([a-f0-9]{40})</span>',
+                    r'([a-f0-9]{40})'
+                ]
+                
+                for pattern in patterns:
+                    matches = re.findall(pattern, response.text)
+                    if matches:
+                        return matches[0][:8]
+            
+            return ''
+            
+        except Exception:
+            return ''
+        
+    def _get_branch_revision_alternative(self, project_name: str, branch_name: str) -> str:
+        """替代方法取得分支 revision"""
+        try:
+            # 嘗試透過 commit API
+            commit_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/{branch_name}"
+            
+            response = self._make_request(commit_url, timeout=5)
+            
+            if response.status_code == 200:
+                # 從 HTML 中解析 commit hash
+                import re
+                
+                # 尋找 commit hash 模式
+                hash_pattern = r'commit\s+([a-f0-9]{40})'
+                match = re.search(hash_pattern, response.text)
+                
+                if match:
+                    return match.group(1)[:8]
+            
+            return ''
+            
+        except Exception:
+            return ''
+        
+    def _get_branch_info_api(self, project_name: str, branch_name: str) -> Dict[str, Any]:
+        """透過 Branch API 取得分支資訊"""
+        try:
+            import urllib.parse
+            
+            # URL 編碼
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_branch = urllib.parse.quote(f"refs/heads/{branch_name}", safe='')
+            
+            # 嘗試多個 API 路徑
+            api_paths = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}"
+            ]
+            
+            for api_path in api_paths:
+                try:
+                    response = self._make_request(api_path, timeout=5)
+                    
+                    if response.status_code == 200:
+                        content = response.text
+                        if content.startswith(")]}'\n"):
+                            content = content[5:]
+                        
+                        import json
+                        branch_info = json.loads(content)
+                        revision = branch_info.get('revision', '')
+                        
+                        if revision:
+                            return {
+                                'success': True,
+                                'revision': revision[:8]  # 只取前8個字符
+                            }
+                            
+                except Exception:
+                    continue
+            
+            return {'success': False, 'revision': ''}
+            
+        except Exception:
+            return {'success': False, 'revision': ''}
+                    
     def create_branch(self, project_name: str, branch_name: str, revision: str) -> Dict[str, Any]:
         """
         建立新分支
