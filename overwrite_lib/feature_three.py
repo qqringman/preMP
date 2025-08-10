@@ -844,11 +844,10 @@ class FeatureThree:
             return True
     
     def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
-        """執行 Git clone, commit, push 操作 - 修正版本（解決 Change-Id 問題）"""
+        """執行 Git clone, commit, push 操作 - 修復版本（使用 commit-msg hook 自動生成 Change-Id）"""
         import subprocess
         import tempfile
         import shutil
-        import uuid
         
         result = {
             'success': False,
@@ -879,40 +878,48 @@ class FeatureThree:
             original_cwd = os.getcwd()
             os.chdir(temp_git_dir)
             
-            # 步驟 2.5: 安裝 commit-msg hook（解決 Change-Id 問題）
+            # 步驟 2.5: 安裝 commit-msg hook（使用您提供的命令）
             self.logger.info(f"🔧 安裝 commit-msg hook...")
             try:
-                gitdir_result = subprocess.run(
-                    ["git", "rev-parse", "--git-dir"], 
-                    capture_output=True, text=True, check=True
+                # 使用您提供的命令格式
+                hook_install_cmd = "gitdir=$(git rev-parse --git-dir); scp -p -P 29418 vince_lin@mm2sd.rtkbf.com:hooks/commit-msg ${gitdir}/hooks/"
+                
+                # 執行命令安裝 hook
+                result_hook = subprocess.run(
+                    hook_install_cmd,
+                    shell=True,  # 使用 shell 來執行複合命令
+                    capture_output=True,
+                    text=True,
+                    timeout=30
                 )
-                git_dir = gitdir_result.stdout.strip()
                 
-                # 建立 hooks 目錄
-                hooks_dir = os.path.join(git_dir, "hooks")
-                os.makedirs(hooks_dir, exist_ok=True)
-                
-                # 下載 commit-msg hook
-                hook_cmd = [
-                    "scp", "-p", "-P", "29418", 
-                    "vince_lin@mm2sd.rtkbf.com:hooks/commit-msg", 
-                    f"{hooks_dir}/commit-msg"
-                ]
-                
-                subprocess.run(hook_cmd, check=True, capture_output=True, text=True, timeout=30)
-                
-                # 設定 hook 可執行權限
-                import stat
-                hook_path = os.path.join(hooks_dir, "commit-msg")
-                if os.path.exists(hook_path):
-                    os.chmod(hook_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
-                    self.logger.info(f"✅ 成功安裝 commit-msg hook")
+                if result_hook.returncode == 0:
+                    self.logger.info(f"✅ commit-msg hook 安裝成功")
+                    
+                    # 驗證 hook 是否存在
+                    gitdir_result = subprocess.run(["git", "rev-parse", "--git-dir"], 
+                                                capture_output=True, text=True, check=True)
+                    git_dir = gitdir_result.stdout.strip()
+                    hook_path = os.path.join(git_dir, "hooks", "commit-msg")
+                    
+                    if os.path.exists(hook_path):
+                        self.logger.info(f"✅ hook 檔案確認存在: {hook_path}")
+                        
+                        # 確保 hook 有執行權限
+                        import stat
+                        os.chmod(hook_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
+                        self.logger.info(f"✅ hook 執行權限設定完成")
+                    else:
+                        self.logger.warning(f"⚠️ hook 檔案不存在: {hook_path}")
+                        
                 else:
-                    self.logger.warning(f"⚠️ commit-msg hook 下載失敗，將手動添加 Change-Id")
+                    self.logger.warning(f"⚠️ commit-msg hook 安裝失敗: {result_hook.stderr}")
+                    self.logger.info(f"📝 將不使用 hook，可能需要手動處理 Change-Id")
                     
             except subprocess.CalledProcessError as e:
                 self.logger.warning(f"⚠️ 安裝 commit-msg hook 失敗: {e.stderr}")
-                self.logger.info(f"📝 將手動添加 Change-Id 到 commit message")
+            except Exception as e:
+                self.logger.warning(f"⚠️ 安裝 commit-msg hook 異常: {str(e)}")
             
             # 步驟 3: 寫入轉換後的檔案
             target_file_path = os.path.join(temp_git_dir, target_filename)
@@ -936,18 +943,14 @@ class FeatureThree:
             # 步驟 5: Add 檔案
             subprocess.run(["git", "add", target_filename], check=True)
             
-            # 步驟 6: Commit（包含 Change-Id）
-            # 生成唯一的 Change-Id
-            change_id = f"I{uuid.uuid4().hex}"
-            
+            # 步驟 6: Commit（讓 hook 自動生成 Change-Id）
             commit_message = f"""Auto-generated manifest update: {overwrite_type}
 
-Generated by manifest conversion tool
-Source: {self.source_files[overwrite_type]}
-Target: {target_filename}
-
-Change-Id: {change_id}"""
+    Generated by manifest conversion tool
+    Source: {self.source_files[overwrite_type]}
+    Target: {target_filename}"""
             
+            # 不手動添加 Change-Id，讓 commit-msg hook 處理
             commit_result = subprocess.run(
                 ["git", "commit", "-m", commit_message],
                 capture_output=True, text=True, check=True
@@ -961,10 +964,22 @@ Change-Id: {change_id}"""
             result['commit_id'] = commit_id_result.stdout.strip()[:8]
             
             self.logger.info(f"📝 創建 commit: {result['commit_id']}")
-            self.logger.info(f"📝 包含 Change-Id: {change_id}")
+            
+            # 檢查 commit message 是否包含 Change-Id（由 hook 添加）
+            commit_msg_result = subprocess.run(
+                ["git", "log", "-1", "--pretty=format:%B"],
+                capture_output=True, text=True, check=True
+            )
+            
+            if "Change-Id:" in commit_msg_result.stdout:
+                self.logger.info(f"✅ Change-Id 已由 hook 自動添加")
+            else:
+                self.logger.warning(f"⚠️ commit message 中沒有 Change-Id，推送可能失敗")
             
             # 步驟 7: Push to Gerrit for review
             push_cmd = ["git", "push", "origin", f"HEAD:refs/for/{branch}"]
+            
+            self.logger.info(f"🚀 推送到 Gerrit: {' '.join(push_cmd)}")
             
             push_result = subprocess.run(
                 push_cmd, capture_output=True, text=True, check=True, timeout=60
@@ -996,16 +1011,30 @@ Change-Id: {change_id}"""
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
             
-            # 特別處理 Change-Id 相關錯誤
-            if "missing Change-Id" in error_msg:
-                result['message'] = f"Change-Id 問題已修正，但推送仍失敗: {error_msg}"
-                self.logger.error(f"Change-Id 相關錯誤: {error_msg}")
+            # 特別處理常見錯誤
+            if "missing Change-Id" in error_msg or "invalid Change-Id" in error_msg:
+                result['message'] = f"Change-Id 問題: {error_msg}"
+                self.logger.error(f"Change-Id 錯誤，可能 hook 安裝失敗: {error_msg}")
                 
                 # 提供詳細的故障排除資訊
-                self.logger.info(f"🔧 故障排除步驟:")
-                self.logger.info(f"  1. 檢查 SSH 金鑰設定")
-                self.logger.info(f"  2. 確認 Gerrit 帳號權限")
-                self.logger.info(f"  3. 檢查分支推送權限")
+                self.logger.info(f"🔧 Change-Id 故障排除步驟:")
+                self.logger.info(f"  1. 確認 SSH 連線到 mm2sd.rtkbf.com")
+                self.logger.info(f"  2. 手動執行: gitdir=$(git rev-parse --git-dir); scp -p -P 29418 vince_lin@mm2sd.rtkbf.com:hooks/commit-msg ${{gitdir}}/hooks/")
+                self.logger.info(f"  3. 確認 ~/.ssh/config 設定正確")
+                self.logger.info(f"  4. 檢查 Gerrit 帳號權限")
+                
+            elif "Permission denied" in error_msg or "publickey" in error_msg:
+                result['message'] = f"SSH 認證失敗: {error_msg}"
+                self.logger.error(f"SSH 認證問題: {error_msg}")
+                self.logger.info(f"🔑 SSH 故障排除:")
+                self.logger.info(f"  1. 檢查 SSH 金鑰: ssh-add -l")
+                self.logger.info(f"  2. 測試連線: ssh -T -p 29418 vince_lin@mm2sd.rtkbf.com")
+                self.logger.info(f"  3. 檢查 ~/.ssh/config")
+                
+            elif "remote rejected" in error_msg:
+                result['message'] = f"Gerrit 拒絕推送: {error_msg}"
+                self.logger.error(f"Gerrit 拒絕: {error_msg}")
+                
             else:
                 result['message'] = f"Git 命令失敗: {error_msg}"
                 
