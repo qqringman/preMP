@@ -401,38 +401,47 @@ class MainApplication:
         input("\n按 Enter 繼續...")
     
     def _execute_feature_three(self):
-        """執行功能三：去除版本號產生新 manifest"""
+        """執行功能三：Manifest 轉換工具 - 全新版本"""
         print("\n" + "="*60)
-        print("  📄 功能三：去除版本號產生新 manifest")
+        print("  📄 功能三：Manifest 轉換工具 (全新版本)")
         print("="*60)
+        print("說明：從 Gerrit 下載源檔案，進行 revision 轉換，並與目標檔案比較差異")
         
         try:
-            # 取得輸入路徑
-            input_path = input("請輸入 manifest.xml 檔案或資料夾路徑: ").strip()
-            if not input_path or not os.path.exists(input_path):
-                print("❌ 檔案或路徑不存在")
-                input("按 Enter 繼續...")
-                return
-            
             # 取得輸出資料夾
             output_folder = self._get_output_folder("請輸入輸出資料夾路徑")
             if not output_folder:
                 return
             
-            # 選擇處理類型
-            process_types = ['master', 'premp', 'mp', 'mpbackup']
-            print("\n請選擇處理類型:")
-            for i, ptype in enumerate(process_types, 1):
-                print(f"  [{i}] {ptype}")
+            # 選擇轉換類型
+            overwrite_types = {
+                '1': 'master_to_premp',
+                '2': 'premp_to_mp', 
+                '3': 'mp_to_mpbackup'
+            }
+            
+            print("\n請選擇轉換類型:")
+            print("  [1] master_to_premp (Master → PreMP)")
+            print("      源檔案: atv-google-refplus.xml")
+            print("      輸出: atv-google-refplus-premp.xml")
+            print()
+            print("  [2] premp_to_mp (PreMP → MP)")
+            print("      源檔案: atv-google-refplus-premp.xml")
+            print("      輸出: atv-google-refplus-wave.xml")
+            print()
+            print("  [3] mp_to_mpbackup (MP → MP Backup)")
+            print("      源檔案: atv-google-refplus-wave.xml")
+            print("      輸出: atv-google-refplus-wave-backup.xml")
+            print()
             
             while True:
                 try:
-                    choice = int(input("請選擇 (1-4): ").strip())
-                    if 1 <= choice <= 4:
-                        process_type = process_types[choice - 1]
+                    choice = input("請選擇 (1-3): ").strip()
+                    if choice in overwrite_types:
+                        overwrite_type = overwrite_types[choice]
                         break
                     else:
-                        print("❌ 請輸入 1-4 之間的數字")
+                        print("❌ 請輸入 1-3 之間的數字")
                 except ValueError:
                     print("❌ 請輸入有效的數字")
             
@@ -442,24 +451,61 @@ class MainApplication:
                 excel_filename = None
             
             print(f"\n📋 處理參數:")
-            print(f"  輸入路徑: {input_path}")
+            print(f"  轉換類型: {overwrite_type}")
             print(f"  輸出資料夾: {output_folder}")
-            print(f"  處理類型: {process_type}")
             print(f"  Excel 檔名: {excel_filename or '使用預設'}")
+            
+            # 顯示處理流程
+            print(f"\n🔄 處理流程:")
+            if overwrite_type == 'master_to_premp':
+                print(f"  1. 從 Gerrit 下載: atv-google-refplus.xml")
+                print(f"  2. 轉換 revision: master → premp.google-refplus")
+                print(f"  3. 輸出檔案: atv-google-refplus-premp.xml")
+                print(f"  4. 與 Gerrit 上的 atv-google-refplus-premp.xml 比較差異")
+            elif overwrite_type == 'premp_to_mp':
+                print(f"  1. 從 Gerrit 下載: atv-google-refplus-premp.xml")
+                print(f"  2. 轉換 revision: premp.google-refplus → mp.google-refplus.wave")
+                print(f"  3. 輸出檔案: atv-google-refplus-wave.xml")
+                print(f"  4. 與 Gerrit 上的 atv-google-refplus-wave.xml 比較差異")
+            elif overwrite_type == 'mp_to_mpbackup':
+                print(f"  1. 從 Gerrit 下載: atv-google-refplus-wave.xml")
+                print(f"  2. 轉換 revision: mp.google-refplus.wave → mp.google-refplus.wave.backup")
+                print(f"  3. 輸出檔案: atv-google-refplus-wave-backup.xml")
+                print(f"  4. 與 Gerrit 上的 atv-google-refplus-wave-backup.xml 比較差異")
             
             if not self._confirm_execution():
                 return
             
             print("\n🔄 開始處理...")
+            print("⬇️  正在從 Gerrit 下載源檔案...")
+            
             success = self.feature_three.process(
-                input_path, output_folder, process_type, excel_filename
+                overwrite_type, output_folder, excel_filename
             )
             
             if success:
                 print("\n✅ 功能三執行成功！")
                 print(f"📁 結果檔案位於: {output_folder}")
+                print(f"📊 詳細報告請查看 Excel 檔案")
+                
+                # 顯示處理結果
+                print(f"\n📋 處理結果:")
+                print(f"  ✅ 已從 Gerrit 下載源檔案")
+                print(f"  ✅ 已完成 revision 轉換")
+                print(f"  ✅ 已保存轉換後檔案")
+                print(f"  ✅ 已下載目標檔案進行比較")
+                print(f"  ✅ 已產生差異分析報告")
+                
+                print(f"\n💡 提示:")
+                print(f"  📄 查看 '轉換摘要' 頁籤了解整體情況")
+                print(f"  📋 查看 '轉換後專案' 頁籤檢視所有專案")
+                print(f"  🔍 查看 '{overwrite_type}_差異部份' 頁籤分析差異")
             else:
                 print("\n❌ 功能三執行失敗")
+                print(f"\n💡 故障排除:")
+                print(f"  1. 檢查網路連線")
+                print(f"  2. 確認 Gerrit 認證設定")
+                print(f"  3. 檢查輸出資料夾權限")
                 
         except Exception as e:
             print(f"\n❌ 執行過程發生錯誤: {str(e)}")
