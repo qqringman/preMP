@@ -7,7 +7,14 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from typing import Dict, List, Any, Optional
 import utils
+import sys
 
+# 加入上一層目錄到路徑
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+    
 # 載入模組 (處理 import 路徑)
 try:
     from excel_handler import ExcelHandler

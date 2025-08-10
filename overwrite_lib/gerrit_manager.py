@@ -1,12 +1,21 @@
 """
-Gerrit API 管理模組
+Gerrit API 管理模組 - 修復版
 處理所有 Gerrit 相關的 API 操作
+主要修復：下載檔案時的 401 認證問題
 """
 import os
 import requests
 import re
+import base64
 from typing import Optional, Dict, Any, List
 import utils
+import sys
+
+# 加入上一層目錄到路徑
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 # 載入設定
 try:
@@ -19,7 +28,7 @@ except ImportError:
 logger = utils.setup_logger(__name__)
 
 class GerritManager:
-    """Gerrit API 管理類別"""
+    """Gerrit API 管理類別 - 修復版"""
     
     def __init__(self):
         self.logger = logger
@@ -38,25 +47,37 @@ class GerritManager:
             self.password = os.environ.get('GERRIT_PW', '')
         
         # 設定認證
-        self.auth = (self.user, self.password)
+        self.auth = (self.user, self.password) if self.user and self.password else None
         self.api_url = f"{self.base_url}{self.api_prefix}"
+        
+        # 建立會話並設定瀏覽器模擬標頭
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
+        
+        if self.auth:
+            self.session.auth = self.auth
         
         self.logger.info(f"Gerrit Manager 初始化完成 - Base URL: {self.base_url}")
     
     def _make_request(self, url: str, method: str = 'GET', **kwargs) -> requests.Response:
-        """統一的請求方法，自動處理認證"""
-        kwargs['auth'] = self.auth
-        
-        # 根據方法執行請求
+        """統一的請求方法，使用 session 處理認證"""
+        # 使用 session 而不是直接的 requests
         method = method.upper()
         if method == 'GET':
-            return requests.get(url, **kwargs)
+            return self.session.get(url, **kwargs)
         elif method == 'POST':
-            return requests.post(url, **kwargs)
+            return self.session.post(url, **kwargs)
         elif method == 'PUT':
-            return requests.put(url, **kwargs)
+            return self.session.put(url, **kwargs)
         elif method == 'HEAD':
-            return requests.head(url, **kwargs)
+            return self.session.head(url, **kwargs)
         else:
             raise ValueError(f"不支援的 HTTP 方法: {method}")
     
@@ -90,43 +111,354 @@ class GerritManager:
     
     def download_file_from_link(self, file_link: str, output_path: str) -> bool:
         """
-        從 Gerrit 連結下載檔案
-        
-        Args:
-            file_link: Gerrit 檔案連結
-            output_path: 輸出檔案路徑
-            
-        Returns:
-            是否下載成功
+        從 Gerrit 連結下載檔案 - 修復版
+        修復 URL 路徑問題
         """
         try:
-            # 轉換為原始檔案連結 (加上 ?format=TEXT)
-            if '?format=TEXT' not in file_link:
-                raw_link = f"{file_link}?format=TEXT"
-            else:
-                raw_link = file_link
+            self.logger.info(f"開始下載檔案: {file_link}")
             
-            response = self._make_request(raw_link, timeout=30)
+            # 策略 1: 直接使用原始 URL（無認證）
+            if self._try_download_direct(file_link, output_path):
+                return True
+            
+            # 策略 2: 直接使用原始 URL（有認證）
+            if self._try_download_with_auth_direct(file_link, output_path):
+                return True
+            
+            # 策略 3: 修正 URL 路徑後下載
+            if self._try_download_with_corrected_paths(file_link, output_path):
+                return True
+            
+            self.logger.error(f"所有下載策略都失敗: {file_link}")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"下載檔案失敗: {str(e)}")
+            return False
+
+    def _try_download_direct(self, file_link: str, output_path: str) -> bool:
+        """策略 1: 直接下載（無認證）"""
+        try:
+            self.logger.info(f"策略 1: 直接下載（無認證）")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            response = requests.get(file_link, headers=headers, timeout=30)
             
             if response.status_code == 200:
-                # 確保輸出目錄存在
-                utils.ensure_dir(os.path.dirname(output_path))
-                
-                # Gerrit 返回的是 base64 編碼，需要解碼
-                import base64
-                content = base64.b64decode(response.text)
-                
-                with open(output_path, 'wb') as f:
-                    f.write(content)
-                
-                self.logger.info(f"成功下載檔案: {output_path}")
-                return True
+                self.logger.info("策略 1 成功！")
+                return self._save_response_to_file(response, output_path, file_link)
             else:
-                self.logger.warning(f"下載失敗 - HTTP {response.status_code}: {file_link}")
+                self.logger.warning(f"策略 1 失敗 - HTTP {response.status_code}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"下載檔案失敗: {str(e)}")
+            self.logger.warning(f"策略 1 異常: {str(e)}")
+            return False
+
+    def _try_download_with_auth_direct(self, file_link: str, output_path: str) -> bool:
+        """策略 2: 直接下載（有認證）"""
+        try:
+            self.logger.info(f"策略 2: 直接下載（有認證）")
+            
+            response = self._make_request(file_link, timeout=30)
+            
+            if response.status_code == 200:
+                self.logger.info("策略 2 成功！")
+                return self._save_response_to_file(response, output_path, file_link)
+            else:
+                self.logger.warning(f"策略 2 失敗 - HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"策略 2 異常: {str(e)}")
+            return False
+
+    def _try_download_with_corrected_paths(self, file_link: str, output_path: str) -> bool:
+        """策略 3: 使用修正的 URL 路徑"""
+        try:
+            self.logger.info(f"策略 3: 使用修正的 URL 路徑")
+            
+            # 根據 API 測試成功的經驗，這個 Gerrit 需要 /gerrit/ 前綴
+            corrected_urls = []
+            
+            # 如果 URL 中沒有 /gerrit/，嘗試加入
+            if '/gerrit/' not in file_link:
+                # https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/... 
+                # 保持現有格式，但確保有 /gerrit/ 前綴
+                corrected_urls.append(file_link)  # 原始 URL 已經有 /gerrit/
+            
+            # 嘗試不同的 API 風格 URL
+            if 'plugins/gitiles' in file_link:
+                # 轉換為 API 風格
+                # https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+                # 轉換為:
+                # https://mm2sd.rtkbf.com/gerrit/a/projects/realtek%2Fandroid%2Fmanifest/branches/realtek%2Fandroid-14%2Fmaster/files/atv-google-refplus.xml/content
+                
+                try:
+                    import urllib.parse
+                    # 解析路徑
+                    parts = file_link.split('/gerrit/plugins/gitiles/')
+                    if len(parts) == 2:
+                        base_url = parts[0]
+                        path_part = parts[1]
+                        
+                        # 解析路徑組件
+                        # realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+                        path_components = path_part.split('/')
+                        if len(path_components) >= 7:
+                            project_path = '/'.join(path_components[:3])  # realtek/android/manifest
+                            ref_parts = path_components[4:]  # refs/heads/realtek/android-14/master/atv-google-refplus.xml
+                            
+                            if len(ref_parts) >= 5:
+                                branch_path = '/'.join(ref_parts[2:-1])  # realtek/android-14/master
+                                file_name = ref_parts[-1]  # atv-google-refplus.xml
+                                
+                                # 構建 API URL
+                                project_encoded = urllib.parse.quote(project_path, safe='')
+                                branch_encoded = urllib.parse.quote(branch_path, safe='')
+                                file_encoded = urllib.parse.quote(file_name, safe='')
+                                
+                                api_url = f"{base_url}/gerrit/a/projects/{project_encoded}/branches/{branch_encoded}/files/{file_encoded}/content"
+                                corrected_urls.append(api_url)
+                except Exception as e:
+                    self.logger.warning(f"構建 API URL 失敗: {str(e)}")
+            
+            # 嘗試這些修正的 URL
+            for i, url in enumerate(corrected_urls, 1):
+                self.logger.info(f"  嘗試修正 URL {i}: {url}")
+                
+                try:
+                    # 無認證
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    }
+                    response = requests.get(url, headers=headers, timeout=30)
+                    
+                    if response.status_code == 200:
+                        self.logger.info(f"  修正 URL {i} 成功（無認證）！")
+                        return self._save_response_to_file(response, output_path, url)
+                    
+                    # 有認證
+                    response = self._make_request(url, timeout=30)
+                    
+                    if response.status_code == 200:
+                        self.logger.info(f"  修正 URL {i} 成功（有認證）！")
+                        return self._save_response_to_file(response, output_path, url)
+                    else:
+                        self.logger.warning(f"  修正 URL {i} 失敗 - HTTP {response.status_code}")
+                        
+                except Exception as e:
+                    self.logger.warning(f"  修正 URL {i} 異常: {str(e)}")
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"策略 3 異常: {str(e)}")
+            return False
+    
+    def _try_download_without_auth(self, file_link: str, output_path: str) -> bool:
+        """策略 1: 無認證下載"""
+        try:
+            self.logger.info(f"策略 1: 無認證下載")
+            
+            # 建立無認證的 session
+            no_auth_session = requests.Session()
+            no_auth_session.headers.update(self.session.headers)
+            
+            response = no_auth_session.get(file_link, timeout=30)
+            
+            if response.status_code == 200:
+                return self._save_response_to_file(response, output_path, file_link)
+            else:
+                self.logger.warning(f"策略 1 失敗 - HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"策略 1 異常: {str(e)}")
+            return False
+    
+    def _try_download_with_auth(self, file_link: str, output_path: str) -> bool:
+        """策略 2: 使用認證下載"""
+        try:
+            self.logger.info(f"策略 2: 使用認證下載")
+            
+            response = self._make_request(file_link, timeout=30)
+            
+            if response.status_code == 200:
+                return self._save_response_to_file(response, output_path, file_link)
+            else:
+                self.logger.warning(f"策略 2 失敗 - HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"策略 2 異常: {str(e)}")
+            return False
+    
+    def _try_download_with_format_text(self, file_link: str, output_path: str) -> bool:
+        """策略 3: 強制使用 ?format=TEXT"""
+        try:
+            self.logger.info(f"策略 3: 強制 ?format=TEXT")
+            
+            # 確保有 ?format=TEXT
+            if '?format=TEXT' not in file_link:
+                if '?' in file_link:
+                    text_link = f"{file_link}&format=TEXT"
+                else:
+                    text_link = f"{file_link}?format=TEXT"
+            else:
+                text_link = file_link
+            
+            # 先嘗試無認證
+            no_auth_session = requests.Session()
+            no_auth_session.headers.update(self.session.headers)
+            
+            response = no_auth_session.get(text_link, timeout=30)
+            
+            if response.status_code == 200:
+                return self._save_response_to_file(response, output_path, text_link, is_base64=True)
+            
+            # 再嘗試有認證
+            response = self._make_request(text_link, timeout=30)
+            
+            if response.status_code == 200:
+                return self._save_response_to_file(response, output_path, text_link, is_base64=True)
+            else:
+                self.logger.warning(f"策略 3 失敗 - HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"策略 3 異常: {str(e)}")
+            return False
+    
+    def _try_alternative_urls(self, file_link: str, output_path: str) -> bool:
+        """策略 4: 嘗試不同的 URL 格式"""
+        try:
+            self.logger.info(f"策略 4: 嘗試替代 URL 格式")
+            
+            alternative_urls = self._generate_alternative_urls(file_link)
+            
+            for i, alt_url in enumerate(alternative_urls, 1):
+                self.logger.info(f"  嘗試替代 URL {i}: {alt_url}")
+                try:
+                    # 先無認證
+                    no_auth_session = requests.Session()
+                    no_auth_session.headers.update(self.session.headers)
+                    response = no_auth_session.get(alt_url, timeout=30)
+                    
+                    if response.status_code == 200:
+                        self.logger.info(f"  替代 URL {i} 成功 (無認證)！")
+                        return self._save_response_to_file(response, output_path, alt_url)
+                    
+                    # 再有認證
+                    response = self._make_request(alt_url, timeout=30)
+                    
+                    if response.status_code == 200:
+                        self.logger.info(f"  替代 URL {i} 成功 (有認證)！")
+                        return self._save_response_to_file(response, output_path, alt_url)
+                    else:
+                        self.logger.warning(f"  替代 URL {i} 失敗 - HTTP {response.status_code}")
+                        
+                except Exception as e:
+                    self.logger.warning(f"  替代 URL {i} 異常: {str(e)}")
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"策略 4 異常: {str(e)}")
+            return False
+    
+    def _generate_alternative_urls(self, original_url: str) -> List[str]:
+        """產生替代的 URL 格式"""
+        alternatives = []
+        
+        try:
+            # 原始: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+            
+            # 替代 1: 移除 plugins/gitiles
+            alt1 = original_url.replace('/gerrit/plugins/gitiles/', '/gerrit/')
+            alternatives.append(alt1)
+            
+            # 替代 2: 使用 raw 格式
+            alt2 = original_url.replace('/+/', '/raw/')
+            alternatives.append(alt2)
+            
+            # 替代 3: 組合 raw 和移除 gitiles
+            alt3 = original_url.replace('/gerrit/plugins/gitiles/', '/gerrit/').replace('/+/', '/raw/')
+            alternatives.append(alt3)
+            
+            # 替代 4: 使用 plain 格式
+            if '?format=TEXT' in original_url:
+                alt4 = original_url.replace('?format=TEXT', '?format=PLAIN')
+                alternatives.append(alt4)
+            else:
+                alt4 = f"{original_url}?format=PLAIN"
+                alternatives.append(alt4)
+            
+            # 替代 5: 移除所有參數
+            if '?' in original_url:
+                alt5 = original_url.split('?')[0]
+                alternatives.append(alt5)
+            
+            # 替代 6: 只保留基本路徑，去掉 plugins/gitiles
+            if '/gerrit/plugins/gitiles/' in original_url:
+                # 轉換為類似這樣的格式：https://mm2sd.rtkbf.com/realtek/android/manifest/blob/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+                parts = original_url.split('/gerrit/plugins/gitiles/')
+                if len(parts) == 2:
+                    base_part = parts[0]
+                    path_part = parts[1].replace('/+/', '/blob/')
+                    alt6 = f"{base_part}/{path_part}"
+                    alternatives.append(alt6)
+            
+        except Exception as e:
+            self.logger.error(f"產生替代 URL 失敗: {str(e)}")
+        
+        return alternatives
+    
+    def _save_response_to_file(self, response: requests.Response, output_path: str, 
+                              source_url: str, is_base64: bool = None) -> bool:
+        """儲存回應內容到檔案"""
+        try:
+            # 確保輸出目錄存在
+            utils.ensure_dir(os.path.dirname(output_path))
+            
+            # 自動判斷是否為 base64
+            if is_base64 is None:
+                is_base64 = '?format=TEXT' in source_url
+            
+            content = response.text
+            
+            if is_base64:
+                try:
+                    # 嘗試 base64 解碼
+                    decoded_content = base64.b64decode(content)
+                    with open(output_path, 'wb') as f:
+                        f.write(decoded_content)
+                    self.logger.info(f"成功儲存檔案 (base64 解碼): {output_path}")
+                    return True
+                    
+                except Exception as decode_error:
+                    self.logger.warning(f"Base64 解碼失敗，嘗試直接儲存: {str(decode_error)}")
+                    # 如果 base64 解碼失敗，嘗試直接儲存
+                    with open(output_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    self.logger.info(f"成功儲存檔案 (直接文字): {output_path}")
+                    return True
+            else:
+                # 直接儲存文字內容
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.logger.info(f"成功儲存檔案 (文字): {output_path}")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"儲存檔案失敗: {str(e)}")
             return False
     
     def check_file_exists(self, file_link: str) -> bool:
@@ -140,11 +472,21 @@ class GerritManager:
             檔案是否存在
         """
         try:
+            # 先嘗試無認證
+            no_auth_session = requests.Session()
+            no_auth_session.headers.update(self.session.headers)
+            response = no_auth_session.head(file_link, timeout=30)
+            
+            if response.status_code == 200:
+                self.logger.info(f"檔案存在 (無認證): {file_link}")
+                return True
+            
+            # 再嘗試有認證
             response = self._make_request(file_link, method='HEAD', timeout=30)
             exists = response.status_code == 200
             
             if exists:
-                self.logger.info(f"檔案存在: {file_link}")
+                self.logger.info(f"檔案存在 (有認證): {file_link}")
             else:
                 self.logger.warning(f"檔案不存在: {file_link}")
             
@@ -219,13 +561,27 @@ class GerritManager:
                             result['details']['successful_endpoint'] = api_url
                             self.logger.info(f"API 認證成功 - 用戶: {user_info.get('name', 'Unknown')}")
                             
-                            # 3. 測試專案查詢
-                            self.logger.info("測試專案查詢...")
-                            test_project = "realtek/android/manifest"
-                            branches = self.query_branches(test_project)
-                            result['tests_performed'].append(f"專案查詢 ({len(branches)} 個分支)")
-                            result['details']['test_project'] = test_project
-                            result['details']['branch_count'] = len(branches)
+                            # 3. 測試檔案下載
+                            self.logger.info("測試檔案下載...")
+                            test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml?format=TEXT"
+                            
+                            # 測試無認證下載
+                            no_auth_session = requests.Session()
+                            no_auth_session.headers.update(self.session.headers)
+                            test_response = no_auth_session.get(test_url, timeout=10)
+                            
+                            if test_response.status_code == 200:
+                                result['tests_performed'].append(f"檔案下載測試 (無認證成功)")
+                                result['details']['download_method'] = '無認證'
+                            else:
+                                # 測試有認證下載
+                                test_response = self._make_request(test_url, timeout=10)
+                                if test_response.status_code == 200:
+                                    result['tests_performed'].append(f"檔案下載測試 (有認證成功)")
+                                    result['details']['download_method'] = '有認證'
+                                else:
+                                    result['tests_performed'].append(f"檔案下載測試 (失敗 HTTP {test_response.status_code})")
+                                    result['details']['download_method'] = '失敗'
                             
                             return result
                         except json.JSONDecodeError as e:

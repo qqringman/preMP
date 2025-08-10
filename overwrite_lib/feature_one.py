@@ -7,7 +7,14 @@ import os
 import pandas as pd
 from typing import Dict, List, Any, Optional
 import utils
+import sys
 
+# 加入上一層目錄到路徑
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+    
 # 載入模組 (處理 import 路徑)
 try:
     from excel_handler import ExcelHandler
@@ -82,18 +89,9 @@ class FeatureOne:
             return False
     
     def _process_row(self, row: pd.Series, output_folder: str, 
-                    missing_manifests: List, shared_sources: Dict) -> Dict:
+                missing_manifests: List, shared_sources: Dict) -> Dict:
         """
         處理單一列資料
-        
-        Args:
-            row: 原始資料列
-            output_folder: 輸出資料夾
-            missing_manifests: 缺少的 manifest 清單
-            shared_sources: 共用來源字典
-            
-        Returns:
-            處理後的資料
         """
         processed_row = row.to_dict()
         
@@ -126,7 +124,7 @@ class FeatureOne:
                     
                     # 檢查檔案是否存在（Gerrit 和本地）
                     self._check_manifest_availability(
-                        row, db_info, jira_info, missing_manifests
+                        row, db_info, jira_info, missing_manifests, field, output_folder
                     )
                 
                 # 收集共用來源資訊
@@ -168,7 +166,7 @@ Source_link: {jira_info['source_link']}
             self.logger.error(f"下載檔案失敗 {db_info}: {str(e)}")
     
     def _check_manifest_availability(self, row: pd.Series, db_info: str, 
-                                   jira_info: Dict, missing_manifests: List):
+                               jira_info: Dict, missing_manifests: List, field: str, output_folder: str):
         """檢查 manifest 檔案的可用性"""
         try:
             if not jira_info['source_link'] or not jira_info['manifest']:
@@ -183,11 +181,15 @@ Source_link: {jira_info['source_link']}
             
             # 如果任一不存在，加入缺失清單
             if not gerrit_exists or not local_exists:
+                # 決定 DB 類型
+                db_type = self._determine_db_type_from_field(field)
+                
                 missing_entry = {
                     'SN': len(missing_manifests) + 1,
                     'Module': row.get('Module', ''),
-                    'DB_Type': self._determine_db_type(row, db_info),
+                    'DB_Type': db_type,
                     'DB Info': db_info,
+                    'DB_Info_Jira': jira_info['jira_link'],  # 新增 JIRA 連結
                     'Source': jira_info['source'],
                     'Source_manifest': jira_info['manifest'],
                     'Source_link': jira_info['source_link']
@@ -196,9 +198,20 @@ Source_link: {jira_info['source_link']}
                 
         except Exception as e:
             self.logger.error(f"檢查檔案可用性失敗: {str(e)}")
-    
+
+    def _determine_db_type_from_field(self, field: str) -> str:
+        """從欄位名稱判斷 DB 類型"""
+        if 'premp' in field:
+            return 'premp'
+        elif 'mpbackup' in field:
+            return 'mpbackup'
+        elif 'mp' in field:
+            return 'mp'
+        else:
+            return 'master'
+            
     def _collect_shared_sources(self, row: pd.Series, db_info: str, jira_info: Dict, 
-                              shared_sources: Dict, field: str):
+                          shared_sources: Dict, field: str):
         """收集共用來源資訊"""
         try:
             source_key = jira_info['source']
@@ -213,9 +226,10 @@ Source_link: {jira_info['source_link']}
                     'source_link': jira_info['source_link']
                 }
             
-            # 添加 DB 資訊（包含類型）
-            db_type = self._determine_db_type(row, db_info, field)
-            db_entry = f"{db_info}({db_type})"
+            # 建立 DB 資訊（包含 Module 和類型）
+            module = row.get('Module', 'Unknown')
+            db_type = self._determine_db_type_from_field(field)
+            db_entry = f"{db_info}({module}, {db_type})"
             
             if db_entry not in shared_sources[source_key]['db_list']:
                 shared_sources[source_key]['db_list'].append(db_entry)
@@ -248,56 +262,68 @@ Source_link: {jira_info['source_link']}
         return 'master'
     
     def _write_excel_with_tabs(self, main_df: pd.DataFrame, missing_manifests: List,
-                              shared_sources: Dict, output_file: str):
+                          shared_sources: Dict, output_file: str):
         """寫入 Excel 檔案（包含多個頁籤）"""
         try:
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-                # 主要資料頁籤
+                # 主要資料頁籤（永遠存在）
                 main_df.to_excel(writer, sheet_name='主要資料', index=False)
                 
-                # 缺少 manifest 頁籤
+                # 缺少 manifest 頁籤（只有在有資料時才建立）
                 if missing_manifests:
                     missing_df = pd.DataFrame(missing_manifests)
+                    # 確保欄位順序
+                    missing_columns = ['SN', 'Module', 'DB_Type', 'DB Info', 'DB_Info_Jira', 
+                                    'Source', 'Source_manifest', 'Source_link']
+                    missing_df = missing_df.reindex(columns=missing_columns)
+                    missing_df.to_excel(writer, sheet_name='缺少_manifest', index=False)
+                    self.logger.info(f"建立 '缺少_manifest' 頁籤，共 {len(missing_manifests)} 筆資料")
                 else:
-                    # 即使沒有資料也建立空頁籤
-                    missing_df = pd.DataFrame(columns=[
-                        'SN', 'Module', 'DB_Type', 'DB Info', 'Source', 
-                        'Source_manifest', 'Source_link'
-                    ])
-                missing_df.to_excel(writer, sheet_name='缺少_manifest', index=False)
+                    self.logger.info("沒有缺少的 manifest 檔案，跳過 '缺少_manifest' 頁籤")
                 
-                # 共用來源頁籤
+                # 共用來源頁籤（只有在有共用資料時才建立）
+                shared_data = []
                 if shared_sources:
-                    shared_data = []
-                    for sn, (source, info) in enumerate(shared_sources.items(), 1):
+                    sn = 1
+                    for source, info in shared_sources.items():
                         if len(info['db_list']) > 1:  # 只有多個 DB 使用同一來源才算共用
+                            # 組合 DB Info，格式：DB2302(Merlin7, master),DB2857(Merlin8, premp)
+                            db_info_combined = ','.join(info['db_list'])
+                            
                             shared_data.append({
                                 'SN': sn,
-                                'DB Info': ','.join(info['db_list']),
+                                'DB Info': db_info_combined,
                                 'Source': info['source'],
                                 'Source_manifest': info['manifest'],
                                 'Source_link': info['source_link']
                             })
-                    
-                    if shared_data:
-                        shared_df = pd.DataFrame(shared_data)
-                    else:
-                        shared_df = pd.DataFrame(columns=[
-                            'SN', 'DB Info', 'Source', 'Source_manifest', 'Source_link'
-                        ])
-                else:
-                    shared_df = pd.DataFrame(columns=[
-                        'SN', 'DB Info', 'Source', 'Source_manifest', 'Source_link'
-                    ])
+                            sn += 1
                 
-                shared_df.to_excel(writer, sheet_name='共用', index=False)
+                # 只有在有共用資料時才建立頁籤
+                if shared_data:
+                    shared_df = pd.DataFrame(shared_data)
+                    # 確保欄位順序
+                    shared_columns = ['SN', 'DB Info', 'Source', 'Source_manifest', 'Source_link']
+                    shared_df = shared_df.reindex(columns=shared_columns)
+                    shared_df.to_excel(writer, sheet_name='共用', index=False)
+                    self.logger.info(f"建立 '共用' 頁籤，共 {len(shared_data)} 筆資料")
+                else:
+                    self.logger.info("沒有共用的來源，跳過 '共用' 頁籤")
                 
                 # 格式化所有工作表
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
             
+            # 統計頁籤資訊
+            created_sheets = ['主要資料']
+            if missing_manifests:
+                created_sheets.append('缺少_manifest')
+            if shared_data:
+                created_sheets.append('共用')
+            
             self.logger.info(f"成功寫入 Excel 檔案: {output_file}")
+            self.logger.info(f"建立的頁籤: {', '.join(created_sheets)}")
             
         except Exception as e:
             self.logger.error(f"寫入 Excel 檔案失敗: {str(e)}")

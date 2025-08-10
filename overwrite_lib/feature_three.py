@@ -7,19 +7,7 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from typing import Dict, List, Any, Optional
 import utils
-
-# 載入模組 (處理 import 路徑)
-try:
-    from excel_handler import ExcelHandler
-except ImportError:
-    # 如果無法直接導入，可能路徑不對，嘗試處理
-    import sys
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    from excel_handler import ExcelHandler
-
+from excel_handler import ExcelHandler
 from gerrit_manager import GerritManager
 
 logger = utils.setup_logger(__name__)

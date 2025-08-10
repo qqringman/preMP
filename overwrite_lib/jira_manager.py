@@ -6,7 +6,15 @@ import os
 import requests
 import re
 from typing import Optional, Dict, Any
+from gerrit_manager import GerritManager
 import utils
+import sys
+
+# 加入上一層目錄到路徑
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 # 載入設定
 try:
@@ -28,13 +36,13 @@ class JiraManager:
         if config:
             self.site = getattr(config, 'JIRA_SITE', 'jira.realtek.com')
             self.user = getattr(config, 'JIRA_USER', 'vince_lin')
-            self.password = getattr(config, 'JIRA_PASSWORD', '')
+            self.password = getattr(config, 'JIRA_PASSWORD', 'Amon100!')
             self.token = getattr(config, 'JIRA_TOKEN', '')
         else:
             # 回退到環境變數
             self.site = os.getenv("JIRA_SITE", "jira.realtek.com").strip()
             self.user = os.getenv("JIRA_USER", "vince_lin").strip()
-            self.password = os.getenv("JIRA_PASSWORD", "").strip()
+            self.password = os.getenv("JIRA_PASSWORD", "Amon100!").strip()
             self.token = os.getenv("JIRA_TOKEN", "").strip()
         
         # 設定認證方式：優先使用 Bearer Token
@@ -410,7 +418,6 @@ class JiraManager:
             
             # 建立 source_link (使用 gerrit_manager)
             if parsed['url'] and parsed['branch'] and parsed['manifest']:
-                from gerrit_manager import GerritManager
                 gerrit = GerritManager()
                 result['source_link'] = gerrit.build_manifest_link(
                     parsed['url'], parsed['branch'], parsed['manifest']
