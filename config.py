@@ -145,3 +145,46 @@ DEFAULT_CHIP_OPTIONS = [
 DEFAULT_DB_OPTIONS = [
     ('all', 'All')
 ]
+
+# =====================================
+# ===== JIRA/Gerrit 整合工具設定 =====
+# =====================================
+
+# JIRA 連線設定
+JIRA_SITE = 'jira.realtek.com'
+JIRA_USER = 'vince_lin'
+JIRA_PASSWORD = ''
+JIRA_TOKEN = ''
+
+# Gerrit 連線設定
+GERRIT_BASE = 'https://mm2sd.rtkbf.com/'
+GERRIT_API_PREFIX = '/a'
+GERRIT_USER = 'vince_lin'
+GERRIT_PW = ''
+
+# JIRA/Gerrit 工具設定
+JIRA_BASE_URL = f'https://{JIRA_SITE}'
+GERRIT_API_URL = f'{GERRIT_BASE.rstrip("/")}{GERRIT_API_PREFIX.rstrip("/")}'
+
+# 預設 Gerrit manifest 連結模板
+GERRIT_MANIFEST_BASE_URL = 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master'
+
+# JIRA issue 連結模板
+JIRA_ISSUE_URL_TEMPLATE = f'{JIRA_BASE_URL}/browse/{{issue_key}}'
+
+# 環境變數設定函數
+def setup_environment_variables():
+    """設定系統環境變數"""
+    import os
+    
+    # JIRA 環境變數
+    os.environ['JIRA_SITE'] = JIRA_SITE
+    os.environ['JIRA_USER'] = JIRA_USER
+    os.environ['JIRA_PASSWORD'] = JIRA_PASSWORD
+    os.environ['JIRA_TOKEN'] = JIRA_TOKEN
+    
+    # Gerrit 環境變數
+    os.environ['GERRIT_BASE'] = GERRIT_BASE
+    os.environ['GERRIT_API_PREFIX'] = GERRIT_API_PREFIX
+    os.environ['GERRIT_USER'] = GERRIT_USER
+    os.environ['GERRIT_PW'] = GERRIT_PW
