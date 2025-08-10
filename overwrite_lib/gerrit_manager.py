@@ -1,12 +1,12 @@
 """
-Gerrit API 管理模組 - 修復版
-處理所有 Gerrit 相關的 API 操作
-主要修復：下載檔案時的 401 認證問題
+Gerrit API 管理模組 - 修復版（使用正確的下載方法）
+主要修復：優先使用 API 風格 URL 進行檔案下載
 """
 import os
 import requests
 import re
 import base64
+import urllib.parse
 from typing import Optional, Dict, Any, List
 import utils
 import sys
@@ -28,7 +28,7 @@ except ImportError:
 logger = utils.setup_logger(__name__)
 
 class GerritManager:
-    """Gerrit API 管理類別 - 修復版"""
+    """Gerrit API 管理類別 - 修復版（使用正確的下載方法）"""
     
     def __init__(self):
         self.logger = logger
@@ -111,21 +111,25 @@ class GerritManager:
     
     def download_file_from_link(self, file_link: str, output_path: str) -> bool:
         """
-        從 Gerrit 連結下載檔案 - 修復版
-        修復 URL 路徑問題
+        從 Gerrit 連結下載檔案 - 修復版（使用 API 風格 URL）
+        優先使用成功的 API 方法
         """
         try:
             self.logger.info(f"開始下載檔案: {file_link}")
             
-            # 策略 1: 直接使用原始 URL（無認證）
-            if self._try_download_direct(file_link, output_path):
+            # 策略 1: 使用 API 風格 URL（最可靠的方法）
+            if self._try_download_with_api_url(file_link, output_path):
                 return True
             
             # 策略 2: 直接使用原始 URL（有認證）
             if self._try_download_with_auth_direct(file_link, output_path):
                 return True
             
-            # 策略 3: 修正 URL 路徑後下載
+            # 策略 3: 直接使用原始 URL（無認證）
+            if self._try_download_direct(file_link, output_path):
+                return True
+            
+            # 策略 4: 嘗試其他 URL 格式
             if self._try_download_with_corrected_paths(file_link, output_path):
                 return True
             
@@ -136,21 +140,24 @@ class GerritManager:
             self.logger.error(f"下載檔案失敗: {str(e)}")
             return False
 
-    def _try_download_direct(self, file_link: str, output_path: str) -> bool:
-        """策略 1: 直接下載（無認證）"""
+    def _try_download_with_api_url(self, file_link: str, output_path: str) -> bool:
+        """策略 1: 使用 API 風格 URL（成功方法）"""
         try:
-            self.logger.info(f"策略 1: 直接下載（無認證）")
+            self.logger.info(f"策略 1: 使用 API 風格 URL")
             
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            }
+            # 轉換為 API URL
+            api_url = self._convert_to_api_url(file_link)
+            if not api_url:
+                self.logger.warning("無法轉換為 API URL")
+                return False
             
-            response = requests.get(file_link, headers=headers, timeout=30)
+            self.logger.info(f"API URL: {api_url}")
+            
+            response = self._make_request(api_url, timeout=30)
             
             if response.status_code == 200:
                 self.logger.info("策略 1 成功！")
-                return self._save_response_to_file(response, output_path, file_link)
+                return self._save_response_to_file(response, output_path, api_url, is_base64=True)
             else:
                 self.logger.warning(f"策略 1 失敗 - HTTP {response.status_code}")
                 return False
@@ -159,12 +166,96 @@ class GerritManager:
             self.logger.warning(f"策略 1 異常: {str(e)}")
             return False
 
-    def _try_download_with_auth_direct(self, file_link: str, output_path: str) -> bool:
-        """策略 2: 直接下載（有認證）"""
+    def _convert_to_api_url(self, original_url: str) -> Optional[str]:
+        """
+        將 gitiles URL 轉換為 API URL
+        
+        原始: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+        轉換: https://mm2sd.rtkbf.com/gerrit/a/projects/realtek%2Fandroid%2Fmanifest/branches/realtek%2Fandroid-14%2Fmaster/files/atv-google-refplus.xml/content
+        """
         try:
-            self.logger.info(f"策略 2: 直接下載（有認證）")
+            if '/gerrit/plugins/gitiles/' not in original_url:
+                self.logger.warning("URL 不是 gitiles 格式")
+                return None
             
-            response = self._make_request(file_link, timeout=30)
+            # 解析 URL 組件
+            parts = original_url.split('/gerrit/plugins/gitiles/')
+            if len(parts) != 2:
+                self.logger.warning("URL 格式不正確")
+                return None
+            
+            base_url = parts[0]
+            path_part = parts[1]
+            
+            # 解析路徑組件
+            # realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+            path_components = path_part.split('/')
+            
+            if len(path_components) < 7:
+                self.logger.warning(f"路徑組件不足: {path_components}")
+                return None
+            
+            # 找到 '+' 的位置
+            plus_index = -1
+            for i, component in enumerate(path_components):
+                if component == '+':
+                    plus_index = i
+                    break
+            
+            if plus_index == -1:
+                self.logger.warning("找不到 '+' 分隔符")
+                return None
+            
+            # 提取組件
+            project_path = '/'.join(path_components[:plus_index])  # realtek/android/manifest
+            ref_parts = path_components[plus_index + 1:]  # refs/heads/realtek/android-14/master/atv-google-refplus.xml
+            
+            if len(ref_parts) < 5:
+                self.logger.warning(f"ref 組件不足: {ref_parts}")
+                return None
+            
+            # 提取分支和檔案
+            if ref_parts[0] == 'refs' and ref_parts[1] == 'heads':
+                # refs/heads/realtek/android-14/master/atv-google-refplus.xml
+                branch_parts = ref_parts[2:-1]  # realtek/android-14/master
+                file_name = ref_parts[-1]  # atv-google-refplus.xml
+                
+                branch_path = '/'.join(branch_parts)
+            else:
+                self.logger.warning(f"不是標準的 refs/heads 格式: {ref_parts}")
+                return None
+            
+            # URL 編碼
+            project_encoded = urllib.parse.quote(project_path, safe='')
+            branch_encoded = urllib.parse.quote(branch_path, safe='')
+            file_encoded = urllib.parse.quote(file_name, safe='')
+            
+            # 構建 API URL
+            api_url = f"{base_url}/gerrit/a/projects/{project_encoded}/branches/{branch_encoded}/files/{file_encoded}/content"
+            
+            self.logger.info(f"URL 轉換成功:")
+            self.logger.info(f"  專案: {project_path}")
+            self.logger.info(f"  分支: {branch_path}")
+            self.logger.info(f"  檔案: {file_name}")
+            self.logger.info(f"  API URL: {api_url}")
+            
+            return api_url
+            
+        except Exception as e:
+            self.logger.error(f"URL 轉換失敗: {str(e)}")
+            return None
+
+    def _try_download_direct(self, file_link: str, output_path: str) -> bool:
+        """策略 2: 直接下載（無認證）"""
+        try:
+            self.logger.info(f"策略 2: 直接下載（無認證）")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            response = requests.get(file_link, headers=headers, timeout=30)
             
             if response.status_code == 200:
                 self.logger.info("策略 2 成功！")
@@ -177,157 +268,16 @@ class GerritManager:
             self.logger.warning(f"策略 2 異常: {str(e)}")
             return False
 
-    def _try_download_with_corrected_paths(self, file_link: str, output_path: str) -> bool:
-        """策略 3: 使用修正的 URL 路徑"""
+    def _try_download_with_auth_direct(self, file_link: str, output_path: str) -> bool:
+        """策略 3: 直接下載（有認證）"""
         try:
-            self.logger.info(f"策略 3: 使用修正的 URL 路徑")
-            
-            # 根據 API 測試成功的經驗，這個 Gerrit 需要 /gerrit/ 前綴
-            corrected_urls = []
-            
-            # 如果 URL 中沒有 /gerrit/，嘗試加入
-            if '/gerrit/' not in file_link:
-                # https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/... 
-                # 保持現有格式，但確保有 /gerrit/ 前綴
-                corrected_urls.append(file_link)  # 原始 URL 已經有 /gerrit/
-            
-            # 嘗試不同的 API 風格 URL
-            if 'plugins/gitiles' in file_link:
-                # 轉換為 API 風格
-                # https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
-                # 轉換為:
-                # https://mm2sd.rtkbf.com/gerrit/a/projects/realtek%2Fandroid%2Fmanifest/branches/realtek%2Fandroid-14%2Fmaster/files/atv-google-refplus.xml/content
-                
-                try:
-                    import urllib.parse
-                    # 解析路徑
-                    parts = file_link.split('/gerrit/plugins/gitiles/')
-                    if len(parts) == 2:
-                        base_url = parts[0]
-                        path_part = parts[1]
-                        
-                        # 解析路徑組件
-                        # realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
-                        path_components = path_part.split('/')
-                        if len(path_components) >= 7:
-                            project_path = '/'.join(path_components[:3])  # realtek/android/manifest
-                            ref_parts = path_components[4:]  # refs/heads/realtek/android-14/master/atv-google-refplus.xml
-                            
-                            if len(ref_parts) >= 5:
-                                branch_path = '/'.join(ref_parts[2:-1])  # realtek/android-14/master
-                                file_name = ref_parts[-1]  # atv-google-refplus.xml
-                                
-                                # 構建 API URL
-                                project_encoded = urllib.parse.quote(project_path, safe='')
-                                branch_encoded = urllib.parse.quote(branch_path, safe='')
-                                file_encoded = urllib.parse.quote(file_name, safe='')
-                                
-                                api_url = f"{base_url}/gerrit/a/projects/{project_encoded}/branches/{branch_encoded}/files/{file_encoded}/content"
-                                corrected_urls.append(api_url)
-                except Exception as e:
-                    self.logger.warning(f"構建 API URL 失敗: {str(e)}")
-            
-            # 嘗試這些修正的 URL
-            for i, url in enumerate(corrected_urls, 1):
-                self.logger.info(f"  嘗試修正 URL {i}: {url}")
-                
-                try:
-                    # 無認證
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    }
-                    response = requests.get(url, headers=headers, timeout=30)
-                    
-                    if response.status_code == 200:
-                        self.logger.info(f"  修正 URL {i} 成功（無認證）！")
-                        return self._save_response_to_file(response, output_path, url)
-                    
-                    # 有認證
-                    response = self._make_request(url, timeout=30)
-                    
-                    if response.status_code == 200:
-                        self.logger.info(f"  修正 URL {i} 成功（有認證）！")
-                        return self._save_response_to_file(response, output_path, url)
-                    else:
-                        self.logger.warning(f"  修正 URL {i} 失敗 - HTTP {response.status_code}")
-                        
-                except Exception as e:
-                    self.logger.warning(f"  修正 URL {i} 異常: {str(e)}")
-                    continue
-            
-            return False
-            
-        except Exception as e:
-            self.logger.warning(f"策略 3 異常: {str(e)}")
-            return False
-    
-    def _try_download_without_auth(self, file_link: str, output_path: str) -> bool:
-        """策略 1: 無認證下載"""
-        try:
-            self.logger.info(f"策略 1: 無認證下載")
-            
-            # 建立無認證的 session
-            no_auth_session = requests.Session()
-            no_auth_session.headers.update(self.session.headers)
-            
-            response = no_auth_session.get(file_link, timeout=30)
-            
-            if response.status_code == 200:
-                return self._save_response_to_file(response, output_path, file_link)
-            else:
-                self.logger.warning(f"策略 1 失敗 - HTTP {response.status_code}")
-                return False
-                
-        except Exception as e:
-            self.logger.warning(f"策略 1 異常: {str(e)}")
-            return False
-    
-    def _try_download_with_auth(self, file_link: str, output_path: str) -> bool:
-        """策略 2: 使用認證下載"""
-        try:
-            self.logger.info(f"策略 2: 使用認證下載")
+            self.logger.info(f"策略 3: 直接下載（有認證）")
             
             response = self._make_request(file_link, timeout=30)
             
             if response.status_code == 200:
+                self.logger.info("策略 3 成功！")
                 return self._save_response_to_file(response, output_path, file_link)
-            else:
-                self.logger.warning(f"策略 2 失敗 - HTTP {response.status_code}")
-                return False
-                
-        except Exception as e:
-            self.logger.warning(f"策略 2 異常: {str(e)}")
-            return False
-    
-    def _try_download_with_format_text(self, file_link: str, output_path: str) -> bool:
-        """策略 3: 強制使用 ?format=TEXT"""
-        try:
-            self.logger.info(f"策略 3: 強制 ?format=TEXT")
-            
-            # 確保有 ?format=TEXT
-            if '?format=TEXT' not in file_link:
-                if '?' in file_link:
-                    text_link = f"{file_link}&format=TEXT"
-                else:
-                    text_link = f"{file_link}?format=TEXT"
-            else:
-                text_link = file_link
-            
-            # 先嘗試無認證
-            no_auth_session = requests.Session()
-            no_auth_session.headers.update(self.session.headers)
-            
-            response = no_auth_session.get(text_link, timeout=30)
-            
-            if response.status_code == 200:
-                return self._save_response_to_file(response, output_path, text_link, is_base64=True)
-            
-            # 再嘗試有認證
-            response = self._make_request(text_link, timeout=30)
-            
-            if response.status_code == 200:
-                return self._save_response_to_file(response, output_path, text_link, is_base64=True)
             else:
                 self.logger.warning(f"策略 3 失敗 - HTTP {response.status_code}")
                 return False
@@ -335,38 +285,23 @@ class GerritManager:
         except Exception as e:
             self.logger.warning(f"策略 3 異常: {str(e)}")
             return False
-    
-    def _try_alternative_urls(self, file_link: str, output_path: str) -> bool:
-        """策略 4: 嘗試不同的 URL 格式"""
+
+    def _try_download_with_corrected_paths(self, file_link: str, output_path: str) -> bool:
+        """策略 4: 使用其他 URL 格式"""
         try:
-            self.logger.info(f"策略 4: 嘗試替代 URL 格式")
+            self.logger.info(f"策略 4: 使用其他 URL 格式")
             
-            alternative_urls = self._generate_alternative_urls(file_link)
+            # 嘗試 ?format=TEXT
+            text_url = f"{file_link}?format=TEXT" if '?' not in file_link else f"{file_link}&format=TEXT"
             
-            for i, alt_url in enumerate(alternative_urls, 1):
-                self.logger.info(f"  嘗試替代 URL {i}: {alt_url}")
-                try:
-                    # 先無認證
-                    no_auth_session = requests.Session()
-                    no_auth_session.headers.update(self.session.headers)
-                    response = no_auth_session.get(alt_url, timeout=30)
-                    
-                    if response.status_code == 200:
-                        self.logger.info(f"  替代 URL {i} 成功 (無認證)！")
-                        return self._save_response_to_file(response, output_path, alt_url)
-                    
-                    # 再有認證
-                    response = self._make_request(alt_url, timeout=30)
-                    
-                    if response.status_code == 200:
-                        self.logger.info(f"  替代 URL {i} 成功 (有認證)！")
-                        return self._save_response_to_file(response, output_path, alt_url)
-                    else:
-                        self.logger.warning(f"  替代 URL {i} 失敗 - HTTP {response.status_code}")
-                        
-                except Exception as e:
-                    self.logger.warning(f"  替代 URL {i} 異常: {str(e)}")
-                    continue
+            self.logger.info(f"  嘗試 ?format=TEXT: {text_url}")
+            response = self._make_request(text_url, timeout=30)
+            
+            if response.status_code == 200:
+                self.logger.info("  策略 4 成功（?format=TEXT）！")
+                return self._save_response_to_file(response, output_path, text_url, is_base64=True)
+            else:
+                self.logger.warning(f"  ?format=TEXT 失敗 - HTTP {response.status_code}")
             
             return False
             
@@ -374,56 +309,9 @@ class GerritManager:
             self.logger.warning(f"策略 4 異常: {str(e)}")
             return False
     
-    def _generate_alternative_urls(self, original_url: str) -> List[str]:
-        """產生替代的 URL 格式"""
-        alternatives = []
-        
-        try:
-            # 原始: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
-            
-            # 替代 1: 移除 plugins/gitiles
-            alt1 = original_url.replace('/gerrit/plugins/gitiles/', '/gerrit/')
-            alternatives.append(alt1)
-            
-            # 替代 2: 使用 raw 格式
-            alt2 = original_url.replace('/+/', '/raw/')
-            alternatives.append(alt2)
-            
-            # 替代 3: 組合 raw 和移除 gitiles
-            alt3 = original_url.replace('/gerrit/plugins/gitiles/', '/gerrit/').replace('/+/', '/raw/')
-            alternatives.append(alt3)
-            
-            # 替代 4: 使用 plain 格式
-            if '?format=TEXT' in original_url:
-                alt4 = original_url.replace('?format=TEXT', '?format=PLAIN')
-                alternatives.append(alt4)
-            else:
-                alt4 = f"{original_url}?format=PLAIN"
-                alternatives.append(alt4)
-            
-            # 替代 5: 移除所有參數
-            if '?' in original_url:
-                alt5 = original_url.split('?')[0]
-                alternatives.append(alt5)
-            
-            # 替代 6: 只保留基本路徑，去掉 plugins/gitiles
-            if '/gerrit/plugins/gitiles/' in original_url:
-                # 轉換為類似這樣的格式：https://mm2sd.rtkbf.com/realtek/android/manifest/blob/refs/heads/realtek/android-14/master/atv-google-refplus.xml
-                parts = original_url.split('/gerrit/plugins/gitiles/')
-                if len(parts) == 2:
-                    base_part = parts[0]
-                    path_part = parts[1].replace('/+/', '/blob/')
-                    alt6 = f"{base_part}/{path_part}"
-                    alternatives.append(alt6)
-            
-        except Exception as e:
-            self.logger.error(f"產生替代 URL 失敗: {str(e)}")
-        
-        return alternatives
-    
     def _save_response_to_file(self, response: requests.Response, output_path: str, 
                           source_url: str, is_base64: bool = None) -> bool:
-        """儲存回應內容到檔案 - 修復 base64 檢測"""
+        """儲存回應內容到檔案 - 保持原始格式，不進行 XML 格式化"""
         try:
             # 確保輸出目錄存在
             utils.ensure_dir(os.path.dirname(output_path))
@@ -445,27 +333,33 @@ class GerritManager:
                     # 嘗試 base64 解碼
                     decoded_content = base64.b64decode(content)
                     content = decoded_content.decode('utf-8')
-                    self.logger.info(f"成功解碼 base64 內容")
+                    self.logger.info(f"成功解碼 base64 內容，解碼後 {len(content)} 字符")
                 except Exception as decode_error:
                     self.logger.warning(f"Base64 解碼失敗，使用原始內容: {str(decode_error)}")
                     # content 保持原樣
             
-            # 如果是 XML 檔案，進行格式化
-            if utils.is_xml_file(output_path):
-                try:
-                    formatted_content = utils.format_xml_content(content)
-                    content = formatted_content
-                    self.logger.info(f"XML 檔案已格式化為多行")
-                except Exception as format_error:
-                    self.logger.warning(f"XML 格式化失敗，保持原始格式: {str(format_error)}")
+            # ⭐ 移除 XML 格式化 - 保持 Gerrit 原始格式
+            # 不再對 XML 檔案進行額外的格式化處理
+            self.logger.info(f"保持檔案原始格式，不進行額外處理")
             
             # 儲存檔案
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            # 統計行數
+            # 統計行數和基本資訊
             line_count = len(content.split('\n'))
-            self.logger.info(f"成功儲存檔案: {output_path} ({line_count} 行)")
+            char_count = len(content)
+            
+            # 如果是 XML，提供更多統計
+            if utils.is_xml_file(output_path):
+                project_count = content.count('<project ')
+                self.logger.info(f"成功儲存 XML 檔案: {output_path} (保持原始格式)")
+                self.logger.info(f"  行數: {line_count}")
+                self.logger.info(f"  字符數: {char_count}")
+                self.logger.info(f"  專案數: {project_count}")
+            else:
+                self.logger.info(f"成功儲存檔案: {output_path} ({line_count} 行, {char_count} 字符)")
+            
             return True
                     
         except Exception as e:
@@ -477,7 +371,7 @@ class GerritManager:
         try:
             # 如果內容很長但只有很少換行，可能是 base64
             if len(content) > 1000 and content.count('\n') < 3:
-                self.logger.info(f"內容疑似 base64: {len(content)} 字符, {content.count('\n')} 換行")
+                self.logger.debug(f"內容疑似 base64: {len(content)} 字符, {content.count('\n')} 換行")
                 return True
             
             # 檢查是否只包含 base64 字符
@@ -489,7 +383,7 @@ class GerritManager:
                 for line in lines:
                     if line and not base64_pattern.match(line.strip()):
                         return False
-                self.logger.info(f"內容符合 base64 格式: {len(lines)} 行")
+                self.logger.debug(f"內容符合 base64 格式: {len(lines)} 行")
                 return True
             
             return False
@@ -498,13 +392,23 @@ class GerritManager:
             
     def check_file_exists(self, file_link: str) -> bool:
         """
-        檢查 Gerrit 上的檔案是否存在 - 改進版
-        參考 download_file_from_link 的成功策略
+        檢查 Gerrit 上的檔案是否存在 - 使用 API 方法
         """
         try:
             self.logger.info(f"檢查檔案是否存在: {file_link}")
             
-            # 策略 1: 直接檢查（無認證）
+            # 策略 1: 使用 API URL 檢查
+            api_url = self._convert_to_api_url(file_link)
+            if api_url:
+                try:
+                    response = self._make_request(api_url, method='HEAD', timeout=10)
+                    if response.status_code == 200:
+                        self.logger.info(f"檔案存在 (API): {file_link}")
+                        return True
+                except Exception as e:
+                    self.logger.debug(f"API 檢查失敗: {str(e)}")
+            
+            # 策略 2: 直接檢查（無認證）
             try:
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -518,7 +422,7 @@ class GerritManager:
             except Exception as e:
                 self.logger.debug(f"無認證檢查失敗: {str(e)}")
             
-            # 策略 2: 使用認證檢查（參考下載成功的方式）
+            # 策略 3: 使用認證檢查
             try:
                 response = self._make_request(file_link, method='HEAD', timeout=10)
                 if response.status_code == 200:
@@ -527,15 +431,6 @@ class GerritManager:
             except Exception as e:
                 self.logger.debug(f"認證檢查失敗: {str(e)}")
             
-            # 策略 3: 嘗試 GET 請求（有些伺服器不支援 HEAD）
-            try:
-                response = self._make_request(file_link, timeout=10)
-                if response.status_code == 200:
-                    self.logger.info(f"檔案存在 (GET請求): {file_link}")
-                    return True
-            except Exception as e:
-                self.logger.debug(f"GET 請求檢查失敗: {str(e)}")
-            
             self.logger.warning(f"檔案不存在或無法存取: {file_link}")
             return False
                 
@@ -543,13 +438,9 @@ class GerritManager:
             self.logger.error(f"檢查檔案存在性失敗: {str(e)}")
             return False
     
+    # 保留其他方法不變...
     def test_connection(self) -> Dict[str, Any]:
-        """
-        測試 Gerrit 連線和認證
-        
-        Returns:
-            測試結果字典
-        """
+        """測試 Gerrit 連線和認證"""
         result = {
             'success': False,
             'message': '',
@@ -574,10 +465,9 @@ class GerritManager:
                 result['message'] = f"網路連線失敗: {str(e)}"
                 return result
             
-            # 2. 測試 API 認證 - 嘗試多個可能的端點
+            # 2. 測試 API 認證
             self.logger.info("測試 Gerrit API 認證...")
             
-            # 嘗試的 API 端點列表
             api_endpoints = [
                 f"{self.api_url}/accounts/self",
                 f"{self.base_url}/a/accounts/self", 
@@ -591,7 +481,6 @@ class GerritManager:
                     result['tests_performed'].append(f"API 端點 {i+1} (HTTP {response.status_code})")
                     
                     if response.status_code == 200:
-                        # Gerrit API 返回的可能以 )]}' 開頭
                         content = response.text
                         if content.startswith(")]}'\n"):
                             content = content[5:]
@@ -608,27 +497,23 @@ class GerritManager:
                             result['details']['successful_endpoint'] = api_url
                             self.logger.info(f"API 認證成功 - 用戶: {user_info.get('name', 'Unknown')}")
                             
-                            # 3. 測試檔案下載
+                            # 3. 測試檔案下載（使用新的 API 方法）
                             self.logger.info("測試檔案下載...")
-                            test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml?format=TEXT"
+                            test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml"
                             
-                            # 測試無認證下載
-                            no_auth_session = requests.Session()
-                            no_auth_session.headers.update(self.session.headers)
-                            test_response = no_auth_session.get(test_url, timeout=10)
-                            
-                            if test_response.status_code == 200:
-                                result['tests_performed'].append(f"檔案下載測試 (無認證成功)")
-                                result['details']['download_method'] = '無認證'
-                            else:
-                                # 測試有認證下載
-                                test_response = self._make_request(test_url, timeout=10)
+                            # 測試 API 風格下載
+                            api_download_url = self._convert_to_api_url(test_url)
+                            if api_download_url:
+                                test_response = self._make_request(api_download_url, timeout=10)
                                 if test_response.status_code == 200:
-                                    result['tests_performed'].append(f"檔案下載測試 (有認證成功)")
-                                    result['details']['download_method'] = '有認證'
+                                    result['tests_performed'].append(f"檔案下載測試 (API 成功)")
+                                    result['details']['download_method'] = 'API'
                                 else:
-                                    result['tests_performed'].append(f"檔案下載測試 (失敗 HTTP {test_response.status_code})")
-                                    result['details']['download_method'] = '失敗'
+                                    result['tests_performed'].append(f"檔案下載測試 (API 失敗 HTTP {test_response.status_code})")
+                                    result['details']['download_method'] = 'API 失敗'
+                            else:
+                                result['tests_performed'].append(f"檔案下載測試 (URL 轉換失敗)")
+                                result['details']['download_method'] = 'URL 轉換失敗'
                             
                             return result
                         except json.JSONDecodeError as e:
@@ -646,7 +531,6 @@ class GerritManager:
                     self.logger.warning(f"API 端點 {i+1} 測試失敗: {str(e)}")
                     continue
             
-            # 如果所有端點都失敗
             if not result['success']:
                 if not result['message']:
                     result['message'] = "所有 API 端點都無法存取"
@@ -657,17 +541,14 @@ class GerritManager:
             result['message'] = f"連線測試過程發生錯誤: {str(e)}"
             self.logger.error(result['message'])
             return result
-    
+
+    # 其他方法保持不變...
     def query_branches(self, project_name: str) -> List[str]:
-        """
-        查詢專案的所有分支 - 改進版
-        """
+        """查詢專案的所有分支"""
         try:
-            # URL 編碼專案名稱
             import urllib.parse
             encoded_project = urllib.parse.quote(project_name, safe='')
             
-            # 嘗試多個可能的 API 路徑
             api_paths = [
                 f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/",
                 f"{self.api_url}/projects/{encoded_project}/branches/",
@@ -680,7 +561,6 @@ class GerritManager:
                     response = self._make_request(api_path, timeout=10)
                     
                     if response.status_code == 200:
-                        # Gerrit API 返回的 JSON 可能以 )]}' 開頭，需要移除
                         content = response.text
                         if content.startswith(")]}'\n"):
                             content = content[5:]
@@ -702,7 +582,6 @@ class GerritManager:
                     self.logger.debug(f"查詢路徑異常 {api_path}: {str(e)}")
                     continue
                     
-            # 如果所有 API 都失敗，嘗試 gitiles 方法
             return self._query_branches_via_gitiles(project_name)
                 
         except Exception as e:
@@ -714,20 +593,16 @@ class GerritManager:
         try:
             self.logger.debug(f"嘗試透過 gitiles 查詢分支: {project_name}")
             
-            # gitiles refs URL
             gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+refs"
             
             response = self._make_request(gitiles_url, timeout=10)
             
             if response.status_code == 200:
-                # 解析 HTML 回應中的分支資訊
                 import re
-                
-                # 尋找 refs/heads/ 的分支
                 branch_pattern = r'refs/heads/([^"<>\s]+)'
                 matches = re.findall(branch_pattern, response.text)
                 
-                branches = list(set(matches))  # 去重複
+                branches = list(set(matches))
                 self.logger.debug(f"透過 gitiles 找到 {len(branches)} 個分支: {project_name}")
                 return branches
             else:
@@ -739,16 +614,7 @@ class GerritManager:
             return []
 
     def check_branch_exists_and_get_revision(self, project_name: str, branch_name: str) -> Dict[str, Any]:
-        """
-        檢查分支是否存在並取得 revision - 新方法
-        
-        Returns:
-            {
-                'exists': bool,
-                'revision': str,
-                'method': str  # 查詢成功的方法
-            }
-        """
+        """檢查分支是否存在並取得 revision"""
         result = {
             'exists': False,
             'revision': '',
@@ -756,7 +622,6 @@ class GerritManager:
         }
         
         try:
-            # 方法 1: 直接查詢特定分支 API
             branch_info = self._get_branch_info_api(project_name, branch_name)
             if branch_info['success']:
                 result['exists'] = True
@@ -764,18 +629,15 @@ class GerritManager:
                 result['method'] = 'Branch API'
                 return result
             
-            # 方法 2: 查詢所有分支然後找目標分支
             branches = self.query_branches(project_name)
             if branch_name in branches:
                 result['exists'] = True
                 result['method'] = 'Branches List'
                 
-                # 嘗試取得 revision
                 revision = self._get_branch_revision_alternative(project_name, branch_name)
                 result['revision'] = revision
                 return result
             
-            # 方法 3: 透過 gitiles commit 查詢
             revision = self._get_revision_via_gitiles(project_name, branch_name)
             if revision:
                 result['exists'] = True
@@ -793,16 +655,12 @@ class GerritManager:
     def _get_revision_via_gitiles(self, project_name: str, branch_name: str) -> str:
         """透過 gitiles 取得 revision"""
         try:
-            # gitiles commit URL
             gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/heads/{branch_name}"
             
             response = self._make_request(gitiles_url, timeout=5)
             
             if response.status_code == 200:
-                # 從回應中解析 commit hash
                 import re
-                
-                # 多種可能的 commit hash 模式
                 patterns = [
                     r'commit\s+([a-f0-9]{40})',
                     r'<span[^>]*>([a-f0-9]{40})</span>',
@@ -822,16 +680,12 @@ class GerritManager:
     def _get_branch_revision_alternative(self, project_name: str, branch_name: str) -> str:
         """替代方法取得分支 revision"""
         try:
-            # 嘗試透過 commit API
             commit_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/{branch_name}"
             
             response = self._make_request(commit_url, timeout=5)
             
             if response.status_code == 200:
-                # 從 HTML 中解析 commit hash
                 import re
-                
-                # 尋找 commit hash 模式
                 hash_pattern = r'commit\s+([a-f0-9]{40})'
                 match = re.search(hash_pattern, response.text)
                 
@@ -848,11 +702,9 @@ class GerritManager:
         try:
             import urllib.parse
             
-            # URL 編碼
             encoded_project = urllib.parse.quote(project_name, safe='')
             encoded_branch = urllib.parse.quote(f"refs/heads/{branch_name}", safe='')
             
-            # 嘗試多個 API 路徑
             api_paths = [
                 f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
                 f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
@@ -875,7 +727,7 @@ class GerritManager:
                         if revision:
                             return {
                                 'success': True,
-                                'revision': revision[:8]  # 只取前8個字符
+                                'revision': revision[:8]
                             }
                             
                 except Exception:
@@ -887,17 +739,7 @@ class GerritManager:
             return {'success': False, 'revision': ''}
                     
     def create_branch(self, project_name: str, branch_name: str, revision: str) -> Dict[str, Any]:
-        """
-        建立新分支
-        
-        Args:
-            project_name: 專案名稱
-            branch_name: 分支名稱
-            revision: 基於的 revision
-            
-        Returns:
-            建立結果
-        """
+        """建立新分支"""
         result = {
             'success': False,
             'message': '',
@@ -905,7 +747,6 @@ class GerritManager:
         }
         
         try:
-            # 首先檢查分支是否已存在
             branches = self.query_branches(project_name)
             if branch_name in branches:
                 result['exists'] = True
@@ -913,7 +754,6 @@ class GerritManager:
                 self.logger.info(result['message'])
                 return result
             
-            # URL 編碼
             import urllib.parse
             encoded_project = urllib.parse.quote(project_name, safe='')
             encoded_branch = urllib.parse.quote(branch_name, safe='')
@@ -940,153 +780,54 @@ class GerritManager:
             result['message'] = f"建立分支發生錯誤: {str(e)}"
             self.logger.error(result['message'])
             return result
-    
-    def determine_branch_type(self, branch_name: str) -> str:
-        """
-        判斷分支類型
-        
-        Args:
-            branch_name: 分支名稱
-            
-        Returns:
-            分支類型: master, premp, mp, mpbackup
-        """
-        if not branch_name:
-            return 'master'
-        
-        branch_lower = branch_name.lower()
-        
-        # 檢查是否包含 premp
-        if 'premp' in branch_lower:
-            return 'premp'
-        
-        # 檢查是否包含 wave.backup
-        if 'wave.backup' in branch_lower or 'wave' in branch_lower and 'backup' in branch_lower:
-            return 'mpbackup'
-        
-        # 檢查是否包含 wave (但不包含 backup)
-        if 'wave' in branch_lower and 'backup' not in branch_lower:
-            return 'mp'
-        
-        # 預設為 master
-        return 'master'
-    
-    def convert_branch_name(self, source_branch: str, target_type: str) -> str:
-        """
-        轉換分支名稱
-        
-        Args:
-            source_branch: 來源分支名稱
-            target_type: 目標類型 (premp, mp, mpbackup)
-            
-        Returns:
-            轉換後的分支名稱
-        """
-        if not source_branch:
-            return source_branch
-        
-        try:
-            if target_type == 'premp':
-                # master -> premp: 加上 premp
-                if 'premp' not in source_branch:
-                    # 在適當位置插入 premp
-                    parts = source_branch.split('/')
-                    if len(parts) >= 3:
-                        # realtek/android-14/master -> realtek/android-14/premp.google-refplus
-                        parts[-1] = 'premp.google-refplus'
-                    return '/'.join(parts)
-                
-            elif target_type == 'mp':
-                # premp -> mp: 替換 premp 為 mp.google-refplus.wave
-                result = source_branch.replace('premp.google-refplus', 'mp.google-refplus.wave')
-                return result
-                
-            elif target_type == 'mpbackup':
-                # mp -> mpbackup: 在 wave 後加上 .backup
-                if 'wave' in source_branch and 'backup' not in source_branch:
-                    result = source_branch.replace('wave', 'wave.backup')
-                    return result
-            
-            return source_branch
-            
-        except Exception as e:
-            self.logger.error(f"轉換分支名稱失敗: {str(e)}")
-            return source_branch
 
     def query_tag(self, project_name: str, tag_name: str) -> Dict[str, Any]:
-            """
-            查詢專案的指定 tag 是否存在並取得 revision
+        """查詢專案的指定 tag 是否存在並取得 revision"""
+        result = {
+            'exists': False,
+            'revision': '',
+            'method': ''
+        }
+        
+        try:
+            self.logger.debug(f"查詢 Tag: {project_name} - {tag_name}")
             
-            Args:
-                project_name: 專案名稱
-                tag_name: tag 名稱 (不包含 refs/tags/ 前綴)
-                
-            Returns:
-                {
-                    'exists': bool,
-                    'revision': str,
-                    'method': str  # 查詢成功的方法
-                }
-            """
-            result = {
-                'exists': False,
-                'revision': '',
-                'method': ''
-            }
+            tag_info = self._get_tag_info_api(project_name, tag_name)
+            if tag_info['success']:
+                result['exists'] = True
+                result['revision'] = tag_info['revision']
+                result['method'] = 'Tag API'
+                return result
             
-            try:
-                self.logger.debug(f"查詢 Tag: {project_name} - {tag_name}")
+            tags = self.query_tags(project_name)
+            if tag_name in tags:
+                result['exists'] = True
+                result['method'] = 'Tags List'
                 
-                # 方法 1: 直接查詢特定 tag API
-                tag_info = self._get_tag_info_api(project_name, tag_name)
-                if tag_info['success']:
-                    result['exists'] = True
-                    result['revision'] = tag_info['revision']
-                    result['method'] = 'Tag API'
-                    return result
-                
-                # 方法 2: 查詢所有 tags 然後找目標 tag
-                tags = self.query_tags(project_name)
-                if tag_name in tags:
-                    result['exists'] = True
-                    result['method'] = 'Tags List'
-                    
-                    # 嘗試取得 revision
-                    revision = self._get_tag_revision_alternative(project_name, tag_name)
-                    result['revision'] = revision
-                    return result
-                
-                # 方法 3: 透過 gitiles tag 查詢
-                revision = self._get_tag_revision_via_gitiles(project_name, tag_name)
-                if revision:
-                    result['exists'] = True
-                    result['revision'] = revision
-                    result['method'] = 'Gitiles'
-                    return result
-                
-                self.logger.debug(f"Tag 不存在: {project_name} - {tag_name}")
-                
-            except Exception as e:
-                self.logger.debug(f"查詢 Tag 存在性失敗: {project_name} - {tag_name}: {str(e)}")
+                revision = self._get_tag_revision_alternative(project_name, tag_name)
+                result['revision'] = revision
+                return result
             
-            return result
+            revision = self._get_tag_revision_via_gitiles(project_name, tag_name)
+            if revision:
+                result['exists'] = True
+                result['revision'] = revision
+                result['method'] = 'Gitiles'
+                return result
+            
+            self.logger.debug(f"Tag 不存在: {project_name} - {tag_name}")
+            
+        except Exception as e:
+            self.logger.debug(f"查詢 Tag 存在性失敗: {project_name} - {tag_name}: {str(e)}")
+        
+        return result
 
     def query_tags(self, project_name: str) -> List[str]:
-        """
-        查詢專案的所有 tags
-        
-        Args:
-            project_name: 專案名稱
-            
-        Returns:
-            tag 名稱列表
-        """
+        """查詢專案的所有 tags"""
         try:
-            # URL 編碼專案名稱
             import urllib.parse
             encoded_project = urllib.parse.quote(project_name, safe='')
             
-            # 嘗試多個可能的 API 路徑
             api_paths = [
                 f"{self.base_url}/gerrit/a/projects/{encoded_project}/tags/",
                 f"{self.api_url}/projects/{encoded_project}/tags/",
@@ -1099,7 +840,6 @@ class GerritManager:
                     response = self._make_request(api_path, timeout=10)
                     
                     if response.status_code == 200:
-                        # Gerrit API 返回的 JSON 可能以 )]}' 開頭，需要移除
                         content = response.text
                         if content.startswith(")]}'\n"):
                             content = content[5:]
@@ -1107,11 +847,9 @@ class GerritManager:
                         import json
                         tags_data = json.loads(content)
                         
-                        # tags_data 可能是字典格式 {tag_name: {object: xxx, ...}}
                         if isinstance(tags_data, dict):
                             tags = list(tags_data.keys())
                         else:
-                            # 或者是列表格式 [{ref: refs/tags/xxx, ...}]
                             tags = [tag['ref'].replace('refs/tags/', '') for tag in tags_data if 'ref' in tag]
                         
                         self.logger.debug(f"查詢到 {len(tags)} 個 tags: {project_name}")
@@ -1127,7 +865,6 @@ class GerritManager:
                     self.logger.debug(f"查詢路徑異常 {api_path}: {str(e)}")
                     continue
                     
-            # 如果所有 API 都失敗，嘗試 gitiles 方法
             return self._query_tags_via_gitiles(project_name)
                 
         except Exception as e:
@@ -1139,20 +876,16 @@ class GerritManager:
         try:
             self.logger.debug(f"嘗試透過 gitiles 查詢 tags: {project_name}")
             
-            # gitiles refs URL
             gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+refs"
             
             response = self._make_request(gitiles_url, timeout=10)
             
             if response.status_code == 200:
-                # 解析 HTML 回應中的 tag 資訊
                 import re
-                
-                # 尋找 refs/tags/ 的 tags
                 tag_pattern = r'refs/tags/([^"<>\s]+)'
                 matches = re.findall(tag_pattern, response.text)
                 
-                tags = list(set(matches))  # 去重複
+                tags = list(set(matches))
                 self.logger.debug(f"透過 gitiles 找到 {len(tags)} 個 tags: {project_name}")
                 return tags
             else:
@@ -1168,11 +901,9 @@ class GerritManager:
         try:
             import urllib.parse
             
-            # URL 編碼
             encoded_project = urllib.parse.quote(project_name, safe='')
             encoded_tag = urllib.parse.quote(f"refs/tags/{tag_name}", safe='')
             
-            # 嘗試多個 API 路徑
             api_paths = [
                 f"{self.base_url}/gerrit/a/projects/{encoded_project}/tags/{encoded_tag}",
                 f"{self.api_url}/projects/{encoded_project}/tags/{encoded_tag}",
@@ -1191,13 +922,12 @@ class GerritManager:
                         import json
                         tag_info = json.loads(content)
                         
-                        # Tag 資訊可能包含 object 或 revision 欄位
                         revision = tag_info.get('object', tag_info.get('revision', ''))
                         
                         if revision:
                             return {
                                 'success': True,
-                                'revision': revision[:8]  # 只取前8個字符
+                                'revision': revision[:8]
                             }
                             
                 except Exception:
@@ -1211,16 +941,13 @@ class GerritManager:
     def _get_tag_revision_alternative(self, project_name: str, tag_name: str) -> str:
         """替代方法取得 tag revision"""
         try:
-            # 嘗試透過 gitiles tag 頁面
             tag_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/tags/{tag_name}"
             
             response = self._make_request(tag_url, timeout=5)
             
             if response.status_code == 200:
-                # 從 HTML 中解析 commit hash
                 import re
                 
-                # 尋找 commit hash 模式
                 hash_patterns = [
                     r'commit\s+([a-f0-9]{40})',
                     r'object\s+([a-f0-9]{40})',
@@ -1241,16 +968,13 @@ class GerritManager:
     def _get_tag_revision_via_gitiles(self, project_name: str, tag_name: str) -> str:
         """透過 gitiles 取得 tag revision"""
         try:
-            # gitiles tag URL
             gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/tags/{tag_name}"
             
             response = self._make_request(gitiles_url, timeout=5)
             
             if response.status_code == 200:
-                # 從回應中解析 commit hash
                 import re
                 
-                # 多種可能的 commit hash 模式
                 patterns = [
                     r'tag\s+([a-f0-9]{40})',
                     r'object\s+([a-f0-9]{40})',
@@ -1267,4 +991,4 @@ class GerritManager:
             return ''
             
         except Exception:
-            return ''        
+            return ''
