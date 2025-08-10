@@ -326,47 +326,54 @@ class MainApplication:
         input("\n按 Enter 繼續...")
     
     def _execute_feature_two(self):
-        """執行功能二：建立分支映射表"""
+        """執行功能二：建立分支映射表 - 修改詢問順序"""
         print("\n" + "="*60)
         print("  🌿 功能二：建立分支映射表")
         print("="*60)
         
         try:
-            # 取得輸入檔案
+            # 1. 取得輸入檔案
             input_file = self._get_input_file("請輸入 manifest.xml 檔案路徑")
             if not input_file:
                 return
             
-            # 選擇處理類型
+            # 2. 取得輸出資料夾
+            output_folder = input("請輸入輸出資料夾路徑 (預設: ./output): ").strip()
+            if not output_folder:
+                output_folder = "./output"
+                print(f"使用預設輸出路徑: {output_folder}")
+            
+            # 3. 選擇處理類型
             process_type = self._select_process_type()
             if not process_type:
                 return
             
-            # 取得輸出資料夾
-            output_folder = input("請輸入輸出資料夾路徑 (預設: ./output): ").strip()
-            if not output_folder:
-                output_folder = "./output"
-            
-            # 取得輸出檔案名稱
+            # 4. 取得輸出檔案名稱（根據處理類型提供預設值）
             default_output = f"manifest_{process_type}.xlsx"
             output_file = input(f"請輸入輸出檔案名稱 (預設: {default_output}): ").strip()
             if not output_file:
                 output_file = default_output
             
-            # 選擇選項
+            # 5. 是否去除重複資料
             remove_duplicates = self._get_yes_no_input("是否去除重複資料？", False)
+            
+            # 6. 是否建立分支
             create_branches = self._get_yes_no_input("是否建立分支？", False)
+            
+            # 7. 是否檢查分支存在性
             check_branch_exists = self._get_yes_no_input("是否檢查分支存在性？(會比較慢)", False)
             
+            # 顯示所有參數供確認
             print(f"\n📋 處理參數:")
             print(f"  輸入檔案: {input_file}")
-            print(f"  處理類型: {process_type}")
             print(f"  輸出資料夾: {output_folder}")
+            print(f"  處理類型: {process_type}")
             print(f"  輸出檔案: {output_file}")
             print(f"  去除重複: {'是' if remove_duplicates else '否'}")
             print(f"  建立分支: {'是' if create_branches else '否'}")
             print(f"  檢查分支存在性: {'是' if check_branch_exists else '否'}")
             
+            # 8. 確認執行
             if not self._confirm_execution():
                 return
             
@@ -379,6 +386,12 @@ class MainApplication:
             if success:
                 print("\n✅ 功能二執行成功！")
                 print(f"📁 結果檔案: {os.path.join(output_folder, output_file)}")
+                
+                # 顯示額外資訊
+                if create_branches:
+                    print("🌿 分支建立狀態已記錄在 Excel 的 'Branch 建立狀態' 頁籤")
+                if check_branch_exists:
+                    print("🔍 分支存在性檢查結果已記錄在 'target_branch_exists' 欄位")
             else:
                 print("\n❌ 功能二執行失敗")
                 
@@ -482,7 +495,7 @@ class MainApplication:
         return output_folder
     
     def _select_process_type(self) -> Optional[str]:
-        """選擇處理類型"""
+        """選擇處理類型 - 改進版"""
         types = {
             '1': 'master_vs_premp',
             '2': 'premp_vs_mp', 
@@ -490,35 +503,42 @@ class MainApplication:
         }
         
         print("\n請選擇處理類型:")
-        print("  [1] master_vs_premp")
-        print("  [2] premp_vs_mp")
-        print("  [3] mp_vs_mpbackup")
+        print("  [1] master_vs_premp (master → premp)")
+        print("  [2] premp_vs_mp (premp → mp)")
+        print("  [3] mp_vs_mpbackup (mp → mpbackup)")
+        print("  [0] 返回上層選單")
         
         while True:
             choice = input("請選擇 (1-3): ").strip()
             if choice in types:
-                return types[choice]
+                selected_type = types[choice]
+                print(f"已選擇: {selected_type}")
+                return selected_type
             elif choice == '0':
                 return None
             else:
-                print("❌ 請輸入 1-3 之間的數字")
+                print("❌ 請輸入 1-3 之間的數字，或輸入 0 返回")
     
     def _get_yes_no_input(self, prompt: str, default: bool = False) -> bool:
-        """取得是/否輸入"""
+        """取得是/否輸入 - 改進版"""
         default_text = "Y/n" if default else "y/N"
         while True:
             response = input(f"{prompt} ({default_text}): ").strip().lower()
             if not response:
-                return default
+                result = default
+                print(f"使用預設值: {'是' if result else '否'}")
+                return result
             elif response in ['y', 'yes', '是']:
+                print("選擇: 是")
                 return True
             elif response in ['n', 'no', '否']:
+                print("選擇: 否")
                 return False
             else:
-                print("❌ 請輸入 y/n 或是/否")
+                print("❌ 請輸入 y/n、是/否，或直接按 Enter 使用預設值")
     
     def _confirm_execution(self) -> bool:
-        """確認執行"""
+        """確認執行 - 改進版"""
         return self._get_yes_no_input("\n是否確認執行？", True)
     
     def _confirm_exit(self):

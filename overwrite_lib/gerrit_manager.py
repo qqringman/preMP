@@ -422,7 +422,7 @@ class GerritManager:
         return alternatives
     
     def _save_response_to_file(self, response: requests.Response, output_path: str, 
-                      source_url: str, is_base64: bool = None) -> bool:
+                          source_url: str, is_base64: bool = None) -> bool:
         """儲存回應內容到檔案 - 修復 base64 檢測"""
         try:
             # 確保輸出目錄存在
@@ -433,8 +433,8 @@ class GerritManager:
                 # 檢查多種可能的 base64 情況
                 is_base64 = (
                     '?format=TEXT' in source_url or  # 原有邏輯
-                    '/files/' in source_url and '/content' in source_url or  # API 格式
-                    'projects/' in source_url and 'branches/' in source_url  # API 路徑
+                    ('/files/' in source_url and '/content' in source_url) or  # API 格式
+                    ('projects/' in source_url and 'branches/' in source_url and '/content' in source_url)  # API 路徑
                 )
             
             content = response.text
@@ -477,6 +477,7 @@ class GerritManager:
         try:
             # 如果內容很長但只有很少換行，可能是 base64
             if len(content) > 1000 and content.count('\n') < 3:
+                self.logger.info(f"內容疑似 base64: {len(content)} 字符, {content.count('\n')} 換行")
                 return True
             
             # 檢查是否只包含 base64 字符
@@ -488,6 +489,7 @@ class GerritManager:
                 for line in lines:
                     if line and not base64_pattern.match(line.strip()):
                         return False
+                self.logger.info(f"內容符合 base64 格式: {len(lines)} 行")
                 return True
             
             return False
@@ -1010,3 +1012,259 @@ class GerritManager:
         except Exception as e:
             self.logger.error(f"轉換分支名稱失敗: {str(e)}")
             return source_branch
+
+    def query_tag(self, project_name: str, tag_name: str) -> Dict[str, Any]:
+            """
+            查詢專案的指定 tag 是否存在並取得 revision
+            
+            Args:
+                project_name: 專案名稱
+                tag_name: tag 名稱 (不包含 refs/tags/ 前綴)
+                
+            Returns:
+                {
+                    'exists': bool,
+                    'revision': str,
+                    'method': str  # 查詢成功的方法
+                }
+            """
+            result = {
+                'exists': False,
+                'revision': '',
+                'method': ''
+            }
+            
+            try:
+                self.logger.debug(f"查詢 Tag: {project_name} - {tag_name}")
+                
+                # 方法 1: 直接查詢特定 tag API
+                tag_info = self._get_tag_info_api(project_name, tag_name)
+                if tag_info['success']:
+                    result['exists'] = True
+                    result['revision'] = tag_info['revision']
+                    result['method'] = 'Tag API'
+                    return result
+                
+                # 方法 2: 查詢所有 tags 然後找目標 tag
+                tags = self.query_tags(project_name)
+                if tag_name in tags:
+                    result['exists'] = True
+                    result['method'] = 'Tags List'
+                    
+                    # 嘗試取得 revision
+                    revision = self._get_tag_revision_alternative(project_name, tag_name)
+                    result['revision'] = revision
+                    return result
+                
+                # 方法 3: 透過 gitiles tag 查詢
+                revision = self._get_tag_revision_via_gitiles(project_name, tag_name)
+                if revision:
+                    result['exists'] = True
+                    result['revision'] = revision
+                    result['method'] = 'Gitiles'
+                    return result
+                
+                self.logger.debug(f"Tag 不存在: {project_name} - {tag_name}")
+                
+            except Exception as e:
+                self.logger.debug(f"查詢 Tag 存在性失敗: {project_name} - {tag_name}: {str(e)}")
+            
+            return result
+
+    def query_tags(self, project_name: str) -> List[str]:
+        """
+        查詢專案的所有 tags
+        
+        Args:
+            project_name: 專案名稱
+            
+        Returns:
+            tag 名稱列表
+        """
+        try:
+            # URL 編碼專案名稱
+            import urllib.parse
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            
+            # 嘗試多個可能的 API 路徑
+            api_paths = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/tags/",
+                f"{self.api_url}/projects/{encoded_project}/tags/",
+                f"{self.base_url}/a/projects/{encoded_project}/tags/"
+            ]
+            
+            for api_path in api_paths:
+                try:
+                    self.logger.debug(f"嘗試查詢 Tags 路徑: {api_path}")
+                    response = self._make_request(api_path, timeout=10)
+                    
+                    if response.status_code == 200:
+                        # Gerrit API 返回的 JSON 可能以 )]}' 開頭，需要移除
+                        content = response.text
+                        if content.startswith(")]}'\n"):
+                            content = content[5:]
+                        
+                        import json
+                        tags_data = json.loads(content)
+                        
+                        # tags_data 可能是字典格式 {tag_name: {object: xxx, ...}}
+                        if isinstance(tags_data, dict):
+                            tags = list(tags_data.keys())
+                        else:
+                            # 或者是列表格式 [{ref: refs/tags/xxx, ...}]
+                            tags = [tag['ref'].replace('refs/tags/', '') for tag in tags_data if 'ref' in tag]
+                        
+                        self.logger.debug(f"查詢到 {len(tags)} 個 tags: {project_name}")
+                        return tags
+                    elif response.status_code == 404:
+                        self.logger.debug(f"專案不存在或無權限: {project_name}")
+                        continue
+                    else:
+                        self.logger.debug(f"查詢 tags 失敗 - HTTP {response.status_code}: {api_path}")
+                        continue
+                            
+                except Exception as e:
+                    self.logger.debug(f"查詢路徑異常 {api_path}: {str(e)}")
+                    continue
+                    
+            # 如果所有 API 都失敗，嘗試 gitiles 方法
+            return self._query_tags_via_gitiles(project_name)
+                
+        except Exception as e:
+            self.logger.error(f"查詢 tags 失敗: {str(e)}")
+            return []
+
+    def _query_tags_via_gitiles(self, project_name: str) -> List[str]:
+        """透過 gitiles 查詢 tags"""
+        try:
+            self.logger.debug(f"嘗試透過 gitiles 查詢 tags: {project_name}")
+            
+            # gitiles refs URL
+            gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+refs"
+            
+            response = self._make_request(gitiles_url, timeout=10)
+            
+            if response.status_code == 200:
+                # 解析 HTML 回應中的 tag 資訊
+                import re
+                
+                # 尋找 refs/tags/ 的 tags
+                tag_pattern = r'refs/tags/([^"<>\s]+)'
+                matches = re.findall(tag_pattern, response.text)
+                
+                tags = list(set(matches))  # 去重複
+                self.logger.debug(f"透過 gitiles 找到 {len(tags)} 個 tags: {project_name}")
+                return tags
+            else:
+                self.logger.debug(f"gitiles 查詢失敗 - HTTP {response.status_code}")
+                return []
+                
+        except Exception as e:
+            self.logger.debug(f"gitiles 查詢異常: {str(e)}")
+            return []
+
+    def _get_tag_info_api(self, project_name: str, tag_name: str) -> Dict[str, Any]:
+        """透過 Tag API 取得 tag 資訊"""
+        try:
+            import urllib.parse
+            
+            # URL 編碼
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_tag = urllib.parse.quote(f"refs/tags/{tag_name}", safe='')
+            
+            # 嘗試多個 API 路徑
+            api_paths = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/tags/{encoded_tag}",
+                f"{self.api_url}/projects/{encoded_project}/tags/{encoded_tag}",
+                f"{self.base_url}/a/projects/{encoded_project}/tags/{encoded_tag}"
+            ]
+            
+            for api_path in api_paths:
+                try:
+                    response = self._make_request(api_path, timeout=5)
+                    
+                    if response.status_code == 200:
+                        content = response.text
+                        if content.startswith(")]}'\n"):
+                            content = content[5:]
+                        
+                        import json
+                        tag_info = json.loads(content)
+                        
+                        # Tag 資訊可能包含 object 或 revision 欄位
+                        revision = tag_info.get('object', tag_info.get('revision', ''))
+                        
+                        if revision:
+                            return {
+                                'success': True,
+                                'revision': revision[:8]  # 只取前8個字符
+                            }
+                            
+                except Exception:
+                    continue
+            
+            return {'success': False, 'revision': ''}
+            
+        except Exception:
+            return {'success': False, 'revision': ''}
+
+    def _get_tag_revision_alternative(self, project_name: str, tag_name: str) -> str:
+        """替代方法取得 tag revision"""
+        try:
+            # 嘗試透過 gitiles tag 頁面
+            tag_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/tags/{tag_name}"
+            
+            response = self._make_request(tag_url, timeout=5)
+            
+            if response.status_code == 200:
+                # 從 HTML 中解析 commit hash
+                import re
+                
+                # 尋找 commit hash 模式
+                hash_patterns = [
+                    r'commit\s+([a-f0-9]{40})',
+                    r'object\s+([a-f0-9]{40})',
+                    r'<span[^>]*>([a-f0-9]{40})</span>',
+                    r'([a-f0-9]{40})'
+                ]
+                
+                for pattern in hash_patterns:
+                    matches = re.findall(pattern, response.text)
+                    if matches:
+                        return matches[0][:8]
+            
+            return ''
+            
+        except Exception:
+            return ''
+
+    def _get_tag_revision_via_gitiles(self, project_name: str, tag_name: str) -> str:
+        """透過 gitiles 取得 tag revision"""
+        try:
+            # gitiles tag URL
+            gitiles_url = f"{self.base_url}/gerrit/plugins/gitiles/{project_name}/+/refs/tags/{tag_name}"
+            
+            response = self._make_request(gitiles_url, timeout=5)
+            
+            if response.status_code == 200:
+                # 從回應中解析 commit hash
+                import re
+                
+                # 多種可能的 commit hash 模式
+                patterns = [
+                    r'tag\s+([a-f0-9]{40})',
+                    r'object\s+([a-f0-9]{40})',
+                    r'commit\s+([a-f0-9]{40})',
+                    r'<span[^>]*>([a-f0-9]{40})</span>',
+                    r'([a-f0-9]{40})'
+                ]
+                
+                for pattern in patterns:
+                    matches = re.findall(pattern, response.text)
+                    if matches:
+                        return matches[0][:8]
+            
+            return ''
+            
+        except Exception:
+            return ''        
