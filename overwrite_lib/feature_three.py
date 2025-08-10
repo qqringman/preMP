@@ -650,8 +650,8 @@ class FeatureThree:
                              output_file_path: str, target_file_path: Optional[str], 
                              diff_analysis: Dict, output_folder: str, 
                              excel_filename: Optional[str], source_download_success: bool,
-                             target_download_success: bool) -> str:
-        """產生 Excel 報告 - 完整版本，包含下載狀態記錄和格式保留"""
+                             target_download_success: bool, push_result: Optional[Dict[str, Any]] = None) -> str:
+        """產生 Excel 報告 - 完整版本，包含下載狀態記錄和推送結果"""
         try:
             # 決定 Excel 檔名
             if excel_filename:
@@ -661,7 +661,7 @@ class FeatureThree:
                 excel_file = os.path.join(output_folder, default_name)
             
             with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-                # 頁籤 1: 轉換摘要 - 增強版本，包含下載狀態
+                # 更新推送狀態到摘要資料
                 summary_data = [{
                     'SN': 1,
                     '轉換類型': overwrite_type,
@@ -678,6 +678,22 @@ class FeatureThree:
                     '差異數量': diff_analysis['summary'].get('differences_count', 0),
                     '相同數量': diff_analysis['summary'].get('identical_count', 0)
                 }]
+                
+                # 添加推送相關資訊
+                if push_result:
+                    summary_data[0].update({
+                        '推送狀態': '成功' if push_result['success'] else '失敗',
+                        '推送結果': push_result['message'],
+                        'Commit ID': push_result.get('commit_id', ''),
+                        'Review URL': push_result.get('review_url', '')
+                    })
+                else:
+                    summary_data[0].update({
+                        '推送狀態': '未執行',
+                        '推送結果': '未執行推送',
+                        'Commit ID': '',
+                        'Review URL': ''
+                    })
                 
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='轉換摘要', index=False)
@@ -874,7 +890,247 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"格式化下載狀態欄位失敗: {str(e)}")
     
-    def _final_file_report(self, output_folder: str, source_file_path: Optional[str], 
+    def _generate_excel_report_safe(self, overwrite_type: str, source_file_path: Optional[str],
+                                  output_file_path: Optional[str], target_file_path: Optional[str], 
+                                  diff_analysis: Dict, output_folder: str, 
+                                  excel_filename: Optional[str], source_download_success: bool,
+                                  target_download_success: bool, push_result: Optional[Dict[str, Any]] = None) -> str:
+        """安全的 Excel 報告生成 - 確保總是能產生報告"""
+        try:
+            return self._generate_excel_report(
+                overwrite_type=overwrite_type,
+                source_file_path=source_file_path,
+                output_file_path=output_file_path,
+                target_file_path=target_file_path,
+                diff_analysis=diff_analysis,
+                output_folder=output_folder,
+                excel_filename=excel_filename,
+                source_download_success=source_download_success,
+                target_download_success=target_download_success,
+                push_result=push_result
+            )
+        except Exception as e:
+            self.logger.error(f"標準 Excel 報告生成失敗: {str(e)}")
+            self.logger.info("嘗試生成基本錯誤報告...")
+            return self._generate_error_report(output_folder, overwrite_type, str(e))
+    
+    def _generate_error_report(self, output_folder: str, overwrite_type: str, error_message: str) -> str:
+        """生成基本錯誤報告"""
+        try:
+            excel_filename = f"{overwrite_type}_error_report.xlsx"
+            excel_file = os.path.join(output_folder, excel_filename)
+            
+            error_data = [{
+                'SN': 1,
+                '轉換類型': overwrite_type,
+                '處理狀態': '失敗',
+                '錯誤訊息': error_message,
+                '時間': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                '建議': '請檢查網路連線和 Gerrit 認證設定'
+            }]
+            
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                df_error = pd.DataFrame(error_data)
+                df_error.to_excel(writer, sheet_name='錯誤報告', index=False)
+                
+                # 格式化
+                worksheet = writer.sheets['錯誤報告']
+                self._format_worksheet_with_green_headers(worksheet)
+            
+            self.logger.info(f"已生成基本錯誤報告: {excel_file}")
+            return excel_file
+            
+        except Exception as e:
+            self.logger.error(f"連基本錯誤報告都無法生成: {str(e)}")
+            return ""
+    
+    def _push_to_gerrit(self, overwrite_type: str, converted_content: str, 
+                       target_content: Optional[str], output_folder: str) -> Dict[str, Any]:
+        """推送轉換後的檔案到 Gerrit 服務器"""
+        push_result = {
+            'success': False,
+            'message': '',
+            'need_push': False,
+            'commit_id': '',
+            'review_url': ''
+        }
+        
+        try:
+            self.logger.info("🚀 開始推送到 Gerrit 服務器...")
+            
+            # 判斷是否需要推送
+            push_result['need_push'] = self._should_push_to_gerrit(converted_content, target_content)
+            
+            if not push_result['need_push']:
+                push_result['success'] = True
+                push_result['message'] = "目標檔案與轉換結果相同，無需推送"
+                self.logger.info("✅ " + push_result['message'])
+                return push_result
+            
+            # 執行 Git 操作
+            git_result = self._execute_git_push(overwrite_type, converted_content, output_folder)
+            
+            push_result.update(git_result)
+            
+            if push_result['success']:
+                self.logger.info(f"✅ 成功推送到 Gerrit: {push_result['review_url']}")
+            else:
+                self.logger.error(f"❌ 推送失敗: {push_result['message']}")
+            
+            return push_result
+            
+        except Exception as e:
+            push_result['message'] = f"推送過程發生錯誤: {str(e)}"
+            self.logger.error(push_result['message'])
+            return push_result
+    
+    def _should_push_to_gerrit(self, converted_content: str, target_content: Optional[str]) -> bool:
+        """判斷是否需要推送到 Gerrit"""
+        if target_content is None:
+            self.logger.info("🎯 目標檔案不存在，需要推送新檔案")
+            return True
+        
+        # 簡單的內容比較（忽略空白差異）
+        def normalize_content(content):
+            return ''.join(content.split()) if content else ''
+        
+        converted_normalized = normalize_content(converted_content)
+        target_normalized = normalize_content(target_content)
+        
+        if converted_normalized == target_normalized:
+            self.logger.info("📋 轉換結果與目標檔案相同，無需推送")
+            return False
+        else:
+            self.logger.info("🔄 轉換結果與目標檔案不同，需要推送更新")
+            return True
+    
+    def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
+        """執行 Git clone, commit, push 操作"""
+        import subprocess
+        import tempfile
+        import shutil
+        
+        result = {
+            'success': False,
+            'message': '',
+            'commit_id': '',
+            'review_url': ''
+        }
+        
+        # 建立臨時 Git 工作目錄
+        temp_git_dir = None
+        
+        try:
+            temp_git_dir = tempfile.mkdtemp(prefix='gerrit_push_')
+            self.logger.info(f"📁 建立臨時 Git 目錄: {temp_git_dir}")
+            
+            # Git 設定
+            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+            branch = "realtek/android-14/master"
+            target_filename = self.output_files[overwrite_type]
+            
+            # 步驟 1: Clone repository
+            self.logger.info(f"📥 Clone repository: {repo_url}")
+            clone_cmd = ["git", "clone", "-b", branch, repo_url, temp_git_dir]
+            
+            subprocess.run(clone_cmd, check=True, capture_output=True, text=True, timeout=60)
+            
+            # 步驟 2: 切換到 Git 目錄並檢查狀態
+            original_cwd = os.getcwd()
+            os.chdir(temp_git_dir)
+            
+            # 步驟 3: 寫入轉換後的檔案
+            target_file_path = os.path.join(temp_git_dir, target_filename)
+            with open(target_file_path, 'w', encoding='utf-8') as f:
+                f.write(converted_content)
+            
+            self.logger.info(f"📝 寫入檔案: {target_filename}")
+            
+            # 步驟 4: 檢查 Git 狀態
+            status_result = subprocess.run(
+                ["git", "status", "--porcelain"], 
+                capture_output=True, text=True, check=True
+            )
+            
+            if not status_result.stdout.strip():
+                result['success'] = True
+                result['message'] = "檔案內容無變化，無需推送"
+                self.logger.info("✅ " + result['message'])
+                return result
+            
+            # 步驟 5: Add 檔案
+            subprocess.run(["git", "add", target_filename], check=True)
+            
+            # 步驟 6: Commit
+            commit_message = f"Auto-generated manifest update: {overwrite_type}\n\n" \
+                           f"Generated by manifest conversion tool\n" \
+                           f"Source: {self.source_files[overwrite_type]}\n" \
+                           f"Target: {target_filename}"
+            
+            commit_result = subprocess.run(
+                ["git", "commit", "-m", commit_message],
+                capture_output=True, text=True, check=True
+            )
+            
+            # 取得 commit ID
+            commit_id_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True
+            )
+            result['commit_id'] = commit_id_result.stdout.strip()[:8]
+            
+            self.logger.info(f"📝 創建 commit: {result['commit_id']}")
+            
+            # 步驟 7: Push to Gerrit for review
+            push_cmd = ["git", "push", "origin", f"HEAD:refs/for/{branch}"]
+            
+            push_result = subprocess.run(
+                push_cmd, capture_output=True, text=True, check=True, timeout=60
+            )
+            
+            # 解析 Gerrit review URL
+            output_lines = push_result.stderr.split('\n')
+            review_url = ""
+            for line in output_lines:
+                if 'https://' in line and 'gerrit' in line:
+                    # 提取 URL
+                    import re
+                    url_match = re.search(r'https://[^\s]+', line)
+                    if url_match:
+                        review_url = url_match.group(0)
+                        break
+            
+            result['success'] = True
+            result['message'] = f"成功推送到 Gerrit，Commit ID: {result['commit_id']}"
+            result['review_url'] = review_url or f"https://mm2sd.rtkbf.com/gerrit/#/q/commit:{result['commit_id']}"
+            
+            self.logger.info(f"🎉 推送成功！Review URL: {result['review_url']}")
+            
+            return result
+            
+        except subprocess.TimeoutExpired:
+            result['message'] = "Git 操作逾時，請檢查網路連線"
+            return result
+        except subprocess.CalledProcessError as e:
+            result['message'] = f"Git 命令失敗: {e.stderr}"
+            return result
+        except Exception as e:
+            result['message'] = f"Git 操作異常: {str(e)}"
+            return result
+        finally:
+            # 恢復原始工作目錄
+            if 'original_cwd' in locals():
+                os.chdir(original_cwd)
+            
+            # 清理臨時目錄
+            if temp_git_dir and os.path.exists(temp_git_dir):
+                try:
+                    shutil.rmtree(temp_git_dir)
+                    self.logger.info(f"🗑️  清理臨時目錄: {temp_git_dir}")
+                except Exception as e:
+                    self.logger.warning(f"清理臨時目錄失敗: {str(e)}")
+    
+    def _final_file_report_complete(self, output_folder: str, source_file_path: Optional[str], 
                           output_file_path: Optional[str], target_file_path: Optional[str], 
                           excel_file: str, source_download_success: bool, target_download_success: bool):
         """最終檔案檢查和報告 - 增強版本，包含下載狀態統計"""
@@ -960,3 +1216,72 @@ class FeatureThree:
                 
         except Exception as e:
             self.logger.error(f"檔案檢查報告失敗: {str(e)}")
+
+# ===============================
+# ===== 使用範例和說明 =====
+# ===============================
+
+"""
+使用範例：
+
+1. 基本使用（不推送到 Gerrit）：
+   feature_three = FeatureThree()
+   success = feature_three.process(
+       overwrite_type='mp_to_mpbackup',
+       output_folder='./output',
+       excel_filename='my_report.xlsx',
+       push_to_gerrit=False
+   )
+
+2. 完整使用（包含推送到 Gerrit）：
+   feature_three = FeatureThree()
+   success = feature_three.process(
+       overwrite_type='master_to_premp',
+       output_folder='./output',
+       push_to_gerrit=True
+   )
+
+3. 命令行支援範例（需要在 main.py 中實現）：
+   def _execute_feature_three(self):
+       # ... 現有程式碼 ...
+       
+       # 新增：詢問是否推送到 Gerrit
+       push_to_gerrit = self._get_yes_no_input(
+           "是否要將轉換結果推送到 Gerrit 服務器？", False
+       )
+       
+       success = self.feature_three.process(
+           overwrite_type, output_folder, excel_filename, push_to_gerrit
+       )
+
+4. Gerrit 推送功能說明：
+   - 自動判斷是否需要推送（目標檔案不存在或內容不同）
+   - 執行 Git clone, commit, push 操作
+   - 推送到 refs/for/branch（等待 Code Review）
+   - 在 Excel 報告中記錄推送結果
+   - 提供 Gerrit Review URL
+
+5. 錯誤處理改進：
+   - 即使下載失敗也會產生 Excel 報告
+   - 詳細記錄失敗原因
+   - 紅字標示下載失敗狀態
+   - 提供故障排除建議
+
+6. Excel 報告內容：
+   ■ 轉換摘要頁籤：
+     - 下載狀態（成功/失敗，紅綠字標示）
+     - 推送狀態（成功/失敗/未執行）
+     - Commit ID 和 Review URL
+   
+   ■ 轉換後專案頁籤：
+     - 原始 Revision vs 轉換後 Revision
+     - 是否實際發生轉換
+   
+   ■ 差異部份頁籤：
+     - 詳細差異分析（如有目標檔案）
+
+7. Git 需求：
+   - 系統需要安裝 Git
+   - 需要 SSH 認證到 mm2sd.rtkbf.com:29418
+   - 建議設定 Git 用戶名和郵箱
+"""

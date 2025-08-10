@@ -1,5 +1,5 @@
 """
-主程式 - 互動式選單系統
+主程式 - 互動式選單系統 (更新版 - 支援 Gerrit 推送)
 整合所有功能模組，提供使用者友善的操作介面
 """
 import os
@@ -55,7 +55,7 @@ class MainApplication:
         print("      └─ 2-3. 查詢分支狀態")
         print()
         print("  📄 [3] Manifest 處理工具")
-        print("      ├─ 3-1. 去除版本號產生新 manifest (功能三)")
+        print("      ├─ 3-1. Manifest 轉換工具 (功能三) 🚀")
         print("      ├─ 3-2. 比較 manifest 差異")
         print("      └─ 3-3. 下載 Gerrit manifest")
         print()
@@ -162,7 +162,7 @@ class MainApplication:
             print("\n" + "="*50)
             print("  📄 Manifest 處理工具")
             print("="*50)
-            print("  [1] 去除版本號產生新 manifest (功能三)")
+            print("  [1] Manifest 轉換工具 (功能三) 🚀")
             print("  [2] 比較 manifest 差異")
             print("  [3] 下載 Gerrit manifest")
             print("  [0] 返回主選單")
@@ -401,11 +401,11 @@ class MainApplication:
         input("\n按 Enter 繼續...")
     
     def _execute_feature_three(self):
-        """執行功能三：Manifest 轉換工具 - 全新版本"""
-        print("\n" + "="*60)
-        print("  📄 功能三：Manifest 轉換工具 (全新版本)")
-        print("="*60)
-        print("說明：從 Gerrit 下載源檔案，進行 revision 轉換，並與目標檔案比較差異")
+        """執行功能三：Manifest 轉換工具 - 新版本 (支援 Gerrit 推送)"""
+        print("\n" + "="*70)
+        print("  📄 功能三：Manifest 轉換工具 🚀 (支援 Gerrit 推送)")
+        print("="*70)
+        print("說明：從 Gerrit 下載源檔案，進行 revision 轉換，並可選擇推送到 Gerrit")
         
         try:
             # 取得輸出資料夾
@@ -450,10 +450,53 @@ class MainApplication:
             if not excel_filename:
                 excel_filename = None
             
+            # 🚀 新增：詢問是否推送到 Gerrit
+            print("\n" + "="*50)
+            print("  🚀 Gerrit 推送設定")
+            print("="*50)
+            print("推送功能說明：")
+            print("• 自動判斷是否需要推送 (目標檔案不存在或內容不同)")
+            print("• 執行 Git clone, commit, push 操作")
+            print("• 推送到 refs/for/branch (等待 Code Review)")
+            print("• 提供 Gerrit Review URL")
+            print()
+            print("⚠️  推送需求：")
+            print("• 系統已安裝 Git")
+            print("• SSH 認證到 mm2sd.rtkbf.com:29418")
+            print("• Git 用戶名和郵箱已設定")
+            print()
+            
+            push_to_gerrit = self._get_yes_no_input(
+                "是否要將轉換結果推送到 Gerrit 服務器？", False
+            )
+            
+            if push_to_gerrit:
+                # 檢查 Git 設定
+                git_check = self._check_git_requirements()
+                if not git_check['valid']:
+                    print(f"\n❌ Git 設定檢查失敗:")
+                    for issue in git_check['issues']:
+                        print(f"  • {issue}")
+                    print("\n💡 建議：")
+                    for suggestion in git_check['suggestions']:
+                        print(f"  • {suggestion}")
+                    
+                    continue_anyway = self._get_yes_no_input(
+                        "\n仍要繼續推送嗎？(可能會失敗)", False
+                    )
+                    if not continue_anyway:
+                        push_to_gerrit = False
+                        print("✅ 已取消 Gerrit 推送，僅執行轉換")
+                else:
+                    print(f"\n✅ Git 設定檢查通過")
+                    for check in git_check['checks']:
+                        print(f"  ✓ {check}")
+            
             print(f"\n📋 處理參數:")
             print(f"  轉換類型: {overwrite_type}")
             print(f"  輸出資料夾: {output_folder}")
             print(f"  Excel 檔名: {excel_filename or '使用預設'}")
+            print(f"  推送到 Gerrit: {'✅ 是' if push_to_gerrit else '❌ 否'}")
             
             # 顯示處理流程
             print(f"\n🔄 處理流程:")
@@ -473,14 +516,24 @@ class MainApplication:
                 print(f"  3. 輸出檔案: atv-google-refplus-wave-backup.xml")
                 print(f"  4. 與 Gerrit 上的 atv-google-refplus-wave-backup.xml 比較差異")
             
+            if push_to_gerrit:
+                print(f"  5. 🚀 推送到 Gerrit (如需要)")
+                print(f"     • Git clone ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest")
+                print(f"     • Git commit & push to refs/for/realtek/android-14/master")
+                print(f"     • 建立 Code Review")
+            
             if not self._confirm_execution():
                 return
             
             print("\n🔄 開始處理...")
             print("⬇️  正在從 Gerrit 下載源檔案...")
             
+            # 🚀 使用新的 process 方法 (包含 push_to_gerrit 參數)
             success = self.feature_three.process(
-                overwrite_type, output_folder, excel_filename
+                overwrite_type=overwrite_type,
+                output_folder=output_folder,
+                excel_filename=excel_filename,
+                push_to_gerrit=push_to_gerrit  # 🚀 新參數
             )
             
             if success:
@@ -493,24 +546,104 @@ class MainApplication:
                 print(f"  ✅ 已從 Gerrit 下載源檔案")
                 print(f"  ✅ 已完成 revision 轉換")
                 print(f"  ✅ 已保存轉換後檔案")
-                print(f"  ✅ 已下載目標檔案進行比較")
-                print(f"  ✅ 已產生差異分析報告")
+                print(f"  ✅ 已嘗試下載目標檔案進行比較")
+                print(f"  ✅ 已產生詳細分析報告")
+                
+                if push_to_gerrit:
+                    print(f"  🚀 已執行 Gerrit 推送流程")
+                    print(f"     查看 Excel 報告中的推送結果和 Review URL")
                 
                 print(f"\n💡 提示:")
                 print(f"  📄 查看 '轉換摘要' 頁籤了解整體情況")
                 print(f"  📋 查看 '轉換後專案' 頁籤檢視所有專案")
-                print(f"  🔍 查看 '{overwrite_type}_差異部份' 頁籤分析差異")
+                if push_to_gerrit:
+                    print(f"  🚀 查看推送狀態和 Gerrit Review URL")
+                print(f"  🔍 查看 '{overwrite_type}_差異部份' 頁籤分析差異 (如有)")
             else:
                 print("\n❌ 功能三執行失敗")
-                print(f"\n💡 故障排除:")
+                print(f"💡 故障排除:")
                 print(f"  1. 檢查網路連線")
                 print(f"  2. 確認 Gerrit 認證設定")
                 print(f"  3. 檢查輸出資料夾權限")
+                print(f"  4. 查看 Excel 錯誤報告了解詳細原因")
                 
         except Exception as e:
             print(f"\n❌ 執行過程發生錯誤: {str(e)}")
         
         input("\n按 Enter 繼續...")
+    
+    def _check_git_requirements(self) -> Dict[str, Any]:
+        """檢查 Git 環境需求"""
+        import subprocess
+        
+        result = {
+            'valid': True,
+            'issues': [],
+            'suggestions': [],
+            'checks': []
+        }
+        
+        try:
+            # 檢查 Git 是否安裝
+            try:
+                git_version = subprocess.run(['git', '--version'], capture_output=True, text=True, timeout=5)
+                if git_version.returncode == 0:
+                    result['checks'].append(f"Git 已安裝: {git_version.stdout.strip()}")
+                else:
+                    result['valid'] = False
+                    result['issues'].append("Git 未安裝或無法執行")
+                    result['suggestions'].append("請安裝 Git: https://git-scm.com/")
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                result['valid'] = False
+                result['issues'].append("Git 未安裝或無法執行")
+                result['suggestions'].append("請安裝 Git: https://git-scm.com/")
+                return result
+            
+            # 檢查 Git 用戶設定
+            try:
+                user_name = subprocess.run(['git', 'config', '--global', 'user.name'], 
+                                         capture_output=True, text=True, timeout=5)
+                user_email = subprocess.run(['git', 'config', '--global', 'user.email'], 
+                                          capture_output=True, text=True, timeout=5)
+                
+                if user_name.returncode == 0 and user_name.stdout.strip():
+                    result['checks'].append(f"Git 用戶名: {user_name.stdout.strip()}")
+                else:
+                    result['issues'].append("Git 用戶名未設定")
+                    result['suggestions'].append("執行: git config --global user.name 'Your Name'")
+                
+                if user_email.returncode == 0 and user_email.stdout.strip():
+                    result['checks'].append(f"Git 郵箱: {user_email.stdout.strip()}")
+                else:
+                    result['issues'].append("Git 郵箱未設定")
+                    result['suggestions'].append("執行: git config --global user.email 'your@email.com'")
+                    
+            except subprocess.TimeoutExpired:
+                result['issues'].append("Git 設定檢查逾時")
+            
+            # 檢查 SSH 連線 (簡單測試)
+            try:
+                ssh_test = subprocess.run(['ssh', '-T', 'mm2sd.rtkbf.com'], 
+                                        capture_output=True, text=True, timeout=10)
+                # SSH 測試通常會返回非 0，但如果能連線就表示 SSH 設定正確
+                if "Permission denied" not in ssh_test.stderr:
+                    result['checks'].append("SSH 連線測試: 可能已設定")
+                else:
+                    result['issues'].append("SSH 認證可能未設定")
+                    result['suggestions'].append("請設定 SSH 金鑰到 Gerrit")
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                result['issues'].append("SSH 測試失敗 (SSH 未安裝或網路問題)")
+                result['suggestions'].append("確認 SSH 已安裝且網路正常")
+            
+            # 如果有任何 issues，標記為無效
+            if result['issues']:
+                result['valid'] = False
+            
+        except Exception as e:
+            result['valid'] = False
+            result['issues'].append(f"Git 檢查過程發生錯誤: {str(e)}")
+        
+        return result
     
     def _get_input_file(self, prompt: str) -> Optional[str]:
         """取得輸入檔案路徑"""
