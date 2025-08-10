@@ -602,9 +602,9 @@ class MainApplication:
             # 檢查 Git 用戶設定
             try:
                 user_name = subprocess.run(['git', 'config', '--global', 'user.name'], 
-                                         capture_output=True, text=True, timeout=5)
+                                        capture_output=True, text=True, timeout=5)
                 user_email = subprocess.run(['git', 'config', '--global', 'user.email'], 
-                                          capture_output=True, text=True, timeout=5)
+                                        capture_output=True, text=True, timeout=5)
                 
                 if user_name.returncode == 0 and user_name.stdout.strip():
                     result['checks'].append(f"Git 用戶名: {user_name.stdout.strip()}")

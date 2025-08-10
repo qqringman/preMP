@@ -48,7 +48,7 @@ class FeatureThree:
         }
     
     def process(self, overwrite_type: str, output_folder: str, 
-                excel_filename: Optional[str] = None) -> bool:
+                excel_filename: Optional[str] = None, push_to_gerrit: bool = False) -> bool:
         """
         處理功能三的主要邏輯 - 微調版本
         
@@ -56,6 +56,7 @@ class FeatureThree:
             overwrite_type: 轉換類型 (master_to_premp, premp_to_mp, mp_to_mpbackup)
             output_folder: 輸出資料夾
             excel_filename: 自定義 Excel 檔名
+            push_to_gerrit: 是否推送到 Gerrit 服務器
             
         Returns:
             是否處理成功
@@ -64,6 +65,7 @@ class FeatureThree:
             self.logger.info("=== 開始執行功能三：Manifest 轉換工具 (微調版本) ===")
             self.logger.info(f"轉換類型: {overwrite_type}")
             self.logger.info(f"輸出資料夾: {output_folder}")
+            self.logger.info(f"推送到 Gerrit: {'是' if push_to_gerrit else '否'}")
             
             # 驗證參數
             if overwrite_type not in self.source_files:
@@ -73,31 +75,44 @@ class FeatureThree:
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
             
+            # 記錄下載狀態
+            source_download_success = False
+            target_download_success = False
+            
             # 步驟 1: 從 Gerrit 下載源檔案
             source_content = self._download_source_file(overwrite_type)
-            if not source_content:
-                self.logger.error("下載源檔案失敗")
-                return False
+            if source_content:
+                source_download_success = True
+                self.logger.info("✅ 源檔案下載成功")
+            else:
+                self.logger.error("❌ 下載源檔案失敗")
+                # 仍然繼續執行，生成錯誤報告
             
             # 步驟 1.5: 保存源檔案到 output 資料夾（加上 gerrit_ 前綴）
-            source_file_path = self._save_source_file(source_content, overwrite_type, output_folder)
+            source_file_path = None
+            if source_content:
+                source_file_path = self._save_source_file(source_content, overwrite_type, output_folder)
             
             # 步驟 2: 進行 revision 轉換
-            converted_content, conversion_info = self._convert_revisions(source_content, overwrite_type)
+            if source_content:
+                converted_content, conversion_info = self._convert_revisions(source_content, overwrite_type)
+            else:
+                # 如果沒有源檔案，建立空的轉換結果
+                converted_content = ""
+                conversion_info = []
             
             # 步驟 3: 保存轉換後的檔案
-            output_file_path = self._save_converted_file(converted_content, overwrite_type, output_folder)
+            output_file_path = None
+            if converted_content:
+                output_file_path = self._save_converted_file(converted_content, overwrite_type, output_folder)
             
             # 步驟 4: 從 Gerrit 下載目標檔案進行比較
             target_content = self._download_target_file(overwrite_type)
             target_file_path = None
             if target_content:
+                target_download_success = True
                 target_file_path = self._save_target_file(target_content, overwrite_type, output_folder)
-                # 再次確認檔案是否存在
-                if target_file_path and os.path.exists(target_file_path):
-                    self.logger.info(f"✅ 確認目標檔案已保存: {target_file_path}")
-                else:
-                    self.logger.error(f"❌ 目標檔案保存失敗或不存在: {target_file_path}")
+                self.logger.info("✅ 目標檔案下載成功")
             else:
                 self.logger.warning("⚠️ 無法下載目標檔案，將跳過差異比較")
             
@@ -106,21 +121,41 @@ class FeatureThree:
                 converted_content, target_content, overwrite_type, conversion_info
             )
             
-            # 步驟 6: 產生 Excel 報告
-            excel_file = self._generate_excel_report(
+            # 步驟 6: 推送到 Gerrit（如果需要）
+            push_result = None
+            if push_to_gerrit and converted_content:
+                self.logger.info("🚀 開始推送到 Gerrit...")
+                push_result = self._push_to_gerrit(overwrite_type, converted_content, target_content, output_folder)
+            else:
+                self.logger.info("⏭️ 跳過 Gerrit 推送")
+            
+            # 步驟 7: 產生 Excel 報告
+            excel_file = self._generate_excel_report_safe(
                 overwrite_type, source_file_path, output_file_path, target_file_path, 
-                diff_analysis, output_folder, excel_filename
+                diff_analysis, output_folder, excel_filename, source_download_success, 
+                target_download_success, push_result
             )
             
             # 最終檔案檢查和報告
-            self._final_file_report(output_folder, source_file_path, output_file_path, target_file_path, 
-                                   excel_file, source_download_success, target_download_success)
+            self._final_file_report_complete(
+                output_folder, source_file_path, output_file_path, target_file_path, 
+                excel_file, source_download_success, target_download_success
+            )
             
             self.logger.info(f"=== 功能三執行完成，Excel 報告：{excel_file} ===")
             return True
             
         except Exception as e:
             self.logger.error(f"功能三執行失敗: {str(e)}")
+            
+            # 即使失敗也嘗試生成錯誤報告
+            try:
+                error_excel = self._generate_error_report(output_folder, overwrite_type, str(e))
+                if error_excel:
+                    self.logger.info(f"已生成錯誤報告: {error_excel}")
+            except:
+                pass
+            
             return False
     
     def _download_source_file(self, overwrite_type: str) -> Optional[str]:
@@ -480,6 +515,40 @@ class FeatureThree:
             self.logger.error(f"檔案名: {target_filename}")
             raise
     
+    def _get_source_and_target_filenames(self, overwrite_type: str) -> tuple:
+        """取得來源和目標檔案名稱"""
+        source_filename = self.output_files.get(overwrite_type, 'unknown.xml')
+        target_filename = f"gerrit_{self.target_files.get(overwrite_type, 'unknown.xml')}"
+        return source_filename, target_filename
+    
+    def _build_project_line_content(self, project: Dict, use_converted_revision: bool = False) -> str:
+        """根據專案資訊建立完整的 project 行內容"""
+        try:
+            # 建立基本的 project 標籤
+            project_line = "<project"
+            
+            # 添加各個屬性（按照常見順序）
+            attrs_order = ['name', 'path', 'revision', 'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote']
+            
+            for attr in attrs_order:
+                value = project.get(attr, '')
+                
+                # 特殊處理 revision
+                if attr == 'revision' and use_converted_revision:
+                    value = project.get('converted_revision', project.get('revision', ''))
+                
+                # 只添加非空值
+                if value:
+                    project_line += f' {attr}="{value}"'
+            
+            project_line += " />"
+            
+            return project_line
+            
+        except Exception as e:
+            self.logger.error(f"建立 project 行內容失敗: {str(e)}")
+            return f"<project name=\"{project.get('name', 'unknown')}\" ... />"
+    
     def _analyze_differences(self, converted_content: str, target_content: Optional[str], 
                            overwrite_type: str, conversion_info: List[Dict]) -> Dict[str, Any]:
         """分析轉換檔案與目標檔案的差異 - 微調版本，包含轉換資訊"""
@@ -498,8 +567,10 @@ class FeatureThree:
                 target_projects = self._extract_projects_with_line_numbers(target_content)
                 analysis['target_projects'] = target_projects
                 
-                # 進行差異比較
-                differences = self._compare_projects_with_conversion_info(conversion_info, target_projects)
+                # 進行差異比較（傳遞 overwrite_type）
+                differences = self._compare_projects_with_conversion_info(
+                    conversion_info, target_projects, overwrite_type
+                )
                 analysis['differences'] = differences
                 
                 # 統計摘要
@@ -529,19 +600,19 @@ class FeatureThree:
             return analysis
     
     def _extract_projects_with_line_numbers(self, xml_content: str) -> List[Dict[str, Any]]:
-        """提取專案資訊並記錄行號"""
+        """提取專案資訊並記錄行號 - 改進版本，提取完整的project行內容"""
         projects = []
         lines = xml_content.split('\n')
         
         try:
             root = ET.fromstring(xml_content)
             
-            # 為每個 project 找到對應的行號
+            # 為每個 project 找到對應的完整行內容
             for project in root.findall('project'):
                 project_name = project.get('name', '')
                 
-                # 在原始內容中尋找對應的行號
-                line_number = self._find_project_line_number(lines, project_name)
+                # 在原始內容中尋找對應的行號和完整內容
+                line_number, full_line = self._find_project_line_and_content(lines, project_name)
                 
                 project_info = {
                     'line_number': line_number,
@@ -553,7 +624,7 @@ class FeatureThree:
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
                     'remote': project.get('remote', ''),
-                    'full_line': self._get_full_project_line(lines, line_number)
+                    'full_line': full_line  # 完整的project行內容
                 }
                 projects.append(project_info)
             
@@ -562,39 +633,102 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"提取專案資訊失敗: {str(e)}")
             return []
-    
-    def _find_project_line_number(self, lines: List[str], project_name: str) -> int:
-        """尋找專案在 XML 中的行號"""
-        for i, line in enumerate(lines, 1):
-            if f'name="{project_name}"' in line:
-                return i
-        return 0
-    
+
+    def _find_project_line_and_content(self, lines: List[str], project_name: str) -> tuple:
+        """尋找專案在 XML 中的行號和完整內容"""
+        line_number = 0
+        full_content = ""
+        
+        try:
+            for i, line in enumerate(lines, 1):
+                stripped_line = line.strip()
+                
+                # 檢查是否包含該專案名稱
+                if f'name="{project_name}"' in line:
+                    line_number = i
+                    
+                    # 提取完整的project標籤內容
+                    if stripped_line.startswith('<project') and stripped_line.endswith('/>'):
+                        # 單行project標籤
+                        full_content = stripped_line
+                    elif stripped_line.startswith('<project'):
+                        # 多行project標籤，需要收集到結束標籤
+                        full_content = stripped_line
+                        
+                        # 繼續收集後續行直到找到結束
+                        for j in range(i, len(lines)):
+                            next_line = lines[j].strip()
+                            if j > i - 1:  # 不重複第一行
+                                full_content += " " + next_line
+                            
+                            if next_line.endswith('/>') or next_line.endswith('</project>'):
+                                break
+                    else:
+                        # 如果不是以<project開始，可能是內容在前一行
+                        full_content = stripped_line
+                        
+                        # 往前找project開始標籤
+                        for k in range(i-2, -1, -1):
+                            prev_line = lines[k].strip()
+                            if prev_line.startswith('<project'):
+                                # 組合完整內容
+                                full_content = prev_line
+                                for m in range(k+1, i):
+                                    full_content += " " + lines[m].strip()
+                                full_content += " " + stripped_line
+                                line_number = k + 1
+                                break
+                    
+                    break
+            
+            # 清理多餘的空格
+            full_content = ' '.join(full_content.split())
+            
+            self.logger.debug(f"找到專案 {project_name} 在第 {line_number} 行: {full_content[:100]}...")
+            
+            return line_number, full_content
+            
+        except Exception as e:
+            self.logger.error(f"尋找專案行失敗 {project_name}: {str(e)}")
+            return 0, f"<project name=\"{project_name}\" ... />"
+
     def _get_full_project_line(self, lines: List[str], line_number: int) -> str:
-        """取得完整的專案行（可能跨多行）"""
+        """取得完整的專案行（可能跨多行） - 改進版本"""
         if line_number == 0 or line_number > len(lines):
             return ''
         
-        # 從指定行開始，找到完整的 project 標籤
-        start_line = line_number - 1
-        full_line = lines[start_line].strip()
-        
-        # 如果行不以 /> 或 > 結尾，可能跨多行
-        if not (full_line.endswith('/>') or full_line.endswith('>')):
-            for i in range(start_line + 1, len(lines)):
-                full_line += ' ' + lines[i].strip()
-                if lines[i].strip().endswith('/>') or lines[i].strip().endswith('>'):
-                    break
-        
-        return full_line
+        try:
+            # 從指定行開始，找到完整的 project 標籤
+            start_line = line_number - 1
+            full_line = lines[start_line].strip()
+            
+            # 如果行不以 /> 或 > 結尾，可能跨多行
+            if not (full_line.endswith('/>') or full_line.endswith('>')):
+                for i in range(start_line + 1, len(lines)):
+                    next_line = lines[i].strip()
+                    full_line += ' ' + next_line
+                    if next_line.endswith('/>') or next_line.endswith('>'):
+                        break
+            
+            # 清理多餘的空格
+            full_line = ' '.join(full_line.split())
+            
+            return full_line
+            
+        except Exception as e:
+            self.logger.error(f"取得完整專案行失敗: {str(e)}")
+            return ''
     
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
-                                             target_projects: List[Dict]) -> List[Dict]:
-        """使用轉換資訊比較專案差異"""
+                                             target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
+        """使用轉換資訊比較專案差異 - 修改版本（記錄完整內容）"""
         differences = []
         
         # 建立目標專案的索引
         target_index = {proj['name']: proj for proj in target_projects}
+        
+        # 取得正確的檔案名稱
+        source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
         for conv_proj in converted_projects:
             project_name = conv_proj['name']
@@ -617,9 +751,13 @@ class FeatureThree:
                 
                 # 如果有差異，記錄
                 if diff_attrs:
+                    # 建立轉換後檔案的 project 行內容
+                    converted_content = self._build_project_line_content(conv_proj, use_converted_revision=True)
+                    
                     difference = {
                         'SN': len(differences) + 1,
-                        'diff_line': 0,  # 轉換檔案沒有實際行號
+                        'source_file': source_file,  # 來源檔案
+                        'content': converted_content,  # 完整的project行內容
                         'name': conv_proj['name'],
                         'path': conv_proj['path'],
                         'revision': conv_proj['converted_revision'],
@@ -628,7 +766,8 @@ class FeatureThree:
                         'groups': conv_proj['groups'],
                         'clone-depth': conv_proj['clone-depth'],
                         'remote': conv_proj['remote'],
-                        'gerrit_diff_line': target_proj['line_number'],
+                        'gerrit_source_file': gerrit_source_file,  # Gerrit來源檔案
+                        'gerrit_content': target_proj['full_line'],  # Gerrit的完整project行內容
                         'gerrit_name': target_proj['name'],
                         'gerrit_path': target_proj['path'],
                         'gerrit_revision': target_proj['revision'],
@@ -638,16 +777,257 @@ class FeatureThree:
                         'gerrit_clone-depth': target_proj['clone-depth'],
                         'gerrit_remote': target_proj['remote'],
                         'diff_attributes': diff_attrs,
-                        'original_revision': conv_proj['original_revision'],  # 新增原始 revision
-                        'converted_full_line': '',  # 轉換檔案沒有實際行
-                        'gerrit_full_line': target_proj['full_line']
+                        'original_revision': conv_proj['original_revision'],  # 保留原始 revision
                     }
                     differences.append(difference)
         
         return differences
     
+    def _push_to_gerrit(self, overwrite_type: str, converted_content: str, 
+                       target_content: Optional[str], output_folder: str) -> Dict[str, Any]:
+        """推送轉換後的檔案到 Gerrit 服務器"""
+        push_result = {
+            'success': False,
+            'message': '',
+            'need_push': False,
+            'commit_id': '',
+            'review_url': ''
+        }
+        
+        try:
+            self.logger.info("🚀 開始推送到 Gerrit 服務器...")
+            
+            # 判斷是否需要推送
+            push_result['need_push'] = self._should_push_to_gerrit(converted_content, target_content)
+            
+            if not push_result['need_push']:
+                push_result['success'] = True
+                push_result['message'] = "目標檔案與轉換結果相同，無需推送"
+                self.logger.info("✅ " + push_result['message'])
+                return push_result
+            
+            # 執行 Git 操作
+            git_result = self._execute_git_push(overwrite_type, converted_content, output_folder)
+            
+            push_result.update(git_result)
+            
+            if push_result['success']:
+                self.logger.info(f"✅ 成功推送到 Gerrit: {push_result['review_url']}")
+            else:
+                self.logger.error(f"❌ 推送失敗: {push_result['message']}")
+            
+            return push_result
+            
+        except Exception as e:
+            push_result['message'] = f"推送過程發生錯誤: {str(e)}"
+            self.logger.error(push_result['message'])
+            return push_result
+    
+    def _should_push_to_gerrit(self, converted_content: str, target_content: Optional[str]) -> bool:
+        """判斷是否需要推送到 Gerrit"""
+        if target_content is None:
+            self.logger.info("🎯 目標檔案不存在，需要推送新檔案")
+            return True
+        
+        # 簡單的內容比較（忽略空白差異）
+        def normalize_content(content):
+            return ''.join(content.split()) if content else ''
+        
+        converted_normalized = normalize_content(converted_content)
+        target_normalized = normalize_content(target_content)
+        
+        if converted_normalized == target_normalized:
+            self.logger.info("📋 轉換結果與目標檔案相同，無需推送")
+            return False
+        else:
+            self.logger.info("🔄 轉換結果與目標檔案不同，需要推送更新")
+            return True
+    
+    def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
+        """執行 Git clone, commit, push 操作 - 修正版本（解決 Change-Id 問題）"""
+        import subprocess
+        import tempfile
+        import shutil
+        import uuid
+        
+        result = {
+            'success': False,
+            'message': '',
+            'commit_id': '',
+            'review_url': ''
+        }
+        
+        # 建立臨時 Git 工作目錄
+        temp_git_dir = None
+        
+        try:
+            temp_git_dir = tempfile.mkdtemp(prefix='gerrit_push_')
+            self.logger.info(f"📁 建立臨時 Git 目錄: {temp_git_dir}")
+            
+            # Git 設定
+            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+            branch = "realtek/android-14/master"
+            target_filename = self.output_files[overwrite_type]
+            
+            # 步驟 1: Clone repository
+            self.logger.info(f"📥 Clone repository: {repo_url}")
+            clone_cmd = ["git", "clone", "-b", branch, repo_url, temp_git_dir]
+            
+            subprocess.run(clone_cmd, check=True, capture_output=True, text=True, timeout=60)
+            
+            # 步驟 2: 切換到 Git 目錄並設定環境
+            original_cwd = os.getcwd()
+            os.chdir(temp_git_dir)
+            
+            # 步驟 2.5: 安裝 commit-msg hook（解決 Change-Id 問題）
+            self.logger.info(f"🔧 安裝 commit-msg hook...")
+            try:
+                gitdir_result = subprocess.run(
+                    ["git", "rev-parse", "--git-dir"], 
+                    capture_output=True, text=True, check=True
+                )
+                git_dir = gitdir_result.stdout.strip()
+                
+                # 建立 hooks 目錄
+                hooks_dir = os.path.join(git_dir, "hooks")
+                os.makedirs(hooks_dir, exist_ok=True)
+                
+                # 下載 commit-msg hook
+                hook_cmd = [
+                    "scp", "-p", "-P", "29418", 
+                    "vince_lin@mm2sd.rtkbf.com:hooks/commit-msg", 
+                    f"{hooks_dir}/commit-msg"
+                ]
+                
+                subprocess.run(hook_cmd, check=True, capture_output=True, text=True, timeout=30)
+                
+                # 設定 hook 可執行權限
+                import stat
+                hook_path = os.path.join(hooks_dir, "commit-msg")
+                if os.path.exists(hook_path):
+                    os.chmod(hook_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
+                    self.logger.info(f"✅ 成功安裝 commit-msg hook")
+                else:
+                    self.logger.warning(f"⚠️ commit-msg hook 下載失敗，將手動添加 Change-Id")
+                    
+            except subprocess.CalledProcessError as e:
+                self.logger.warning(f"⚠️ 安裝 commit-msg hook 失敗: {e.stderr}")
+                self.logger.info(f"📝 將手動添加 Change-Id 到 commit message")
+            
+            # 步驟 3: 寫入轉換後的檔案
+            target_file_path = os.path.join(temp_git_dir, target_filename)
+            with open(target_file_path, 'w', encoding='utf-8') as f:
+                f.write(converted_content)
+            
+            self.logger.info(f"📝 寫入檔案: {target_filename}")
+            
+            # 步驟 4: 檢查 Git 狀態
+            status_result = subprocess.run(
+                ["git", "status", "--porcelain"], 
+                capture_output=True, text=True, check=True
+            )
+            
+            if not status_result.stdout.strip():
+                result['success'] = True
+                result['message'] = "檔案內容無變化，無需推送"
+                self.logger.info("✅ " + result['message'])
+                return result
+            
+            # 步驟 5: Add 檔案
+            subprocess.run(["git", "add", target_filename], check=True)
+            
+            # 步驟 6: Commit（包含 Change-Id）
+            # 生成唯一的 Change-Id
+            change_id = f"I{uuid.uuid4().hex}"
+            
+            commit_message = f"""Auto-generated manifest update: {overwrite_type}
+
+Generated by manifest conversion tool
+Source: {self.source_files[overwrite_type]}
+Target: {target_filename}
+
+Change-Id: {change_id}"""
+            
+            commit_result = subprocess.run(
+                ["git", "commit", "-m", commit_message],
+                capture_output=True, text=True, check=True
+            )
+            
+            # 取得 commit ID
+            commit_id_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True
+            )
+            result['commit_id'] = commit_id_result.stdout.strip()[:8]
+            
+            self.logger.info(f"📝 創建 commit: {result['commit_id']}")
+            self.logger.info(f"📝 包含 Change-Id: {change_id}")
+            
+            # 步驟 7: Push to Gerrit for review
+            push_cmd = ["git", "push", "origin", f"HEAD:refs/for/{branch}"]
+            
+            push_result = subprocess.run(
+                push_cmd, capture_output=True, text=True, check=True, timeout=60
+            )
+            
+            # 解析 Gerrit review URL
+            output_lines = push_result.stderr.split('\n')
+            review_url = ""
+            for line in output_lines:
+                if 'https://' in line and 'gerrit' in line:
+                    # 提取 URL
+                    import re
+                    url_match = re.search(r'https://[^\s]+', line)
+                    if url_match:
+                        review_url = url_match.group(0)
+                        break
+            
+            result['success'] = True
+            result['message'] = f"成功推送到 Gerrit，Commit ID: {result['commit_id']}"
+            result['review_url'] = review_url or f"https://mm2sd.rtkbf.com/gerrit/#/q/commit:{result['commit_id']}"
+            
+            self.logger.info(f"🎉 推送成功！Review URL: {result['review_url']}")
+            
+            return result
+            
+        except subprocess.TimeoutExpired:
+            result['message'] = "Git 操作逾時，請檢查網路連線"
+            return result
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            
+            # 特別處理 Change-Id 相關錯誤
+            if "missing Change-Id" in error_msg:
+                result['message'] = f"Change-Id 問題已修正，但推送仍失敗: {error_msg}"
+                self.logger.error(f"Change-Id 相關錯誤: {error_msg}")
+                
+                # 提供詳細的故障排除資訊
+                self.logger.info(f"🔧 故障排除步驟:")
+                self.logger.info(f"  1. 檢查 SSH 金鑰設定")
+                self.logger.info(f"  2. 確認 Gerrit 帳號權限")
+                self.logger.info(f"  3. 檢查分支推送權限")
+            else:
+                result['message'] = f"Git 命令失敗: {error_msg}"
+                
+            return result
+        except Exception as e:
+            result['message'] = f"Git 操作異常: {str(e)}"
+            return result
+        finally:
+            # 恢復原始工作目錄
+            if 'original_cwd' in locals():
+                os.chdir(original_cwd)
+            
+            # 清理臨時目錄
+            if temp_git_dir and os.path.exists(temp_git_dir):
+                try:
+                    shutil.rmtree(temp_git_dir)
+                    self.logger.info(f"🗑️  清理臨時目錄: {temp_git_dir}")
+                except Exception as e:
+                    self.logger.warning(f"清理臨時目錄失敗: {str(e)}")
+    
     def _generate_excel_report(self, overwrite_type: str, source_file_path: Optional[str],
-                             output_file_path: str, target_file_path: Optional[str], 
+                             output_file_path: Optional[str], target_file_path: Optional[str], 
                              diff_analysis: Dict, output_folder: str, 
                              excel_filename: Optional[str], source_download_success: bool,
                              target_download_success: bool, push_result: Optional[Dict[str, Any]] = None) -> str:
@@ -698,7 +1078,7 @@ class FeatureThree:
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='轉換摘要', index=False)
                 
-                # 頁籤 2: 轉換後專案清單 - 微調版本（增加 revision 資訊）
+                # 頁籤 2: 轉換後專案清單 - 微調版本（增加 revision 資訊和中文表頭）
                 if diff_analysis['converted_projects']:
                     converted_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
@@ -706,8 +1086,8 @@ class FeatureThree:
                             'SN': i,
                             '專案名稱': proj['name'],
                             '路徑': proj['path'],
-                            '原始 Revision': proj['original_revision'],
-                            '轉換後 Revision': proj['converted_revision'],
+                            '原始 Revision': proj['original_revision'],  # 中文表頭
+                            '轉換後 Revision': proj['converted_revision'],  # 中文表頭
                             '是否轉換': '是' if proj['changed'] else '否',
                             'Upstream': proj['upstream'],
                             'Dest-Branch': proj['dest-branch'],
@@ -724,11 +1104,16 @@ class FeatureThree:
                     diff_sheet_name = f"{overwrite_type}_差異部份"
                     df_diff = pd.DataFrame(diff_analysis['differences'])
                     
-                    # 調整欄位順序 - 增加原始 revision
+                    # 調整欄位順序 - 新版本（添加來源檔案欄位）
                     diff_columns = [
-                        'SN', 'diff_line', 'name', 'path', 'original_revision', 'revision', 
+                        'SN', 
+                        'source_file',  # 新增：來源檔案
+                        'content',      # 修改：完整內容（原 diff_line）
+                        'name', 'path', 'original_revision', 'revision', 
                         'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote',
-                        'gerrit_diff_line', 'gerrit_name', 'gerrit_path', 'gerrit_revision',
+                        'gerrit_source_file',  # 新增：Gerrit來源檔案
+                        'gerrit_content',      # 修改：Gerrit完整內容（原 gerrit_diff_line）
+                        'gerrit_name', 'gerrit_path', 'gerrit_revision',
                         'gerrit_upstream', 'gerrit_dest-branch', 'gerrit_groups', 
                         'gerrit_clone-depth', 'gerrit_remote'
                     ]
@@ -739,17 +1124,21 @@ class FeatureThree:
                     
                     df_diff.to_excel(writer, sheet_name=diff_sheet_name, index=False)
                 
-                # 格式化所有工作表 - 增強版本（綠底白字標頭 + 下載狀態紅字標示）
+                # 格式化所有工作表 - 增強版本（綠底白字標頭 + 下載狀態紅字標示 + 轉換後專案格式化）
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
-                    self._format_worksheet_with_green_headers(worksheet)
+                    self.excel_handler._format_worksheet(worksheet)
                     
                     # 特別格式化轉換摘要頁籤的下載狀態
                     if sheet_name == '轉換摘要':
                         self._format_download_status_columns(worksheet, source_download_success, target_download_success)
                     
+                    # 特別格式化轉換後專案頁籤
+                    elif sheet_name == '轉換後專案':
+                        self._format_converted_projects_sheet(worksheet)
+                    
                     # 特別格式化差異部份頁籤
-                    if '差異部份' in sheet_name:
+                    elif '差異部份' in sheet_name:
                         self._format_diff_sheet(worksheet)
             
             self.logger.info(f"成功產生 Excel 報告: {excel_file}")
@@ -759,51 +1148,66 @@ class FeatureThree:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
     
-    def _format_worksheet_with_green_headers(self, worksheet):
-        """格式化工作表 - 微調版本，所有標頭都用綠底白字"""
+    def _format_converted_projects_sheet(self, worksheet):
+        """格式化轉換後專案頁籤 - 新版本（紅底白字表頭 + 是否轉換內容顏色）"""
         try:
-            from openpyxl.styles import PatternFill, Font, Alignment
+            from openpyxl.styles import PatternFill, Font
             from openpyxl.utils import get_column_letter
             
-            # 綠底白字格式
-            green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
-            white_font = Font(color="FFFFFF", bold=True)
-            center_alignment = Alignment(horizontal="center", vertical="center")
+            # 定義顏色
+            red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")    # 紅底
+            white_font = Font(color="FFFFFF", bold=True)  # 白字
+            blue_font = Font(color="0070C0", bold=True)   # 藍字（是）
+            red_font = Font(color="C5504B", bold=True)    # 紅字（否）
             
-            # 設定所有標頭（第一列）為綠底白字
-            for col_num in range(1, worksheet.max_column + 1):
+            # 紅底白字表頭欄位
+            red_header_columns = ['原始 Revision', '轉換後 Revision']
+            
+            # 找到各欄位的位置並設定表頭格式
+            revision_columns = {}  # 記錄revision欄位位置
+            conversion_column = None  # 記錄是否轉換欄位位置
+            
+            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
                 col_letter = get_column_letter(col_num)
-                header_cell = worksheet[f"{col_letter}1"]
+                header_value = str(cell.value) if cell.value else ''
                 
-                header_cell.fill = green_fill
-                header_cell.font = white_font
-                header_cell.alignment = center_alignment
+                if header_value in red_header_columns:
+                    # 設定紅底白字表頭
+                    cell.fill = red_fill
+                    cell.font = white_font
+                    revision_columns[header_value] = col_num
+                    self.logger.debug(f"設定紅底白字表頭: {header_value}")
+                elif header_value == '是否轉換':
+                    conversion_column = col_num
+                    self.logger.debug(f"找到是否轉換欄位: 第{col_num}欄")
             
-            # 自動調整欄寬
-            for col_num in range(1, worksheet.max_column + 1):
+            # 設定是否轉換欄位的內容顏色
+            if conversion_column:
+                col_letter = get_column_letter(conversion_column)
+                
+                # 遍歷資料列（從第2列開始）
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    if cell_value == '是':
+                        cell.font = blue_font  # 是：藍色
+                    elif cell_value == '否':
+                        cell.font = red_font   # 否：紅色
+            
+            # 設定revision欄位的欄寬
+            for header_name, col_num in revision_columns.items():
                 col_letter = get_column_letter(col_num)
-                column = worksheet[col_letter]
-                
-                # 計算最大寬度
-                max_length = 0
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                
-                # 設定欄寬（最小8，最大50）
-                adjusted_width = min(max(max_length + 2, 8), 50)
-                worksheet.column_dimensions[col_letter].width = adjusted_width
+                worksheet.column_dimensions[col_letter].width = 35
+                self.logger.debug(f"設定revision欄位寬度: {header_name} -> 35")
             
-            self.logger.info(f"已設定工作表格式：所有標頭綠底白字，自動調整欄寬")
+            self.logger.info("已設定轉換後專案頁籤格式：紅底白字表頭，是否轉換顏色區分")
             
         except Exception as e:
-            self.logger.error(f"格式化工作表失敗: {str(e)}")
-    
+            self.logger.error(f"格式化轉換後專案頁籤失敗: {str(e)}")
+
     def _format_diff_sheet(self, worksheet):
-        """格式化差異部份頁籤 - 綠底白字 vs 藍底白字"""
+        """格式化差異部份頁籤 - 新版本（綠底白字 vs 藍底白字 vs 紅底白字，包含來源檔案欄位）"""
         try:
             from openpyxl.styles import PatternFill, Font
             from openpyxl.utils import get_column_letter
@@ -811,29 +1215,71 @@ class FeatureThree:
             # 定義顏色
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")  # 綠底
             blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")   # 藍底
+            red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")    # 紅底
             white_font = Font(color="FFFFFF", bold=True)  # 白字
             
-            # 綠底白字欄位（轉換後的資料）
-            green_columns = ['SN', 'diff_line', 'name', 'path', 'original_revision', 'revision', 'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote']
+            # 綠底白字欄位（轉換後的資料和來源檔案，除了revision相關）
+            green_columns = [
+                'SN', 'source_file', 'content', 'name', 'path',
+                'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote'
+            ]
             
-            # 藍底白字欄位（Gerrit 的資料）
-            blue_columns = ['gerrit_diff_line', 'gerrit_name', 'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote']
+            # 藍底白字欄位（Gerrit 的資料和Gerrit來源檔案）
+            blue_columns = [
+                'gerrit_source_file', 'gerrit_content', 'gerrit_name', 'gerrit_path', 
+                'gerrit_revision', 'gerrit_upstream', 'gerrit_dest-branch', 
+                'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote'
+            ]
+            
+            # 紅底白字欄位（revision 相關欄位，突出顯示變化）
+            red_columns = [
+                'original_revision', 'revision'
+            ]
             
             # 找到各欄位的位置並設定格式
             for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
                 col_letter = get_column_letter(col_num)
                 header_value = str(cell.value) if cell.value else ''
                 
-                if header_value in green_columns:
+                if header_value in red_columns:
+                    # 設定紅底白字（revision 欄位）
+                    cell.fill = red_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定紅底白字欄位: {header_value}")
+                elif header_value in green_columns:
                     # 設定綠底白字
                     cell.fill = green_fill
                     cell.font = white_font
+                    self.logger.debug(f"設定綠底白字欄位: {header_value}")
                 elif header_value in blue_columns:
                     # 設定藍底白字
                     cell.fill = blue_fill
                     cell.font = white_font
+                    self.logger.debug(f"設定藍底白字欄位: {header_value}")
             
-            self.logger.info("已設定差異部份頁籤格式：綠底白字 vs 藍底白字")
+            # 特別處理各種欄位的欄寬
+            for col_num, cell in enumerate(worksheet[1], 1):
+                col_letter = get_column_letter(col_num)
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value in ['content', 'gerrit_content']:
+                    # 設定較寬的欄寬以容納完整的 project 行
+                    worksheet.column_dimensions[col_letter].width = 80
+                    self.logger.debug(f"設定寬欄位: {header_value} -> 80")
+                elif header_value in ['source_file', 'gerrit_source_file']:
+                    # 設定檔名欄位的欄寬
+                    worksheet.column_dimensions[col_letter].width = 25
+                    self.logger.debug(f"設定檔名欄位: {header_value} -> 25")
+                elif header_value in ['original_revision', 'revision', 'gerrit_revision']:
+                    # 設定 revision 欄位的欄寬
+                    worksheet.column_dimensions[col_letter].width = 35
+                    self.logger.debug(f"設定 revision 欄位: {header_value} -> 35")
+                elif header_value in ['upstream', 'dest-branch', 'gerrit_upstream', 'gerrit_dest-branch']:
+                    # 設定分支欄位的欄寬
+                    worksheet.column_dimensions[col_letter].width = 30
+                    self.logger.debug(f"設定分支欄位: {header_value} -> 30")
+            
+            self.logger.info("已設定差異部份頁籤格式：綠底白字 vs 藍底白字 vs 紅底白字（revision），包含來源檔案欄位")
             
         except Exception as e:
             self.logger.error(f"格式化差異頁籤失敗: {str(e)}")
@@ -935,7 +1381,7 @@ class FeatureThree:
                 
                 # 格式化
                 worksheet = writer.sheets['錯誤報告']
-                self._format_worksheet_with_green_headers(worksheet)
+                self.excel_handler._format_worksheet(worksheet)
             
             self.logger.info(f"已生成基本錯誤報告: {excel_file}")
             return excel_file
@@ -943,192 +1389,6 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"連基本錯誤報告都無法生成: {str(e)}")
             return ""
-    
-    def _push_to_gerrit(self, overwrite_type: str, converted_content: str, 
-                       target_content: Optional[str], output_folder: str) -> Dict[str, Any]:
-        """推送轉換後的檔案到 Gerrit 服務器"""
-        push_result = {
-            'success': False,
-            'message': '',
-            'need_push': False,
-            'commit_id': '',
-            'review_url': ''
-        }
-        
-        try:
-            self.logger.info("🚀 開始推送到 Gerrit 服務器...")
-            
-            # 判斷是否需要推送
-            push_result['need_push'] = self._should_push_to_gerrit(converted_content, target_content)
-            
-            if not push_result['need_push']:
-                push_result['success'] = True
-                push_result['message'] = "目標檔案與轉換結果相同，無需推送"
-                self.logger.info("✅ " + push_result['message'])
-                return push_result
-            
-            # 執行 Git 操作
-            git_result = self._execute_git_push(overwrite_type, converted_content, output_folder)
-            
-            push_result.update(git_result)
-            
-            if push_result['success']:
-                self.logger.info(f"✅ 成功推送到 Gerrit: {push_result['review_url']}")
-            else:
-                self.logger.error(f"❌ 推送失敗: {push_result['message']}")
-            
-            return push_result
-            
-        except Exception as e:
-            push_result['message'] = f"推送過程發生錯誤: {str(e)}"
-            self.logger.error(push_result['message'])
-            return push_result
-    
-    def _should_push_to_gerrit(self, converted_content: str, target_content: Optional[str]) -> bool:
-        """判斷是否需要推送到 Gerrit"""
-        if target_content is None:
-            self.logger.info("🎯 目標檔案不存在，需要推送新檔案")
-            return True
-        
-        # 簡單的內容比較（忽略空白差異）
-        def normalize_content(content):
-            return ''.join(content.split()) if content else ''
-        
-        converted_normalized = normalize_content(converted_content)
-        target_normalized = normalize_content(target_content)
-        
-        if converted_normalized == target_normalized:
-            self.logger.info("📋 轉換結果與目標檔案相同，無需推送")
-            return False
-        else:
-            self.logger.info("🔄 轉換結果與目標檔案不同，需要推送更新")
-            return True
-    
-    def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
-        """執行 Git clone, commit, push 操作"""
-        import subprocess
-        import tempfile
-        import shutil
-        
-        result = {
-            'success': False,
-            'message': '',
-            'commit_id': '',
-            'review_url': ''
-        }
-        
-        # 建立臨時 Git 工作目錄
-        temp_git_dir = None
-        
-        try:
-            temp_git_dir = tempfile.mkdtemp(prefix='gerrit_push_')
-            self.logger.info(f"📁 建立臨時 Git 目錄: {temp_git_dir}")
-            
-            # Git 設定
-            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
-            branch = "realtek/android-14/master"
-            target_filename = self.output_files[overwrite_type]
-            
-            # 步驟 1: Clone repository
-            self.logger.info(f"📥 Clone repository: {repo_url}")
-            clone_cmd = ["git", "clone", "-b", branch, repo_url, temp_git_dir]
-            
-            subprocess.run(clone_cmd, check=True, capture_output=True, text=True, timeout=60)
-            
-            # 步驟 2: 切換到 Git 目錄並檢查狀態
-            original_cwd = os.getcwd()
-            os.chdir(temp_git_dir)
-            
-            # 步驟 3: 寫入轉換後的檔案
-            target_file_path = os.path.join(temp_git_dir, target_filename)
-            with open(target_file_path, 'w', encoding='utf-8') as f:
-                f.write(converted_content)
-            
-            self.logger.info(f"📝 寫入檔案: {target_filename}")
-            
-            # 步驟 4: 檢查 Git 狀態
-            status_result = subprocess.run(
-                ["git", "status", "--porcelain"], 
-                capture_output=True, text=True, check=True
-            )
-            
-            if not status_result.stdout.strip():
-                result['success'] = True
-                result['message'] = "檔案內容無變化，無需推送"
-                self.logger.info("✅ " + result['message'])
-                return result
-            
-            # 步驟 5: Add 檔案
-            subprocess.run(["git", "add", target_filename], check=True)
-            
-            # 步驟 6: Commit
-            commit_message = f"Auto-generated manifest update: {overwrite_type}\n\n" \
-                           f"Generated by manifest conversion tool\n" \
-                           f"Source: {self.source_files[overwrite_type]}\n" \
-                           f"Target: {target_filename}"
-            
-            commit_result = subprocess.run(
-                ["git", "commit", "-m", commit_message],
-                capture_output=True, text=True, check=True
-            )
-            
-            # 取得 commit ID
-            commit_id_result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True, text=True, check=True
-            )
-            result['commit_id'] = commit_id_result.stdout.strip()[:8]
-            
-            self.logger.info(f"📝 創建 commit: {result['commit_id']}")
-            
-            # 步驟 7: Push to Gerrit for review
-            push_cmd = ["git", "push", "origin", f"HEAD:refs/for/{branch}"]
-            
-            push_result = subprocess.run(
-                push_cmd, capture_output=True, text=True, check=True, timeout=60
-            )
-            
-            # 解析 Gerrit review URL
-            output_lines = push_result.stderr.split('\n')
-            review_url = ""
-            for line in output_lines:
-                if 'https://' in line and 'gerrit' in line:
-                    # 提取 URL
-                    import re
-                    url_match = re.search(r'https://[^\s]+', line)
-                    if url_match:
-                        review_url = url_match.group(0)
-                        break
-            
-            result['success'] = True
-            result['message'] = f"成功推送到 Gerrit，Commit ID: {result['commit_id']}"
-            result['review_url'] = review_url or f"https://mm2sd.rtkbf.com/gerrit/#/q/commit:{result['commit_id']}"
-            
-            self.logger.info(f"🎉 推送成功！Review URL: {result['review_url']}")
-            
-            return result
-            
-        except subprocess.TimeoutExpired:
-            result['message'] = "Git 操作逾時，請檢查網路連線"
-            return result
-        except subprocess.CalledProcessError as e:
-            result['message'] = f"Git 命令失敗: {e.stderr}"
-            return result
-        except Exception as e:
-            result['message'] = f"Git 操作異常: {str(e)}"
-            return result
-        finally:
-            # 恢復原始工作目錄
-            if 'original_cwd' in locals():
-                os.chdir(original_cwd)
-            
-            # 清理臨時目錄
-            if temp_git_dir and os.path.exists(temp_git_dir):
-                try:
-                    shutil.rmtree(temp_git_dir)
-                    self.logger.info(f"🗑️  清理臨時目錄: {temp_git_dir}")
-                except Exception as e:
-                    self.logger.warning(f"清理臨時目錄失敗: {str(e)}")
     
     def _final_file_report_complete(self, output_folder: str, source_file_path: Optional[str], 
                           output_file_path: Optional[str], target_file_path: Optional[str], 
@@ -1274,11 +1534,12 @@ class FeatureThree:
      - Commit ID 和 Review URL
    
    ■ 轉換後專案頁籤：
-     - 原始 Revision vs 轉換後 Revision
-     - 是否實際發生轉換
+     - 原始 Revision vs 轉換後 Revision（紅底白字表頭）
+     - 是否轉換（是=藍色，否=紅色）
    
    ■ 差異部份頁籤：
      - 詳細差異分析（如有目標檔案）
+     - 三色格式：綠色（基本）、紅色（revision）、藍色（Gerrit）
 
 7. Git 需求：
    - 系統需要安裝 Git

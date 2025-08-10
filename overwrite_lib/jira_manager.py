@@ -428,3 +428,123 @@ class JiraManager:
         except Exception as e:
             self.logger.error(f"取得 {db_info} 的 JIRA 資訊失敗: {str(e)}")
             return result
+
+    def test_alternative_apis(self) -> Dict[str, Any]:
+        """測試替代的 API 路徑"""
+        result = {
+            'working_apis': [],
+            'failed_apis': []
+        }
+        
+        try:
+            # 測試不同的 API 路徑和認證方式
+            test_endpoints = [
+                {
+                    'name': 'REST API v2 myself',
+                    'url': f"{self.base_url}/rest/api/2/myself",
+                    'auth_method': 'Basic Auth'
+                },
+                {
+                    'name': 'REST API latest myself',
+                    'url': f"{self.base_url}/rest/api/latest/myself",
+                    'auth_method': 'Basic Auth'
+                },
+                {
+                    'name': 'REST API 2 serverInfo',
+                    'url': f"{self.base_url}/rest/api/2/serverInfo",
+                    'auth_method': 'No Auth'
+                },
+                {
+                    'name': 'JIRA 根目錄',
+                    'url': f"{self.base_url}/",
+                    'auth_method': 'No Auth'
+                }
+            ]
+            
+            for endpoint in test_endpoints:
+                try:
+                    if endpoint['auth_method'] == 'No Auth':
+                        # 不使用認證的測試
+                        response = requests.get(endpoint['url'], timeout=10)
+                    else:
+                        # 使用認證的測試
+                        response = self._make_request(endpoint['url'], timeout=10)
+                    
+                    endpoint_result = {
+                        'name': endpoint['name'],
+                        'url': endpoint['url'],
+                        'auth_method': endpoint['auth_method'],
+                        'status': response.status_code,
+                        'content_type': response.headers.get('content-type', 'Unknown'),
+                        'content_preview': response.text[:100] if response.text else 'Empty'
+                    }
+                    
+                    if response.status_code == 200:
+                        result['working_apis'].append(endpoint_result)
+                    else:
+                        result['failed_apis'].append(endpoint_result)
+                        
+                except Exception as e:
+                    endpoint_result = {
+                        'name': endpoint['name'],
+                        'url': endpoint['url'],
+                        'auth_method': endpoint['auth_method'],
+                        'status': 'Error',
+                        'error': str(e)
+                    }
+                    result['failed_apis'].append(endpoint_result)
+            
+            return result
+            
+        except Exception as e:
+            result['error'] = str(e)
+            return result
+
+    def try_session_login(self) -> Dict[str, Any]:
+        """嘗試使用 Session 方式登入"""
+        result = {
+            'success': False,
+            'message': '',
+            'session_info': {}
+        }
+        
+        try:
+            # 使用 Session 嘗試登入
+            session = requests.Session()
+            
+            # 先取得登入頁面
+            login_page_url = f"{self.base_url}/login.jsp"
+            login_page = session.get(login_page_url, timeout=10)
+            
+            if login_page.status_code == 200:
+                result['session_info']['login_page_status'] = 'OK'
+                
+                # 嘗試提交登入表單
+                login_data = {
+                    'os_username': self.user,
+                    'os_password': self.password,
+                    'os_destination': '',
+                    'user_role': '',
+                    'atl_token': '',
+                    'login': 'Log In'
+                }
+                
+                login_response = session.post(login_page_url, data=login_data, timeout=10)
+                
+                if login_response.status_code == 200:
+                    # 檢查是否登入成功
+                    if 'dashboard' in login_response.url or 'secure' in login_response.url:
+                        result['success'] = True
+                        result['message'] = "Session 登入成功"
+                        result['session_info']['redirect_url'] = login_response.url
+                    else:
+                        result['message'] = "Session 登入失敗：可能是帳號密碼錯誤"
+                else:
+                    result['message'] = f"Session 登入失敗：HTTP {login_response.status_code}"
+            else:
+                result['message'] = f"無法存取登入頁面：HTTP {login_page.status_code}"
+                
+        except Exception as e:
+            result['message'] = f"Session 登入過程發生錯誤：{str(e)}"
+        
+        return result        
