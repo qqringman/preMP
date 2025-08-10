@@ -422,19 +422,25 @@ class GerritManager:
         return alternatives
     
     def _save_response_to_file(self, response: requests.Response, output_path: str, 
-                          source_url: str, is_base64: bool = None) -> bool:
-        """儲存回應內容到檔案 - 支援 XML 格式化"""
+                      source_url: str, is_base64: bool = None) -> bool:
+        """儲存回應內容到檔案 - 修復 base64 檢測"""
         try:
             # 確保輸出目錄存在
             utils.ensure_dir(os.path.dirname(output_path))
             
-            # 自動判斷是否為 base64
+            # 改進的 base64 檢測邏輯
             if is_base64 is None:
-                is_base64 = '?format=TEXT' in source_url
+                # 檢查多種可能的 base64 情況
+                is_base64 = (
+                    '?format=TEXT' in source_url or  # 原有邏輯
+                    '/files/' in source_url and '/content' in source_url or  # API 格式
+                    'projects/' in source_url and 'branches/' in source_url  # API 路徑
+                )
             
             content = response.text
             
-            if is_base64:
+            # 如果懷疑是 base64，先檢查內容特徵
+            if is_base64 or self._looks_like_base64(content):
                 try:
                     # 嘗試 base64 解碼
                     decoded_content = base64.b64decode(content)
@@ -465,7 +471,29 @@ class GerritManager:
         except Exception as e:
             self.logger.error(f"儲存檔案失敗: {str(e)}")
             return False
-    
+
+    def _looks_like_base64(self, content: str) -> bool:
+        """檢查內容是否看起來像 base64 編碼"""
+        try:
+            # 如果內容很長但只有很少換行，可能是 base64
+            if len(content) > 1000 and content.count('\n') < 3:
+                return True
+            
+            # 檢查是否只包含 base64 字符
+            import re
+            base64_pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
+            lines = content.strip().split('\n')
+            
+            if len(lines) <= 2:  # base64 通常是 1-2 行
+                for line in lines:
+                    if line and not base64_pattern.match(line.strip()):
+                        return False
+                return True
+            
+            return False
+        except:
+            return False
+            
     def check_file_exists(self, file_link: str) -> bool:
         """
         檢查 Gerrit 上的檔案是否存在 - 改進版
