@@ -114,14 +114,7 @@ class ManifestConversionTester:
     def compare_manifests(self, master_projects: Dict, premp_projects: Dict) -> List[Dict]:
         """
         比對 master 轉換後與 premp 的差異
-        修改：改進特殊項目處理邏輯，通用檢查master和premp是否相同
-        
-        Args:
-            master_projects: master manifest 的專案
-            premp_projects: premp manifest 的專案
-            
-        Returns:
-            所有比對結果列表（包括成功和失敗的）
+        修正：增加更詳細的調試資訊
         """
         all_results = []
         self.failed_cases = []  # 重置失敗案例列表
@@ -131,18 +124,29 @@ class ManifestConversionTester:
         self.stats['no_revision_projects'] = 0
         self.stats['revision_projects'] = 0
         self.stats['skipped_special_projects'] = 0
-        self.stats['same_revision_projects'] = 0  # 新增統計
+        self.stats['same_revision_projects'] = 0
+        
+        # 計數器（用於調試）
+        debug_counters = {
+            'no_revision': 0,
+            'skipped_special': 0,
+            'same_revision': 0,
+            'converted_match': 0,
+            'converted_mismatch': 0,
+            'not_found_in_premp': 0
+        }
         
         # 比對 master 中的每個專案
         for name, master_proj in master_projects.items():
             master_revision = master_proj['revision']
-            sn = len(all_results) + 1  # 當前 SN
+            sn = len(all_results) + 1
             
             # 檢查是否有 revision 屬性
             if not master_revision or master_revision.strip() == '':
-                # 沒有 revision 的專案，只記錄狀態，不進行轉換比對
+                debug_counters['no_revision'] += 1
                 self.stats['no_revision_projects'] += 1
                 
+                # ... 無revision的處理邏輯保持不變 ...
                 if name in premp_projects:
                     premp_proj = premp_projects[name]
                     premp_revision = premp_proj['revision']
@@ -180,10 +184,12 @@ class ManifestConversionTester:
                     })
                 continue
             
-            # 檢查是否為完全跳過的特殊項目（如 refs/tags）
+            # 檢查是否為完全跳過的特殊項目
             if self._should_skip_conversion(master_revision):
+                debug_counters['skipped_special'] += 1
                 self.stats['skipped_special_projects'] += 1
                 
+                # ... 跳過特殊項目的處理邏輯保持不變 ...
                 if name in premp_projects:
                     premp_proj = premp_projects[name]
                     premp_revision = premp_proj['revision']
@@ -229,33 +235,35 @@ class ManifestConversionTester:
                 premp_proj = premp_projects[name]
                 premp_revision = premp_proj['revision']
                 
-                # 🆕 改進邏輯：通用檢查 master 和 premp 的原始 revision 是否相同
+                # 檢查 master 和 premp 的原始 revision 是否相同
                 if master_revision == premp_revision:
-                    # 原始 revision 相同，無需轉換，算作成功匹配
+                    debug_counters['same_revision'] += 1
                     self.stats['matched'] += 1
-                    self.stats['same_revision_projects'] += 1  # 新增統計
+                    self.stats['same_revision_projects'] += 1
                     status = '✅ 匹配 (原始相同)'
                     is_correct = '是'
                     description = f'Master 和 PreMP 的原始 revision 相同: {master_revision}，無需轉換'
-                    final_converted_revision = master_revision  # 保持原值
+                    final_converted_revision = master_revision
                 else:
-                    # 原始 revision 不同，進行正常的轉換比對
+                    # 進行轉換比對
                     converted_revision = self.convert_revision(master_revision)
                     
                     if converted_revision == premp_revision:
+                        debug_counters['converted_match'] += 1
                         self.stats['matched'] += 1
                         status = '✅ 匹配'
                         is_correct = '是'
                         description = '轉換結果與 PreMP 正確版完全匹配'
                         final_converted_revision = converted_revision
                     else:
+                        debug_counters['converted_mismatch'] += 1
                         self.stats['mismatched'] += 1
                         status = '❌ 不匹配'
                         is_correct = '否'
                         description = f'期望: {premp_revision}, 實際: {converted_revision}'
                         final_converted_revision = converted_revision
                         
-                        # 🆕 記錄失敗案例詳細資訊
+                        # 🔥 只有真正的不匹配才加入failed_cases
                         self.failed_cases.append({
                             'SN': sn,
                             '專案名稱': name,
@@ -287,7 +295,8 @@ class ManifestConversionTester:
                     'Remote': master_proj.get('remote', '')
                 })
             else:
-                # 在 premp 中找不到對應專案 - 不算轉換失敗，只是記錄狀態
+                # PreMP中不存在的專案
+                debug_counters['not_found_in_premp'] += 1
                 converted_revision = self.convert_revision(master_revision)
                 self.stats['not_found_in_premp'] += 1
                 status = '🔶 PreMP中不存在 (非轉換錯誤)'
@@ -308,7 +317,7 @@ class ManifestConversionTester:
                     'Remote': master_proj.get('remote', '')
                 })
         
-        # 找出 premp 中有但 master 中沒有的專案
+        # 處理僅存在於PreMP的專案
         for name in premp_projects:
             if name not in master_projects:
                 self.stats['extra_in_premp'] += 1
@@ -328,6 +337,17 @@ class ManifestConversionTester:
                     'Groups': premp_projects[name].get('groups', ''),
                     'Remote': premp_projects[name].get('remote', '')
                 })
+        
+        # 🔥 調試資訊
+        self.logger.info(f"🔍 比對結果調試:")
+        self.logger.info(f"  - 無revision: {debug_counters['no_revision']}")
+        self.logger.info(f"  - 跳過特殊: {debug_counters['skipped_special']}")
+        self.logger.info(f"  - 原始相同: {debug_counters['same_revision']}")
+        self.logger.info(f"  - 轉換匹配: {debug_counters['converted_match']}")
+        self.logger.info(f"  - 轉換不匹配: {debug_counters['converted_mismatch']}")
+        self.logger.info(f"  - PreMP中不存在: {debug_counters['not_found_in_premp']}")
+        self.logger.info(f"  - failed_cases數量: {len(self.failed_cases)}")
+        self.logger.info(f"  - stats.mismatched: {self.stats['mismatched']}")
         
         return all_results
 
@@ -381,14 +401,17 @@ class ManifestConversionTester:
             return '特殊項目，完全跳過轉換'
                 
     def generate_excel_report(self, differences: List[Dict], output_file: str, 
-                        master_file: str, premp_file: str) -> bool:
+                    master_file: str, premp_file: str) -> bool:
         """
         生成 Excel 測試報告
-        修改：增加失敗案例詳細對照頁籤和改進轉換規則統計
+        修正：增加failed_cases調試資訊
         """
         try:
+            # 🔥 關鍵調試：檢查failed_cases狀態
+            self.logger.info(f"🔍 Excel生成時 failed_cases 數量: {len(self.failed_cases)}")
+            
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-                # 頁籤 1: 測試摘要 - 增加相同 revision 專案統計
+                # 頁籤 1: 測試摘要
                 summary_data = [{
                     '測試時間': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'Master Manifest': os.path.basename(master_file),
@@ -408,11 +431,10 @@ class ManifestConversionTester:
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='測試摘要', index=False)
                 
-                # 頁籤 2: 需要關注的項目（排除無需轉換的）
+                # 頁籤 2: 需要關注的項目
                 if differences:
                     df_diff = pd.DataFrame(differences)
                     
-                    # 分類顯示不同類型的差異
                     need_attention = df_diff[
                         (~df_diff['狀態'].str.contains('無需轉換', na=False)) &
                         (df_diff['狀態'] != '✅ 匹配') &
@@ -422,7 +444,7 @@ class ManifestConversionTester:
                     if not need_attention.empty:
                         need_attention.to_excel(writer, sheet_name='需要關注的項目', index=False)
                     
-                    # 頁籤 3: 無需轉換的專案（無 revision）
+                    # 頁籤 3: 無需轉換的專案
                     no_conversion_needed = df_diff[
                         df_diff['狀態'].str.contains('無需轉換', na=False)
                     ]
@@ -430,12 +452,16 @@ class ManifestConversionTester:
                     if not no_conversion_needed.empty:
                         no_conversion_needed.to_excel(writer, sheet_name='無需轉換專案', index=False)
                     
-                    # 🆕 頁籤 4: 失敗案例詳細對照
-                    if self.failed_cases:
+                    # 🔥 頁籤 4: 失敗案例詳細對照 - 修正條件判斷
+                    self.logger.info(f"🔍 準備創建失敗案例頁籤，failed_cases數量: {len(self.failed_cases)}")
+                    if self.failed_cases and len(self.failed_cases) > 0:
                         df_failed = pd.DataFrame(self.failed_cases)
                         df_failed.to_excel(writer, sheet_name='失敗案例詳細對照', index=False)
+                        self.logger.info(f"✅ 已創建失敗案例詳細對照頁籤，包含 {len(self.failed_cases)} 個案例")
+                    else:
+                        self.logger.warning(f"⚠️ 未創建失敗案例詳細對照頁籤，failed_cases為空")
                 
-                # 頁籤 5: 所有專案對照表（按類型分組）
+                # 頁籤 5: 所有專案對照表
                 all_comparisons = []
                 for diff in differences:
                     status_icon = '🔵' if '無需轉換' in diff['狀態'] else (
@@ -457,7 +483,7 @@ class ManifestConversionTester:
                     df_all = pd.DataFrame(all_comparisons)
                     df_all.to_excel(writer, sheet_name='所有專案對照', index=False)
                 
-                # 🆕 頁籤 6: 轉換規則統計（改進版，包含失敗案例SN）
+                # 頁籤 6: 轉換規則統計
                 rule_stats = self._analyze_conversion_rules(differences)
                 if rule_stats:
                     df_rules = pd.DataFrame(rule_stats)
@@ -477,21 +503,34 @@ class ManifestConversionTester:
     
     def _analyze_conversion_rules(self, differences: List[Dict]) -> List[Dict]:
         """
-        分析轉換規則的使用情況 - 改進版，包含失敗案例的SN
-        修改：記錄失敗案例的SN，方便對應
+        分析轉換規則的使用情況 - 修正版本，確保失敗判斷邏輯一致
+        修正：只有真正的轉換錯誤才算失敗，排除"PreMP中不存在"等非轉換錯誤
         """
         rule_usage = {}
         
         for diff in differences:
-            # 跳過沒有 revision 的專案和不存在的專案
-            if (diff['Master Revision'] == 'N/A (專案不存在)' or 
-                '無 (沒有 revision 屬性)' in diff['Master Revision'] or
-                '無需轉換' in diff['狀態'] or
-                '跳過' in diff['狀態']):
+            # 🔥 修正：跳過更多不需要統計的項目
+            master_rev = diff['Master Revision']
+            status = diff['狀態']
+            
+            # 跳過沒有 revision 的專案
+            if (master_rev == 'N/A (專案不存在)' or 
+                '無 (沒有 revision 屬性)' in master_rev):
                 continue
                 
+            # 🔥 跳過無需轉換的專案（新增）
+            if '無需轉換' in status:
+                continue
+                
+            # 🔥 跳過特殊項目（新增）
+            if '跳過' in status:
+                continue
+            
+            # 🔥 跳過非轉換錯誤的項目（關鍵修正）
+            if 'PreMP中不存在' in status or '僅存在於PreMP' in status:
+                continue
+                    
             # 分析使用了哪種轉換規則
-            master_rev = diff['Master Revision']
             converted_rev = diff['轉換後 Revision']
             
             # 判斷規則類型
@@ -503,29 +542,41 @@ class ManifestConversionTester:
                     '使用次數': 0,
                     '成功次數': 0,
                     '失敗次數': 0,
-                    '失敗案例SN': [],  # 🆕 新增：記錄失敗案例的SN
+                    '失敗案例SN': [],
                     '失敗範例': []
                 }
             
             rule_usage[rule_type]['使用次數'] += 1
             
-            if '匹配' in diff['狀態']:
+            # 🔥 修正：更精確的成功/失敗判斷
+            if status == '✅ 匹配' or status == '✅ 匹配 (原始相同)':
                 rule_usage[rule_type]['成功次數'] += 1
-            else:
+            elif status == '❌ 不匹配':
+                # 🔥 只有真正的不匹配才算失敗
                 rule_usage[rule_type]['失敗次數'] += 1
-                rule_usage[rule_type]['失敗案例SN'].append(diff['SN'])  # 🆕 記錄SN
+                rule_usage[rule_type]['失敗案例SN'].append(diff['SN'])
                 
                 # 記錄失敗範例（最多3個）
                 if len(rule_usage[rule_type]['失敗範例']) < 3:
                     rule_usage[rule_type]['失敗範例'].append(f"{master_rev} → {converted_rev}")
+            else:
+                # 🔥 其他狀態（如PreMP中不存在）不算成功也不算失敗，只記錄使用次數
+                self.logger.debug(f"跳過狀態統計: {status} - {master_rev}")
+                continue
         
         # 轉換為列表並加入成功率和失敗案例SN
         result = []
         for rule_type, stats in rule_usage.items():
-            stats['成功率'] = f"{(stats['成功次數'] / stats['使用次數'] * 100):.1f}%" if stats['使用次數'] > 0 else '0%'
+            # 🔥 修正：只有實際進行成功/失敗判斷的項目才計算成功率
+            actual_judged = stats['成功次數'] + stats['失敗次數']
+            if actual_judged > 0:
+                stats['成功率'] = f"{(stats['成功次數'] / actual_judged * 100):.1f}%"
+            else:
+                stats['成功率'] = 'N/A'
+                
             stats['失敗範例詳情'] = '\n'.join(stats['失敗範例']) if stats['失敗範例'] else 'N/A'
             
-            # 🆕 格式化失敗案例SN列表
+            # 格式化失敗案例SN列表
             if stats['失敗案例SN']:
                 sn_list = [str(sn) for sn in stats['失敗案例SN']]
                 if len(sn_list) <= 10:
@@ -540,6 +591,13 @@ class ManifestConversionTester:
             del stats['失敗範例']
             
             result.append(stats)
+        
+        # 🔥 新增：調試資訊
+        total_failures = sum(r['失敗次數'] for r in result)
+        self.logger.info(f"🔍 轉換規則統計分析完成:")
+        self.logger.info(f"  - 規則類型數: {len(result)}")
+        self.logger.info(f"  - 總失敗次數: {total_failures}")
+        self.logger.info(f"  - mismatched統計: {self.stats.get('mismatched', 0)}")
         
         return result
     
