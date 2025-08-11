@@ -124,10 +124,10 @@ class FeatureTwo:
             import config
             if remote == 'rtk-prebuilt':
                 # 使用 prebuilt 專用的 Gerrit 伺服器
-                return getattr(config, 'GERRIT_BASE_URL_PREBUILT', 'https://mm2sd-git2.rtkbf.com')
+                return getattr(config, 'GERRIT_PREBUILT_URL', 'https://mm2sd-git2.rtkbf.com')
             else:
                 # 使用一般的 Gerrit 伺服器
-                return getattr(config, 'GERRIT_BASE_URL_NORMAL', 'https://mm2sd.rtkbf.com')
+                return getattr(config, 'GERRIT_SORUCE_URL', 'https://mm2sd.rtkbf.com')
         except:
             # 如果無法載入 config，使用預設值
             if remote == 'rtk-prebuilt':
@@ -431,19 +431,15 @@ class FeatureTwo:
 
     def _set_revision_diff_formulas(self, writer):
         """
-        🆕 設定 revision_diff 欄位的 Excel 公式
+        設定 revision_diff 欄位的 Excel 公式
         公式邏輯：比對 revision 前8碼與 target_branch_revision
-        - 相同顯示 "Y"
-        - 不同顯示 "N"
-        - 任一為空或 "-" 顯示 "-"
-        
-        Args:
-            writer: ExcelWriter 物件
+        - 相同顯示 "N" (綠色)
+        - 不同顯示 "Y" (紅色)
+        - 任一為空或 "-" 顯示 "Y" (紅色)
         """
         try:
             from openpyxl.utils import get_column_letter
             
-            # 處理每個頁籤
             for sheet_name in ['專案列表', '重覆']:
                 if sheet_name not in writer.sheets:
                     continue
@@ -455,8 +451,7 @@ class FeatureTwo:
                 target_revision_col = None
                 revision_diff_col = None
                 
-                # 掃描標題列找到欄位位置
-                for col_num, cell in enumerate(worksheet[1], 1):  # 第一列是標題
+                for col_num, cell in enumerate(worksheet[1], 1):
                     header = str(cell.value) if cell.value else ''
                     if header == 'revision':
                         revision_col = col_num
@@ -465,35 +460,28 @@ class FeatureTwo:
                     elif header == 'revision_diff':
                         revision_diff_col = col_num
                 
-                # 如果找到所有需要的欄位，設定公式
                 if revision_col and target_revision_col and revision_diff_col:
                     revision_letter = get_column_letter(revision_col)
                     target_letter = get_column_letter(target_revision_col)
                     diff_letter = get_column_letter(revision_diff_col)
                     
-                    # 從第二列開始設定公式（第一列是標題）
+                    # 設定欄寬 - 縮小 revision_diff 欄位寬度
+                    worksheet.column_dimensions[diff_letter].width = 12  # 縮小寬度
+                    
                     for row_num in range(2, worksheet.max_row + 1):
-                        # Excel 公式：
-                        # =IF(OR(target_branch_revision="-", target_branch_revision="", revision=""), "-", 
-                        #      IF(LEFT(revision,8)=target_branch_revision, "Y", "N"))
+                        # 修改公式邏輯：相同顯示 "N"，不同或空值顯示 "Y"
                         formula = (
                             f'=IF(OR({target_letter}{row_num}="-", '
                             f'{target_letter}{row_num}="", '
                             f'{revision_letter}{row_num}=""), '
-                            f'"-", '
+                            f'"Y", '  # 空值顯示 Y
                             f'IF(LEFT({revision_letter}{row_num},8)={target_letter}{row_num}, '
-                            f'"Y", "N"))'
+                            f'"N", "Y"))'  # 相同顯示 N，不同顯示 Y
                         )
                         
-                        # 設定公式到 revision_diff 欄位
                         worksheet[f"{diff_letter}{row_num}"].value = formula
                     
                     self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式")
-                    self.logger.debug(f"  revision 欄位: 第{revision_col}欄 ({revision_letter})")
-                    self.logger.debug(f"  target_branch_revision 欄位: 第{target_revision_col}欄 ({target_letter})")
-                    self.logger.debug(f"  revision_diff 欄位: 第{revision_diff_col}欄 ({diff_letter})")
-                else:
-                    self.logger.warning(f"'{sheet_name}' 頁籤缺少必要欄位，無法設定公式")
                     
         except Exception as e:
             self.logger.error(f"設定 revision_diff 公式失敗: {str(e)}")
@@ -532,13 +520,8 @@ class FeatureTwo:
 
     def _format_revision_diff_column(self, worksheet, orange_fill, white_font):
         """
-        🆕 格式化 revision_diff 欄位（橘底白字，Y綠字/N紅字）
+        格式化 revision_diff 欄位（橘底白字，N綠字/Y紅字）
         使用條件格式化處理公式結果
-        
-        Args:
-            worksheet: Excel 工作表
-            orange_fill: 橘底填色
-            white_font: 白字字體
         """
         try:
             from openpyxl.styles import Font
@@ -546,13 +529,12 @@ class FeatureTwo:
             from openpyxl.formatting.rule import CellIsRule
             
             # 內容樣式
-            green_font = Font(color="00B050", bold=True)  # Y 的綠字
-            red_font = Font(color="FF0000", bold=True)    # N 的紅字
-            black_font = Font(color="000000")              # 一般文字（-）
+            green_font = Font(color="00B050", bold=True)  # N 的綠字
+            red_font = Font(color="FF0000", bold=True)    # Y 的紅字
             
             # 找到 revision_diff 欄位的位置
             revision_diff_col = None
-            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+            for col_num, cell in enumerate(worksheet[1], 1):
                 header_value = str(cell.value) if cell.value else ''
                 if header_value == 'revision_diff':
                     revision_diff_col = col_num
@@ -566,57 +548,43 @@ class FeatureTwo:
                 header_cell.fill = orange_fill
                 header_cell.font = white_font
                 
-                # 🆕 使用條件格式化來處理公式結果
-                # 定義資料範圍（從第2列到最後一列）
+                # 設定欄寬 - 縮小寬度
+                worksheet.column_dimensions[col_letter].width = 12  # 從預設寬度改為 12
+                
+                # 定義資料範圍
                 data_range = f"{col_letter}2:{col_letter}{worksheet.max_row}"
                 
-                # 條件格式規則 1: 當值為 "Y" 時使用綠字
-                rule_y = CellIsRule(
-                    operator='equal',
-                    formula=['"Y"'],
-                    font=green_font
-                )
-                worksheet.conditional_formatting.add(data_range, rule_y)
-                
-                # 條件格式規則 2: 當值為 "N" 時使用紅字
+                # 條件格式規則 1: 當值為 "N" 時使用綠字（相同）
                 rule_n = CellIsRule(
                     operator='equal',
                     formula=['"N"'],
-                    font=red_font
+                    font=green_font
                 )
                 worksheet.conditional_formatting.add(data_range, rule_n)
                 
-                # 條件格式規則 3: 當值為 "-" 時使用黑字（預設就是黑字，可省略）
-                # 但為了確保一致性，還是設定
-                rule_dash = CellIsRule(
+                # 條件格式規則 2: 當值為 "Y" 時使用紅字（不同或空值）
+                rule_y = CellIsRule(
                     operator='equal',
-                    formula=['"-"'],
-                    font=black_font
+                    formula=['"Y"'],
+                    font=red_font
                 )
-                worksheet.conditional_formatting.add(data_range, rule_dash)
+                worksheet.conditional_formatting.add(data_range, rule_y)
                 
-                self.logger.info("已設定 revision_diff 欄位格式：標頭橘底白字，使用條件格式化處理公式結果")
-                self.logger.debug(f"  條件格式範圍: {data_range}")
-            
+                self.logger.info("已設定 revision_diff 欄位格式：標頭橘底白字，N綠字/Y紅字")
+                
         except Exception as e:
             self.logger.error(f"格式化 revision_diff 欄位失敗: {str(e)}")
 
     def _format_link_columns(self, worksheet, blue_fill, green_fill, white_font):
         """
-        格式化連結欄位 - 新方法
-        
-        Args:
-            worksheet: Excel 工作表
-            blue_fill: 藍底填色
-            green_fill: 綠底填色
-            white_font: 白字字體
+        格式化連結欄位 - 調整欄寬
         """
         try:
             from openpyxl.utils import get_column_letter
             
             # 找到連結欄位的位置
             link_columns = {}
-            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+            for col_num, cell in enumerate(worksheet[1], 1):
                 header_value = str(cell.value) if cell.value else ''
                 
                 if header_value == 'branch_link':
@@ -624,37 +592,31 @@ class FeatureTwo:
                 elif header_value == 'target_branch_link':
                     link_columns['target_branch_link'] = col_num
             
-            # 格式化 branch_link 欄位 (藍底白字) - 現在在最後一欄
+            # 格式化 branch_link 欄位 (藍底白字)
             if 'branch_link' in link_columns:
                 col_num = link_columns['branch_link']
                 col_letter = get_column_letter(col_num)
                 
-                # 格式化標題
                 header_cell = worksheet[f"{col_letter}1"]
                 header_cell.fill = blue_fill
                 header_cell.font = white_font
                 
-                # 設定欄寬
-                worksheet.column_dimensions[col_letter].width = 80
+                # 調整欄寬 - 略微縮小
+                worksheet.column_dimensions[col_letter].width = 60  # 從 80 改為 60
                 
-                self.logger.debug(f"已設定 branch_link 欄位格式: 第{col_num}欄 (藍底白字)")
-            
             # 格式化 target_branch_link 欄位 (綠底白字)
             if 'target_branch_link' in link_columns:
                 col_num = link_columns['target_branch_link']
                 col_letter = get_column_letter(col_num)
                 
-                # 格式化標題
                 header_cell = worksheet[f"{col_letter}1"]
                 header_cell.fill = green_fill
                 header_cell.font = white_font
                 
-                # 設定欄寬
-                worksheet.column_dimensions[col_letter].width = 80
+                # 調整欄寬 - 略微縮小
+                worksheet.column_dimensions[col_letter].width = 60  # 從 80 改為 60
                 
-                self.logger.debug(f"已設定 target_branch_link 欄位格式: 第{col_num}欄 (綠底白字)")
-            
-            self.logger.info("已完成連結欄位格式化: target_branch_link (綠底白字), branch_link (藍底白字，最後一欄)")
+            self.logger.info("已完成連結欄位格式化並調整欄寬")
             
         except Exception as e:
             self.logger.error(f"格式化連結欄位失敗: {str(e)}")
