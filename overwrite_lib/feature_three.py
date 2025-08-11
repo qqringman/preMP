@@ -689,8 +689,8 @@ class FeatureThree:
     
     def _convert_master_to_premp(self, revision: str) -> str:
         """
-        master → premp 轉換規則 - 修正版本，根據失敗案例調整規則
-        修改：修正 Linux kernel 和 mp.google-refplus 的轉換規則
+        master → premp 轉換規則 - 與 test_manifest_conversion.py 完全同步
+        修改：確保與測試模組使用完全相同的轉換邏輯
         
         Args:
             revision: 原始 revision
@@ -712,7 +712,7 @@ class FeatureThree:
         if self._should_skip_revision_conversion(original_revision):
             return original_revision
         
-        # 🆕 精確匹配轉換規則（優先級最高）- 修正版本
+        # 🆕 精確匹配轉換規則（優先級最高）- 與測試模組完全同步
         exact_mappings = {
             # 基本 master 分支轉換
             'realtek/master': 'realtek/android-14/premp.google-refplus',
@@ -741,7 +741,7 @@ class FeatureThree:
             self.logger.debug(f"精確匹配轉換: {original_revision} → {exact_mappings[original_revision]}")
             return exact_mappings[original_revision]
         
-        # 🆕 模式匹配轉換規則（使用正規表達式）
+        # 🆕 模式匹配轉換規則（使用正規表達式）- 與測試模組完全同步
         import re
         
         # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
@@ -847,7 +847,7 @@ class FeatureThree:
 
     def _should_skip_revision_conversion(self, revision: str) -> bool:
         """
-        判斷是否應該跳過 revision 轉換
+        判斷是否應該跳過 revision 轉換 - 與測試模組完全同步
         
         Args:
             revision: 原始 revision
@@ -858,6 +858,10 @@ class FeatureThree:
         if not revision:
             return True
         
+        # 🆕 跳過 Google 開頭的項目
+        if revision.startswith('google/'):
+            return True
+        
         # 跳過 refs/tags/
         if revision.startswith('refs/tags/'):
             return True
@@ -866,7 +870,7 @@ class FeatureThree:
 
     def _smart_conversion_fallback(self, revision: str) -> str:
         """
-        智能轉換備案 - 當沒有精確規則時使用
+        智能轉換備案 - 當沒有精確規則時使用 - 與測試模組完全同步
         
         Args:
             revision: 原始 revision
@@ -877,7 +881,9 @@ class FeatureThree:
         # 如果包含 mp.google-refplus，嘗試替換為 premp.google-refplus
         if 'mp.google-refplus' in revision:
             # 保留原始路徑，只替換關鍵字
-            return revision.replace('mp.google-refplus', 'premp.google-refplus')
+            result = revision.replace('mp.google-refplus', 'premp.google-refplus')
+            self.logger.debug(f"智能替換 mp→premp: {revision} → {result}")
+            return result
         
         # 如果是 master 但沒有匹配到特定規則，使用預設轉換
         if '/master' in revision and 'realtek/' in revision:
@@ -886,12 +892,18 @@ class FeatureThree:
             android_match = re.search(r'android-(\d+)', revision)
             if android_match:
                 android_ver = android_match.group(1)
-                return f'realtek/android-{android_ver}/premp.google-refplus'
+                result = f'realtek/android-{android_ver}/premp.google-refplus'
+                self.logger.debug(f"智能Android版本轉換: {revision} → {result}")
+                return result
             else:
-                return 'realtek/android-14/premp.google-refplus'
+                result = 'realtek/android-14/premp.google-refplus'
+                self.logger.debug(f"智能預設轉換: {revision} → {result}")
+                return result
         
         # 如果完全沒有匹配，返回預設值
-        return 'realtek/android-14/premp.google-refplus'
+        result = 'realtek/android-14/premp.google-refplus'
+        self.logger.debug(f"備案預設轉換: {revision} → {result}")
+        return result
             
     def _convert_premp_to_mp(self, revision: str) -> str:
         """premp → mp 轉換規則"""
