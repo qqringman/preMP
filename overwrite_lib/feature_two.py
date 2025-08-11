@@ -626,14 +626,27 @@ class FeatureTwo:
     # ========================
 
     def _parse_manifest(self, input_file: str) -> List[Dict]:
-        """解析 manifest.xml 檔案"""
+        """解析 manifest.xml 檔案 - 增強版（支援 default remote）"""
         try:
             tree = ET.parse(input_file)
             root = tree.getroot()
             
+            # 先讀取 default 標籤的 remote 屬性
+            default_remote = ''
+            default_element = root.find('default')
+            if default_element is not None:
+                default_remote = default_element.get('remote', '')
+                self.logger.info(f"找到預設 remote: {default_remote}")
+            
             projects = []
             
             for project in root.findall('project'):
+                # 取得專案的 remote，如果為空則使用 default_remote
+                project_remote = project.get('remote', '')
+                if not project_remote and default_remote:
+                    project_remote = default_remote
+                    self.logger.debug(f"專案 {project.get('name', '')} 使用預設 remote: {default_remote}")
+                
                 project_data = {
                     'name': project.get('name', ''),
                     'path': project.get('path', ''),
@@ -642,11 +655,20 @@ class FeatureTwo:
                     'dest-branch': project.get('dest-branch', ''),
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
-                    'remote': project.get('remote', '')
+                    'remote': project_remote  # 使用處理後的 remote 值
                 }
                 projects.append(project_data)
             
             self.logger.info(f"解析完成，共 {len(projects)} 個專案")
+            
+            # 統計 remote 使用情況
+            remote_stats = {}
+            for p in projects:
+                remote_val = p.get('remote', 'no-remote')
+                remote_stats[remote_val] = remote_stats.get(remote_val, 0) + 1
+            
+            self.logger.info(f"Remote 統計: {remote_stats}")
+            
             return projects
             
         except Exception as e:
