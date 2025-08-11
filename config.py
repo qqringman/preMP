@@ -57,6 +57,8 @@ DB_TARGET_FILES = ['manifest_{version}.xml', 'Version_{version}.txt']  # {versio
 # manifest.xml 比較會檢查 revision 差異、動態分支檢查、新增/刪除的專案
 
 # Gerrit URL 設定（用於產生連結，根據您的環境修改）
+GERRIT_SORUCE_URL = "https://mm2sd.rtkbf.com"
+GERRIT_PREBUILT_URL = "https://mm2sd-git2.rtkbf.com"
 GERRIT_BASE_URL_PREBUILT = "https://mm2sd-git2.rtkbf.com/gerrit/plugins/gitiles/"
 GERRIT_BASE_URL_NORMAL = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/"
 

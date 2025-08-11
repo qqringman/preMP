@@ -2,6 +2,7 @@
 功能二：透過 manifest.xml 建立分支映射表 - 增強版
 建立一張 mapping 的 branch table (manifest_projects.xlsx) 並建立相關 branch (可選)
 新增：支援 refs/tags/ 的 Tag 處理邏輯 + branch/tag 連結功能
+修正：branch_link 使用 dest-branch 欄位並移到最後一欄
 """
 import os
 import xml.etree.ElementTree as ET
@@ -88,6 +89,10 @@ class FeatureTwo:
             # 步驟 4: 處理重複資料
             unique_projects, duplicate_projects = self._handle_duplicates(projects_with_links, remove_duplicates)
             
+            # 🆕 步驟 4.5: 重新編號 SN（避免跳號）
+            unique_projects = self._renumber_projects(unique_projects)
+            duplicate_projects = self._renumber_projects(duplicate_projects)
+            
             self.logger.info(f"處理完成: {len(unique_projects)} 個專案, {len(duplicate_projects)} 個重複")
             
             # 步驟 5: 生成 Excel 報告（使用新的方法）
@@ -105,14 +110,78 @@ class FeatureTwo:
             self.logger.error(f"功能二執行失敗: {str(e)}")
             return False
 
-    def _build_gerrit_link(self, project_name: str, revision: str, target_type: str) -> str:
+    def _get_gerrit_base_url(self, remote: str) -> str:
         """
-        建立 Gerrit branch/tag 連結
+        🆕 根據 remote 取得對應的 Gerrit base URL
+        
+        Args:
+            remote: remote 欄位值
+            
+        Returns:
+            對應的 Gerrit base URL
+        """
+        try:
+            import config
+            if remote == 'rtk-prebuilt':
+                # 使用 prebuilt 專用的 Gerrit 伺服器
+                return getattr(config, 'GERRIT_BASE_URL_PREBUILT', 'https://mm2sd-git2.rtkbf.com')
+            else:
+                # 使用一般的 Gerrit 伺服器
+                return getattr(config, 'GERRIT_BASE_URL_NORMAL', 'https://mm2sd.rtkbf.com')
+        except:
+            # 如果無法載入 config，使用預設值
+            if remote == 'rtk-prebuilt':
+                return 'https://mm2sd-git2.rtkbf.com'
+            else:
+                return 'https://mm2sd.rtkbf.com'
+    
+    def _build_gerrit_link_from_dest_branch(self, project_name: str, dest_branch: str, remote: str = '') -> str:
+        """
+        🆕 修正版：根據 dest-branch 建立 Gerrit branch/tag 連結（支援 remote 判斷）
+        
+        Args:
+            project_name: 專案名稱
+            dest_branch: dest-branch 欄位值
+            remote: remote 欄位值（用於判斷使用哪個 Gerrit）
+            
+        Returns:
+            Gerrit 連結 URL
+        """
+        try:
+            if not project_name or not dest_branch:
+                return ""
+            
+            # 🆕 根據 remote 決定 base URL
+            gerrit_base = self._get_gerrit_base_url(remote)
+            base_url = f"{gerrit_base}/gerrit/plugins/gitiles"
+            
+            # 判斷是 tag 還是 branch
+            if dest_branch.startswith('refs/tags/'):
+                # Tag: 直接使用完整的 refs/tags/xxx
+                link = f"{base_url}/{project_name}/+/{dest_branch}"
+            elif dest_branch.startswith('refs/heads/'):
+                # Branch: 已經有 refs/heads/ 前綴，直接使用
+                link = f"{base_url}/{project_name}/+/{dest_branch}"
+            else:
+                # 沒有前綴的情況，當作 branch 處理，加上 refs/heads/
+                link = f"{base_url}/{project_name}/+/refs/heads/{dest_branch}"
+            
+            self.logger.debug(f"建立 branch_link: {project_name} + {dest_branch} -> {link} (remote: {remote})")
+            return link
+            
+        except Exception as e:
+            self.logger.error(f"建立 Gerrit 連結失敗 {project_name}: {str(e)}")
+            return ""
+    
+    def _build_gerrit_link(self, project_name: str, revision: str, target_type: str, remote: str = '') -> str:
+        """
+        建立 Gerrit branch/tag 連結（用於 target_branch_link）（支援 remote 判斷）
         
         Args:
             project_name: 專案名稱
             revision: 分支或標籤名稱
             target_type: 'branch' 或 'tag'
+            remote: remote 欄位值（用於判斷使用哪個 Gerrit）
             
         Returns:
             Gerrit 連結 URL
@@ -121,7 +190,9 @@ class FeatureTwo:
             if not project_name or not revision:
                 return ""
             
-            base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles"
+            # 🆕 根據 remote 決定 base URL
+            gerrit_base = self._get_gerrit_base_url(remote)
+            base_url = f"{gerrit_base}/gerrit/plugins/gitiles"
             
             # 處理 refs/tags/ 或 refs/heads/ 前綴
             clean_revision = revision
@@ -139,7 +210,7 @@ class FeatureTwo:
                 # branch link: /+/refs/heads/{branch_name}
                 link = f"{base_url}/{project_name}/+/refs/heads/{clean_revision}"
             
-            self.logger.debug(f"建立 {target_type} 連結: {project_name} -> {link}")
+            self.logger.debug(f"建立 {target_type} 連結: {project_name} -> {link} (remote: {remote})")
             return link
             
         except Exception as e:
@@ -193,9 +264,26 @@ class FeatureTwo:
         
         return 'Branch'  # 預設為 Branch
 
+    def _renumber_projects(self, projects: List[Dict]) -> List[Dict]:
+        """
+        🆕 重新編號專案列表的 SN，確保連續不跳號
+        
+        Args:
+            projects: 專案列表
+            
+        Returns:
+            重新編號後的專案列表
+        """
+        for i, project in enumerate(projects, 1):
+            project['SN'] = i
+        return projects
+    
     def _add_links_to_projects(self, projects: List[Dict]) -> List[Dict]:
         """
         為專案添加 branch/tag 連結資訊
+        🆕 修正：branch_link 使用 dest-branch 欄位
+        🆕 新增：revision_diff 欄位（將使用 Excel 公式）
+        🆕 新增：根據 remote 判斷 Gerrit 伺服器
         
         Args:
             projects: 專案列表
@@ -210,24 +298,30 @@ class FeatureTwo:
             
             project_name = project.get('name', '')
             
-            # 來源 revision 資訊（從 revision, upstream, dest-branch 中取得）
-            source_revision = project.get('revision', '') or project.get('upstream', '') or project.get('dest-branch', '')
-            source_type = self._determine_revision_type(source_revision)
+            # 🆕 取得 remote 資訊
+            remote = project.get('remote', '')
             
-            # 目標 branch 資訊
+            # 🆕 修正：branch_link 應該使用 dest-branch 欄位
+            dest_branch = project.get('dest-branch', '')
+            
+            # 🆕 建立 branch_link - 使用 dest-branch（傳入 remote）
+            branch_link = self._build_gerrit_link_from_dest_branch(project_name, dest_branch, remote)
+            
+            # 目標 branch 資訊（保持不變）
             target_branch = project.get('target_branch', '')
             target_type = project.get('target_type', 'Branch')
             
-            # 🆕 建立 branch_link (藍底白字) - 來源 revision 的連結
-            branch_link = self._build_gerrit_link(project_name, source_revision, source_type)
+            # 建立 target_branch_link (綠底白字) - 目標 branch 的連結（傳入 remote）
+            target_branch_link = self._build_gerrit_link(project_name, target_branch, target_type, remote)
             
-            # 🆕 建立 target_branch_link (綠底白字) - 目標 branch 的連結
-            target_branch_link = self._build_gerrit_link(project_name, target_branch, target_type)
+            # 🆕 revision_diff 欄位將使用 Excel 公式，這裡只是佔位符
+            # 實際公式會在 _write_excel_with_links 中設定
+            revision_diff = ''  # 佔位符，將被 Excel 公式取代
             
-            # 添加連結欄位
+            # 添加所有欄位
             enhanced_project['branch_link'] = branch_link
             enhanced_project['target_branch_link'] = target_branch_link
-            enhanced_project['source_type'] = source_type
+            enhanced_project['revision_diff'] = revision_diff
             
             projects_with_links.append(enhanced_project)
         
@@ -236,7 +330,7 @@ class FeatureTwo:
 
     def _write_excel_with_links(self, projects: List[Dict], duplicate_projects: List[Dict], 
                               output_file: str, output_folder: str = None):
-        """寫入 Excel 檔案 - 包含連結功能的增強版"""
+        """寫入 Excel 檔案 - 包含連結功能的增強版（branch_link 移到最後，revision_diff 使用公式）"""
         try:
             # 處理輸出檔案路徑
             if not output_file:
@@ -261,21 +355,24 @@ class FeatureTwo:
                 if projects:
                     df_main = pd.DataFrame(projects)
                     
-                    # 🆕 調整欄位順序：在 target_branch 左方加入 branch_link，在 target_branch_revision 右方加入 target_branch_link
+                    # 🆕 調整欄位順序：branch_link 移到最後，revision_diff 在 target_branch_revision 右邊
                     main_column_order = [
                         'SN', 'name', 'revision', 'upstream', 'dest-branch',
-                        'branch_link',  # 🆕 藍底白字
                         'target_branch', 
                         'target_type', 
                         'target_branch_exists', 
                         'target_branch_revision',
-                        'target_branch_link'  # 🆕 綠底白字
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision
+                        'target_branch_link'  # 綠底白字
                     ]
                     
-                    # 添加其他可能存在的欄位
-                    for col in ['groups', 'path', 'source_type']:
-                        if col in df_main.columns:
+                    # 添加其他可能存在的欄位（groups, path, source_type 等）
+                    for col in df_main.columns:
+                        if col not in main_column_order and col != 'branch_link':
                             main_column_order.append(col)
+                    
+                    # 最後加上 branch_link
+                    main_column_order.append('branch_link')  # 🆕 藍底白字移到最後
                     
                     # 只保留存在的欄位
                     main_column_order = [col for col in main_column_order if col in df_main.columns]
@@ -283,8 +380,9 @@ class FeatureTwo:
                 else:
                     # 空的 DataFrame 結構
                     df_main = pd.DataFrame(columns=[
-                        'SN', 'name', 'revision', 'upstream', 'dest-branch', 'branch_link',
-                        'target_branch', 'target_type', 'target_branch_exists', 'target_branch_revision', 'target_branch_link'
+                        'SN', 'name', 'revision', 'upstream', 'dest-branch',
+                        'target_branch', 'target_type', 'target_branch_exists', 
+                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link'
                     ])
                 
                 df_main.to_excel(writer, sheet_name='專案列表', index=False)
@@ -292,29 +390,35 @@ class FeatureTwo:
                 # 頁籤 2: 重複專案
                 if duplicate_projects:
                     df_dup = pd.DataFrame(duplicate_projects)
-                    if 'SN' in df_dup.columns:
-                        df_dup['SN'] = range(1, len(df_dup) + 1)
+                    # 🆕 移除這裡的重新編號，因為已經在 _renumber_projects 處理過了
                     
-                    # 🆕 重複頁籤也使用相同的欄位順序
+                    # 🆕 重複頁籤也使用相同的欄位順序（branch_link 在最後）
                     dup_column_order = [
                         'SN', 'name', 'revision', 'upstream', 'dest-branch',
-                        'branch_link',  # 🆕 藍底白字
                         'target_branch',
                         'target_type',
                         'target_branch_exists',
                         'target_branch_revision',
-                        'target_branch_link'  # 🆕 綠底白字
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision
+                        'target_branch_link'  # 綠底白字
                     ]
                     
-                    for col in ['groups', 'path', 'source_type']:
-                        if col in df_dup.columns:
+                    # 添加其他欄位
+                    for col in df_dup.columns:
+                        if col not in dup_column_order and col != 'branch_link':
                             dup_column_order.append(col)
+                    
+                    # 最後加上 branch_link
+                    dup_column_order.append('branch_link')  # 🆕 藍底白字移到最後
                     
                     dup_column_order = [col for col in dup_column_order if col in df_dup.columns]
                     df_dup = df_dup[dup_column_order]
                     
                     df_dup.to_excel(writer, sheet_name='重覆', index=False)
                     self.logger.info(f"建立 '重覆' 頁籤，共 {len(duplicate_projects)} 筆資料")
+                
+                # 🆕 設定 revision_diff 欄位的 Excel 公式
+                self._set_revision_diff_formulas(writer)
                 
                 # 🆕 格式化所有工作表，包含連結欄位
                 self._format_excel_with_links(writer)
@@ -325,6 +429,75 @@ class FeatureTwo:
             self.logger.error(f"寫入 Excel 檔案失敗: {str(e)}")
             raise
 
+    def _set_revision_diff_formulas(self, writer):
+        """
+        🆕 設定 revision_diff 欄位的 Excel 公式
+        公式邏輯：比對 revision 前8碼與 target_branch_revision
+        - 相同顯示 "Y"
+        - 不同顯示 "N"
+        - 任一為空或 "-" 顯示 "-"
+        
+        Args:
+            writer: ExcelWriter 物件
+        """
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 處理每個頁籤
+            for sheet_name in ['專案列表', '重覆']:
+                if sheet_name not in writer.sheets:
+                    continue
+                    
+                worksheet = writer.sheets[sheet_name]
+                
+                # 找到各欄位的位置
+                revision_col = None
+                target_revision_col = None
+                revision_diff_col = None
+                
+                # 掃描標題列找到欄位位置
+                for col_num, cell in enumerate(worksheet[1], 1):  # 第一列是標題
+                    header = str(cell.value) if cell.value else ''
+                    if header == 'revision':
+                        revision_col = col_num
+                    elif header == 'target_branch_revision':
+                        target_revision_col = col_num
+                    elif header == 'revision_diff':
+                        revision_diff_col = col_num
+                
+                # 如果找到所有需要的欄位，設定公式
+                if revision_col and target_revision_col and revision_diff_col:
+                    revision_letter = get_column_letter(revision_col)
+                    target_letter = get_column_letter(target_revision_col)
+                    diff_letter = get_column_letter(revision_diff_col)
+                    
+                    # 從第二列開始設定公式（第一列是標題）
+                    for row_num in range(2, worksheet.max_row + 1):
+                        # Excel 公式：
+                        # =IF(OR(target_branch_revision="-", target_branch_revision="", revision=""), "-", 
+                        #      IF(LEFT(revision,8)=target_branch_revision, "Y", "N"))
+                        formula = (
+                            f'=IF(OR({target_letter}{row_num}="-", '
+                            f'{target_letter}{row_num}="", '
+                            f'{revision_letter}{row_num}=""), '
+                            f'"-", '
+                            f'IF(LEFT({revision_letter}{row_num},8)={target_letter}{row_num}, '
+                            f'"Y", "N"))'
+                        )
+                        
+                        # 設定公式到 revision_diff 欄位
+                        worksheet[f"{diff_letter}{row_num}"].value = formula
+                    
+                    self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式")
+                    self.logger.debug(f"  revision 欄位: 第{revision_col}欄 ({revision_letter})")
+                    self.logger.debug(f"  target_branch_revision 欄位: 第{target_revision_col}欄 ({target_letter})")
+                    self.logger.debug(f"  revision_diff 欄位: 第{revision_diff_col}欄 ({diff_letter})")
+                else:
+                    self.logger.warning(f"'{sheet_name}' 頁籤缺少必要欄位，無法設定公式")
+                    
+        except Exception as e:
+            self.logger.error(f"設定 revision_diff 公式失敗: {str(e)}")
+    
     def _format_excel_with_links(self, writer):
         """
         格式化 Excel 工作表，包含新的連結欄位格式
@@ -336,6 +509,7 @@ class FeatureTwo:
             # 定義顏色
             blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")    # 藍底
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")   # 綠底
+            orange_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")  # 🆕 橘底
             white_font = Font(color="FFFFFF", bold=True)  # 白字
             
             for sheet_name in writer.sheets:
@@ -347,11 +521,85 @@ class FeatureTwo:
                 # 🆕 特別格式化連結欄位
                 self._format_link_columns(worksheet, blue_fill, green_fill, white_font)
                 
+                # 🆕 格式化 revision_diff 欄位
+                self._format_revision_diff_column(worksheet, orange_fill, white_font)
+                
                 # 保留原有的目標分支欄位格式化
                 self._format_target_branch_columns(worksheet)
                 
         except Exception as e:
             self.logger.error(f"Excel 格式化失敗: {str(e)}")
+
+    def _format_revision_diff_column(self, worksheet, orange_fill, white_font):
+        """
+        🆕 格式化 revision_diff 欄位（橘底白字，Y綠字/N紅字）
+        使用條件格式化處理公式結果
+        
+        Args:
+            worksheet: Excel 工作表
+            orange_fill: 橘底填色
+            white_font: 白字字體
+        """
+        try:
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+            from openpyxl.formatting.rule import CellIsRule
+            
+            # 內容樣式
+            green_font = Font(color="00B050", bold=True)  # Y 的綠字
+            red_font = Font(color="FF0000", bold=True)    # N 的紅字
+            black_font = Font(color="000000")              # 一般文字（-）
+            
+            # 找到 revision_diff 欄位的位置
+            revision_diff_col = None
+            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == 'revision_diff':
+                    revision_diff_col = col_num
+                    break
+            
+            if revision_diff_col:
+                col_letter = get_column_letter(revision_diff_col)
+                
+                # 格式化標題（橘底白字）
+                header_cell = worksheet[f"{col_letter}1"]
+                header_cell.fill = orange_fill
+                header_cell.font = white_font
+                
+                # 🆕 使用條件格式化來處理公式結果
+                # 定義資料範圍（從第2列到最後一列）
+                data_range = f"{col_letter}2:{col_letter}{worksheet.max_row}"
+                
+                # 條件格式規則 1: 當值為 "Y" 時使用綠字
+                rule_y = CellIsRule(
+                    operator='equal',
+                    formula=['"Y"'],
+                    font=green_font
+                )
+                worksheet.conditional_formatting.add(data_range, rule_y)
+                
+                # 條件格式規則 2: 當值為 "N" 時使用紅字
+                rule_n = CellIsRule(
+                    operator='equal',
+                    formula=['"N"'],
+                    font=red_font
+                )
+                worksheet.conditional_formatting.add(data_range, rule_n)
+                
+                # 條件格式規則 3: 當值為 "-" 時使用黑字（預設就是黑字，可省略）
+                # 但為了確保一致性，還是設定
+                rule_dash = CellIsRule(
+                    operator='equal',
+                    formula=['"-"'],
+                    font=black_font
+                )
+                worksheet.conditional_formatting.add(data_range, rule_dash)
+                
+                self.logger.info("已設定 revision_diff 欄位格式：標頭橘底白字，使用條件格式化處理公式結果")
+                self.logger.debug(f"  條件格式範圍: {data_range}")
+            
+        except Exception as e:
+            self.logger.error(f"格式化 revision_diff 欄位失敗: {str(e)}")
 
     def _format_link_columns(self, worksheet, blue_fill, green_fill, white_font):
         """
@@ -376,7 +624,7 @@ class FeatureTwo:
                 elif header_value == 'target_branch_link':
                     link_columns['target_branch_link'] = col_num
             
-            # 格式化 branch_link 欄位 (藍底白字)
+            # 格式化 branch_link 欄位 (藍底白字) - 現在在最後一欄
             if 'branch_link' in link_columns:
                 col_num = link_columns['branch_link']
                 col_letter = get_column_letter(col_num)
@@ -406,7 +654,7 @@ class FeatureTwo:
                 
                 self.logger.debug(f"已設定 target_branch_link 欄位格式: 第{col_num}欄 (綠底白字)")
             
-            self.logger.info("已完成連結欄位格式化: branch_link (藍底白字), target_branch_link (綠底白字)")
+            self.logger.info("已完成連結欄位格式化: target_branch_link (綠底白字), branch_link (藍底白字，最後一欄)")
             
         except Exception as e:
             self.logger.error(f"格式化連結欄位失敗: {str(e)}")
@@ -444,7 +692,7 @@ class FeatureTwo:
             return []
     
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False) -> List[Dict]:
-        """轉換專案的分支名稱 - 增強版 (支援 Tag)"""
+        """轉換專案的分支名稱 - 增強版 (支援 Tag 和 remote 判斷)"""
         converted_projects = []
         tag_count = 0
         branch_count = 0
@@ -452,6 +700,9 @@ class FeatureTwo:
         for i, project in enumerate(projects, 1):
             converted_project = project.copy()
             converted_project['SN'] = i
+            
+            # 🆕 取得 remote 資訊
+            remote = project.get('remote', '')
             
             # 判斷來源分支類型
             source_type = self._determine_source_type(project)
@@ -472,11 +723,11 @@ class FeatureTwo:
             # 根據參數決定是否檢查存在性
             if check_branch_exists and target_branch:
                 if is_tag:
-                    # 檢查 Tag 存在性
-                    exists_info = self._check_target_tag_exists(project.get('name', ''), target_branch)
+                    # 檢查 Tag 存在性（傳入 remote）
+                    exists_info = self._check_target_tag_exists(project.get('name', ''), target_branch, remote)
                 else:
-                    # 檢查 Branch 存在性
-                    exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch)
+                    # 檢查 Branch 存在性（傳入 remote）
+                    exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch, remote)
                 
                 converted_project['target_branch_exists'] = exists_info['exists_status']
                 converted_project['target_branch_revision'] = exists_info['revision']
@@ -499,8 +750,34 @@ class FeatureTwo:
             return False
         return reference.startswith('refs/tags/')
 
-    def _check_target_tag_exists(self, project_name: str, target_tag: str) -> Dict[str, str]:
-        """檢查目標 Tag 是否存在並取得 revision"""
+    def _get_prebuilt_gerrit_manager(self) -> 'GerritManager':
+        """
+        🆕 取得或建立 rtk-prebuilt 專用的 GerritManager
+        
+        Returns:
+            設定好的 GerritManager 實例
+        """
+        # 如果還沒有建立 prebuilt 專用的 manager，建立一個
+        if not hasattr(self, '_prebuilt_gerrit_manager'):
+            from gerrit_manager import GerritManager
+            self._prebuilt_gerrit_manager = GerritManager()
+            
+            # 設定 prebuilt 專用的 URL
+            prebuilt_base = self._get_gerrit_base_url('rtk-prebuilt')
+            self._prebuilt_gerrit_manager.base_url = prebuilt_base
+            self._prebuilt_gerrit_manager.api_url = f"{prebuilt_base}/a"
+            
+            # 更新 session 的基礎 URL
+            if hasattr(self._prebuilt_gerrit_manager, 'session'):
+                # session 會使用相同的認證資訊
+                pass
+            
+            self.logger.info(f"建立 rtk-prebuilt 專用 GerritManager: {prebuilt_base}")
+        
+        return self._prebuilt_gerrit_manager
+    
+    def _check_target_tag_exists(self, project_name: str, target_tag: str, remote: str = '') -> Dict[str, str]:
+        """檢查目標 Tag 是否存在並取得 revision（支援 remote 判斷）"""
         result = {
             'exists_status': 'N',
             'revision': ''
@@ -515,20 +792,31 @@ class FeatureTwo:
             if tag_name.startswith('refs/tags/'):
                 tag_name = tag_name[10:]  # 移除 'refs/tags/'
             
+            # 🆕 根據 remote 建立或選擇正確的 GerritManager
+            if remote == 'rtk-prebuilt':
+                # 使用 prebuilt 的 Gerrit 伺服器
+                temp_gerrit = self._get_prebuilt_gerrit_manager()
+                self.logger.debug(f"使用 rtk-prebuilt Gerrit 檢查 Tag: {project_name}")
+            else:
+                # 使用預設的 GerritManager
+                temp_gerrit = self.gerrit_manager
+                self.logger.debug(f"使用預設 Gerrit 檢查 Tag: {project_name}")
+            
             # 查詢 Tag
-            tag_info = self.gerrit_manager.query_tag(project_name, tag_name)
+            tag_info = temp_gerrit.query_tag(project_name, tag_name)
             
             if tag_info['exists']:
                 result['exists_status'] = 'Y'
                 result['revision'] = tag_info['revision']
+                self.logger.debug(f"Tag 存在: {project_name}/{tag_name} - {result['revision']}")
             
         except Exception as e:
             self.logger.debug(f"檢查 Tag 失敗: {project_name} - {target_tag}: {str(e)}")
         
         return result
 
-    def _check_target_branch_exists(self, project_name: str, target_branch: str) -> Dict[str, str]:
-        """檢查目標分支是否存在並取得 revision - 簡化版"""
+    def _check_target_branch_exists(self, project_name: str, target_branch: str, remote: str = '') -> Dict[str, str]:
+        """檢查目標分支是否存在並取得 revision - 簡化版（支援 remote 判斷）"""
         result = {
             'exists_status': 'N',
             'revision': ''
@@ -538,20 +826,27 @@ class FeatureTwo:
             if not project_name or not target_branch:
                 return result
             
-            # 直接使用最可靠的方法
-            branch_info = self._query_branch_direct(project_name, target_branch)
+            # 🆕 根據 remote 選擇正確的 GerritManager
+            if remote == 'rtk-prebuilt':
+                self.logger.debug(f"使用 rtk-prebuilt Gerrit 檢查分支: {project_name}/{target_branch}")
+            else:
+                self.logger.debug(f"使用預設 Gerrit 檢查分支: {project_name}/{target_branch}")
+            
+            # 直接使用最可靠的方法（傳入 remote）
+            branch_info = self._query_branch_direct(project_name, target_branch, remote)
             
             if branch_info['exists']:
                 result['exists_status'] = 'Y'
                 result['revision'] = branch_info['revision']
+                self.logger.debug(f"分支存在: {project_name}/{target_branch} - {result['revision']}")
             
         except Exception as e:
             self.logger.debug(f"檢查分支失敗: {project_name} - {target_branch}: {str(e)}")
         
         return result
 
-    def _query_branch_direct(self, project_name: str, branch_name: str) -> Dict[str, Any]:
-        """直接查詢分支 - 使用最可靠的方法"""
+    def _query_branch_direct(self, project_name: str, branch_name: str, remote: str = '') -> Dict[str, Any]:
+        """直接查詢分支 - 使用最可靠的方法（支援 remote 判斷）"""
         try:
             import urllib.parse
             
@@ -559,10 +854,23 @@ class FeatureTwo:
             encoded_project = urllib.parse.quote(project_name, safe='')
             encoded_branch = urllib.parse.quote(f"refs/heads/{branch_name}", safe='')
             
-            # 使用最成功的 API 路徑
-            api_url = f"{self.gerrit_manager.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}"
+            # 🆕 根據 remote 選擇正確的 GerritManager
+            if remote == 'rtk-prebuilt':
+                # 使用 prebuilt 的 Gerrit
+                temp_gerrit = self._get_prebuilt_gerrit_manager()
+                gerrit_base = self._get_gerrit_base_url('rtk-prebuilt')
+            else:
+                # 使用預設的 Gerrit
+                temp_gerrit = self.gerrit_manager
+                gerrit_base = self._get_gerrit_base_url('')
             
-            response = self.gerrit_manager._make_request(api_url, timeout=5)
+            # 建立 API URL
+            api_url = f"{gerrit_base}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}"
+            
+            self.logger.debug(f"查詢分支 API: {api_url}")
+            
+            # 使用對應的 GerritManager 發送請求
+            response = temp_gerrit._make_request(api_url, timeout=5)
             
             if response.status_code == 200:
                 content = response.text
@@ -578,6 +886,7 @@ class FeatureTwo:
                     'revision': revision[:8] if revision else 'Unknown'
                 }
             else:
+                self.logger.debug(f"分支不存在或無法存取: HTTP {response.status_code}")
                 return {'exists': False, 'revision': ''}
                 
         except Exception as e:
@@ -643,6 +952,7 @@ class FeatureTwo:
     def _handle_duplicates(self, projects: List[Dict], remove_duplicates: bool) -> tuple:
         """處理重複資料"""
         if not remove_duplicates:
+            # 如果不去重複，直接返回所有專案和空的重複列表
             return projects, []
         
         # 用於檢查重複的欄位
@@ -664,6 +974,7 @@ class FeatureTwo:
         
         self.logger.info(f"去重複後：保留 {len(unique_projects)} 個，重複 {len(duplicate_projects)} 個")
         
+        # 🆕 注意：這裡不重新編號，交給上層的 _renumber_projects 處理
         return unique_projects, duplicate_projects
 
     def _format_target_branch_columns(self, worksheet):
@@ -672,7 +983,7 @@ class FeatureTwo:
             from openpyxl.styles import PatternFill, Font
             from openpyxl.utils import get_column_letter
             
-            # 標頭樣式：綠色底白字（但不覆蓋連結欄位的格式）
+            # 標頭樣式：綠色底白字（但不覆蓋連結欄位和revision_diff的格式）
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
             white_font = Font(color="FFFFFF", bold=True)
             
@@ -683,21 +994,21 @@ class FeatureTwo:
             purple_font = Font(color="7030A0", bold=True) # Branch 的紫字
             black_font = Font(color="000000")             # 一般文字
             
-            # 找到目標欄位的位置（排除連結欄位，它們有自己的格式）
+            # 找到目標欄位的位置（排除連結欄位和revision_diff，它們有自己的格式）
             target_columns = {}
             for col_num, cell in enumerate(worksheet[1], 1):  # 第一列（標題列）
                 header_value = str(cell.value) if cell.value else ''
                 if header_value in ['target_branch', 'target_type', 'target_branch_exists', 'target_branch_revision']:
-                    # 跳過連結欄位，它們已經有專門的格式
-                    if header_value not in ['branch_link', 'target_branch_link']:
+                    # 跳過連結欄位和revision_diff，它們已經有專門的格式
+                    if header_value not in ['branch_link', 'target_branch_link', 'revision_diff']:
                         target_columns[header_value] = col_num
             
-            # 格式化標頭（但不覆蓋連結欄位）
+            # 格式化標頭（但不覆蓋連結欄位和revision_diff）
             for col_name, col_num in target_columns.items():
                 col_letter = get_column_letter(col_num)
                 header_cell = worksheet[f"{col_letter}1"]
-                # 只有當不是連結欄位時才設定綠底白字
-                if col_name not in ['branch_link', 'target_branch_link']:
+                # 只有當不是連結欄位和revision_diff時才設定綠底白字
+                if col_name not in ['branch_link', 'target_branch_link', 'revision_diff']:
                     header_cell.fill = green_fill
                     header_cell.font = white_font
             
@@ -746,18 +1057,23 @@ class FeatureTwo:
             self.logger.error(f"格式化目標分支欄位失敗: {str(e)}")
                 
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None):
-        """建立分支並記錄結果 - 增強版 (跳過 Tag 類型)"""
+        """建立分支並記錄結果 - 增強版 (跳過 Tag 類型，支援 remote 判斷)"""
         try:
             self.logger.info("開始建立分支...")
             
             branch_results = []
             skipped_tags = 0
+            prebuilt_count = 0
+            normal_count = 0
             
             for project in projects:
                 project_name = project.get('name', '')
                 target_branch = project.get('target_branch', '')
                 target_type = project.get('target_type', 'Branch')
                 revision = project.get('revision', '')
+                
+                # 🆕 取得 remote 資訊
+                remote = project.get('remote', '')
                 
                 if not all([project_name, target_branch, revision]):
                     continue
@@ -770,17 +1086,31 @@ class FeatureTwo:
                         'Project': project_name,
                         'Target_Branch': target_branch,
                         'Target_Type': 'Tag',
-                        'target_branch_link': project.get('target_branch_link', ''),  # 🆕 包含連結
+                        'target_branch_link': project.get('target_branch_link', ''),
                         'Revision': revision,
                         'Status': '跳過',
                         'Message': 'Tag 類型不建立分支',
-                        'Already_Exists': '-'
+                        'Already_Exists': '-',
+                        'Remote': remote,
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)  # 🆕 記錄使用的伺服器
                     }
                     branch_results.append(branch_result)
                     continue
                 
+                # 🆕 根據 remote 選擇正確的 GerritManager
+                if remote == 'rtk-prebuilt':
+                    # 使用 prebuilt 的 Gerrit 伺服器
+                    temp_gerrit = self._get_prebuilt_gerrit_manager()
+                    prebuilt_count += 1
+                    self.logger.debug(f"使用 rtk-prebuilt Gerrit 建立分支: {project_name}")
+                else:
+                    # 使用預設的 GerritManager
+                    temp_gerrit = self.gerrit_manager
+                    normal_count += 1
+                    self.logger.debug(f"使用預設 Gerrit 建立分支: {project_name}")
+                
                 # 建立分支
-                result = self.gerrit_manager.create_branch(project_name, target_branch, revision)
+                result = temp_gerrit.create_branch(project_name, target_branch, revision)
                 
                 # 記錄結果
                 branch_result = {
@@ -788,11 +1118,13 @@ class FeatureTwo:
                     'Project': project_name,
                     'Target_Branch': target_branch,
                     'Target_Type': 'Branch',
-                    'target_branch_link': project.get('target_branch_link', ''),  # 🆕 包含連結
+                    'target_branch_link': project.get('target_branch_link', ''),
                     'Revision': revision,
                     'Status': '成功' if result['success'] else '失敗',
                     'Message': result['message'],
-                    'Already_Exists': '是' if result.get('exists', False) else '否'
+                    'Already_Exists': '是' if result.get('exists', False) else '否',
+                    'Remote': remote,
+                    'Gerrit_Server': self._get_gerrit_base_url(remote)  # 🆕 記錄使用的伺服器
                 }
                 branch_results.append(branch_result)
                 
@@ -809,13 +1141,15 @@ class FeatureTwo:
             self._add_branch_status_sheet(full_output_path, branch_results)
             
             self.logger.info(f"分支建立完成，共處理 {len(branch_results)} 個專案")
-            self.logger.info(f"跳過 {skipped_tags} 個 Tag 類型專案")
+            self.logger.info(f"  - 跳過 {skipped_tags} 個 Tag 類型專案")
+            self.logger.info(f"  - 在 rtk-prebuilt Gerrit 處理 {prebuilt_count} 個專案")
+            self.logger.info(f"  - 在預設 Gerrit 處理 {normal_count} 個專案")
             
         except Exception as e:
             self.logger.error(f"建立分支失敗: {str(e)}")
     
     def _add_branch_status_sheet(self, excel_file: str, branch_results: List[Dict]):
-        """在 Excel 檔案中加入分支建立狀態頁籤 - 增強版 (包含連結)"""
+        """在 Excel 檔案中加入分支建立狀態頁籤 - 增強版 (包含連結、remote 和 Gerrit 伺服器)"""
         try:
             # 讀取現有的 Excel 檔案
             with pd.ExcelFile(excel_file) as xls:
@@ -832,9 +1166,18 @@ class FeatureTwo:
                 # 加入分支建立狀態頁籤
                 if branch_results:
                     df_branch = pd.DataFrame(branch_results)
+                    # 調整欄位順序
+                    column_order = [
+                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
+                        'Revision', 'Status', 'Message', 'Already_Exists', 'Remote', 'Gerrit_Server'
+                    ]
+                    # 只保留存在的欄位
+                    column_order = [col for col in column_order if col in df_branch.columns]
+                    df_branch = df_branch[column_order]
                 else:
                     df_branch = pd.DataFrame(columns=[
-                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 'Revision', 'Status', 'Message', 'Already_Exists'
+                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
+                        'Revision', 'Status', 'Message', 'Already_Exists', 'Remote', 'Gerrit_Server'
                     ])
                 
                 df_branch.to_excel(writer, sheet_name='Branch 建立狀態', index=False)
@@ -847,8 +1190,10 @@ class FeatureTwo:
                     # 特別格式化 Branch 建立狀態頁籤
                     if sheet_name == 'Branch 建立狀態':
                         self._format_branch_status_column(worksheet)
-                        # 🆕 也格式化連結欄位
+                        # 也格式化連結欄位
                         self._format_branch_status_links(worksheet)
+                        # 🆕 格式化 Remote 和 Gerrit_Server 欄位
+                        self._format_remote_columns(worksheet)
             
             self.logger.info("成功加入分支建立狀態頁籤")
             
@@ -882,6 +1227,75 @@ class FeatureTwo:
                     
         except Exception as e:
             self.logger.error(f"格式化分支狀態連結欄位失敗: {str(e)}")
+
+    def _format_remote_columns(self, worksheet):
+        """
+        🆕 格式化 Remote 和 Gerrit_Server 欄位
+        
+        Args:
+            worksheet: Excel 工作表
+        """
+        try:
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.utils import get_column_letter
+            
+            # 定義顏色
+            purple_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")  # 紫底
+            white_font = Font(color="FFFFFF", bold=True)  # 白字
+            purple_font = Font(color="7030A0", bold=True)  # 紫字（用於 rtk-prebuilt）
+            black_font = Font(color="000000")  # 黑字（用於其他）
+            
+            # 找到 Remote 和 Gerrit_Server 欄位的位置
+            remote_col = None
+            server_col = None
+            
+            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == 'Remote':
+                    remote_col = col_num
+                elif header_value == 'Gerrit_Server':
+                    server_col = col_num
+            
+            # 格式化 Remote 欄位（紫底白字標題）
+            if remote_col:
+                col_letter = get_column_letter(remote_col)
+                
+                # 格式化標題
+                header_cell = worksheet[f"{col_letter}1"]
+                header_cell.fill = purple_fill
+                header_cell.font = white_font
+                
+                # 格式化資料列（rtk-prebuilt 用紫字，其他用黑字）
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    if cell_value == 'rtk-prebuilt':
+                        cell.font = purple_font  # rtk-prebuilt 用紫字
+                    else:
+                        cell.font = black_font   # 其他用黑字
+            
+            # 格式化 Gerrit_Server 欄位
+            if server_col:
+                col_letter = get_column_letter(server_col)
+                
+                # 設定欄寬（URL 較長）
+                worksheet.column_dimensions[col_letter].width = 40
+                
+                # 格式化資料列（包含 mm2sd-git2 的用紫字）
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    if 'mm2sd-git2' in cell_value:
+                        cell.font = purple_font  # mm2sd-git2 用紫字
+                    else:
+                        cell.font = black_font   # 其他用黑字
+            
+            self.logger.debug("已設定 Remote 和 Gerrit_Server 欄位格式")
+            
+        except Exception as e:
+            self.logger.error(f"格式化 Remote 欄位失敗: {str(e)}")
 
     def _format_branch_status_column(self, worksheet):
         """格式化分支建立狀態欄位"""
