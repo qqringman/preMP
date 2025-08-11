@@ -50,7 +50,7 @@ class FeatureThree:
     def process(self, overwrite_type: str, output_folder: str, 
                 excel_filename: Optional[str] = None, push_to_gerrit: bool = False) -> bool:
         """
-        處理功能三的主要邏輯 - 微調版本
+        處理功能三的主要邏輯 - 微調版本（加入 include 展開功能）
         
         Args:
             overwrite_type: 轉換類型 (master_to_premp, premp_to_mp, mp_to_mpbackup)
@@ -62,7 +62,7 @@ class FeatureThree:
             是否處理成功
         """
         try:
-            self.logger.info("=== 開始執行功能三：Manifest 轉換工具 (微調版本) ===")
+            self.logger.info("=== 開始執行功能三：Manifest 轉換工具 (微調版本 + include 展開) ===")
             self.logger.info(f"轉換類型: {overwrite_type}")
             self.logger.info(f"輸出資料夾: {output_folder}")
             self.logger.info(f"推送到 Gerrit: {'是' if push_to_gerrit else '否'}")
@@ -93,9 +93,30 @@ class FeatureThree:
             if source_content:
                 source_file_path = self._save_source_file(source_content, overwrite_type, output_folder)
             
+            # 🆕 步驟 1.6: 檢查是否有 include 標籤，如果有則展開
+            expanded_content = None
+            expanded_file_path = None
+            use_expanded = False
+            
+            if source_content and self._has_include_tags(source_content):
+                self.logger.info("🔍 檢測到 include 標籤，準備展開 manifest...")
+                expanded_content, expanded_file_path = self._expand_manifest_with_repo(
+                    overwrite_type, output_folder
+                )
+                if expanded_content:
+                    use_expanded = True
+                    self.logger.info("✅ Manifest 展開成功，將使用展開後的檔案進行轉換")
+                else:
+                    self.logger.warning("⚠️ Manifest 展開失敗，將使用原始檔案")
+            else:
+                self.logger.info("ℹ️ 未檢測到 include 標籤，使用原始檔案")
+            
+            # 決定要使用的內容進行轉換
+            content_for_conversion = expanded_content if use_expanded else source_content
+            
             # 步驟 2: 進行 revision 轉換
-            if source_content:
-                converted_content, conversion_info = self._convert_revisions(source_content, overwrite_type)
+            if content_for_conversion:
+                converted_content, conversion_info = self._convert_revisions(content_for_conversion, overwrite_type)
             else:
                 # 如果沒有源檔案，建立空的轉換結果
                 converted_content = ""
@@ -129,17 +150,17 @@ class FeatureThree:
             else:
                 self.logger.info("⏭️ 跳過 Gerrit 推送")
             
-            # 步驟 7: 產生 Excel 報告
+            # 步驟 7: 產生 Excel 報告（包含展開檔案資訊）
             excel_file = self._generate_excel_report_safe(
                 overwrite_type, source_file_path, output_file_path, target_file_path, 
                 diff_analysis, output_folder, excel_filename, source_download_success, 
-                target_download_success, push_result
+                target_download_success, push_result, expanded_file_path, use_expanded
             )
             
             # 最終檔案檢查和報告
             self._final_file_report_complete(
                 output_folder, source_file_path, output_file_path, target_file_path, 
-                excel_file, source_download_success, target_download_success
+                excel_file, source_download_success, target_download_success, expanded_file_path
             )
             
             self.logger.info(f"=== 功能三執行完成，Excel 報告：{excel_file} ===")
@@ -157,7 +178,159 @@ class FeatureThree:
                 pass
             
             return False
+
+    def _has_include_tags(self, xml_content: str) -> bool:
+        """
+        檢查 XML 內容是否包含 include 標籤
+        
+        Args:
+            xml_content: XML 檔案內容
+            
+        Returns:
+            是否包含 include 標籤
+        """
+        try:
+            import re
+            
+            # 使用正規表達式檢查 include 標籤
+            include_pattern = r'<include\s+name\s*=\s*["\'][^"\']*["\'][^>]*/?>'
+            matches = re.findall(include_pattern, xml_content, re.IGNORECASE)
+            
+            if matches:
+                self.logger.info(f"🔍 發現 {len(matches)} 個 include 標籤:")
+                for i, match in enumerate(matches, 1):
+                    self.logger.info(f"  {i}. {match}")
+                return True
+            else:
+                self.logger.info("ℹ️ 未發現 include 標籤")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"檢查 include 標籤時發生錯誤: {str(e)}")
+            return False
     
+    def _expand_manifest_with_repo(self, overwrite_type: str, output_folder: str) -> tuple:
+        """
+        使用 repo 命令展開包含 include 的 manifest
+        
+        Args:
+            overwrite_type: 轉換類型
+            output_folder: 輸出資料夾
+            
+        Returns:
+            (expanded_content, expanded_file_path) 或 (None, None) 如果失敗
+        """
+        import subprocess
+        import tempfile
+        import shutil
+        
+        try:
+            # 建立臨時工作目錄
+            temp_work_dir = tempfile.mkdtemp(prefix='repo_expand_')
+            self.logger.info(f"📁 建立臨時工作目錄: {temp_work_dir}")
+            
+            # 取得相關參數
+            source_filename = self.source_files[overwrite_type]
+            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+            branch = "realtek/android-14/master"
+            
+            original_cwd = os.getcwd()
+            
+            try:
+                # 切換到臨時目錄
+                os.chdir(temp_work_dir)
+                
+                # 步驟 1: repo init
+                self.logger.info(f"🔄 執行 repo init...")
+                init_cmd = [
+                    "repo", "init", 
+                    "-u", repo_url,
+                    "-b", branch,
+                    "-m", source_filename
+                ]
+                
+                self.logger.info(f"指令: {' '.join(init_cmd)}")
+                
+                init_result = subprocess.run(
+                    init_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120  # 2分鐘超時
+                )
+                
+                if init_result.returncode != 0:
+                    self.logger.error(f"repo init 失敗: {init_result.stderr}")
+                    return None, None
+                
+                self.logger.info("✅ repo init 成功")
+                
+                # 步驟 2: repo manifest 展開
+                self.logger.info(f"🔄 執行 repo manifest 展開...")
+                expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expand.xml')}"
+                
+                manifest_cmd = ["repo", "manifest"]
+                
+                manifest_result = subprocess.run(
+                    manifest_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if manifest_result.returncode != 0:
+                    self.logger.error(f"repo manifest 失敗: {manifest_result.stderr}")
+                    return None, None
+                
+                expanded_content = manifest_result.stdout
+                
+                if not expanded_content.strip():
+                    self.logger.error("repo manifest 返回空內容")
+                    return None, None
+                
+                self.logger.info(f"✅ repo manifest 成功，內容長度: {len(expanded_content)} 字符")
+                
+                # 步驟 3: 保存展開後的檔案到輸出資料夾
+                expanded_file_path = os.path.join(output_folder, expanded_filename)
+                
+                with open(expanded_file_path, 'w', encoding='utf-8') as f:
+                    f.write(expanded_content)
+                
+                # 驗證檔案
+                if os.path.exists(expanded_file_path):
+                    file_size = os.path.getsize(expanded_file_path)
+                    self.logger.info(f"✅ 展開檔案已保存: {expanded_file_path}")
+                    self.logger.info(f"✅ 檔案大小: {file_size} bytes")
+                    
+                    # 統計專案數量
+                    project_count = expanded_content.count('<project ')
+                    self.logger.info(f"✅ 展開後專案數量: {project_count}")
+                    
+                    return expanded_content, expanded_file_path
+                else:
+                    self.logger.error(f"展開檔案保存失敗: {expanded_file_path}")
+                    return None, None
+                
+            finally:
+                # 恢復原始工作目錄
+                os.chdir(original_cwd)
+                
+                # 清理臨時目錄
+                try:
+                    shutil.rmtree(temp_work_dir)
+                    self.logger.info(f"🗑️ 清理臨時目錄: {temp_work_dir}")
+                except Exception as e:
+                    self.logger.warning(f"清理臨時目錄失敗: {str(e)}")
+                
+        except subprocess.TimeoutExpired:
+            self.logger.error("repo 命令執行超時")
+            return None, None
+        except FileNotFoundError:
+            self.logger.error("repo 命令未找到，請確認已安裝 repo 工具")
+            return None, None
+        except Exception as e:
+            self.logger.error(f"展開 manifest 時發生錯誤: {str(e)}")
+            return None, None
+            
     def _download_source_file(self, overwrite_type: str) -> Optional[str]:
         """從 Gerrit 下載源檔案"""
         try:
@@ -1059,8 +1232,9 @@ class FeatureThree:
                              output_file_path: Optional[str], target_file_path: Optional[str], 
                              diff_analysis: Dict, output_folder: str, 
                              excel_filename: Optional[str], source_download_success: bool,
-                             target_download_success: bool, push_result: Optional[Dict[str, Any]] = None) -> str:
-        """產生 Excel 報告 - 完整版本，包含下載狀態記錄和推送結果"""
+                             target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
+                             expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
+        """產生 Excel 報告 - 完整版本，包含展開檔案資訊"""
         try:
             # 決定 Excel 檔名
             if excel_filename:
@@ -1070,13 +1244,16 @@ class FeatureThree:
                 excel_file = os.path.join(output_folder, default_name)
             
             with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-                # 更新推送狀態到摘要資料
+                # 更新推送狀態到摘要資料（包含展開檔案資訊）
                 summary_data = [{
                     'SN': 1,
                     '轉換類型': overwrite_type,
                     'Gerrit 源檔案': os.path.basename(source_file_path) if source_file_path else '無',
                     '源檔案下載狀態': '成功' if source_download_success else '失敗',
                     '源檔案': self.source_files.get(overwrite_type, ''),
+                    '包含 include 標籤': '是' if use_expanded else '否',
+                    'Gerrit 展開檔案': os.path.basename(expanded_file_path) if expanded_file_path else '無',
+                    '使用展開檔案轉換': '是' if use_expanded else '否',
                     '輸出檔案': os.path.basename(output_file_path) if output_file_path else '',
                     'Gerrit 目標檔案': os.path.basename(target_file_path) if target_file_path else '無',
                     '目標檔案下載狀態': '成功' if target_download_success else '失敗 (檔案不存在)',
@@ -1153,14 +1330,15 @@ class FeatureThree:
                     
                     df_diff.to_excel(writer, sheet_name=diff_sheet_name, index=False)
                 
-                # 格式化所有工作表 - 增強版本（綠底白字標頭 + 下載狀態紅字標示 + 轉換後專案格式化）
+                # 格式化所有工作表 - 增強版本（包含展開檔案狀態格式化）
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self.excel_handler._format_worksheet(worksheet)
                     
-                    # 特別格式化轉換摘要頁籤的下載狀態
+                    # 特別格式化轉換摘要頁籤的下載狀態和展開狀態
                     if sheet_name == '轉換摘要':
                         self._format_download_status_columns(worksheet, source_download_success, target_download_success)
+                        self._format_expand_status_columns(worksheet, use_expanded)
                     
                     # 特別格式化轉換後專案頁籤
                     elif sheet_name == '轉換後專案':
@@ -1176,7 +1354,44 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
-    
+
+    def _format_expand_status_columns(self, worksheet, use_expanded: bool):
+        """格式化展開狀態欄位 - 新增方法"""
+        try:
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+            
+            # 定義顏色
+            blue_font = Font(color="0070C0", bold=True)   # 藍字（是）
+            black_font = Font(color="000000")             # 黑字（否）
+            
+            # 找到展開相關欄位的位置
+            expand_columns = {}
+            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+                header_value = str(cell.value) if cell.value else ''
+                
+                if 'include 標籤' in header_value or '展開檔案轉換' in header_value:
+                    expand_columns[header_value] = col_num
+            
+            # 格式化展開狀態欄位
+            for header_name, col_num in expand_columns.items():
+                col_letter = get_column_letter(col_num)
+                
+                # 資料列（第2列開始）
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    if '是' in cell_value:
+                        cell.font = blue_font  # 是：藍色
+                    elif '否' in cell_value:
+                        cell.font = black_font   # 否：黑色
+            
+            self.logger.info("已設定展開狀態欄位格式：是=藍字，否=黑字")
+            
+        except Exception as e:
+            self.logger.error(f"格式化展開狀態欄位失敗: {str(e)}")
+
     def _format_converted_projects_sheet(self, worksheet):
         """格式化轉換後專案頁籤 - 新版本（紅底白字表頭 + 是否轉換內容顏色）"""
         try:
@@ -1369,8 +1584,9 @@ class FeatureThree:
                                   output_file_path: Optional[str], target_file_path: Optional[str], 
                                   diff_analysis: Dict, output_folder: str, 
                                   excel_filename: Optional[str], source_download_success: bool,
-                                  target_download_success: bool, push_result: Optional[Dict[str, Any]] = None) -> str:
-        """安全的 Excel 報告生成 - 確保總是能產生報告"""
+                                  target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
+                                  expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
+        """安全的 Excel 報告生成 - 包含展開檔案資訊"""
         try:
             return self._generate_excel_report(
                 overwrite_type=overwrite_type,
@@ -1382,7 +1598,9 @@ class FeatureThree:
                 excel_filename=excel_filename,
                 source_download_success=source_download_success,
                 target_download_success=target_download_success,
-                push_result=push_result
+                push_result=push_result,
+                expanded_file_path=expanded_file_path,
+                use_expanded=use_expanded
             )
         except Exception as e:
             self.logger.error(f"標準 Excel 報告生成失敗: {str(e)}")
@@ -1421,8 +1639,9 @@ class FeatureThree:
     
     def _final_file_report_complete(self, output_folder: str, source_file_path: Optional[str], 
                           output_file_path: Optional[str], target_file_path: Optional[str], 
-                          excel_file: str, source_download_success: bool, target_download_success: bool):
-        """最終檔案檢查和報告 - 增強版本，包含下載狀態統計"""
+                          excel_file: str, source_download_success: bool, target_download_success: bool,
+                          expanded_file_path: Optional[str] = None):
+        """最終檔案檢查和報告 - 增強版本，包含展開檔案"""
         try:
             self.logger.info("📁 最終檔案檢查報告:")
             self.logger.info(f"📂 輸出資料夾: {output_folder}")
@@ -1433,6 +1652,9 @@ class FeatureThree:
             if source_file_path:
                 status = "✅" if source_download_success else "❌"
                 files_to_check.append((f"Gerrit 源檔案 {status}", source_file_path))
+            
+            if expanded_file_path:
+                files_to_check.append(("Gerrit 展開檔案 ✅", expanded_file_path))
             
             if output_file_path:
                 files_to_check.append(("轉換後檔案 ✅", output_file_path))
@@ -1459,6 +1681,9 @@ class FeatureThree:
             self.logger.info(f"  🔵 源檔案下載: {'✅ 成功' if source_download_success else '❌ 失敗'}")
             self.logger.info(f"  🟡 目標檔案下載: {'✅ 成功' if target_download_success else '❌ 失敗 (檔案不存在)'}")
             
+            if expanded_file_path:
+                self.logger.info(f"  🟢 Manifest 展開: {'✅ 成功' if os.path.exists(expanded_file_path) else '❌ 失敗'}")
+            
             if not target_download_success:
                 self.logger.info(f"  💡 提示: 目標檔案在 Gerrit 上不存在是正常情況")
                 self.logger.info(f"       這表示該 manifest 檔案尚未在 master 分支上建立")
@@ -1483,7 +1708,9 @@ class FeatureThree:
                     
                     self.logger.info(f"  🔵 Gerrit 原始檔案: {len(gerrit_files)} 個")
                     for filename, size in gerrit_files:
-                        self.logger.info(f"    - {filename} ({size} bytes)")
+                        is_expanded = "_expand.xml" in filename
+                        file_type = "(展開檔案)" if is_expanded else "(原始檔案)"
+                        self.logger.info(f"    - {filename} ({size} bytes) {file_type}")
                     
                     self.logger.info(f"  🟢 轉換後檔案: {len(converted_files)} 個")
                     for filename, size in converted_files:
@@ -1498,6 +1725,10 @@ class FeatureThree:
                 if source_file_path:
                     source_filename = os.path.basename(source_file_path)
                     self.logger.info(f"🎯 重點提醒: 已保存 Gerrit 源檔案為 {source_filename}")
+                if expanded_file_path:
+                    expanded_filename = os.path.basename(expanded_file_path)
+                    self.logger.info(f"🎯 重點提醒: 已保存展開檔案為 {expanded_filename}")
+                    self.logger.info(f"🎯 轉換使用的是展開後的檔案")
                 if not target_download_success:
                     self.logger.info(f"📋 Excel 報告中已記錄目標檔案下載失敗狀態（紅字標示）")
             else:
