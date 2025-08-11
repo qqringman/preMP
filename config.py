@@ -1,4 +1,4 @@
-# SFTP 連線設定
+﻿# SFTP 連線設定
 SFTP_HOST = 'mmsftpx.realtek.com'
 SFTP_PORT = 22
 SFTP_USERNAME = 'lgwar_user'
@@ -241,3 +241,167 @@ Target: {target_file}"""
 
 # 選擇使用哪個模板
 USE_DETAILED_COMMIT_MESSAGE = True  # True = 使用詳細模板, False = 使用簡單模板
+# =====================================
+# ===== Android 版本設定 =====
+# =====================================
+
+# 預設 Android 版本
+DEFAULT_ANDROID_VERSION = '14'
+
+# 支援的 Android 版本列表
+SUPPORTED_ANDROID_VERSIONS = ['11', '12', '13', '14', '15']
+
+# 版本對應的 upgrade 版本
+ANDROID_UPGRADE_MAPPING = {
+    '14': '11',  # Android 14 升級自 Android 11
+    '15': '12'   # Android 15 升級自 Android 12
+}
+
+# =====================================
+# ===== 晶片映射設定 =====
+# =====================================
+
+# 晶片到 RTD 型號的映射
+CHIP_TO_RTD_MAPPING = {
+    'mac7p': 'rtd2851a',
+    'mac8q': 'rtd2851f',
+    'mac9p': 'rtd2895p',
+    'merlin7': 'rtd6748',
+    'merlin8': 'rtd2885p',
+    'merlin8p': 'rtd2885q',
+    'merlin9': 'rtd2875q',
+}
+
+# RTD 型號到晶片的反向映射（自動生成）
+RTD_TO_CHIP_MAPPING = {v: k for k, v in CHIP_TO_RTD_MAPPING.items()}
+
+# =====================================
+# ===== Kernel 版本設定 =====
+# =====================================
+
+# 支援的 Linux Kernel 版本
+SUPPORTED_KERNEL_VERSIONS = ['4.14', '4.19', '5.4', '5.10', '5.15', '6.1']
+
+# =====================================
+# ===== Manifest 轉換映射規則 =====
+# =====================================
+
+# Master to PreMP 轉換規則（精確匹配）
+MASTER_TO_PREMP_EXACT_MAPPING = {
+    # 晶片特定的 master 分支轉換
+    'realtek/mac7p/master': 'realtek/android-14/premp.google-refplus.rtd2851a',
+    'realtek/mac8q/master': 'realtek/android-14/premp.google-refplus.rtd2851f',
+    'realtek/mac9p/master': 'realtek/android-14/premp.google-refplus.rtd2895p',
+    'realtek/merlin7/master': 'realtek/android-14/premp.google-refplus.rtd6748',
+    'realtek/merlin8/master': 'realtek/android-14/premp.google-refplus.rtd2885p',
+    'realtek/merlin8p/master': 'realtek/android-14/premp.google-refplus.rtd2885q',
+    'realtek/merlin9/master': 'realtek/android-14/premp.google-refplus.rtd2875q',
+    
+    # 通用 master 分支
+    'realtek/master': 'realtek/android-14/premp.google-refplus',
+    'realtek/gaia': 'realtek/android-14/premp.google-refplus',
+    'realtek/gki/master': 'realtek/android-14/premp.google-refplus',
+    
+    # Android 14 相關轉換
+    'realtek/android-14/master': 'realtek/android-14/premp.google-refplus.upgrade-11',
+    'realtek/android-14/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+    
+    # Kernel 版本轉換
+    'realtek/linux-5.15/android-14/master': 'realtek/linux-5.15/android-14/premp.google-refplus',
+    'realtek/linux-4.14/android-14/mp.google-refplus': 'realtek/linux-4.14/android-14/premp.google-refplus',
+    
+    # 特殊的保持不變的項目
+    'master-kernel-build-2022': 'master-kernel-build-2022',
+}
+
+# Master to PreMP 模式匹配規則（用於動態匹配）
+MASTER_TO_PREMP_PATTERN_RULES = [
+    # Upgrade 版本轉換規則
+    {
+        'pattern': r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)\.?(rtd\w+)?',
+        'replacement': r'realtek/android-\1/premp.google-refplus.upgrade-\2.\3',
+        'description': 'Android upgrade 版本轉換（帶晶片型號）'
+    },
+    {
+        'pattern': r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)$',
+        'replacement': r'realtek/android-\1/premp.google-refplus.upgrade-\2',
+        'description': 'Android upgrade 版本轉換（無晶片型號）'
+    },
+    
+    # Kernel 版本轉換規則
+    {
+        'pattern': r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)',
+        'replacement': r'realtek/linux-\1/android-\2/premp.google-refplus.\3',
+        'description': 'Linux kernel 版本轉換（帶晶片型號）'
+    },
+    
+    # refs/tags 保持不變
+    {
+        'pattern': r'^refs/tags/.*',
+        'replacement': None,  # None 表示保持原值
+        'description': 'Git tags 保持不變'
+    },
+]
+
+# PreMP to MP 轉換規則
+PREMP_TO_MP_KEYWORD = 'premp.google-refplus'
+MP_TO_MPBACKUP_KEYWORD = 'mp.google-refplus.wave'
+
+# PreMP to MP 轉換目標
+PREMP_TO_MP_TARGET = 'mp.google-refplus.wave'
+
+# MP to MP Backup 轉換目標
+MP_TO_MPBACKUP_TARGET = 'mp.google-refplus.wave.backup'
+
+# =====================================
+# ===== 轉換選項設定 =====
+# =====================================
+
+# 是否啟用智能匹配（當精確匹配失敗時）
+ENABLE_SMART_MATCHING = True
+
+# 是否記錄未匹配的 revision
+LOG_UNMATCHED_REVISIONS = True
+
+# 預設轉換行為（當沒有匹配規則時）
+DEFAULT_CONVERSION_BEHAVIOR = 'use_default'  # 'use_default', 'keep_original', 'raise_error'
+
+# 預設的 premp 分支（當無法匹配時使用）
+DEFAULT_PREMP_BRANCH = 'realtek/android-{android_version}/premp.google-refplus'
+
+# =====================================
+# ===== 輔助函數 =====
+# =====================================
+
+def get_android_version_from_path(path: str) -> str:
+    """從路徑中提取 Android 版本號"""
+    import re
+    match = re.search(r'android-(\d+)', path)
+    if match:
+        return match.group(1)
+    return DEFAULT_ANDROID_VERSION
+
+def get_chip_from_path(path: str) -> str:
+    """從路徑中提取晶片名稱"""
+    import re
+    # 嘗試匹配晶片名稱
+    for chip in CHIP_TO_RTD_MAPPING.keys():
+        if f'/{chip}/' in path:
+            return chip
+    
+    # 嘗試匹配 RTD 型號
+    match = re.search(r'rtd(\w+)', path)
+    if match:
+        rtd_model = f'rtd{match.group(1)}'
+        if rtd_model in RTD_TO_CHIP_MAPPING:
+            return RTD_TO_CHIP_MAPPING[rtd_model]
+    
+    return None
+
+def get_kernel_version_from_path(path: str) -> str:
+    """從路徑中提取 Kernel 版本號"""
+    import re
+    match = re.search(r'linux-([\d.]+)', path)
+    if match:
+        return match.group(1)
+    return None
