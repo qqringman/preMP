@@ -2,6 +2,7 @@
 """
 快速測試 Master to PreMP 轉換規則
 可以獨立執行或整合到現有系統中
+修改：增加失敗案例詳細顯示功能
 """
 import os
 import sys
@@ -106,12 +107,45 @@ def quick_test_manifest_conversion(master_file=None, premp_file=None, output_fil
         tester = ManifestConversionTester()
         success = tester.test_conversion(master_file, premp_file, output_file)
         
-        # 顯示結果
+        # 🆕 顯示詳細結果，包含失敗案例資訊
         print("\n" + "="*60)
         if success:
             print("✅ 測試完成 - 所有轉換規則正確！")
         else:
             print("⚠️ 測試完成 - 發現轉換差異")
+            
+            # 🆕 如果有失敗案例，顯示詳細資訊
+            if hasattr(tester, 'failed_cases') and tester.failed_cases:
+                print(f"\n❌ 失敗案例摘要 ({len(tester.failed_cases)} 個):")
+                
+                # 按規則類型分組顯示
+                rule_failures = {}
+                for case in tester.failed_cases:
+                    rule_type = case['轉換規則類型']
+                    if rule_type not in rule_failures:
+                        rule_failures[rule_type] = []
+                    rule_failures[rule_type].append({
+                        'sn': case['SN'],
+                        'name': case['專案名稱'],
+                        'master': case['Master Revision'],
+                        'converted': case['轉換後 Revision'],
+                        'expected': case['PreMP Revision (正確版)']
+                    })
+                
+                for rule_type, failures in rule_failures.items():
+                    print(f"\n  🔴 {rule_type} ({len(failures)} 個失敗):")
+                    for failure in failures[:3]:  # 只顯示前3個
+                        print(f"    SN {failure['sn']}: {failure['name']}")
+                        print(f"      Master: {failure['master']}")
+                        print(f"      轉換後: {failure['converted']}")
+                        print(f"      期望值: {failure['expected']}")
+                    
+                    if len(failures) > 3:
+                        print(f"    ... 還有 {len(failures) - 3} 個失敗案例")
+                
+                print(f"\n💡 詳細失敗資訊請查看 Excel 報告中的 '失敗案例詳細對照' 頁籤")
+                print(f"💡 轉換規則分析請查看 '轉換規則統計' 頁籤的 '失敗案例SN列表' 欄位")
+            
         print(f"📊 詳細報告已儲存至: {output_file}")
         print("="*60)
         
@@ -239,7 +273,7 @@ def integrate_with_main_menu():
 def batch_test_multiple_manifests(test_pairs):
     """
     批次測試多組 manifest 檔案
-    修改：顯示更詳細的轉換成功資訊
+    修改：顯示更詳細的轉換成功資訊和失敗案例摘要
     
     Args:
         test_pairs: 測試對列表，格式為 [(master1, premp1), (master2, premp2), ...]
@@ -278,15 +312,17 @@ def batch_test_multiple_manifests(test_pairs):
                 'premp': premp_file,
                 'output': output_file,
                 'success': success,
-                'stats': tester.stats
+                'stats': tester.stats,
+                'failed_cases': getattr(tester, 'failed_cases', [])  # 🆕 新增失敗案例
             })
             
-            # 🆕 顯示詳細的轉換統計
+            # 顯示詳細的轉換統計
             stats = tester.stats
             print(f"  📊 統計結果:")
             print(f"    - 總專案數: {stats['total_projects']}")
             print(f"    - 🔵 參與轉換: {stats['revision_projects']}")
             print(f"    - ⚪ 無revision: {stats['no_revision_projects']}")
+            print(f"    - 🟢 原始相同: {stats['same_revision_projects']}")
             print(f"    - 🟣 完全跳過: {stats['skipped_special_projects']}")
             print(f"    - ✅ 轉換成功: {stats['matched']}")
             print(f"    - ❌ 轉換失敗: {stats['mismatched']}")
@@ -294,6 +330,16 @@ def batch_test_multiple_manifests(test_pairs):
             if stats['revision_projects'] > 0:
                 success_rate = (stats['matched'] / stats['revision_projects'] * 100)
                 print(f"    - 📈 成功率: {success_rate:.2f}%")
+            
+            # 🆕 顯示失敗案例摘要
+            if hasattr(tester, 'failed_cases') and tester.failed_cases:
+                print(f"    - 🔴 失敗案例: {len(tester.failed_cases)} 個")
+                
+                # 顯示失敗案例的專案名稱（最多3個）
+                failed_names = [case['專案名稱'] for case in tester.failed_cases[:3]]
+                print(f"      {', '.join(failed_names)}")
+                if len(tester.failed_cases) > 3:
+                    print(f"      ... 還有 {len(tester.failed_cases) - 3} 個")
             
             if success:
                 print(f"  ✅ 測試通過")
@@ -308,7 +354,8 @@ def batch_test_multiple_manifests(test_pairs):
                 'premp': premp_file,
                 'output': None,
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'failed_cases': []
             })
     
     # 顯示總結
@@ -319,13 +366,20 @@ def batch_test_multiple_manifests(test_pairs):
     passed = sum(1 for r in results if r['success'])
     failed = len(results) - passed
     
-    # 🆕 計算整體統計
+    # 計算整體統計
     total_projects = sum(r['stats']['total_projects'] for r in results if 'stats' in r)
     total_revision_projects = sum(r['stats']['revision_projects'] for r in results if 'stats' in r)
     total_no_revision = sum(r['stats']['no_revision_projects'] for r in results if 'stats' in r)
     total_skipped_complete = sum(r['stats']['skipped_special_projects'] for r in results if 'stats' in r)
+    total_same_revision = sum(r['stats']['same_revision_projects'] for r in results if 'stats' in r)
     total_matched = sum(r['stats']['matched'] for r in results if 'stats' in r)
     total_mismatched = sum(r['stats']['mismatched'] for r in results if 'stats' in r)
+    
+    # 🆕 統計全部失敗案例
+    all_failed_cases = []
+    for r in results:
+        if 'failed_cases' in r:
+            all_failed_cases.extend(r['failed_cases'])
     
     print(f"🔢 整體統計:")
     print(f"  總測試數: {len(results)}")
@@ -336,6 +390,7 @@ def batch_test_multiple_manifests(test_pairs):
     print(f"  總專案數: {total_projects}")
     print(f"  🔵 參與轉換專案: {total_revision_projects}")
     print(f"  ⚪ 無revision專案: {total_no_revision}")
+    print(f"  🟢 原始相同專案: {total_same_revision}")
     print(f"  🟣 完全跳過專案: {total_skipped_complete}")
     print(f"  ✅ 轉換成功: {total_matched} (包括原始相同)")
     print(f"  ❌ 轉換失敗: {total_mismatched}")
@@ -343,6 +398,21 @@ def batch_test_multiple_manifests(test_pairs):
     if total_revision_projects > 0:
         overall_success_rate = (total_matched / total_revision_projects * 100)
         print(f"  📈 整體轉換成功率: {overall_success_rate:.2f}%")
+    
+    # 🆕 顯示失敗案例總結
+    if all_failed_cases:
+        print(f"\n🔴 失敗案例總結 ({len(all_failed_cases)} 個):")
+        
+        # 按規則類型分組統計
+        rule_failures = {}
+        for case in all_failed_cases:
+            rule_type = case['轉換規則類型']
+            if rule_type not in rule_failures:
+                rule_failures[rule_type] = 0
+            rule_failures[rule_type] += 1
+        
+        for rule_type, count in sorted(rule_failures.items(), key=lambda x: x[1], reverse=True):
+            print(f"  {rule_type}: {count} 個失敗")
     
     # 顯示詳細結果
     print("\n詳細結果:")
@@ -352,6 +422,8 @@ def batch_test_multiple_manifests(test_pairs):
         if 'stats' in result:
             stats = result['stats']
             print(f"   參與轉換: {stats['revision_projects']}, 成功: {stats['matched']}, 失敗: {stats['mismatched']}")
+        if 'failed_cases' in result and result['failed_cases']:
+            print(f"   失敗案例: {len(result['failed_cases'])} 個")
         if 'error' in result:
             print(f"   錯誤: {result['error']}")
     

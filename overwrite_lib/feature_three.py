@@ -3,6 +3,7 @@
 從 Gerrit 下載源檔案，進行 revision 轉換，並與目標檔案比較差異
 微調：確保 Gerrit 檔案正確保存，增加 revision 比較資訊，標頭格式化
 修正：確保展開檔案正確保存到 output 資料夾
+修改：改進特殊項目處理邏輯，通用檢查master和premp是否相同
 """
 import os
 import xml.etree.ElementTree as ET
@@ -688,7 +689,8 @@ class FeatureThree:
     
     def _convert_master_to_premp(self, revision: str) -> str:
         """
-        master → premp 轉換規則 - 與 test_manifest_conversion.py 同步更新版本
+        master → premp 轉換規則 - 修正版本，根據失敗案例調整規則
+        修改：修正 Linux kernel 和 mp.google-refplus 的轉換規則
         
         Args:
             revision: 原始 revision
@@ -701,16 +703,16 @@ class FeatureThree:
         
         original_revision = revision.strip()
         
+        # 🆕 跳過 Google 開頭的項目（如 google/u-tv-keystone-rtk-refplus-wave4-release）
+        if original_revision.startswith('google/'):
+            self.logger.debug(f"跳過 Google 項目: {original_revision}")
+            return original_revision
+        
         # 🆕 跳過特殊項目（與測試模組保持一致）
         if self._should_skip_revision_conversion(original_revision):
             return original_revision
         
-        # 🆕 檢查智能處理的特殊項目
-        if self._should_smart_handle_special_revision(original_revision):
-            # 智能處理：保持原值，讓比對邏輯決定是否匹配
-            return original_revision
-        
-        # 🆕 精確匹配轉換規則（優先級最高）
+        # 🆕 精確匹配轉換規則（優先級最高）- 修正版本
         exact_mappings = {
             # 基本 master 分支轉換
             'realtek/master': 'realtek/android-14/premp.google-refplus',
@@ -719,10 +721,24 @@ class FeatureThree:
             
             # Android 14 主要分支
             'realtek/android-14/master': 'realtek/android-14/premp.google-refplus',
+            
+            # 🔥 修正：Linux kernel android master 分支轉換（保留 linux 路徑）
+            'realtek/linux-5.15/android-14/master': 'realtek/linux-5.15/android-14/premp.google-refplus',
+            'realtek/linux-4.14/android-14/master': 'realtek/linux-4.14/android-14/premp.google-refplus',
+            'realtek/linux-5.4/android-14/master': 'realtek/linux-5.4/android-14/premp.google-refplus',
+            'realtek/linux-5.10/android-14/master': 'realtek/linux-5.10/android-14/premp.google-refplus',
+            'realtek/linux-6.1/android-14/master': 'realtek/linux-6.1/android-14/premp.google-refplus',
+            
+            # 🔥 修正：直接的 mp.google-refplus 轉換（需要加上 android-14）
+            'realtek/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+            
+            # 其他常見的轉換
+            'realtek/android-14/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
         }
         
         # 檢查精確匹配
         if original_revision in exact_mappings:
+            self.logger.debug(f"精確匹配轉換: {original_revision} → {exact_mappings[original_revision]}")
             return exact_mappings[original_revision]
         
         # 🆕 模式匹配轉換規則（使用正規表達式）
@@ -733,51 +749,74 @@ class FeatureThree:
         match1 = re.match(pattern1, original_revision)
         if match1:
             android_ver, upgrade_ver, rtd_chip = match1.groups()
-            return f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}.{rtd_chip}'
+            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}.{rtd_chip}'
+            self.logger.debug(f"模式1轉換: {original_revision} → {result}")
+            return result
         
         # 規則 2: mp.google-refplus.upgrade-11 → premp.google-refplus.upgrade-11
         pattern2 = r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)$'
         match2 = re.match(pattern2, original_revision)
         if match2:
             android_ver, upgrade_ver = match2.groups()
-            return f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}'
+            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}'
+            self.logger.debug(f"模式2轉換: {original_revision} → {result}")
+            return result
         
-        # 規則 3: linux-X.X/master → linux-X.X/android-14/premp.google-refplus
+        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-14/premp.google-refplus（修正版）
         pattern3 = r'realtek/linux-([\d.]+)/master$'
         match3 = re.match(pattern3, original_revision)
         if match3:
             linux_ver = match3.group(1)
-            return f'realtek/linux-{linux_ver}/android-14/premp.google-refplus'
+            result = f'realtek/linux-{linux_ver}/android-14/premp.google-refplus'
+            self.logger.debug(f"模式3轉換（Linux master）: {original_revision} → {result}")
+            return result
         
-        # 規則 4: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-Y/premp.google-refplus
-        pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
+        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-Y/premp.google-refplus（修正版）
+        pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/master$'
         match4 = re.match(pattern4, original_revision)
         if match4:
             linux_ver, android_ver = match4.groups()
-            return f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式4轉換（Linux Android master）: {original_revision} → {result}")
+            return result
         
-        # 規則 5: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-Y/premp.google-refplus.rtdXXXX
-        pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
+        # 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-Y/premp.google-refplus
+        pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
         match5 = re.match(pattern5, original_revision)
         if match5:
-            linux_ver, android_ver, rtd_chip = match5.groups()
-            return f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            linux_ver, android_ver = match5.groups()
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式5轉換: {original_revision} → {result}")
+            return result
         
-        # 規則 6: android-Y/mp.google-refplus → android-Y/premp.google-refplus
-        pattern6 = r'realtek/android-(\d+)/mp\.google-refplus$'
+        # 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-Y/premp.google-refplus.rtdXXXX
+        pattern6 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
         match6 = re.match(pattern6, original_revision)
         if match6:
-            android_ver = match6.group(1)
-            return f'realtek/android-{android_ver}/premp.google-refplus'
+            linux_ver, android_ver, rtd_chip = match6.groups()
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            self.logger.debug(f"模式6轉換: {original_revision} → {result}")
+            return result
         
-        # 規則 7: android-Y/mp.google-refplus.rtdXXXX → android-Y/premp.google-refplus.rtdXXXX
-        pattern7 = r'realtek/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
+        # 規則 7: android-Y/mp.google-refplus → android-Y/premp.google-refplus
+        pattern7 = r'realtek/android-(\d+)/mp\.google-refplus$'
         match7 = re.match(pattern7, original_revision)
         if match7:
-            android_ver, rtd_chip = match7.groups()
-            return f'realtek/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            android_ver = match7.group(1)
+            result = f'realtek/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式7轉換: {original_revision} → {result}")
+            return result
         
-        # 規則 8: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX
+        # 規則 8: android-Y/mp.google-refplus.rtdXXXX → android-Y/premp.google-refplus.rtdXXXX
+        pattern8 = r'realtek/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
+        match8 = re.match(pattern8, original_revision)
+        if match8:
+            android_ver, rtd_chip = match8.groups()
+            result = f'realtek/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            self.logger.debug(f"模式8轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX
         chip_mappings = {
             'mac7p': 'rtd2851a',
             'mac8q': 'rtd2851f', 
@@ -790,15 +829,21 @@ class FeatureThree:
         
         for chip, rtd_model in chip_mappings.items():
             if f'realtek/{chip}/master' == original_revision:
-                return f'realtek/android-14/premp.google-refplus.{rtd_model}'
+                result = f'realtek/android-14/premp.google-refplus.{rtd_model}'
+                self.logger.debug(f"晶片轉換: {original_revision} → {result}")
+                return result
         
-        # 規則 9: v3.16 版本轉換
-        pattern9 = r'realtek/v3\.16/mp\.google-refplus$'
-        if re.match(pattern9, original_revision):
-            return 'realtek/v3.16/premp.google-refplus'
+        # 規則 10: v3.16 版本轉換
+        pattern10 = r'realtek/v3\.16/mp\.google-refplus$'
+        if re.match(pattern10, original_revision):
+            result = 'realtek/v3.16/premp.google-refplus'
+            self.logger.debug(f"v3.16轉換: {original_revision} → {result}")
+            return result
         
         # 🆕 如果沒有匹配的規則，根據關鍵字進行智能轉換
-        return self._smart_conversion_fallback(original_revision)
+        smart_result = self._smart_conversion_fallback(original_revision)
+        self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
+        return smart_result
 
     def _should_skip_revision_conversion(self, revision: str) -> bool:
         """
@@ -819,31 +864,6 @@ class FeatureThree:
         
         return False
 
-    def _should_smart_handle_special_revision(self, revision: str) -> bool:
-        """
-        判斷是否為需要智能處理的特殊項目（檢查是否與premp相同）
-        
-        Args:
-            revision: 專案的 revision
-            
-        Returns:
-            是否需要智能處理
-        """
-        if not revision:
-            return False
-        
-        revision = revision.strip()
-        
-        # 需要智能處理的特殊項目（檢查master和premp是否相同）
-        special_items_to_check = [
-            'master-kernel-build-2022',
-            'master-kernel-build-2021',
-            'master-kernel-build-2023',
-            # 可以添加其他需要檢查相同性的特殊項目
-        ]
-        
-        return revision in special_items_to_check
-        
     def _smart_conversion_fallback(self, revision: str) -> str:
         """
         智能轉換備案 - 當沒有精確規則時使用
@@ -1217,7 +1237,7 @@ class FeatureThree:
     
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                              target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異 - 修改版本（記錄完整內容）"""
+        """使用轉換資訊比較專案差異 - 修正版本（記錄完整內容）"""
         differences = []
         
         # 建立目標專案的索引
@@ -2186,4 +2206,5 @@ class FeatureThree:
 3. 增加多層驗證確保檔案正確保存
 4. 增強日誌輸出和錯誤診斷
 5. 確保 repo 命令錯誤處理更完善
+6. 修改特殊項目處理邏輯，移除特定項目限制，改用通用檢查邏輯
 """
