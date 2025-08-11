@@ -2,6 +2,7 @@
 功能三：Manifest 轉換工具 - 微調版本
 從 Gerrit 下載源檔案，進行 revision 轉換，並與目標檔案比較差異
 微調：確保 Gerrit 檔案正確保存，增加 revision 比較資訊，標頭格式化
+修正：確保展開檔案正確保存到 output 資料夾
 """
 import os
 import xml.etree.ElementTree as ET
@@ -107,12 +108,21 @@ class FeatureThree:
             
             if source_content and self._has_include_tags(source_content):
                 self.logger.info("🔍 檢測到 include 標籤，準備展開 manifest...")
-                expanded_content, expanded_file_path = self._expand_manifest_with_repo(
+                expanded_content, expanded_file_path = self._expand_manifest_with_repo_fixed(
                     overwrite_type, output_folder
                 )
-                if expanded_content:
+                if expanded_content and expanded_file_path:
                     use_expanded = True
                     self.logger.info("✅ Manifest 展開成功，將使用展開後的檔案進行轉換")
+                    self.logger.info(f"✅ 展開檔案已保存到: {expanded_file_path}")
+                    
+                    # 🆕 驗證展開檔案是否真的存在
+                    if os.path.exists(expanded_file_path):
+                        file_size = os.path.getsize(expanded_file_path)
+                        self.logger.info(f"✅ 展開檔案驗證成功: {os.path.basename(expanded_file_path)} ({file_size} bytes)")
+                    else:
+                        self.logger.error(f"❌ 展開檔案不存在: {expanded_file_path}")
+                        use_expanded = False
                 else:
                     self.logger.warning("⚠️ Manifest 展開失敗，將使用原始檔案")
             else:
@@ -216,9 +226,9 @@ class FeatureThree:
             self.logger.error(f"檢查 include 標籤時發生錯誤: {str(e)}")
             return False
     
-    def _expand_manifest_with_repo(self, overwrite_type: str, output_folder: str) -> tuple:
+    def _expand_manifest_with_repo_fixed(self, overwrite_type: str, output_folder: str) -> tuple:
         """
-        使用 repo 命令展開包含 include 的 manifest
+        使用 repo 命令展開包含 include 的 manifest - 修正版本，同時保存到臨時目錄和輸出目錄
         
         Args:
             overwrite_type: 轉換類型
@@ -232,20 +242,57 @@ class FeatureThree:
         import shutil
         
         try:
-            # 建立臨時工作目錄
-            temp_work_dir = tempfile.mkdtemp(prefix='repo_expand_')
-            self.logger.info(f"📁 建立臨時工作目錄: {temp_work_dir}")
-            
             # 取得相關參數
             source_filename = self.source_files[overwrite_type]
             repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
             branch = "realtek/android-14/master"
+            
+            # 🆕 生成展開檔案名稱 - 使用絕對路徑解決臨時目錄問題
+            expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expand.xml')}"
+            # 🔥 關鍵修正：轉換為絕對路徑，避免在臨時目錄中誤保存
+            final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
+            
+            self.logger.info(f"🎯 準備展開 manifest...")
+            self.logger.info(f"🎯 源檔案: {source_filename}")
+            self.logger.info(f"🎯 展開檔案名: {expanded_filename}")
+            self.logger.info(f"🎯 目標絕對路徑: {final_expanded_path}")
+            
+            # 🆕 在切換目錄前確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            abs_output_folder = os.path.abspath(output_folder)
+            self.logger.info(f"🎯 輸出資料夾絕對路徑: {abs_output_folder}")
+            
+            # 🆕 檢查 repo 命令是否可用
+            try:
+                repo_check = subprocess.run(
+                    ["repo", "--version"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=10
+                )
+                if repo_check.returncode == 0:
+                    self.logger.info(f"✅ repo 工具可用: {repo_check.stdout.strip()}")
+                else:
+                    self.logger.error(f"❌ repo 工具檢查失敗: {repo_check.stderr}")
+                    return None, None
+            except FileNotFoundError:
+                self.logger.error("❌ repo 命令未找到，請確認已安裝 repo 工具")
+                self.logger.error("安裝方法: curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.local/bin/repo && chmod a+x ~/.local/bin/repo")
+                return None, None
+            except Exception as e:
+                self.logger.error(f"❌ repo 工具檢查異常: {str(e)}")
+                return None, None
+            
+            # 建立臨時工作目錄
+            temp_work_dir = tempfile.mkdtemp(prefix='repo_expand_')
+            self.logger.info(f"📁 建立臨時工作目錄: {temp_work_dir}")
             
             original_cwd = os.getcwd()
             
             try:
                 # 切換到臨時目錄
                 os.chdir(temp_work_dir)
+                self.logger.info(f"📂 切換到臨時目錄: {temp_work_dir}")
                 
                 # 步驟 1: repo init
                 self.logger.info(f"🔄 執行 repo init...")
@@ -256,7 +303,7 @@ class FeatureThree:
                     "-m", source_filename
                 ]
                 
-                self.logger.info(f"指令: {' '.join(init_cmd)}")
+                self.logger.info(f"🎯 Init 指令: {' '.join(init_cmd)}")
                 
                 init_result = subprocess.run(
                     init_cmd,
@@ -265,17 +312,31 @@ class FeatureThree:
                     timeout=120  # 2分鐘超時
                 )
                 
+                self.logger.info(f"🔍 repo init 返回碼: {init_result.returncode}")
+                if init_result.stdout:
+                    self.logger.info(f"🔍 repo init stdout: {init_result.stdout}")
+                if init_result.stderr:
+                    self.logger.info(f"🔍 repo init stderr: {init_result.stderr}")
+                
                 if init_result.returncode != 0:
-                    self.logger.error(f"repo init 失敗: {init_result.stderr}")
+                    self.logger.error(f"❌ repo init 失敗 (返回碼: {init_result.returncode})")
                     return None, None
                 
                 self.logger.info("✅ repo init 成功")
                 
+                # 🆕 檢查 .repo 目錄是否存在
+                repo_dir = os.path.join(temp_work_dir, ".repo")
+                if os.path.exists(repo_dir):
+                    self.logger.info(f"✅ .repo 目錄已建立: {repo_dir}")
+                else:
+                    self.logger.error(f"❌ .repo 目錄不存在: {repo_dir}")
+                    return None, None
+                
                 # 步驟 2: repo manifest 展開
                 self.logger.info(f"🔄 執行 repo manifest 展開...")
-                expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expand.xml')}"
                 
                 manifest_cmd = ["repo", "manifest"]
+                self.logger.info(f"🎯 Manifest 指令: {' '.join(manifest_cmd)}")
                 
                 manifest_result = subprocess.run(
                     manifest_cmd,
@@ -284,58 +345,154 @@ class FeatureThree:
                     timeout=60
                 )
                 
+                self.logger.info(f"🔍 repo manifest 返回碼: {manifest_result.returncode}")
+                if manifest_result.stderr:
+                    self.logger.info(f"🔍 repo manifest stderr: {manifest_result.stderr}")
+                
                 if manifest_result.returncode != 0:
-                    self.logger.error(f"repo manifest 失敗: {manifest_result.stderr}")
+                    self.logger.error(f"❌ repo manifest 失敗 (返回碼: {manifest_result.returncode})")
                     return None, None
                 
                 expanded_content = manifest_result.stdout
                 
                 if not expanded_content.strip():
-                    self.logger.error("repo manifest 返回空內容")
+                    self.logger.error("❌ repo manifest 返回空內容")
                     return None, None
                 
                 self.logger.info(f"✅ repo manifest 成功，內容長度: {len(expanded_content)} 字符")
                 
-                # 步驟 3: 保存展開後的檔案到輸出資料夾
-                expanded_file_path = os.path.join(output_folder, expanded_filename)
+                # 🆕 檢查展開內容的基本特徵
+                project_count = expanded_content.count('<project ')
+                include_count = expanded_content.count('<include ')
+                self.logger.info(f"🔍 展開內容分析:")
+                self.logger.info(f"   - Project 標籤數量: {project_count}")
+                self.logger.info(f"   - Include 標籤數量: {include_count}")
                 
-                with open(expanded_file_path, 'w', encoding='utf-8') as f:
-                    f.write(expanded_content)
+                # 🆕 步驟 3A: 在臨時目錄保存一份展開檔案
+                temp_expanded_path = os.path.join(temp_work_dir, expanded_filename)
+                self.logger.info(f"📝 在臨時目錄保存展開檔案: {temp_expanded_path}")
                 
-                # 驗證檔案
-                if os.path.exists(expanded_file_path):
-                    file_size = os.path.getsize(expanded_file_path)
-                    self.logger.info(f"✅ 展開檔案已保存: {expanded_file_path}")
-                    self.logger.info(f"✅ 檔案大小: {file_size} bytes")
+                try:
+                    with open(temp_expanded_path, 'w', encoding='utf-8') as f:
+                        f.write(expanded_content)
+                    self.logger.info(f"✅ 臨時目錄檔案保存成功")
                     
-                    # 統計專案數量
-                    project_count = expanded_content.count('<project ')
-                    self.logger.info(f"✅ 展開後專案數量: {project_count}")
+                    # 驗證臨時檔案
+                    if os.path.exists(temp_expanded_path):
+                        temp_file_size = os.path.getsize(temp_expanded_path)
+                        self.logger.info(f"✅ 臨時檔案驗證: {temp_file_size} bytes")
                     
-                    return expanded_content, expanded_file_path
+                except Exception as temp_write_error:
+                    self.logger.error(f"❌ 臨時目錄檔案保存失敗: {str(temp_write_error)}")
+                    return None, None
+                
+                # 🆕 步驟 3B: 同時複製到輸出資料夾（使用絕對路徑）
+                self.logger.info(f"📝 複製展開檔案到輸出資料夾...")
+                self.logger.info(f"📝 目標絕對路徑: {final_expanded_path}")
+                self.logger.info(f"📝 當前工作目錄: {os.getcwd()}")
+                
+                # 🔥 關鍵：確保目標資料夾存在（使用絕對路徑）
+                target_dir = os.path.dirname(final_expanded_path)
+                utils.ensure_dir(target_dir)
+                self.logger.info(f"✅ 目標資料夾確認存在: {target_dir}")
+                
+                # 複製檔案到輸出目錄（使用絕對路徑）
+                try:
+                    shutil.copy2(temp_expanded_path, final_expanded_path)
+                    self.logger.info(f"✅ 檔案複製完成（臨時→輸出）")
+                except Exception as copy_error:
+                    self.logger.error(f"❌ 檔案複製失敗: {str(copy_error)}")
+                    self.logger.error(f"❌ 源路徑: {temp_expanded_path}")
+                    self.logger.error(f"❌ 目標路徑: {final_expanded_path}")
+                    return None, None
+                
+                # 🆕 步驟 4: 驗證兩個位置的檔案都存在
+                self.logger.info(f"🔍 驗證檔案保存狀態...")
+                
+                # 驗證臨時檔案
+                if os.path.exists(temp_expanded_path):
+                    temp_size = os.path.getsize(temp_expanded_path)
+                    self.logger.info(f"✅ 臨時檔案存在: {temp_expanded_path} ({temp_size} bytes)")
                 else:
-                    self.logger.error(f"展開檔案保存失敗: {expanded_file_path}")
+                    self.logger.error(f"❌ 臨時檔案不存在: {temp_expanded_path}")
+                
+                # 驗證輸出檔案
+                if os.path.exists(final_expanded_path):
+                    file_size = os.path.getsize(final_expanded_path)
+                    self.logger.info(f"✅ 輸出檔案存在: {final_expanded_path} ({file_size} bytes)")
+                    
+                    # 🆕 驗證檔案內容一致性
+                    try:
+                        with open(final_expanded_path, 'r', encoding='utf-8') as f:
+                            saved_content = f.read()
+                            
+                        if len(saved_content) == len(expanded_content):
+                            self.logger.info(f"✅ 檔案內容驗證成功 ({len(saved_content)} 字符)")
+                        else:
+                            self.logger.warning(f"⚠️ 檔案內容長度不匹配: 原始 {len(expanded_content)}, 保存 {len(saved_content)}")
+                            
+                        # 驗證專案數量
+                        saved_project_count = saved_content.count('<project ')
+                        self.logger.info(f"✅ 保存檔案專案數量: {saved_project_count}")
+                        
+                    except Exception as read_error:
+                        self.logger.error(f"❌ 檔案內容驗證失敗: {str(read_error)}")
+                        return None, None
+                    
+                    # 🎉 成功返回
+                    self.logger.info(f"🎉 展開檔案處理完成!")
+                    self.logger.info(f"   📁 臨時位置: {temp_expanded_path}")
+                    self.logger.info(f"   📁 輸出位置: {final_expanded_path}")
+                    self.logger.info(f"   📊 檔案大小: {file_size} bytes")
+                    self.logger.info(f"   📊 專案數量: {project_count}")
+                    
+                    return expanded_content, final_expanded_path
+                else:
+                    self.logger.error(f"❌ 輸出檔案不存在: {final_expanded_path}")
+                    
+                    # 🆕 檢查輸出目錄狀態
+                    if os.path.exists(abs_output_folder):
+                        files_in_output = os.listdir(abs_output_folder)
+                        self.logger.error(f"❌ 輸出目錄內容: {files_in_output}")
+                    else:
+                        self.logger.error(f"❌ 輸出目錄不存在: {abs_output_folder}")
+                    
                     return None, None
                 
             finally:
+                # 🆕 在清理前顯示臨時目錄內容
+                self.logger.info(f"🔍 清理前臨時目錄內容:")
+                try:
+                    temp_files = os.listdir(temp_work_dir)
+                    for filename in temp_files[:10]:  # 只顯示前10個檔案
+                        filepath = os.path.join(temp_work_dir, filename)
+                        if os.path.isfile(filepath):
+                            filesize = os.path.getsize(filepath)
+                            self.logger.info(f"   📄 {filename} ({filesize} bytes)")
+                        else:
+                            self.logger.info(f"   📁 {filename} (目錄)")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ 無法列出臨時目錄內容: {str(e)}")
+                
                 # 恢復原始工作目錄
                 os.chdir(original_cwd)
+                self.logger.info(f"📂 恢復原始工作目錄: {original_cwd}")
                 
-                # 清理臨時目錄
+                # 🆕 延遲清理臨時目錄（可選：保留一段時間供調試）
+                # 注意：這裡我們還是清理，但添加了更多日誌
                 try:
                     shutil.rmtree(temp_work_dir)
-                    self.logger.info(f"🗑️ 清理臨時目錄: {temp_work_dir}")
+                    self.logger.info(f"🗑️ 清理臨時目錄成功: {temp_work_dir}")
                 except Exception as e:
-                    self.logger.warning(f"清理臨時目錄失敗: {str(e)}")
+                    self.logger.warning(f"⚠️ 清理臨時目錄失敗: {str(e)}")
                 
         except subprocess.TimeoutExpired:
-            self.logger.error("repo 命令執行超時")
-            return None, None
-        except FileNotFoundError:
-            self.logger.error("repo 命令未找到，請確認已安裝 repo 工具")
+            self.logger.error("❌ repo 命令執行超時")
             return None, None
         except Exception as e:
-            self.logger.error(f"展開 manifest 時發生錯誤: {str(e)}")
+            self.logger.error(f"❌ 展開 manifest 時發生錯誤: {str(e)}")
+            import traceback
+            self.logger.error(f"❌ 錯誤詳情: {traceback.format_exc()}")
             return None, None
             
     def _download_source_file(self, overwrite_type: str) -> Optional[str]:
@@ -1864,48 +2021,10 @@ class FeatureThree:
        push_to_gerrit=True
    )
 
-3. 命令行支援範例（需要在 main.py 中實現）：
-   def _execute_feature_three(self):
-       # ... 現有程式碼 ...
-       
-       # 新增：詢問是否推送到 Gerrit
-       push_to_gerrit = self._get_yes_no_input(
-           "是否要將轉換結果推送到 Gerrit 服務器？", False
-       )
-       
-       success = self.feature_three.process(
-           overwrite_type, output_folder, excel_filename, push_to_gerrit
-       )
-
-4. Gerrit 推送功能說明：
-   - 自動判斷是否需要推送（目標檔案不存在或內容不同）
-   - 執行 Git clone, commit, push 操作
-   - 推送到 refs/for/branch（等待 Code Review）
-   - 在 Excel 報告中記錄推送結果
-   - 提供 Gerrit Review URL
-
-5. 錯誤處理改進：
-   - 即使下載失敗也會產生 Excel 報告
-   - 詳細記錄失敗原因
-   - 紅字標示下載失敗狀態
-   - 提供故障排除建議
-
-6. Excel 報告內容：
-   ■ 轉換摘要頁籤：
-     - 下載狀態（成功/失敗，紅綠字標示）
-     - 推送狀態（成功/失敗/未執行）
-     - Commit ID 和 Review URL
-   
-   ■ 轉換後專案頁籤：
-     - 原始 Revision vs 轉換後 Revision（紅底白字表頭）
-     - 是否轉換（是=藍色，否=紅色）
-   
-   ■ 差異部份頁籤：
-     - 詳細差異分析（如有目標檔案）
-     - 三色格式：綠色（基本）、紅色（revision）、藍色（Gerrit）
-
-7. Git 需求：
-   - 系統需要安裝 Git
-   - 需要 SSH 認證到 mm2sd.rtkbf.com:29418
-   - 建議設定 Git 用戶名和郵箱
+修正重點：
+1. 重命名 _expand_manifest_with_repo 為 _expand_manifest_with_repo_fixed
+2. 在 _expand_manifest_with_repo_fixed 中立即保存展開檔案到最終目標位置
+3. 增加多層驗證確保檔案正確保存
+4. 增強日誌輸出和錯誤診斷
+5. 確保 repo 命令錯誤處理更完善
 """
