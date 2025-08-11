@@ -106,23 +106,112 @@ class ManifestConversionTester:
     def compare_manifests(self, master_projects: Dict, premp_projects: Dict) -> List[Dict]:
         """
         比對 master 轉換後與 premp 的差異
+        修改：排除不需要比對的特殊項目
         
         Args:
             master_projects: master manifest 的專案
             premp_projects: premp manifest 的專案
             
         Returns:
-            差異列表
+            所有比對結果列表（包括成功和失敗的）
         """
-        differences = []
+        all_results = []
         
         # 統計
         self.stats['total_projects'] = len(master_projects)
+        self.stats['no_revision_projects'] = 0
+        self.stats['revision_projects'] = 0
+        self.stats['skipped_special_projects'] = 0  # 🆕 新增：跳過的特殊專案數
         
         # 比對 master 中的每個專案
         for name, master_proj in master_projects.items():
-            # 轉換 master revision
             master_revision = master_proj['revision']
+            
+            # 🆕 檢查是否有 revision 屬性
+            if not master_revision or master_revision.strip() == '':
+                # 沒有 revision 的專案，只記錄狀態，不進行轉換比對
+                self.stats['no_revision_projects'] += 1
+                
+                if name in premp_projects:
+                    premp_proj = premp_projects[name]
+                    premp_revision = premp_proj['revision']
+                    
+                    all_results.append({
+                        'SN': len(all_results) + 1,
+                        '專案名稱': name,
+                        '專案路徑': master_proj['path'],
+                        'Master Revision': '無 (沒有 revision 屬性)',
+                        '轉換後 Revision': 'N/A (跳過轉換)',
+                        'PreMP Revision (正確版)': premp_revision if premp_revision else '無',
+                        '狀態': '🔵 無需轉換 (Master無revision)',
+                        '轉換是否正確': 'N/A',
+                        '差異說明': 'Master 專案沒有 revision 屬性，跳過轉換比對',
+                        'Upstream': master_proj.get('upstream', ''),
+                        'Dest-Branch': master_proj.get('dest-branch', ''),
+                        'Groups': master_proj.get('groups', ''),
+                        'Remote': master_proj.get('remote', '')
+                    })
+                else:
+                    all_results.append({
+                        'SN': len(all_results) + 1,
+                        '專案名稱': name,
+                        '專案路徑': master_proj['path'],
+                        'Master Revision': '無 (沒有 revision 屬性)',
+                        '轉換後 Revision': 'N/A (跳過轉換)',
+                        'PreMP Revision (正確版)': 'N/A (專案不存在)',
+                        '狀態': '🔵 無需轉換 (Master無revision且PreMP不存在)',
+                        '轉換是否正確': 'N/A',
+                        '差異說明': 'Master 專案沒有 revision 且 PreMP 中不存在此專案',
+                        'Upstream': master_proj.get('upstream', ''),
+                        'Dest-Branch': master_proj.get('dest-branch', ''),
+                        'Groups': master_proj.get('groups', ''),
+                        'Remote': master_proj.get('remote', '')
+                    })
+                continue
+            
+            # 🆕 檢查是否為完全跳過的特殊項目（如 refs/tags）
+            if self._should_skip_conversion(master_revision):
+                self.stats['skipped_special_projects'] += 1
+                
+                if name in premp_projects:
+                    premp_proj = premp_projects[name]
+                    premp_revision = premp_proj['revision']
+                    
+                    all_results.append({
+                        'SN': len(all_results) + 1,
+                        '專案名稱': name,
+                        '專案路徑': master_proj['path'],
+                        'Master Revision': master_revision,
+                        '轉換後 Revision': 'N/A (跳過特殊項目)',
+                        'PreMP Revision (正確版)': premp_revision,
+                        '狀態': '🟣 跳過轉換 (特殊項目)',
+                        '轉換是否正確': 'N/A',
+                        '差異說明': self._get_skip_reason(master_revision),
+                        'Upstream': master_proj.get('upstream', ''),
+                        'Dest-Branch': master_proj.get('dest-branch', ''),
+                        'Groups': master_proj.get('groups', ''),
+                        'Remote': master_proj.get('remote', '')
+                    })
+                else:
+                    all_results.append({
+                        'SN': len(all_results) + 1,
+                        '專案名稱': name,
+                        '專案路徑': master_proj['path'],
+                        'Master Revision': master_revision,
+                        '轉換後 Revision': 'N/A (跳過特殊項目)',
+                        'PreMP Revision (正確版)': 'N/A (專案不存在)',
+                        '狀態': '🟣 跳過轉換 (特殊項目且PreMP不存在)',
+                        '轉換是否正確': 'N/A',
+                        '差異說明': f'{self._get_skip_reason(master_revision)}，且 PreMP 中不存在此專案',
+                        'Upstream': master_proj.get('upstream', ''),
+                        'Dest-Branch': master_proj.get('dest-branch', ''),
+                        'Groups': master_proj.get('groups', ''),
+                        'Remote': master_proj.get('remote', '')
+                    })
+                continue
+            
+            # 有 revision 且需要轉換的專案
+            self.stats['revision_projects'] += 1
             converted_revision = self.convert_revision(master_revision)
             
             # 在 premp 中查找對應專案
@@ -130,37 +219,51 @@ class ManifestConversionTester:
                 premp_proj = premp_projects[name]
                 premp_revision = premp_proj['revision']
                 
-                # 比對轉換後的 revision 與 premp revision
-                if converted_revision == premp_revision:
+                # 🆕 通用邏輯：檢查 master 和 premp 的原始 revision 是否相同
+                if master_revision == premp_revision:
+                    # 原始 revision 相同，無需轉換，算作成功匹配
                     self.stats['matched'] += 1
-                    status = '✅ 匹配'
+                    status = '✅ 匹配 (原始相同)'
+                    is_correct = '是'
+                    description = f'Master 和 PreMP 的原始 revision 相同: {master_revision}，無需轉換'
+                    final_converted_revision = master_revision  # 保持原值
                 else:
-                    self.stats['mismatched'] += 1
-                    status = '❌ 不匹配'
-                    
-                    # 記錄差異
-                    differences.append({
-                        'SN': len(differences) + 1,
-                        '專案名稱': name,
-                        '專案路徑': master_proj['path'],
-                        'Master Revision': master_revision,
-                        '轉換後 Revision': converted_revision,
-                        'PreMP Revision (正確版)': premp_revision,
-                        '狀態': status,
-                        '轉換是否正確': '否',
-                        '差異說明': f'期望: {premp_revision}, 實際: {converted_revision}',
-                        'Upstream': master_proj.get('upstream', ''),
-                        'Dest-Branch': master_proj.get('dest-branch', ''),
-                        'Groups': master_proj.get('groups', ''),
-                        'Remote': master_proj.get('remote', '')
-                    })
-            else:
-                # 在 premp 中找不到對應專案
-                self.stats['not_found_in_premp'] += 1
-                status = '⚠️ PreMP中不存在'
+                    # 原始 revision 不同，進行正常的轉換比對
+                    if converted_revision == premp_revision:
+                        self.stats['matched'] += 1
+                        status = '✅ 匹配'
+                        is_correct = '是'
+                        description = '轉換結果與 PreMP 正確版完全匹配'
+                        final_converted_revision = converted_revision
+                    else:
+                        self.stats['mismatched'] += 1
+                        status = '❌ 不匹配'
+                        is_correct = '否'
+                        description = f'期望: {premp_revision}, 實際: {converted_revision}'
+                        final_converted_revision = converted_revision
                 
-                differences.append({
-                    'SN': len(differences) + 1,
+                all_results.append({
+                    'SN': len(all_results) + 1,
+                    '專案名稱': name,
+                    '專案路徑': master_proj['path'],
+                    'Master Revision': master_revision,
+                    '轉換後 Revision': final_converted_revision,
+                    'PreMP Revision (正確版)': premp_revision,
+                    '狀態': status,
+                    '轉換是否正確': is_correct,
+                    '差異說明': description,
+                    'Upstream': master_proj.get('upstream', ''),
+                    'Dest-Branch': master_proj.get('dest-branch', ''),
+                    'Groups': master_proj.get('groups', ''),
+                    'Remote': master_proj.get('remote', '')
+                })
+            else:
+                # 🆕 在 premp 中找不到對應專案 - 不算轉換失敗，只是記錄狀態
+                self.stats['not_found_in_premp'] += 1
+                status = '🔶 PreMP中不存在 (非轉換錯誤)'
+                
+                all_results.append({
+                    'SN': len(all_results) + 1,
                     '專案名稱': name,
                     '專案路徑': master_proj['path'],
                     'Master Revision': master_revision,
@@ -168,7 +271,7 @@ class ManifestConversionTester:
                     'PreMP Revision (正確版)': 'N/A (專案不存在)',
                     '狀態': status,
                     '轉換是否正確': 'N/A',
-                    '差異說明': '專案在 PreMP manifest 中不存在',
+                    '差異說明': '專案在 PreMP manifest 中不存在，無法驗證轉換正確性',
                     'Upstream': master_proj.get('upstream', ''),
                     'Dest-Branch': master_proj.get('dest-branch', ''),
                     'Groups': master_proj.get('groups', ''),
@@ -179,8 +282,8 @@ class ManifestConversionTester:
         for name in premp_projects:
             if name not in master_projects:
                 self.stats['extra_in_premp'] += 1
-                differences.append({
-                    'SN': len(differences) + 1,
+                all_results.append({
+                    'SN': len(all_results) + 1,
                     '專案名稱': name,
                     '專案路徑': premp_projects[name]['path'],
                     'Master Revision': 'N/A (專案不存在)',
@@ -195,73 +298,148 @@ class ManifestConversionTester:
                     'Remote': premp_projects[name].get('remote', '')
                 })
         
-        return differences
-    
-    def generate_excel_report(self, differences: List[Dict], output_file: str, 
-                            master_file: str, premp_file: str) -> bool:
+        return all_results
+
+    def _should_smart_handle_special_revision(self, revision: str) -> bool:
         """
-        生成 Excel 測試報告
+        判斷是否為需要智能處理的特殊項目（檢查是否與premp相同）
         
         Args:
-            differences: 差異列表
-            output_file: 輸出檔案路徑
-            master_file: master manifest 檔案路徑
-            premp_file: premp manifest 檔案路徑
+            revision: 專案的 revision
             
         Returns:
-            是否成功生成報告
+            是否需要智能處理
+        """
+        if not revision:
+            return False
+        
+        revision = revision.strip()
+        
+        # 需要智能處理的特殊項目（檢查master和premp是否相同）
+        special_items_to_check = [
+            'master-kernel-build-2022',
+            'master-kernel-build-2021',
+            'master-kernel-build-2023',
+            # 可以添加其他需要檢查相同性的特殊項目
+        ]
+        
+        return revision in special_items_to_check
+
+    def _should_skip_conversion(self, revision: str) -> bool:
+        """
+        判斷是否應該完全跳過轉換比對的特殊項目
+        
+        Args:
+            revision: 專案的 revision
+            
+        Returns:
+            是否應該跳過
+        """
+        if not revision:
+            return False
+        
+        revision = revision.strip()
+        
+        # 完全跳過轉換的項目（如 refs/tags）
+        if revision.startswith('refs/tags/'):
+            return True
+        
+        # 其他完全跳過的特殊項目可以在這裡添加
+        # 注意：移除了 master-kernel-build-* 系列，因為現在使用通用邏輯處理
+        
+        return False
+        
+    def _get_skip_reason(self, revision: str) -> str:
+        """
+        取得跳過轉換的原因說明
+        
+        Args:
+            revision: 專案的 revision
+            
+        Returns:
+            跳過原因
+        """
+        if not revision:
+            return '未知原因'
+        
+        revision = revision.strip()
+        
+        if revision.startswith('refs/tags/'):
+            return 'Git tags 不需要轉換'
+        else:
+            return '特殊項目，完全跳過轉換'
+                
+    def generate_excel_report(self, differences: List[Dict], output_file: str, 
+                        master_file: str, premp_file: str) -> bool:
+        """
+        生成 Excel 測試報告
+        修改：增加無 revision 專案的統計資訊
         """
         try:
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-                # 頁籤 1: 測試摘要
+                # 頁籤 1: 測試摘要 - 增加無 revision 專案統計
                 summary_data = [{
                     '測試時間': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'Master Manifest': os.path.basename(master_file),
                     'PreMP Manifest (正確版)': os.path.basename(premp_file),
                     '總專案數': self.stats['total_projects'],
+                    '🔵 有revision專案數': self.stats['revision_projects'],
+                    '⚪ 無revision專案數': self.stats['no_revision_projects'],
                     '✅ 匹配數': self.stats['matched'],
                     '❌ 不匹配數': self.stats['mismatched'],
                     '⚠️ PreMP中不存在': self.stats['not_found_in_premp'],
                     '🔶 僅存在於PreMP': self.stats['extra_in_premp'],
-                    '匹配率': f"{(self.stats['matched'] / self.stats['total_projects'] * 100):.2f}%" if self.stats['total_projects'] > 0 else '0%'
+                    '轉換成功率': f"{(self.stats['matched'] / self.stats['revision_projects'] * 100):.2f}%" if self.stats['revision_projects'] > 0 else '0%',
+                    '備註': f"跳過 {self.stats['no_revision_projects']} 個無revision專案的轉換比對"
                 }]
                 
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='測試摘要', index=False)
                 
-                # 頁籤 2: 差異詳情（只包含有問題的項目）
+                # 頁籤 2: 需要關注的項目（排除無需轉換的）
                 if differences:
                     df_diff = pd.DataFrame(differences)
                     
-                    # 只保留有問題的項目（排除匹配的）
-                    df_diff_filtered = df_diff[df_diff['狀態'] != '✅ 匹配']
+                    # 分類顯示不同類型的差異
+                    need_attention = df_diff[
+                        (~df_diff['狀態'].str.contains('無需轉換', na=False)) &
+                        (df_diff['狀態'] != '✅ 匹配')
+                    ]
                     
-                    if not df_diff_filtered.empty:
-                        df_diff_filtered.to_excel(writer, sheet_name='差異詳情', index=False)
-                    else:
-                        # 如果沒有差異，創建一個說明頁籤
-                        df_no_diff = pd.DataFrame([{
-                            '結果': '✅ 所有轉換規則測試通過！',
-                            '說明': '所有 Master revision 轉換後都與 PreMP 正確版完全匹配'
-                        }])
-                        df_no_diff.to_excel(writer, sheet_name='測試結果', index=False)
+                    if not need_attention.empty:
+                        need_attention.to_excel(writer, sheet_name='需要關注的項目', index=False)
+                    
+                    # 頁籤 3: 無需轉換的專案（無 revision）
+                    no_conversion_needed = df_diff[
+                        df_diff['狀態'].str.contains('無需轉換', na=False)
+                    ]
+                    
+                    if not no_conversion_needed.empty:
+                        no_conversion_needed.to_excel(writer, sheet_name='無需轉換專案', index=False)
                 
-                # 頁籤 3: 所有專案對照表
+                # 頁籤 4: 所有專案對照表（按類型分組）
                 all_comparisons = []
                 for diff in differences:
+                    status_icon = '🔵' if '無需轉換' in diff['狀態'] else (
+                        '✅' if diff['狀態'] == '✅ 匹配' else '❌'
+                    )
+                    
                     all_comparisons.append({
                         'SN': diff['SN'],
                         '專案名稱': diff['專案名稱'],
+                        '專案類型': '無revision' if '無需轉換' in diff['狀態'] else '有revision',
                         'Master Revision': diff['Master Revision'],
                         '轉換後 Revision': diff['轉換後 Revision'],
                         'PreMP Revision (正確版)': diff['PreMP Revision (正確版)'],
-                        '匹配結果': '✅' if diff['狀態'] == '✅ 匹配' else '❌'
+                        '結果': status_icon,
+                        '狀態說明': diff['狀態']
                     })
                 
-                df_all = pd.DataFrame(all_comparisons)
-                df_all.to_excel(writer, sheet_name='所有專案對照', index=False)
+                if all_comparisons:
+                    df_all = pd.DataFrame(all_comparisons)
+                    df_all.to_excel(writer, sheet_name='所有專案對照', index=False)
                 
-                # 頁籤 4: 轉換規則統計
+                # 頁籤 5: 轉換規則統計（只統計有 revision 的專案）
                 rule_stats = self._analyze_conversion_rules(differences)
                 if rule_stats:
                     df_rules = pd.DataFrame(rule_stats)
@@ -280,11 +458,14 @@ class ManifestConversionTester:
             return False
     
     def _analyze_conversion_rules(self, differences: List[Dict]) -> List[Dict]:
-        """分析轉換規則的使用情況"""
+        """分析轉換規則的使用情況 - 排除無 revision 專案"""
         rule_usage = {}
         
         for diff in differences:
-            if diff['Master Revision'] == 'N/A (專案不存在)':
+            # 跳過沒有 revision 的專案和不存在的專案
+            if (diff['Master Revision'] == 'N/A (專案不存在)' or 
+                '無 (沒有 revision 屬性)' in diff['Master Revision'] or
+                '無需轉換' in diff['狀態']):
                 continue
                 
             # 分析使用了哪種轉換規則
@@ -355,7 +536,7 @@ class ManifestConversionTester:
         return "智能推斷或預設"
     
     def _format_worksheet(self, worksheet, sheet_name: str):
-        """格式化 Excel 工作表"""
+        """格式化 Excel 工作表 - 增加無需轉換專案的格式"""
         from openpyxl.styles import PatternFill, Font, Alignment
         from openpyxl.utils import get_column_letter
         
@@ -364,9 +545,10 @@ class ManifestConversionTester:
         header_font = Font(color="FFFFFF", bold=True)
         
         # 差異顏色
-        red_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")
-        green_fill = PatternFill(start_color="E6FFE6", end_color="E6FFE6", fill_type="solid")
-        yellow_fill = PatternFill(start_color="FFFACD", end_color="FFFACD", fill_type="solid")
+        red_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")      # 不匹配
+        green_fill = PatternFill(start_color="E6FFE6", end_color="E6FFE6", fill_type="solid")    # 匹配
+        yellow_fill = PatternFill(start_color="FFFACD", end_color="FFFACD", fill_type="solid")   # 不存在
+        blue_fill = PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid")     # 無需轉換
         
         # 設定標題格式
         for cell in worksheet[1]:
@@ -375,17 +557,34 @@ class ManifestConversionTester:
             cell.alignment = Alignment(horizontal='center', vertical='center')
         
         # 根據頁籤設定特定格式
-        if sheet_name == '差異詳情':
+        if sheet_name in ['需要關注的項目', '無需轉換專案', '所有專案對照']:
             # 為不同狀態設定背景色
             for row in range(2, worksheet.max_row + 1):
-                status_cell = worksheet[f'G{row}']  # 狀態欄位
-                if status_cell.value:
-                    if '不匹配' in str(status_cell.value):
+                # 找到狀態欄位（可能在不同位置）
+                status_cell = None
+                for col in range(1, worksheet.max_column + 1):
+                    header = worksheet.cell(row=1, column=col).value
+                    if header and ('狀態' in str(header) or '結果' in str(header)):
+                        status_cell = worksheet.cell(row=row, column=col)
+                        break
+                
+                if status_cell and status_cell.value:
+                    status_value = str(status_cell.value)
+                    fill_color = None
+                    
+                    if '不匹配' in status_value or '❌' in status_value:
+                        fill_color = red_fill
+                    elif '匹配' in status_value or '✅' in status_value:
+                        fill_color = green_fill
+                    elif '不存在' in status_value or '⚠️' in status_value:
+                        fill_color = yellow_fill
+                    elif '無需轉換' in status_value or '🔵' in status_value:
+                        fill_color = blue_fill
+                    
+                    # 套用背景色到整行
+                    if fill_color:
                         for col in range(1, worksheet.max_column + 1):
-                            worksheet.cell(row=row, column=col).fill = red_fill
-                    elif '不存在' in str(status_cell.value):
-                        for col in range(1, worksheet.max_column + 1):
-                            worksheet.cell(row=row, column=col).fill = yellow_fill
+                            worksheet.cell(row=row, column=col).fill = fill_color
         
         # 自動調整欄寬
         for column in worksheet.columns:
@@ -404,15 +603,7 @@ class ManifestConversionTester:
     
     def test_conversion(self, master_file: str, premp_file: str, output_file: str) -> bool:
         """
-        執行轉換測試
-        
-        Args:
-            master_file: master manifest.xml 檔案路徑
-            premp_file: premp manifest.xml 檔案路徑
-            output_file: 輸出 Excel 檔案路徑
-            
-        Returns:
-            測試是否全部通過
+        執行轉換測試 - 修改結果顯示邏輯
         """
         try:
             self.logger.info("="*80)
@@ -432,26 +623,36 @@ class ManifestConversionTester:
             self.logger.info("\n📊 步驟 3: 生成測試報告")
             self.generate_excel_report(differences, output_file, master_file, premp_file)
             
-            # 步驟 4: 顯示測試結果
+            # 步驟 4: 顯示測試結果 - 更新統計顯示
             self.logger.info("\n📈 測試結果統計:")
             self.logger.info(f"  總專案數: {self.stats['total_projects']}")
-            self.logger.info(f"  ✅ 匹配: {self.stats['matched']}")
-            self.logger.info(f"  ❌ 不匹配: {self.stats['mismatched']}")
+            self.logger.info(f"  🔵 有revision專案: {self.stats['revision_projects']}")
+            self.logger.info(f"  ⚪ 無revision專案: {self.stats['no_revision_projects']} (跳過轉換)")
+            self.logger.info(f"  ✅ 轉換匹配: {self.stats['matched']}")
+            self.logger.info(f"  ❌ 轉換不匹配: {self.stats['mismatched']}")
             self.logger.info(f"  ⚠️ PreMP中不存在: {self.stats['not_found_in_premp']}")
             self.logger.info(f"  🔶 僅存在於PreMP: {self.stats['extra_in_premp']}")
             
-            # 計算測試是否通過
-            all_passed = (self.stats['mismatched'] == 0 and 
-                         self.stats['not_found_in_premp'] == 0)
+            # 計算轉換成功率（只考慮有 revision 的專案）
+            if self.stats['revision_projects'] > 0:
+                conversion_rate = (self.stats['matched'] / self.stats['revision_projects'] * 100)
+                self.logger.info(f"  📊 轉換成功率: {conversion_rate:.2f}%")
             
-            if all_passed:
-                self.logger.info("\n✅ 所有轉換規則測試通過！")
+            # 計算測試是否通過（只考慮有 revision 的專案）
+            conversion_passed = (self.stats['mismatched'] == 0)
+            
+            if self.stats['no_revision_projects'] > 0:
+                self.logger.info(f"\n💡 說明: 跳過了 {self.stats['no_revision_projects']} 個沒有 revision 屬性的專案")
+                self.logger.info("    這些專案不需要進行轉換比對，只記錄狀態資訊")
+            
+            if conversion_passed:
+                self.logger.info("\n✅ 所有需要轉換的專案規則測試通過！")
             else:
                 self.logger.warning(f"\n⚠️ 發現 {self.stats['mismatched']} 個轉換錯誤")
                 self.logger.info(f"詳細差異請查看: {output_file}")
             
             self.logger.info("="*80)
-            return all_passed
+            return conversion_passed
             
         except Exception as e:
             self.logger.error(f"測試執行失敗: {str(e)}")

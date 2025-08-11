@@ -239,6 +239,7 @@ def integrate_with_main_menu():
 def batch_test_multiple_manifests(test_pairs):
     """
     批次測試多組 manifest 檔案
+    修改：顯示更詳細的轉換成功資訊
     
     Args:
         test_pairs: 測試對列表，格式為 [(master1, premp1), (master2, premp2), ...]
@@ -280,6 +281,20 @@ def batch_test_multiple_manifests(test_pairs):
                 'stats': tester.stats
             })
             
+            # 🆕 顯示詳細的轉換統計
+            stats = tester.stats
+            print(f"  📊 統計結果:")
+            print(f"    - 總專案數: {stats['total_projects']}")
+            print(f"    - 🔵 參與轉換: {stats['revision_projects']}")
+            print(f"    - ⚪ 無revision: {stats['no_revision_projects']}")
+            print(f"    - 🟣 完全跳過: {stats['skipped_special_projects']}")
+            print(f"    - ✅ 轉換成功: {stats['matched']}")
+            print(f"    - ❌ 轉換失敗: {stats['mismatched']}")
+            
+            if stats['revision_projects'] > 0:
+                success_rate = (stats['matched'] / stats['revision_projects'] * 100)
+                print(f"    - 📈 成功率: {success_rate:.2f}%")
+            
             if success:
                 print(f"  ✅ 測試通過")
             else:
@@ -304,10 +319,30 @@ def batch_test_multiple_manifests(test_pairs):
     passed = sum(1 for r in results if r['success'])
     failed = len(results) - passed
     
-    print(f"總測試數: {len(results)}")
-    print(f"✅ 通過: {passed}")
-    print(f"❌ 失敗: {failed}")
-    print(f"成功率: {(passed/len(results)*100):.1f}%")
+    # 🆕 計算整體統計
+    total_projects = sum(r['stats']['total_projects'] for r in results if 'stats' in r)
+    total_revision_projects = sum(r['stats']['revision_projects'] for r in results if 'stats' in r)
+    total_no_revision = sum(r['stats']['no_revision_projects'] for r in results if 'stats' in r)
+    total_skipped_complete = sum(r['stats']['skipped_special_projects'] for r in results if 'stats' in r)
+    total_matched = sum(r['stats']['matched'] for r in results if 'stats' in r)
+    total_mismatched = sum(r['stats']['mismatched'] for r in results if 'stats' in r)
+    
+    print(f"🔢 整體統計:")
+    print(f"  總測試數: {len(results)}")
+    print(f"  ✅ 通過: {passed}")
+    print(f"  ❌ 失敗: {failed}")
+    print(f"  成功率: {(passed/len(results)*100):.1f}%")
+    print(f"\n📊 專案轉換統計:")
+    print(f"  總專案數: {total_projects}")
+    print(f"  🔵 參與轉換專案: {total_revision_projects}")
+    print(f"  ⚪ 無revision專案: {total_no_revision}")
+    print(f"  🟣 完全跳過專案: {total_skipped_complete}")
+    print(f"  ✅ 轉換成功: {total_matched} (包括原始相同)")
+    print(f"  ❌ 轉換失敗: {total_mismatched}")
+    
+    if total_revision_projects > 0:
+        overall_success_rate = (total_matched / total_revision_projects * 100)
+        print(f"  📈 整體轉換成功率: {overall_success_rate:.2f}%")
     
     # 顯示詳細結果
     print("\n詳細結果:")
@@ -316,12 +351,11 @@ def batch_test_multiple_manifests(test_pairs):
         print(f"{status} 測試 {result['index']}: {os.path.basename(result['master'])}")
         if 'stats' in result:
             stats = result['stats']
-            print(f"   匹配: {stats['matched']}/{stats['total_projects']}")
+            print(f"   參與轉換: {stats['revision_projects']}, 成功: {stats['matched']}, 失敗: {stats['mismatched']}")
         if 'error' in result:
             print(f"   錯誤: {result['error']}")
     
     return results
-
 
 # 主程式進入點
 if __name__ == "__main__":
