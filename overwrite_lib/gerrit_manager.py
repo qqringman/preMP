@@ -70,12 +70,26 @@ class GerritManager:
         """統一的請求方法，使用 session 處理認證"""
         # 使用 session 而不是直接的 requests
         method = method.upper()
+        
+        # 處理 JSON 資料
+        if 'json' in kwargs and kwargs['json'] is not None:
+            if 'headers' not in kwargs:
+                kwargs['headers'] = {}
+            kwargs['headers']['Content-Type'] = 'application/json'
+            kwargs['headers']['Accept'] = 'application/json'
+            
+            # 將 json 參數轉換為 data
+            import json
+            kwargs['data'] = json.dumps(kwargs.pop('json'))
+        
         if method == 'GET':
             return self.session.get(url, **kwargs)
         elif method == 'POST':
             return self.session.post(url, **kwargs)
         elif method == 'PUT':
             return self.session.put(url, **kwargs)
+        elif method == 'DELETE':
+            return self.session.delete(url, **kwargs)
         elif method == 'HEAD':
             return self.session.head(url, **kwargs)
         else:
@@ -739,7 +753,17 @@ class GerritManager:
             return {'success': False, 'revision': ''}
                     
     def create_branch(self, project_name: str, branch_name: str, revision: str) -> Dict[str, Any]:
-        """建立新分支"""
+        """
+        建立新分支 - 修正版（基於診斷工具的成功經驗）
+        
+        Args:
+            project_name: 專案名稱
+            branch_name: 分支名稱（自動處理 refs/heads/ 前綴）
+            revision: commit hash
+            
+        Returns:
+            包含 success, message, exists 的字典
+        """
         result = {
             'success': False,
             'message': '',
@@ -747,38 +771,134 @@ class GerritManager:
         }
         
         try:
+            # 處理分支名稱格式
+            # 如果有 refs/heads/ 前綴，移除它
+            if branch_name.startswith('refs/heads/'):
+                simple_branch_name = branch_name[11:]
+                branch_ref = branch_name
+            else:
+                simple_branch_name = branch_name
+                branch_ref = f"refs/heads/{branch_name}"
+            
+            self.logger.info(f"建立分支: {project_name}/{simple_branch_name}")
+            self.logger.debug(f"  完整參考: {branch_ref}")
+            self.logger.debug(f"  Revision: {revision}")
+            
+            # 先檢查分支是否已存在
             branches = self.query_branches(project_name)
-            if branch_name in branches:
+            if simple_branch_name in branches or branch_ref in branches:
                 result['exists'] = True
-                result['message'] = f"分支 {branch_name} 已存在"
+                result['message'] = f"分支 {simple_branch_name} 已存在"
                 self.logger.info(result['message'])
                 return result
             
             import urllib.parse
+            import json
+            
+            # URL 編碼
             encoded_project = urllib.parse.quote(project_name, safe='')
-            encoded_branch = urllib.parse.quote(branch_name, safe='')
             
-            url = f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}"
+            # 根據診斷工具的成功經驗，使用簡化的分支名稱（不帶 refs/heads/）
+            encoded_branch = urllib.parse.quote(simple_branch_name, safe='')
             
-            data = {
-                'revision': revision
+            # 準備請求資料
+            data = json.dumps({'revision': revision})
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             }
             
-            response = self._make_request(url, method='PUT', json=data, timeout=30)
+            # 嘗試不同的 API 路徑（按成功率排序）
+            api_urls = [
+                # 最可能成功的路徑（基於診斷工具）
+                (f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}", "Gerrit API (簡化名稱)"),
+                (f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}", "標準 API (簡化名稱)"),
+                (f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}", "簡化 API (簡化名稱)"),
+                # 備用：使用完整的 refs/heads/ 格式
+                (f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{urllib.parse.quote(branch_ref, safe='')}", "Gerrit API (完整參考)"),
+            ]
             
-            if response.status_code in [200, 201]:
-                result['success'] = True
-                result['message'] = f"成功建立分支 {branch_name}"
-                self.logger.info(result['message'])
-            else:
-                result['message'] = f"建立分支失敗 - HTTP {response.status_code}"
-                self.logger.warning(result['message'])
+            for url, desc in api_urls:
+                try:
+                    self.logger.debug(f"嘗試 {desc}: {url}")
+                    
+                    # 使用 PUT 方法建立分支
+                    response = self.session.put(url, data=data, headers=headers, timeout=30)
+                    
+                    self.logger.debug(f"  回應狀態: HTTP {response.status_code}")
+                    
+                    if response.status_code in [200, 201]:
+                        result['success'] = True
+                        result['message'] = f"成功建立分支 {simple_branch_name}"
+                        self.logger.info(f"✅ {result['message']} (使用 {desc})")
+                        
+                        # 解析回應內容
+                        try:
+                            content = response.text
+                            if content.startswith(")]}'\n"):
+                                content = content[5:]
+                            branch_info = json.loads(content)
+                            self.logger.debug(f"  分支資訊: {branch_info}")
+                        except:
+                            pass
+                        
+                        return result
+                        
+                    elif response.status_code == 409:
+                        result['exists'] = True
+                        result['message'] = f"分支 {simple_branch_name} 已存在"
+                        self.logger.info(result['message'])
+                        return result
+                        
+                    elif response.status_code == 404:
+                        self.logger.debug(f"  404 - 專案可能不存在或路徑錯誤")
+                        # 顯示部分回應內容以便診斷
+                        if response.text:
+                            self.logger.debug(f"  回應: {response.text[:200]}")
+                        continue
+                        
+                    elif response.status_code == 400:
+                        self.logger.warning(f"  400 - 請求格式錯誤")
+                        if response.text:
+                            self.logger.debug(f"  回應: {response.text[:200]}")
+                        continue
+                        
+                    elif response.status_code == 403:
+                        result['message'] = f"權限不足 - 無法在 {project_name} 建立分支"
+                        self.logger.error(result['message'])
+                        return result
+                        
+                    else:
+                        self.logger.debug(f"  未預期的狀態碼: {response.status_code}")
+                        if response.text:
+                            self.logger.debug(f"  回應: {response.text[:200]}")
+                        continue
+                        
+                except requests.exceptions.Timeout:
+                    self.logger.warning(f"  請求逾時: {url}")
+                    continue
+                except Exception as e:
+                    self.logger.debug(f"  異常: {str(e)}")
+                    continue
+            
+            # 如果所有方法都失敗
+            result['message'] = f"建立分支失敗 - 請確認專案 {project_name} 存在且有權限"
+            self.logger.error(result['message'])
+            
+            # 提供診斷建議
+            self.logger.info("建議:")
+            self.logger.info("  1. 確認專案名稱正確: " + project_name)
+            self.logger.info("  2. 確認 revision 存在: " + revision[:8])
+            self.logger.info("  3. 確認您有建立分支的權限")
+            self.logger.info("  4. 可以使用診斷工具進一步檢查: python3 debug_branch.py --project " + project_name)
             
             return result
             
         except Exception as e:
             result['message'] = f"建立分支發生錯誤: {str(e)}"
             self.logger.error(result['message'])
+            import traceback
+            self.logger.debug(f"錯誤詳情:\n{traceback.format_exc()}")
             return result
 
     def query_tag(self, project_name: str, tag_name: str) -> Dict[str, Any]:
@@ -992,3 +1112,221 @@ class GerritManager:
             
         except Exception:
             return ''
+
+    def delete_branch(self, project_name: str, branch_name: str) -> Dict[str, Any]:
+        """
+        刪除分支
+        
+        Args:
+            project_name: 專案名稱
+            branch_name: 分支名稱（自動處理 refs/heads/ 前綴）
+            
+        Returns:
+            包含 success 和 message 的字典
+        """
+        result = {
+            'success': False,
+            'message': ''
+        }
+        
+        try:
+            import urllib.parse
+            
+            # 處理分支名稱格式（與 create_branch 一致）
+            if branch_name.startswith('refs/heads/'):
+                simple_branch_name = branch_name[11:]
+            else:
+                simple_branch_name = branch_name
+            
+            self.logger.info(f"刪除分支: {project_name}/{simple_branch_name}")
+            
+            # URL 編碼
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_branch = urllib.parse.quote(simple_branch_name, safe='')
+            
+            # 嘗試不同的 API 路徑
+            api_urls = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}"
+            ]
+            
+            for url in api_urls:
+                try:
+                    self.logger.debug(f"嘗試刪除: {url}")
+                    
+                    # 發送 DELETE 請求
+                    response = self._make_request(url, method='DELETE', timeout=30)
+                    
+                    if response.status_code in [204, 200]:  # 204 No Content 是成功刪除
+                        result['success'] = True
+                        result['message'] = f"成功刪除分支 {simple_branch_name}"
+                        self.logger.info(f"✅ {result['message']}")
+                        return result
+                    elif response.status_code == 404:
+                        self.logger.debug(f"  404 - 分支不存在")
+                        continue
+                    elif response.status_code == 405:
+                        result['message'] = f"無法刪除分支 {simple_branch_name} - 可能是受保護的分支"
+                        self.logger.warning(result['message'])
+                        return result
+                    elif response.status_code == 403:
+                        result['message'] = f"權限不足 - 無法刪除分支 {simple_branch_name}"
+                        self.logger.error(result['message'])
+                        return result
+                    else:
+                        self.logger.debug(f"  狀態碼: {response.status_code}")
+                        continue
+                        
+                except Exception as e:
+                    self.logger.debug(f"  異常: {str(e)}")
+                    continue
+            
+            # 如果所有方法都失敗，可能是分支不存在
+            result['message'] = f"分支 {simple_branch_name} 不存在或無法刪除"
+            self.logger.warning(result['message'])
+            return result
+            
+        except Exception as e:
+            result['message'] = f"刪除分支發生錯誤: {str(e)}"
+            self.logger.error(result['message'])
+            return result
+
+    def update_branch(self, project_name: str, branch_name: str, new_revision: str, force: bool = False) -> Dict[str, Any]:
+        """
+        更新/取代分支指向新的 revision
+        
+        Args:
+            project_name: 專案名稱
+            branch_name: 分支名稱
+            new_revision: 新的 revision (commit hash)
+            force: 是否強制更新（允許非快進式更新）
+            
+        Returns:
+            包含 success 和 message 的字典
+        """
+        result = {
+            'success': False,
+            'message': '',
+            'old_revision': '',
+            'new_revision': ''
+        }
+        
+        try:
+            # 處理分支名稱格式
+            if branch_name.startswith('refs/heads/'):
+                simple_branch_name = branch_name[11:]
+            else:
+                simple_branch_name = branch_name
+            
+            self.logger.info(f"更新分支: {project_name}/{simple_branch_name}")
+            self.logger.info(f"  新 Revision: {new_revision[:8]}")
+            self.logger.info(f"  強制更新: {force}")
+            
+            # 先檢查分支是否存在並取得當前 revision
+            branch_info = self.check_branch_exists_and_get_revision(project_name, simple_branch_name)
+            
+            if not branch_info['exists']:
+                result['message'] = f"分支 {simple_branch_name} 不存在"
+                self.logger.warning(result['message'])
+                return result
+            
+            result['old_revision'] = branch_info['revision']
+            
+            # 如果新舊 revision 相同，不需要更新
+            if result['old_revision'] == new_revision[:8]:
+                result['success'] = True
+                result['new_revision'] = new_revision[:8]
+                result['message'] = f"分支 {simple_branch_name} 已經指向 {new_revision[:8]}"
+                self.logger.info(result['message'])
+                return result
+            
+            if force:
+                # 強制更新：先刪除再建立
+                self.logger.info("執行強制更新（刪除並重建分支）")
+                
+                # 刪除舊分支
+                delete_result = self.delete_branch(project_name, simple_branch_name)
+                if not delete_result['success']:
+                    result['message'] = f"無法刪除舊分支: {delete_result['message']}"
+                    self.logger.error(result['message'])
+                    return result
+                
+                # 建立新分支
+                create_result = self.create_branch(project_name, simple_branch_name, new_revision)
+                if create_result['success']:
+                    result['success'] = True
+                    result['new_revision'] = new_revision[:8]
+                    result['message'] = f"成功強制更新分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
+                    self.logger.info(f"✅ {result['message']}")
+                else:
+                    result['message'] = f"重新建立分支失敗: {create_result['message']}"
+                    self.logger.error(result['message'])
+                    # 嘗試恢復原分支
+                    self.logger.warning(f"嘗試恢復原分支到 {result['old_revision']}")
+                    restore_result = self.create_branch(project_name, simple_branch_name, result['old_revision'])
+                    if restore_result['success']:
+                        self.logger.info("成功恢復原分支")
+                    else:
+                        self.logger.error("無法恢復原分支！")
+            else:
+                # 嘗試直接更新（只允許快進式更新）
+                self.logger.info("嘗試快進式更新")
+                
+                import urllib.parse
+                import json
+                
+                encoded_project = urllib.parse.quote(project_name, safe='')
+                encoded_branch = urllib.parse.quote(simple_branch_name, safe='')
+                
+                # 準備請求資料
+                data = json.dumps({'revision': new_revision})
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+                
+                # 嘗試不同的 API 路徑
+                api_urls = [
+                    f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
+                    f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
+                    f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}"
+                ]
+                
+                for url in api_urls:
+                    try:
+                        self.logger.debug(f"嘗試更新: {url}")
+                        
+                        # 使用 PUT 方法更新分支
+                        response = self.session.put(url, data=data, headers=headers, timeout=30)
+                        
+                        if response.status_code in [200, 201]:
+                            result['success'] = True
+                            result['new_revision'] = new_revision[:8]
+                            result['message'] = f"成功更新分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
+                            self.logger.info(f"✅ {result['message']}")
+                            return result
+                        elif response.status_code == 409:
+                            self.logger.warning(f"  409 衝突 - 可能需要強制更新 (force=True)")
+                            result['message'] = f"更新失敗 - 非快進式更新需要 force=True"
+                            continue
+                        else:
+                            self.logger.debug(f"  狀態碼: {response.status_code}")
+                            continue
+                            
+                    except Exception as e:
+                        self.logger.debug(f"  異常: {str(e)}")
+                        continue
+                
+                # 如果所有方法都失敗
+                if not result['success']:
+                    result['message'] = f"更新分支失敗 - 可能需要強制更新 (force=True)"
+                    self.logger.warning(result['message'])
+                    
+            return result
+            
+        except Exception as e:
+            result['message'] = f"更新分支發生錯誤: {str(e)}"
+            self.logger.error(result['message'])
+            return result
+            
