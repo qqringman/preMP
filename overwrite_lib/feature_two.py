@@ -690,7 +690,7 @@ class FeatureTwo:
     
     def _determine_revision_type(self, revision: str) -> str:
         """
-        判斷 revision 是 branch 還是 tag
+        判斷 revision 是 branch 還是 tag - 修正版本
         
         Args:
             revision: revision 字串
@@ -705,31 +705,59 @@ class FeatureTwo:
         if revision.startswith('refs/tags/'):
             return 'Tag'
         
-        # 常見的 tag 關鍵字
+        # 🔥 修正：更精確的 tag 關鍵字判斷
+        revision_lower = revision.lower()
+        
+        # 常見的 tag 關鍵字（移除容易誤判的 android-）
         tag_keywords = [
             'release', 'tag', 'v1.', 'v2.', 'v3.', 'v4.', 'v5.',
             'stable', 'final', 'rc', 'beta', 'alpha',
-            'android-', 'aosp-', 'platform-',
+            'aosp-', 'platform-',  # 🔥 移除 'android-'
             '.release', '-release', '_release'
         ]
-        
-        revision_lower = revision.lower()
         
         # 檢查是否包含 tag 關鍵字
         for keyword in tag_keywords:
             if keyword in revision_lower:
                 return 'Tag'
         
-        # 檢查版本號格式 (如 v1.0.0, 12.0.1)
+        # 🔥 新增：更精確的 Android tag 版本號格式檢查
+        # Android tag 通常格式為：android-12.0.0_r1, android-13-qpr1-d-beta-1 等
+        import re
+        android_tag_patterns = [
+            r'android-\d+\.\d+\.\d+',  # android-12.0.0
+            r'android-\d+-.*-release',  # android-13-xxx-release
+            r'android-\d+-.*-beta',     # android-13-xxx-beta
+            r'android-\d+-.*-rc',       # android-13-xxx-rc
+            r'android-\d+\.\d+\.\d+_r\d+',  # android-12.0.0_r1
+        ]
+        
+        for pattern in android_tag_patterns:
+            if re.search(pattern, revision_lower):
+                return 'Tag'
+        
+        # 🔥 分支格式檢查：包含斜線的通常是分支
+        if '/' in revision:
+            # 檢查是否為明顯的分支格式
+            branch_indicators = [
+                '/master', '/main', '/develop', '/dev',
+                '/premp', '/mp', '/wave', '/backup',
+                'realtek/', 'refs/heads/'
+            ]
+            
+            for indicator in branch_indicators:
+                if indicator in revision_lower:
+                    return 'Branch'
+        
+        # 檢查版本號格式 (如 v1.0.0, 12.0.1) - 但排除明顯的分支
         version_patterns = [
-            r'v?\d+\.\d+',  # v1.0, 1.0
-            r'v?\d+\.\d+\.\d+',  # v1.0.0, 1.0.0
-            r'android-\d+',  # android-12
-            r'api-\d+',  # api-30
+            r'^v?\d+\.\d+$',      # v1.0, 1.0 (開頭到結尾)
+            r'^v?\d+\.\d+\.\d+$', # v1.0.0, 1.0.0 (開頭到結尾)
+            r'^api-\d+$',         # api-30 (開頭到結尾)
         ]
         
         for pattern in version_patterns:
-            if re.search(pattern, revision_lower):
+            if re.match(pattern, revision_lower):
                 return 'Tag'
         
         return 'Branch'  # 預設為 Branch
@@ -750,16 +778,9 @@ class FeatureTwo:
     
     def _add_links_to_projects(self, projects: List[Dict]) -> List[Dict]:
         """
-        為專案添加 branch/tag 連結資訊
-        🔥 修正：branch_link 使用 revision 欄位（因為很多專案沒有 dest-branch）
-        🆕 新增：revision_diff 欄位（將使用 Excel 公式）
-        🆕 新增：根據 remote 判斷 Gerrit 伺服器
-        
-        Args:
-            projects: 專案列表
-            
-        Returns:
-            包含連結資訊的專案列表
+        為專案添加 branch/tag 連結資訊 - 修正版本
+        🔥 修正：移除 effective_revision 欄位輸出
+        🔥 修正：修正 revision_type 判斷邏輯
         """
         projects_with_links = []
         
@@ -801,10 +822,10 @@ class FeatureTwo:
             
             # 🔥 建立 branch_link - 使用有效的 revision
             if link_revision:
-                # 判斷 revision 類型
+                # 🔥 修正：使用修正後的判斷邏輯
                 revision_type = self._determine_revision_type(link_revision)
                 branch_link = self._build_gerrit_link(project_name, link_revision, revision_type, remote)
-                self.logger.debug(f"為專案 {project_name} 建立 branch_link: {link_revision} -> {branch_link[:50]}...")
+                self.logger.debug(f"為專案 {project_name} 建立 branch_link: {link_revision} -> {revision_type} -> {branch_link[:50]}...")
             else:
                 branch_link = ""
                 self.logger.debug(f"專案 {project_name} 沒有有效 revision，branch_link 為空")
@@ -820,7 +841,7 @@ class FeatureTwo:
             # 實際公式會在 _write_excel_with_links 中設定
             revision_diff = ''  # 佔位符，將被 Excel 公式取代
             
-            # 添加所有欄位
+            # 添加所有欄位（🔥 移除 effective_revision）
             enhanced_project['branch_link'] = branch_link
             enhanced_project['target_branch_link'] = target_branch_link
             enhanced_project['revision_diff'] = revision_diff
@@ -844,11 +865,10 @@ class FeatureTwo:
         return projects_with_links
 
     def _write_excel_with_links(self, projects: List[Dict], duplicate_projects: List[Dict], 
-                              output_file: str, output_folder: str = None):
+                          output_file: str, output_folder: str = None):
         """
         寫入 Excel 檔案 - 包含連結功能的增強版
-        🔥 修正：branch_link 使用 revision 欄位避免空值問題
-        🆕 功能：revision_diff 使用 Excel 公式自動比對
+        🔥 修正：移除 effective_revision 欄位輸出
         """
         try:
             # 處理輸出檔案路徑
@@ -874,20 +894,14 @@ class FeatureTwo:
                 if projects:
                     df_main = pd.DataFrame(projects)
                     
-                    # 🆕 調整欄位順序：
-                    # - revision: 原始 revision（可能是 hash 或 branch name）
-                    # - effective_revision: 用於轉換的有效 revision（hash→upstream, branch→revision）
-                    # - target_branch: 轉換後分支 
-                    # - revision_diff: 比對結果（橘底白字，比對 effective_revision）
-                    # - target_branch_link: 轉換後分支連結（綠底白字）
-                    # - branch_link: 原始分支連結（藍底白字，移到最後）
+                    # 🆕 調整欄位順序（🔥 移除 effective_revision）：
                     main_column_order = [
-                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'upstream', 'dest-branch',  # 🔥 移除 effective_revision
                         'target_branch', 
                         'target_type', 
                         'target_branch_exists', 
                         'target_branch_revision',
-                        'revision_diff',  # 🆕 橘底白字，使用公式比對 effective_revision
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision（不是 effective_revision）
                         'target_branch_link'  # 綠底白字
                     ]
                     
@@ -903,9 +917,9 @@ class FeatureTwo:
                     main_column_order = [col for col in main_column_order if col in df_main.columns]
                     df_main = df_main[main_column_order]
                 else:
-                    # 空的 DataFrame 結構
+                    # 空的 DataFrame 結構（🔥 移除 effective_revision）
                     df_main = pd.DataFrame(columns=[
-                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'upstream', 'dest-branch',  # 🔥 移除 effective_revision
                         'target_branch', 'target_type', 'target_branch_exists', 
                         'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link'
                     ])
@@ -915,18 +929,15 @@ class FeatureTwo:
                 # 頁籤 2: 重複專案
                 if duplicate_projects:
                     df_dup = pd.DataFrame(duplicate_projects)
-                    # 🆕 移除這裡的重新編號，因為已經在 _renumber_projects 處理過了
                     
-                    # 🆕 重複頁籤也使用相同的欄位順序
-                    # - branch_link（原始分支連結）在最後
-                    # - target_branch_link（轉換後分支連結）在 revision_diff 右邊
+                    # 🆕 重複頁籤也使用相同的欄位順序（🔥 移除 effective_revision）
                     dup_column_order = [
-                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'upstream', 'dest-branch',  # 🔥 移除 effective_revision
                         'target_branch',
                         'target_type',
                         'target_branch_exists',
                         'target_branch_revision',
-                        'revision_diff',  # 🆕 橘底白字，使用公式比對 effective_revision
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision（不是 effective_revision）
                         'target_branch_link'  # 綠底白字
                     ]
                     
@@ -959,11 +970,7 @@ class FeatureTwo:
     def _set_revision_diff_formulas(self, writer):
         """
         設定 revision_diff 欄位的 Excel 公式
-        🔥 修正：比對 effective_revision 前8碼與 target_branch_revision
-        公式邏輯：
-        - 相同顯示 "N" (綠色)
-        - 不同顯示 "Y" (紅色)  
-        - 任一為空或 "-" 顯示 "Y" (紅色)
+        🔥 修正：比對 revision 前8碼與 target_branch_revision（不再使用 effective_revision）
         """
         try:
             from openpyxl.utils import get_column_letter
@@ -975,30 +982,21 @@ class FeatureTwo:
                 worksheet = writer.sheets[sheet_name]
                 
                 # 找到各欄位的位置
-                effective_revision_col = None
+                revision_col = None  # 🔥 改為使用 revision 欄位
                 target_revision_col = None
                 revision_diff_col = None
                 
                 for col_num, cell in enumerate(worksheet[1], 1):
                     header = str(cell.value) if cell.value else ''
-                    if header == 'effective_revision':
-                        effective_revision_col = col_num
+                    if header == 'revision':  # 🔥 直接使用 revision 欄位
+                        revision_col = col_num
                     elif header == 'target_branch_revision':
                         target_revision_col = col_num
                     elif header == 'revision_diff':
                         revision_diff_col = col_num
                 
-                # 🔥 如果沒有 effective_revision 欄位，嘗試使用 revision 欄位
-                if not effective_revision_col:
-                    for col_num, cell in enumerate(worksheet[1], 1):
-                        header = str(cell.value) if cell.value else ''
-                        if header == 'revision':
-                            effective_revision_col = col_num
-                            self.logger.info(f"使用 revision 欄位代替 effective_revision 進行比對")
-                            break
-                
-                if effective_revision_col and target_revision_col and revision_diff_col:
-                    effective_letter = get_column_letter(effective_revision_col)
+                if revision_col and target_revision_col and revision_diff_col:
+                    revision_letter = get_column_letter(revision_col)
                     target_letter = get_column_letter(target_revision_col)
                     diff_letter = get_column_letter(revision_diff_col)
                     
@@ -1006,19 +1004,19 @@ class FeatureTwo:
                     worksheet.column_dimensions[diff_letter].width = 12
                     
                     for row_num in range(2, worksheet.max_row + 1):
-                        # 🔥 修改公式邏輯：比對 effective_revision（或 revision）前8碼
+                        # 🔥 修改公式邏輯：比對 revision 前8碼
                         formula = (
                             f'=IF(OR({target_letter}{row_num}="-", '
                             f'{target_letter}{row_num}="", '
-                            f'{effective_letter}{row_num}=""), '
+                            f'{revision_letter}{row_num}=""), '
                             f'"Y", '  # 空值顯示 Y
-                            f'IF(LEFT({effective_letter}{row_num},8)={target_letter}{row_num}, '
+                            f'IF(LEFT({revision_letter}{row_num},8)={target_letter}{row_num}, '
                             f'"N", "Y"))'  # 相同顯示 N，不同顯示 Y
                         )
                         
                         worksheet[f"{diff_letter}{row_num}"].value = formula
                     
-                    self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式（使用 effective_revision）")
+                    self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式（使用 revision 欄位）")
                 else:
                     self.logger.warning(f"無法為 '{sheet_name}' 頁籤設定公式，缺少必要欄位")
                     
