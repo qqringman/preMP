@@ -1200,17 +1200,20 @@ class FeatureTwo:
     # ============================================
 
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
-                        force_update: bool = False) -> List[Dict]:
+                    force_update: bool = False) -> List[Dict]:
         """
-        建立分支並返回結果 - 修正版 (🔥 增加 revision 欄位)
+        建立分支並返回結果 - 修正版 (🔥 只有版本不同時才建立/更新分支)
         """
         try:
             self.logger.info("開始建立分支...")
-            self.logger.info("🎯 建立邏輯：從原始 revision 創建目標 target_branch 分支")
+            self.logger.info("🎯 建立邏輯：只有當來源和目標版本不同時才建立/更新分支")
             self.logger.info(f"🆕 強制更新模式: {'啟用' if force_update else '停用'}")
             
             branch_results = []
             skipped_tags = 0
+            skipped_same_version = 0
+            updated_branches = 0
+            delete_recreate_count = 0
             prebuilt_count = 0
             normal_count = 0
             
@@ -1219,13 +1222,12 @@ class FeatureTwo:
                 target_branch = project.get('target_branch', '')
                 target_type = project.get('target_type', 'Branch')
                 revision = project.get('revision', '')  # 🔥 來源 revision
+                target_branch_revision = project.get('target_branch_revision', '')  # 目標分支 revision
                 
-                # 🔥 使用項目中已設定的 remote（由 _convert_projects 自動偵測）
+                # 🔥 使用項目中已設定的 remote
                 remote = project.get('remote', '')
                 if not remote:
-                    # 如果還是沒有，再次自動偵測
                     remote = self._auto_detect_remote(project)
-                    self.logger.debug(f"分支建立時自動偵測 remote: {project_name} -> {remote}")
                 
                 # 檢查必要資訊
                 if not all([project_name, target_branch, revision]):
@@ -1235,15 +1237,14 @@ class FeatureTwo:
                 # 跳過 Tag 類型的專案
                 if target_type == 'Tag' or self._is_tag_reference(target_branch):
                     skipped_tags += 1
-                    # 🔥 使用統一的欄位名稱，添加 revision 欄位
                     branch_result = {
                         'SN': len(branch_results) + 1,
                         'Project': project_name,
-                        'revision': revision,                # 🔥 新增：來源 revision
-                        'target_branch': target_branch,      # 🔥 小寫
-                        'target_type': 'Tag',               # 🔥 小寫
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Tag',
                         'target_branch_link': project.get('target_branch_link', ''),
-                        'target_branch_revision': revision,  # 🔥 改名
+                        'target_branch_revision': revision,
                         'Status': '跳過',
                         'Message': 'Tag 類型不建立分支',
                         'Already_Exists': '-',
@@ -1253,6 +1254,34 @@ class FeatureTwo:
                     }
                     branch_results.append(branch_result)
                     continue
+                
+                # 🔥 新邏輯：計算 revision_diff，只有不同時才建立分支
+                revision_diff = self._calculate_revision_diff(revision, target_branch_revision)
+                
+                # 🔥 如果版本相同且目標分支已存在，跳過建立
+                if revision_diff == "N":
+                    skipped_same_version += 1
+                    branch_result = {
+                        'SN': len(branch_results) + 1,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': project.get('target_branch_link', ''),
+                        'target_branch_revision': target_branch_revision,
+                        'Status': '跳過',
+                        'Message': f'版本相同，無需更新 (來源: {revision[:8]}, 目標: {target_branch_revision})',
+                        'Already_Exists': '是',
+                        'Force_Update': '否',
+                        'Remote': remote,
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)
+                    }
+                    branch_results.append(branch_result)
+                    self.logger.debug(f"⏭️ 跳過 {project_name}：版本相同 ({revision[:8]} = {target_branch_revision})")
+                    continue
+                
+                # 🔥 只有版本不同 (revision_diff = "Y") 時才建立/更新分支
+                self.logger.info(f"🔄 需要更新分支 {project_name}: {revision[:8]} → {target_branch}")
                 
                 # 根據 remote 選擇正確的 GerritManager
                 if remote == 'rtk-prebuilt':
@@ -1264,79 +1293,17 @@ class FeatureTwo:
                     normal_count += 1
                     gerrit_server = self._get_gerrit_base_url('')
                 
-                # 檢查分支是否已存在（如果不是強制更新模式）
-                branch_exists = False
-                existing_revision = ''
+                # 🔥 執行分支建立/更新
+                success, branch_result = self._create_or_update_branch_with_retry(
+                    temp_gerrit, project_name, target_branch, revision, remote, 
+                    gerrit_server, force_update, len(branch_results) + 1
+                )
                 
-                if not force_update:
-                    exists_info = self._check_target_branch_exists(project_name, target_branch, remote)
-                    branch_exists = exists_info['exists_status'] == 'Y'
-                    existing_revision = exists_info['revision']
-                    
-                    if branch_exists:
-                        # 🔥 使用統一的欄位名稱，添加 revision 欄位
-                        branch_result = {
-                            'SN': len(branch_results) + 1,
-                            'Project': project_name,
-                            'revision': revision,                # 🔥 新增：來源 revision
-                            'target_branch': target_branch,      # 🔥 小寫
-                            'target_type': 'Branch',             # 🔥 小寫
-                            'target_branch_link': project.get('target_branch_link', ''),
-                            'target_branch_revision': existing_revision,  # 🔥 改名
-                            'Status': '成功',
-                            'Message': f"分支已存在，無需建立 (當前 revision: {existing_revision})",
-                            'Already_Exists': '是',
-                            'Force_Update': '否',
-                            'Remote': remote,
-                            'Gerrit_Server': gerrit_server
-                        }
-                        branch_results.append(branch_result)
-                        continue
-                
-                # 執行分支建立/更新
-                result = temp_gerrit.create_branch(project_name, target_branch, revision)
-                
-                # 分析結果
-                success = result.get('success', False)
-                message = result.get('message', '')
-                already_exists = result.get('exists', False)
-                
-                # 根據結果判斷狀態
                 if success:
-                    if already_exists and not force_update:
-                        status = '成功'
-                        final_message = f"分支已存在且正確：{message}"
-                    elif already_exists and force_update:
-                        status = '成功'
-                        final_message = f"分支已存在，已強制更新：{message}"
-                    else:
-                        status = '成功'
-                        final_message = f"成功建立分支：{message}"
-                else:
-                    if not force_update and ("已存在" in message or "already exists" in message.lower()):
-                        status = '成功'
-                        final_message = f"分支已存在，無需建立：{message}"
-                        already_exists = True
-                    else:
-                        status = '失敗'
-                        final_message = f"建立失敗：{message}"
+                    updated_branches += 1
+                    if "刪除後重建" in branch_result.get('Message', ''):
+                        delete_recreate_count += 1
                 
-                # 🔥 使用統一的欄位名稱記錄結果，添加 revision 欄位
-                branch_result = {
-                    'SN': len(branch_results) + 1,
-                    'Project': project_name,
-                    'revision': revision,                    # 🔥 新增：來源 revision
-                    'target_branch': target_branch,          # 🔥 小寫
-                    'target_type': 'Branch',                 # 🔥 小寫
-                    'target_branch_link': project.get('target_branch_link', ''),
-                    'target_branch_revision': revision,      # 🔥 改名（這是用來建立分支的revision）
-                    'Status': status,
-                    'Message': final_message,
-                    'Already_Exists': '是' if already_exists else '否',
-                    'Force_Update': '是' if force_update else '否',
-                    'Remote': remote,
-                    'Gerrit_Server': gerrit_server
-                }
                 branch_results.append(branch_result)
                 
                 # 進度報告
@@ -1349,17 +1316,166 @@ class FeatureTwo:
             failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
             
             self.logger.info(f"🎉 分支建立完成，共處理 {len(branch_results)} 個專案")
-            self.logger.info(f"  - ✅ 成功: {success_count} 個")
+            self.logger.info(f"  - ✅ 成功更新: {success_count} 個")
             self.logger.info(f"  - ❌ 失敗: {failure_count} 個")
             self.logger.info(f"  - ⏭️ 跳過 Tag: {skipped_tags} 個")
+            self.logger.info(f"  - ⏭️ 跳過版本相同: {skipped_same_version} 個")
+            if delete_recreate_count > 0:
+                self.logger.info(f"  - 🔄 刪除後重建: {delete_recreate_count} 個")
             
-            # 🔥 返回結果供狀態頁籤使用
             return branch_results
             
         except Exception as e:
             self.logger.error(f"建立分支失敗: {str(e)}")
             return []
 
+    def _calculate_revision_diff(self, source_revision: str, target_revision: str) -> str:
+        """
+        🔥 計算 revision 差異
+        比較來源和目標 revision 的前8碼
+        
+        Returns:
+            "N": 版本相同
+            "Y": 版本不同或目標為空
+        """
+        try:
+            if not source_revision:
+                return "Y"
+            
+            if not target_revision or target_revision == "-":
+                return "Y"
+            
+            # 比較前8碼
+            source_short = source_revision[:8] if len(source_revision) >= 8 else source_revision
+            target_short = target_revision[:8] if len(target_revision) >= 8 else target_revision
+            
+            if source_short == target_short:
+                return "N"  # 相同
+            else:
+                return "Y"  # 不同
+                
+        except Exception as e:
+            self.logger.debug(f"計算 revision_diff 失敗: {str(e)}")
+            return "Y"  # 出錯時當作不同處理
+            
+    def _create_or_update_branch_with_retry(self, gerrit_manager, project_name: str, 
+                                        target_branch: str, revision: str, remote: str,
+                                        gerrit_server: str, force_update: bool, sn: int) -> tuple:
+        """
+        🔥 建立或更新分支，失敗時嘗試刪除後重建（使用現有 API）
+        
+        Returns:
+            (success: bool, branch_result: dict)
+        """
+        try:
+            # 第一次嘗試：直接建立分支
+            result = gerrit_manager.create_branch(project_name, target_branch, revision)
+            
+            success = result.get('success', False)
+            message = result.get('message', '')
+            already_exists = result.get('exists', False)
+            
+            # 如果成功，直接返回
+            if success:
+                if already_exists:
+                    status = '成功'
+                    final_message = f"分支已更新：{message}"
+                else:
+                    status = '成功'
+                    final_message = f"成功建立分支：{message}"
+                    
+                branch_result = {
+                    'SN': sn,
+                    'Project': project_name,
+                    'revision': revision,
+                    'target_branch': target_branch,
+                    'target_type': 'Branch',
+                    'target_branch_link': '',
+                    'target_branch_revision': revision,
+                    'Status': status,
+                    'Message': final_message,
+                    'Already_Exists': '是' if already_exists else '否',
+                    'Force_Update': '是' if force_update else '否',
+                    'Remote': remote,
+                    'Gerrit_Server': gerrit_server
+                }
+                return True, branch_result
+            
+            # 🔥 如果失敗且是因為分支已存在，且在強制更新模式下
+            if (not success and force_update and 
+                ("已存在" in message or "already exists" in message.lower())):
+                
+                self.logger.info(f"🔄 分支建立失敗，嘗試刪除後重建: {project_name}/{target_branch}")
+                
+                # 🔥 使用現有的 delete_branch API
+                delete_result = gerrit_manager.delete_branch(project_name, target_branch)
+                
+                if delete_result.get('success', False):
+                    self.logger.info(f"✅ 成功刪除分支: {project_name}/{target_branch}")
+                    
+                    # 🔥 重新建立分支（使用現有的 create_branch API）
+                    recreate_result = gerrit_manager.create_branch(project_name, target_branch, revision)
+                    
+                    if recreate_result.get('success', False):
+                        branch_result = {
+                            'SN': sn,
+                            'Project': project_name,
+                            'revision': revision,
+                            'target_branch': target_branch,
+                            'target_type': 'Branch',
+                            'target_branch_link': '',
+                            'target_branch_revision': revision,
+                            'Status': '成功',
+                            'Message': f"刪除後重建成功：{recreate_result.get('message', '')}",
+                            'Already_Exists': '否',
+                            'Force_Update': '是',
+                            'Remote': remote,
+                            'Gerrit_Server': gerrit_server
+                        }
+                        return True, branch_result
+                    else:
+                        final_message = f"刪除成功但重建失敗：{recreate_result.get('message', '')}"
+                else:
+                    final_message = f"刪除分支失敗：{delete_result.get('message', '')}"
+            else:
+                final_message = f"建立失敗：{message}"
+            
+            # 失敗情況
+            branch_result = {
+                'SN': sn,
+                'Project': project_name,
+                'revision': revision,
+                'target_branch': target_branch,
+                'target_type': 'Branch',
+                'target_branch_link': '',
+                'target_branch_revision': revision,
+                'Status': '失敗',
+                'Message': final_message,
+                'Already_Exists': '-',
+                'Force_Update': '是' if force_update else '否',
+                'Remote': remote,
+                'Gerrit_Server': gerrit_server
+            }
+            return False, branch_result
+            
+        except Exception as e:
+            branch_result = {
+                'SN': sn,
+                'Project': project_name,
+                'revision': revision,
+                'target_branch': target_branch,
+                'target_type': 'Branch',
+                'target_branch_link': '',
+                'target_branch_revision': revision,
+                'Status': '失敗',
+                'Message': f"建立分支異常：{str(e)}",
+                'Already_Exists': '-',
+                'Force_Update': '是' if force_update else '否',
+                'Remote': remote,
+                'Gerrit_Server': gerrit_server
+            }
+            return False, branch_result
+            
     # ============================================
     # 以下方法保持不變...
     # ============================================
