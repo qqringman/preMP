@@ -3,6 +3,9 @@
 建立一張 mapping 的 branch table (manifest_projects.xlsx) 並建立相關 branch (可選)
 新增：支援 refs/tags/ 的 Tag 處理邏輯 + branch/tag 連結功能
 修正：branch_link 使用 dest-branch 欄位並移到最後一欄
+🔥 修正：master_vs_premp 使用 feature_three.py 的完整轉換邏輯
+🔥 修正：當 revision 為空且 remote=rtk 時，使用 default revision
+⚠️  重要：feature_three.py 也需要同步相同的 default revision 處理邏輯！
 """
 import os
 import xml.etree.ElementTree as ET
@@ -10,6 +13,7 @@ import pandas as pd
 from typing import Dict, List, Any, Optional, Tuple
 import utils
 import sys
+import re
 
 # 加入上一層目錄到路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,11 +34,12 @@ except ImportError:
     from excel_handler import ExcelHandler
 
 from gerrit_manager import GerritManager
+import config
 
 logger = utils.setup_logger(__name__)
 
 class FeatureTwo:
-    """功能二：建立分支映射表 - 增強版 (支援 Tag + 連結功能)"""
+    """功能二：建立分支映射表 - 增強版 (支援 Tag + 連結功能 + 完整 master_to_premp 轉換邏輯)"""
     
     def __init__(self):
         self.logger = logger
@@ -80,7 +85,7 @@ class FeatureTwo:
             
             self.logger.info(f"成功解析 {len(projects)} 個專案")
             
-            # 步驟 2: 轉換專案（使用原有邏輯）
+            # 步驟 2: 轉換專案（使用新的邏輯）
             converted_projects = self._convert_projects(projects, process_type, check_branch_exists)
             
             # 步驟 3: 🆕 添加連結資訊
@@ -110,6 +115,362 @@ class FeatureTwo:
             self.logger.error(f"功能二執行失敗: {str(e)}")
             return False
 
+    # ============================================
+    # 🔥 新增：從 feature_three.py 移植的轉換邏輯
+    # ============================================
+
+    def _should_skip_revision_conversion(self, revision: str) -> bool:
+        """
+        判斷是否應該跳過 revision 轉換 - 與 feature_three.py 完全同步
+        
+        Args:
+            revision: 原始 revision
+            
+        Returns:
+            是否應該跳過轉換
+        """
+        if not revision:
+            return True
+        
+        # 🆕 跳過 Google 開頭的項目
+        if revision.startswith('google/'):
+            return True
+        
+        # 跳過 refs/tags/
+        if revision.startswith('refs/tags/'):
+            return True
+        
+        return False
+
+    def _smart_conversion_fallback(self, revision: str) -> str:
+        """
+        智能轉換備案 - 當沒有精確規則時使用 - 與 feature_three.py 完全同步
+        
+        Args:
+            revision: 原始 revision
+            
+        Returns:
+            轉換後的 revision
+        """
+        # 如果包含 mp.google-refplus，嘗試替換為 premp.google-refplus
+        if 'mp.google-refplus' in revision:
+            # 保留原始路徑，只替換關鍵字
+            result = revision.replace('mp.google-refplus', 'premp.google-refplus')
+            self.logger.debug(f"智能替換 mp→premp: {revision} → {result}")
+            return result
+        
+        # 如果是 master 但沒有匹配到特定規則，使用預設轉換
+        if '/master' in revision and 'realtek/' in revision:
+            # 提取 android 版本（如果有）
+            android_match = re.search(r'android-(\d+)', revision)
+            if android_match:
+                android_ver = android_match.group(1)
+                result = f'realtek/android-{android_ver}/premp.google-refplus'
+                self.logger.debug(f"智能Android版本轉換: {revision} → {result}")
+                return result
+            else:
+                result = 'realtek/android-14/premp.google-refplus'
+                self.logger.debug(f"智能預設轉換: {revision} → {result}")
+                return result
+        
+        # 如果完全沒有匹配，返回預設值
+        result = 'realtek/android-14/premp.google-refplus'
+        self.logger.debug(f"備案預設轉換: {revision} → {result}")
+        return result
+
+    def _convert_master_to_premp(self, revision: str) -> str:
+        """
+        master → premp 轉換規則 - 從 feature_three.py 完全移植
+        
+        Args:
+            revision: 原始 revision
+            
+        Returns:
+            轉換後的 revision
+        """
+        if not revision:
+            return revision
+        
+        original_revision = revision.strip()
+        
+        # 🆕 跳過 Google 開頭的項目（如 google/u-tv-keystone-rtk-refplus-wave4-release）
+        if original_revision.startswith('google/'):
+            self.logger.debug(f"跳過 Google 項目: {original_revision}")
+            return original_revision
+        
+        # 🆕 跳過特殊項目
+        if self._should_skip_revision_conversion(original_revision):
+            return original_revision
+        
+        # 🆕 精確匹配轉換規則（優先級最高）
+        exact_mappings = {
+            # 基本 master 分支轉換
+            'realtek/master': 'realtek/android-14/premp.google-refplus',
+            'realtek/gaia': 'realtek/android-14/premp.google-refplus',
+            'realtek/gki/master': 'realtek/android-14/premp.google-refplus',
+            
+            # Android 14 主要分支
+            'realtek/android-14/master': 'realtek/android-14/premp.google-refplus',
+            
+            # 🔥 修正：Linux kernel android master 分支轉換（保留 linux 路徑）
+            'realtek/linux-5.15/android-14/master': 'realtek/linux-5.15/android-14/premp.google-refplus',
+            'realtek/linux-4.14/android-14/master': 'realtek/linux-4.14/android-14/premp.google-refplus',
+            'realtek/linux-5.4/android-14/master': 'realtek/linux-5.4/android-14/premp.google-refplus',
+            'realtek/linux-5.10/android-14/master': 'realtek/linux-5.10/android-14/premp.google-refplus',
+            'realtek/linux-6.1/android-14/master': 'realtek/linux-6.1/android-14/premp.google-refplus',
+            
+            # 🔥 修正：直接的 mp.google-refplus 轉換（需要加上 android-14）
+            'realtek/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+            
+            # 其他常見的轉換
+            'realtek/android-14/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+        }
+        
+        # 檢查精確匹配
+        if original_revision in exact_mappings:
+            self.logger.debug(f"精確匹配轉換: {original_revision} → {exact_mappings[original_revision]}")
+            return exact_mappings[original_revision]
+        
+        # 🆕 模式匹配轉換規則（使用正規表達式）
+        
+        # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
+        pattern1 = r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)\.(rtd\w+)'
+        match1 = re.match(pattern1, original_revision)
+        if match1:
+            android_ver, upgrade_ver, rtd_chip = match1.groups()
+            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}.{rtd_chip}'
+            self.logger.debug(f"模式1轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 2: mp.google-refplus.upgrade-11 → premp.google-refplus.upgrade-11
+        pattern2 = r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)$'
+        match2 = re.match(pattern2, original_revision)
+        if match2:
+            android_ver, upgrade_ver = match2.groups()
+            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}'
+            self.logger.debug(f"模式2轉換: {original_revision} → {result}")
+            return result
+        
+        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-14/premp.google-refplus（修正版）
+        pattern3 = r'realtek/linux-([\d.]+)/master$'
+        match3 = re.match(pattern3, original_revision)
+        if match3:
+            linux_ver = match3.group(1)
+            result = f'realtek/linux-{linux_ver}/android-14/premp.google-refplus'
+            self.logger.debug(f"模式3轉換（Linux master）: {original_revision} → {result}")
+            return result
+        
+        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-Y/premp.google-refplus（修正版）
+        pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/master$'
+        match4 = re.match(pattern4, original_revision)
+        if match4:
+            linux_ver, android_ver = match4.groups()
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式4轉換（Linux Android master）: {original_revision} → {result}")
+            return result
+        
+        # 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-Y/premp.google-refplus
+        pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
+        match5 = re.match(pattern5, original_revision)
+        if match5:
+            linux_ver, android_ver = match5.groups()
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式5轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-Y/premp.google-refplus.rtdXXXX
+        pattern6 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
+        match6 = re.match(pattern6, original_revision)
+        if match6:
+            linux_ver, android_ver, rtd_chip = match6.groups()
+            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            self.logger.debug(f"模式6轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 7: android-Y/mp.google-refplus → android-Y/premp.google-refplus
+        pattern7 = r'realtek/android-(\d+)/mp\.google-refplus$'
+        match7 = re.match(pattern7, original_revision)
+        if match7:
+            android_ver = match7.group(1)
+            result = f'realtek/android-{android_ver}/premp.google-refplus'
+            self.logger.debug(f"模式7轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 8: android-Y/mp.google-refplus.rtdXXXX → android-Y/premp.google-refplus.rtdXXXX
+        pattern8 = r'realtek/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
+        match8 = re.match(pattern8, original_revision)
+        if match8:
+            android_ver, rtd_chip = match8.groups()
+            result = f'realtek/android-{android_ver}/premp.google-refplus.{rtd_chip}'
+            self.logger.debug(f"模式8轉換: {original_revision} → {result}")
+            return result
+        
+        # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX
+        chip_mappings = getattr(config, 'CHIP_TO_RTD_MAPPING', {
+            'mac7p': 'rtd2851a',
+            'mac8q': 'rtd2851f', 
+            'mac9p': 'rtd2895p',
+            'merlin7': 'rtd6748',
+            'merlin8': 'rtd2885p',
+            'merlin8p': 'rtd2885q',
+            'merlin9': 'rtd2875q',
+        })
+        
+        for chip, rtd_model in chip_mappings.items():
+            if f'realtek/{chip}/master' == original_revision:
+                result = f'realtek/android-14/premp.google-refplus.{rtd_model}'
+                self.logger.debug(f"晶片轉換: {original_revision} → {result}")
+                return result
+        
+        # 規則 10: v3.16 版本轉換
+        pattern10 = r'realtek/v3\.16/mp\.google-refplus$'
+        if re.match(pattern10, original_revision):
+            result = 'realtek/v3.16/premp.google-refplus'
+            self.logger.debug(f"v3.16轉換: {original_revision} → {result}")
+            return result
+        
+        # 🆕 如果沒有匹配的規則，根據關鍵字進行智能轉換
+        smart_result = self._smart_conversion_fallback(original_revision)
+        self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
+        return smart_result
+
+    def _convert_premp_to_mp(self, revision: str) -> str:
+        """premp → mp 轉換規則"""
+        # 將 premp.google-refplus 關鍵字替換為 mp.google-refplus.wave
+        return revision.replace('premp.google-refplus', 'mp.google-refplus.wave')
+    
+    def _convert_mp_to_mpbackup(self, revision: str) -> str:
+        """mp → mpbackup 轉換規則"""
+        # 將 mp.google-refplus.wave 關鍵字替換為 mp.google-refplus.wave.backup
+        return revision.replace('mp.google-refplus.wave', 'mp.google-refplus.wave.backup')
+
+    # ============================================
+    # 🔥 修改的轉換邏輯
+    # ============================================
+
+    def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False) -> List[Dict]:
+        """轉換專案的分支名稱 - 增強版 (支援 Tag 和 remote 判斷 + 完整 master_to_premp 轉換邏輯)"""
+        converted_projects = []
+        tag_count = 0
+        branch_count = 0
+        
+        self.logger.info(f"🔄 開始轉換專案分支，處理類型: {process_type}")
+        
+        for i, project in enumerate(projects, 1):
+            converted_project = project.copy()
+            converted_project['SN'] = i
+            
+            # 🆕 取得 remote 資訊
+            remote = project.get('remote', '')
+            
+            # 🔥 修正：使用 revision 進行轉換，而不是 dest-branch 或 upstream
+            source_revision = project.get('revision', '')
+            
+            # 如果沒有 revision，跳過轉換
+            if not source_revision:
+                target_branch = ''
+                self.logger.debug(f"專案 {project.get('name', '')} 沒有 revision，跳過轉換")
+            else:
+                # 🔥 根據處理類型進行轉換
+                target_branch = self._convert_revision_by_type(source_revision, process_type)
+                
+                if target_branch != source_revision:
+                    self.logger.debug(f"專案 {project.get('name', '')} 轉換: {source_revision} → {target_branch}")
+            
+            converted_project['target_branch'] = target_branch
+            
+            # 判斷目標是 Tag 還是 Branch
+            is_tag = self._is_tag_reference(target_branch)
+            converted_project['target_type'] = 'Tag' if is_tag else 'Branch'
+            
+            if is_tag:
+                tag_count += 1
+            else:
+                branch_count += 1
+            
+            # 根據參數決定是否檢查存在性
+            if check_branch_exists and target_branch:
+                if is_tag:
+                    # 檢查 Tag 存在性（傳入 remote）
+                    exists_info = self._check_target_tag_exists(project.get('name', ''), target_branch, remote)
+                else:
+                    # 檢查 Branch 存在性（傳入 remote）
+                    exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch, remote)
+                
+                converted_project['target_branch_exists'] = exists_info['exists_status']
+                converted_project['target_branch_revision'] = exists_info['revision']
+            else:
+                converted_project['target_branch_exists'] = '-'  # 未檢查
+                converted_project['target_branch_revision'] = '-'  # 未檢查
+            
+            converted_projects.append(converted_project)
+            
+            # 每100個項目顯示進度
+            if check_branch_exists and i % 100 == 0:
+                self.logger.info(f"已處理 {i}/{len(projects)} 個專案的存在性檢查")
+        
+        self.logger.info(f"轉換完成 - Branch: {branch_count}, Tag: {tag_count}")
+        return converted_projects
+
+    def _convert_revision_by_type(self, revision: str, process_type: str) -> str:
+        """
+        🔥 新版本：根據處理類型轉換 revision - 使用完整的轉換邏輯
+        
+        Args:
+            revision: 原始 revision
+            process_type: 處理類型
+            
+        Returns:
+            轉換後的 revision
+        """
+        try:
+            if not revision:
+                return ''
+            
+            # 如果是 Tag 參考，直接返回不做轉換
+            if self._is_tag_reference(revision):
+                self.logger.debug(f"檢測到 Tag 參考，保持原樣: {revision}")
+                return revision
+            
+            # 🔥 根據處理類型進行轉換，使用完整的轉換邏輯
+            if process_type == 'master_vs_premp':
+                # 使用完整的 master → premp 轉換邏輯
+                return self._convert_master_to_premp(revision)
+                
+            elif process_type == 'premp_vs_mp':
+                # premp → mp
+                return self._convert_premp_to_mp(revision)
+                
+            elif process_type == 'mp_vs_mpbackup':
+                # mp → mpbackup
+                return self._convert_mp_to_mpbackup(revision)
+            
+            # 如果沒有匹配的處理類型，返回原值
+            return revision
+            
+        except Exception as e:
+            self.logger.error(f"轉換 revision 失敗: {revision}, 錯誤: {str(e)}")
+            return revision
+
+    def _convert_branch_by_type(self, project: Dict, process_type: str) -> str:
+        """
+        🔥 保留舊版方法但重定向到新的轉換邏輯
+        
+        Args:
+            project: 專案字典
+            process_type: 處理類型
+            
+        Returns:
+            轉換後的分支名稱
+        """
+        # 取得 revision 進行轉換
+        revision = project.get('revision', '')
+        return self._convert_revision_by_type(revision, process_type)
+
+    # ============================================
+    # 以下方法保持不變，只是為了完整性而包含
+    # ============================================
+
     def _get_gerrit_base_url(self, remote: str) -> str:
         """
         🆕 根據 remote 取得對應的 Gerrit base URL
@@ -121,7 +482,6 @@ class FeatureTwo:
             對應的 Gerrit base URL
         """
         try:
-            import config
             if remote == 'rtk-prebuilt':
                 # 使用 prebuilt 專用的 Gerrit 伺服器
                 return getattr(config, 'GERRIT_PREBUILT_URL', 'https://mm2sd-git2.rtkbf.com')
@@ -250,7 +610,6 @@ class FeatureTwo:
                 return 'Tag'
         
         # 檢查版本號格式 (如 v1.0.0, 12.0.1)
-        import re
         version_patterns = [
             r'v?\d+\.\d+',  # v1.0, 1.0
             r'v?\d+\.\d+\.\d+',  # v1.0.0, 1.0.0
@@ -281,7 +640,7 @@ class FeatureTwo:
     def _add_links_to_projects(self, projects: List[Dict]) -> List[Dict]:
         """
         為專案添加 branch/tag 連結資訊
-        🆕 修正：branch_link 使用 dest-branch 欄位
+        🔥 修正：branch_link 使用 revision 欄位（因為很多專案沒有 dest-branch）
         🆕 新增：revision_diff 欄位（將使用 Excel 公式）
         🆕 新增：根據 remote 判斷 Gerrit 伺服器
         
@@ -293,6 +652,10 @@ class FeatureTwo:
         """
         projects_with_links = []
         
+        # 🔥 調試資訊：統計欄位使用情況
+        revision_count = 0
+        dest_branch_count = 0
+        
         for project in projects:
             enhanced_project = project.copy()
             
@@ -301,11 +664,25 @@ class FeatureTwo:
             # 🆕 取得 remote 資訊
             remote = project.get('remote', '')
             
-            # 🆕 修正：branch_link 應該使用 dest-branch 欄位
+            # 🔥 修正：branch_link 使用 revision 欄位（原始分支），因為 dest-branch 經常是空的
+            revision = project.get('revision', '')
             dest_branch = project.get('dest-branch', '')
             
-            # 🆕 建立 branch_link - 使用 dest-branch（傳入 remote）
-            branch_link = self._build_gerrit_link_from_dest_branch(project_name, dest_branch, remote)
+            # 🔥 統計欄位使用情況
+            if revision:
+                revision_count += 1
+            if dest_branch:
+                dest_branch_count += 1
+            
+            # 🔥 建立 branch_link - 使用 revision（原始分支的連結）
+            if revision:
+                # 判斷 revision 類型
+                revision_type = self._determine_revision_type(revision)
+                branch_link = self._build_gerrit_link(project_name, revision, revision_type, remote)
+                self.logger.debug(f"為專案 {project_name} 建立 branch_link: {revision} -> {branch_link[:50]}...")
+            else:
+                branch_link = ""
+                self.logger.debug(f"專案 {project_name} 沒有 revision，branch_link 為空")
             
             # 目標 branch 資訊（保持不變）
             target_branch = project.get('target_branch', '')
@@ -326,11 +703,19 @@ class FeatureTwo:
             projects_with_links.append(enhanced_project)
         
         self.logger.info(f"已為 {len(projects_with_links)} 個專案添加連結資訊")
+        self.logger.info(f"🔗 branch_link 使用 revision 欄位，target_branch_link 使用轉換後的 target_branch")
+        self.logger.info(f"📊 欄位統計: revision 欄位有值: {revision_count}, dest-branch 欄位有值: {dest_branch_count}")
+        if revision_count > dest_branch_count:
+            self.logger.info(f"✅ 修正說明: 使用 revision 而非 dest-branch 可以避免大部分 branch_link 為空的問題")
         return projects_with_links
 
     def _write_excel_with_links(self, projects: List[Dict], duplicate_projects: List[Dict], 
                               output_file: str, output_folder: str = None):
-        """寫入 Excel 檔案 - 包含連結功能的增強版（branch_link 移到最後，revision_diff 使用公式）"""
+        """
+        寫入 Excel 檔案 - 包含連結功能的增強版
+        🔥 修正：branch_link 使用 revision 欄位避免空值問題
+        🆕 功能：revision_diff 使用 Excel 公式自動比對
+        """
         try:
             # 處理輸出檔案路徑
             if not output_file:
@@ -355,7 +740,12 @@ class FeatureTwo:
                 if projects:
                     df_main = pd.DataFrame(projects)
                     
-                    # 🆕 調整欄位順序：branch_link 移到最後，revision_diff 在 target_branch_revision 右邊
+                    # 🆕 調整欄位順序：
+                    # - revision: 原始分支
+                    # - target_branch: 轉換後分支 
+                    # - revision_diff: 比對結果（橘底白字，使用公式比對 revision）
+                    # - target_branch_link: 轉換後分支連結（綠底白字）
+                    # - branch_link: 原始分支連結（藍底白字，移到最後）
                     main_column_order = [
                         'SN', 'name', 'revision', 'upstream', 'dest-branch',
                         'target_branch', 
@@ -392,7 +782,9 @@ class FeatureTwo:
                     df_dup = pd.DataFrame(duplicate_projects)
                     # 🆕 移除這裡的重新編號，因為已經在 _renumber_projects 處理過了
                     
-                    # 🆕 重複頁籤也使用相同的欄位順序（branch_link 在最後）
+                    # 🆕 重複頁籤也使用相同的欄位順序
+                    # - branch_link（原始分支連結）在最後
+                    # - target_branch_link（轉換後分支連結）在 revision_diff 右邊
                     dup_column_order = [
                         'SN', 'name', 'revision', 'upstream', 'dest-branch',
                         'target_branch',
@@ -626,19 +1018,26 @@ class FeatureTwo:
     # ========================
 
     def _parse_manifest(self, input_file: str) -> List[Dict]:
-        """解析 manifest.xml 檔案 - 增強版（支援 default remote）"""
+        """
+        解析 manifest.xml 檔案 - 增強版（支援 default remote 和 revision）
+        🔥 新增：當專案 revision 為空且 remote=rtk 時，使用 default 的 revision
+        """
         try:
             tree = ET.parse(input_file)
             root = tree.getroot()
             
-            # 先讀取 default 標籤的 remote 屬性
+            # 🔥 讀取 default 標籤的 remote 和 revision 屬性
             default_remote = ''
+            default_revision = ''
             default_element = root.find('default')
             if default_element is not None:
                 default_remote = default_element.get('remote', '')
+                default_revision = default_element.get('revision', '')
                 self.logger.info(f"找到預設 remote: {default_remote}")
+                self.logger.info(f"找到預設 revision: {default_revision}")
             
             projects = []
+            applied_default_revision_count = 0
             
             for project in root.findall('project'):
                 # 取得專案的 remote，如果為空則使用 default_remote
@@ -647,10 +1046,17 @@ class FeatureTwo:
                     project_remote = default_remote
                     self.logger.debug(f"專案 {project.get('name', '')} 使用預設 remote: {default_remote}")
                 
+                # 🔥 取得專案的 revision，如果為空且 remote=rtk 則使用 default_revision
+                project_revision = project.get('revision', '')
+                if not project_revision and project_remote == 'rtk' and default_revision:
+                    project_revision = default_revision
+                    applied_default_revision_count += 1
+                    self.logger.debug(f"專案 {project.get('name', '')} 使用預設 revision: {default_revision}")
+                
                 project_data = {
                     'name': project.get('name', ''),
                     'path': project.get('path', ''),
-                    'revision': project.get('revision', ''),
+                    'revision': project_revision,  # 🔥 使用處理後的 revision 值
                     'upstream': project.get('upstream', ''),
                     'dest-branch': project.get('dest-branch', ''),
                     'groups': project.get('groups', ''),
@@ -661,72 +1067,30 @@ class FeatureTwo:
             
             self.logger.info(f"解析完成，共 {len(projects)} 個專案")
             
+            # 🔥 統計應用預設 revision 的專案數量
+            if applied_default_revision_count > 0:
+                self.logger.info(f"✅ 已為 {applied_default_revision_count} 個 rtk remote 專案應用預設 revision")
+            
             # 統計 remote 使用情況
             remote_stats = {}
+            revision_stats = {'有revision': 0, '無revision': 0}
             for p in projects:
                 remote_val = p.get('remote', 'no-remote')
                 remote_stats[remote_val] = remote_stats.get(remote_val, 0) + 1
+                
+                if p.get('revision', ''):
+                    revision_stats['有revision'] += 1
+                else:
+                    revision_stats['無revision'] += 1
             
             self.logger.info(f"Remote 統計: {remote_stats}")
+            self.logger.info(f"Revision 統計: {revision_stats}")
             
             return projects
             
         except Exception as e:
             self.logger.error(f"解析 manifest 檔案失敗: {str(e)}")
             return []
-    
-    def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False) -> List[Dict]:
-        """轉換專案的分支名稱 - 增強版 (支援 Tag 和 remote 判斷)"""
-        converted_projects = []
-        tag_count = 0
-        branch_count = 0
-        
-        for i, project in enumerate(projects, 1):
-            converted_project = project.copy()
-            converted_project['SN'] = i
-            
-            # 🆕 取得 remote 資訊
-            remote = project.get('remote', '')
-            
-            # 判斷來源分支類型
-            source_type = self._determine_source_type(project)
-            
-            # 根據處理類型轉換目標分支
-            target_branch = self._convert_branch_by_type(project, process_type)
-            converted_project['target_branch'] = target_branch
-            
-            # 判斷目標是 Tag 還是 Branch
-            is_tag = self._is_tag_reference(target_branch)
-            converted_project['target_type'] = 'Tag' if is_tag else 'Branch'
-            
-            if is_tag:
-                tag_count += 1
-            else:
-                branch_count += 1
-            
-            # 根據參數決定是否檢查存在性
-            if check_branch_exists and target_branch:
-                if is_tag:
-                    # 檢查 Tag 存在性（傳入 remote）
-                    exists_info = self._check_target_tag_exists(project.get('name', ''), target_branch, remote)
-                else:
-                    # 檢查 Branch 存在性（傳入 remote）
-                    exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch, remote)
-                
-                converted_project['target_branch_exists'] = exists_info['exists_status']
-                converted_project['target_branch_revision'] = exists_info['revision']
-            else:
-                converted_project['target_branch_exists'] = '-'  # 未檢查
-                converted_project['target_branch_revision'] = '-'  # 未檢查
-            
-            converted_projects.append(converted_project)
-            
-            # 每100個項目顯示進度
-            if check_branch_exists and i % 100 == 0:
-                self.logger.info(f"已處理 {i}/{len(projects)} 個專案的存在性檢查")
-        
-        self.logger.info(f"轉換完成 - Branch: {branch_count}, Tag: {tag_count}")
-        return converted_projects
 
     def _is_tag_reference(self, reference: str) -> bool:
         """判斷參考是否為 Tag (以 refs/tags/ 開頭)"""
@@ -893,45 +1257,6 @@ class FeatureTwo:
                 return 'mp'
         
         return 'master'
-    
-    def _convert_branch_by_type(self, project: Dict, process_type: str) -> str:
-        """根據處理類型轉換分支名稱 - 增強版 (保持 Tag 格式)"""
-        try:
-            # 優先使用 dest-branch，其次使用 upstream
-            source_branch = project.get('dest-branch') or project.get('upstream', '')
-            
-            if not source_branch:
-                return ''
-            
-            # 如果是 Tag 參考，直接返回不做轉換
-            if self._is_tag_reference(source_branch):
-                self.logger.debug(f"檢測到 Tag 參考，保持原樣: {source_branch}")
-                return source_branch
-            
-            # 根據處理類型進行轉換
-            if process_type == 'master_vs_premp':
-                # master -> premp
-                if 'premp' not in source_branch:
-                    # 簡單的轉換邏輯：替換最後的部分為 premp.google-refplus
-                    parts = source_branch.split('/')
-                    if len(parts) >= 3:
-                        parts[-1] = 'premp.google-refplus'
-                    return '/'.join(parts)
-                
-            elif process_type == 'premp_vs_mp':
-                # premp -> mp
-                return source_branch.replace('premp.google-refplus', 'mp.google-refplus.wave')
-                
-            elif process_type == 'mp_vs_mpbackup':
-                # mp -> mpbackup
-                if 'wave' in source_branch and 'backup' not in source_branch:
-                    return source_branch.replace('wave', 'wave.backup')
-            
-            return source_branch
-            
-        except Exception as e:
-            self.logger.error(f"轉換分支名稱失敗: {str(e)}")
-            return source_branch
     
     def _handle_duplicates(self, projects: List[Dict], remove_duplicates: bool) -> tuple:
         """處理重複資料"""

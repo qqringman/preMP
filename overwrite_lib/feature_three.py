@@ -569,23 +569,63 @@ class FeatureThree:
             return None
     
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
-        """根據轉換類型進行 revision 轉換 - 使用字串替換保留所有原始格式"""
+        """
+        根據轉換類型進行 revision 轉換 - 使用字串替換保留所有原始格式
+        🔥 新增：處理 default revision - 當 revision 為空且 remote=rtk 時使用 default revision
+        """
         try:
             self.logger.info(f"開始進行 revision 轉換: {overwrite_type}")
             self.logger.info("使用字串替換方式，保留所有原始格式（包含註釋、空格等）")
             
-            # 先用 ElementTree 解析以取得專案資訊（但不用於生成最終檔案）
+            # 🔥 先解析 XML 取得 default 資訊
             temp_root = ET.fromstring(xml_content)
+            
+            # 🔥 讀取 default 標籤的 remote 和 revision 屬性
+            default_remote = ''
+            default_revision = ''
+            default_element = temp_root.find('default')
+            if default_element is not None:
+                default_remote = default_element.get('remote', '')
+                default_revision = default_element.get('revision', '')
+                self.logger.info(f"找到預設 remote: {default_remote}, revision: {default_revision}")
+            
             conversion_info = []
             conversion_count = 0
+            applied_default_count = 0
             
             # 建立轉換後的內容（從原始字串開始）
             converted_content = xml_content
             
             # 遍歷所有 project 元素以記錄轉換資訊
             for project in temp_root.findall('project'):
-                revision = project.get('revision')
                 project_name = project.get('name', '')
+                project_remote = project.get('remote', '') or default_remote
+                revision = project.get('revision', '')
+                
+                # 🔥 如果 revision 為空且 remote=rtk，使用 default revision
+                original_revision = revision
+                if not revision and project_remote == 'rtk' and default_revision:
+                    revision = default_revision
+                    applied_default_count += 1
+                    self.logger.debug(f"專案 {project_name} 使用預設 revision: {default_revision}")
+                    
+                    # 🔥 在 XML 字串中插入 default revision
+                    # 找到該專案的 project 標籤並添加 revision 屬性
+                    import re
+                    escaped_project_name = re.escape(project_name)
+                    
+                    # 模式匹配: <project name="xxx" 但沒有 revision 屬性
+                    pattern = rf'(<project[^>]*name\s*=\s*["\']?{escaped_project_name}["\']?[^>]*?)(?<!revision\s*=\s*["\'][^"\']*)(>|/>)'
+                    
+                    def add_revision(match):
+                        project_attrs = match.group(1)
+                        closing = match.group(2)
+                        # 檢查是否已經有 revision 屬性
+                        if 'revision=' not in project_attrs:
+                            return f'{project_attrs} revision="{default_revision}"{closing}'
+                        return match.group(0)
+                    
+                    converted_content = re.sub(pattern, add_revision, converted_content)
                 
                 if not revision:
                     continue
@@ -603,8 +643,9 @@ class FeatureThree:
                     'dest-branch': project.get('dest-branch', ''),
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
-                    'remote': project.get('remote', ''),
-                    'changed': new_revision != old_revision
+                    'remote': project_remote,
+                    'changed': new_revision != old_revision,
+                    'used_default_revision': original_revision != old_revision  # 🔥 標記是否使用了預設 revision
                 })
                 
                 # 如果需要轉換，在字串中直接替換
@@ -668,6 +709,8 @@ class FeatureThree:
                                 # 不增加 conversion_count，因為實際上沒有轉換
             
             self.logger.info(f"revision 轉換完成，共轉換 {conversion_count} 個專案")
+            if applied_default_count > 0:
+                self.logger.info(f"✅ 已為 {applied_default_count} 個 rtk remote 專案應用預設 revision")
             self.logger.info("✅ 保留了所有原始格式：XML 宣告、註釋、空格、換行等")
             
             return converted_content, conversion_info
