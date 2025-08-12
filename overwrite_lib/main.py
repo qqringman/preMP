@@ -1,5 +1,5 @@
 """
-主程式 - 互動式選單系統 (更新版 - 支援 Gerrit 推送)
+主程式 - 互動式選單系統 (更新版 - 支援 Gerrit 推送 + 強制更新分支選項)
 整合所有功能模組，提供使用者友善的操作介面
 """
 import os
@@ -131,12 +131,15 @@ class MainApplication:
                 input("按 Enter 繼續...")
     
     def _branch_management_menu(self):
-        """分支管理工具選單"""
+        """分支管理工具選單 - 🆕 新增強制更新說明"""
         while True:
             print("\n" + "="*50)
             print("  🌿 分支管理工具")
             print("="*50)
             print("  [1] 建立分支映射表 (功能二)")
+            print("      ├─ 支援強制更新已存在分支")
+            print("      ├─ 智能跳過已存在分支")
+            print("      └─ 詳細分支建立狀態報告")
             print("  [2] 批次建立分支")
             print("  [3] 查詢分支狀態")
             print("  [0] 返回主選單")
@@ -326,7 +329,7 @@ class MainApplication:
         input("\n按 Enter 繼續...")
     
     def _execute_feature_two(self):
-        """執行功能二：建立分支映射表 - 修改詢問順序"""
+        """執行功能二：建立分支映射表 - 🆕 新增強制更新分支選項"""
         print("\n" + "="*60)
         print("  🌿 功能二：建立分支映射表")
         print("="*60)
@@ -360,6 +363,37 @@ class MainApplication:
             # 6. 是否建立分支
             create_branches = self._get_yes_no_input("是否建立分支？", False)
             
+            # 🆕 6.5. 強制更新分支選項（只在建立分支時詢問）
+            force_update_branches = False
+            if create_branches:
+                print("\n" + "="*50)
+                print("  🔄 分支建立模式設定")
+                print("="*50)
+                print("分支處理邏輯說明：")
+                print("• 預設模式：如果分支已存在，視為成功並跳過建立")
+                print("• 強制更新模式：如果分支已存在，強制更新到新的 revision")
+                print()
+                print("⚠️  強制更新注意事項：")
+                print("• 會覆蓋現有分支的 revision")
+                print("• 可能會影響其他開發者的工作")
+                print("• 建議在確認無人使用該分支時才使用")
+                print()
+                
+                force_update_branches = self._get_yes_no_input(
+                    "是否強制更新已存在的分支？", False
+                )
+                
+                if force_update_branches:
+                    print("⚠️  已啟用強制更新模式")
+                    confirm_force = self._get_yes_no_input(
+                        "確定要強制更新已存在的分支嗎？(這會覆蓋現有分支)", False
+                    )
+                    if not confirm_force:
+                        force_update_branches = False
+                        print("✅ 已改為預設模式（跳過已存在的分支）")
+                else:
+                    print("✅ 使用預設模式（已存在的分支視為成功並跳過）")
+            
             # 7. 是否檢查分支存在性
             check_branch_exists = self._get_yes_no_input("是否檢查分支存在性？(會比較慢)", False)
             
@@ -371,6 +405,12 @@ class MainApplication:
             print(f"  輸出檔案: {output_file}")
             print(f"  去除重複: {'是' if remove_duplicates else '否'}")
             print(f"  建立分支: {'是' if create_branches else '否'}")
+            if create_branches:
+                print(f"  🆕 強制更新分支: {'是' if force_update_branches else '否'}")
+                if force_update_branches:
+                    print(f"      ⚠️  將覆蓋已存在分支的 revision")
+                else:
+                    print(f"      ✅ 已存在分支將被跳過（視為成功）")
             print(f"  檢查分支存在性: {'是' if check_branch_exists else '否'}")
             
             # 8. 確認執行
@@ -378,9 +418,12 @@ class MainApplication:
                 return
             
             print("\n🔄 開始處理...")
+            
+            # 🆕 傳入 force_update_branches 參數
             success = self.feature_two.process(
                 input_file, process_type, output_file, 
-                remove_duplicates, create_branches, check_branch_exists, output_folder
+                remove_duplicates, create_branches, check_branch_exists, output_folder,
+                force_update_branches  # 🆕 新增參數
             )
             
             if success:
@@ -390,6 +433,11 @@ class MainApplication:
                 # 顯示額外資訊
                 if create_branches:
                     print("🌿 分支建立狀態已記錄在 Excel 的 'Branch 建立狀態' 頁籤")
+                    if force_update_branches:
+                        print("🔄 強制更新模式：已存在的分支已被更新到新的 revision")
+                    else:
+                        print("✅ 預設模式：已存在的分支被視為成功並跳過")
+                    print("💡 提示：查看 'Force_Update' 欄位了解各分支的處理方式")
                 if check_branch_exists:
                     print("🔍 分支存在性檢查結果已記錄在 'target_branch_exists' 欄位")
             else:
@@ -737,6 +785,7 @@ class MainApplication:
         """批次建立分支"""
         print("\n🌿 批次建立分支")
         print("⚠️  此功能尚未實作")
+        print("💡 提示：請使用功能二中的建立分支選項")
         input("按 Enter 繼續...")
     
     def _query_branch_status(self):

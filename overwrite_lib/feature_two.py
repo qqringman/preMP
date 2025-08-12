@@ -1,24 +1,13 @@
 """
-功能二：透過 manifest.xml 建立分支映射表 - 增強版
+功能二：透過 manifest.xml 建立分支映射表 - 增強版 (支援強制更新選項)
 建立一張 mapping 的 branch table (manifest_projects.xlsx) 並建立相關 branch (可選)
 新增：支援 refs/tags/ 的 Tag 處理邏輯 + branch/tag 連結功能
 修正：branch_link 使用 dest-branch 欄位並移到最後一欄
 🔥 修正：master_vs_premp 使用 feature_three.py 的完整轉換邏輯
 🔥 修正：當 revision 為空且 remote=rtk 時，使用 default revision
 🔥 修正：支援兩種 revision 格式 - Hash vs Branch Name
+🆕 新增：強制更新已存在分支的選項
 ⚠️  重要：feature_three.py 也需要同步相同的處理邏輯！
-
-📋 Revision 處理邏輯：
-1. Hash revision (40字符hex) + upstream 欄位 → 使用 upstream 進行轉換和建立連結
-2. Branch revision (包含/和字母) → 直接使用 revision 進行轉換和建立連結
-3. 空 revision + remote=rtk → 使用 default revision
-
-範例：
-第1種 (Hash): revision="5dccbb8e43926e4d54139640149b7b42afc30129" upstream="realtek/android-14/mp.google-refplus.upgrade-11.rtd2851a"
-→ 使用 upstream 進行轉換
-
-第2種 (Branch): revision="realtek/android-14/mp.google-refplus.upgrade-11.rtd2851a"  
-→ 直接使用 revision 進行轉換
 """
 import os
 import xml.etree.ElementTree as ET
@@ -52,7 +41,7 @@ import config
 logger = utils.setup_logger(__name__)
 
 class FeatureTwo:
-    """功能二：建立分支映射表 - 增強版 (支援 Tag + 連結功能 + 完整 master_to_premp 轉換邏輯)"""
+    """功能二：建立分支映射表 - 增強版 (支援 Tag + 連結功能 + 完整 master_to_premp 轉換邏輯 + 強制更新選項)"""
     
     def __init__(self):
         self.logger = logger
@@ -61,9 +50,9 @@ class FeatureTwo:
     
     def process(self, input_file: str, process_type: str, output_filename: str, 
                 remove_duplicates: bool, create_branches: bool, check_branch_exists: bool,
-                output_folder: str = './output') -> bool:
+                output_folder: str = './output', force_update_branches: bool = False) -> bool:
         """
-        處理功能二的主要邏輯 - 修改版本（包含連結生成）
+        處理功能二的主要邏輯 - 修改版本（🆕 新增 force_update_branches 參數）
         
         Args:
             input_file: 輸入的 manifest.xml 檔案路徑
@@ -73,6 +62,7 @@ class FeatureTwo:
             create_branches: 是否建立分支
             check_branch_exists: 是否檢查分支存在性
             output_folder: 輸出資料夾路徑
+            force_update_branches: 🆕 是否強制更新已存在的分支
             
         Returns:
             是否處理成功
@@ -86,6 +76,7 @@ class FeatureTwo:
             self.logger.info(f"建立分支: {create_branches}")
             self.logger.info(f"檢查分支存在性: {check_branch_exists}")
             self.logger.info(f"輸出資料夾: {output_folder}")
+            self.logger.info(f"🆕 強制更新分支: {force_update_branches}")  # 🆕 新增日誌
             
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
@@ -116,9 +107,9 @@ class FeatureTwo:
             # 步驟 5: 生成 Excel 報告（使用新的方法）
             self._write_excel_with_links(unique_projects, duplicate_projects, output_filename, output_folder)
             
-            # 步驟 6: 建立分支（如果需要）
+            # 步驟 6: 建立分支（如果需要，🆕 傳入強制更新參數）
             if create_branches:
-                self._create_branches(unique_projects, output_filename, output_folder)
+                self._create_branches(unique_projects, output_filename, output_folder, force_update_branches)
             
             excel_path = os.path.join(output_folder, output_filename)
             self.logger.info(f"=== 功能二執行完成，Excel 檔案：{excel_path} ===")
@@ -255,6 +246,7 @@ class FeatureTwo:
         # 如果是 master 但沒有匹配到特定規則，使用預設轉換
         if '/master' in revision and 'realtek/' in revision:
             # 提取 android 版本（如果有）
+            import re
             android_match = re.search(r'android-(\d+)', revision)
             if android_match:
                 android_ver = android_match.group(1)
@@ -562,21 +554,6 @@ class FeatureTwo:
         except Exception as e:
             self.logger.error(f"轉換 revision 失敗: {revision}, 錯誤: {str(e)}")
             return revision
-
-    def _convert_branch_by_type(self, project: Dict, process_type: str) -> str:
-        """
-        🔥 保留舊版方法但重定向到新的轉換邏輯
-        
-        Args:
-            project: 專案字典
-            process_type: 處理類型
-            
-        Returns:
-            轉換後的分支名稱
-        """
-        # 取得 revision 進行轉換
-        revision = project.get('revision', '')
-        return self._convert_revision_by_type(revision, process_type)
 
     # ============================================
     # 以下方法保持不變，只是為了完整性而包含
@@ -1158,9 +1135,341 @@ class FeatureTwo:
         except Exception as e:
             self.logger.error(f"格式化連結欄位失敗: {str(e)}")
 
-    # ========================
-    # 以下保持原有方法不變
-    # ========================
+    # ============================================
+    # 🔥 修改的建立分支邏輯 - 支援強制更新選項
+    # ============================================
+
+    def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
+                        force_update: bool = False):
+        """
+        建立分支並記錄結果 - 增強版 (🆕 支援強制更新選項)
+        
+        Args:
+            projects: 專案列表
+            output_file: 輸出檔案名稱
+            output_folder: 輸出資料夾
+            force_update: 🆕 是否強制更新已存在的分支
+        """
+        try:
+            self.logger.info("開始建立分支...")
+            self.logger.info("🎯 建立邏輯：從原始 revision 創建目標 target_branch 分支")
+            self.logger.info(f"🆕 強制更新模式: {'啟用' if force_update else '停用'}")
+            if not force_update:
+                self.logger.info("ℹ️  已存在的分支將被視為成功，不會嘗試更新")
+            else:
+                self.logger.info("⚠️  已存在的分支將被強制更新到新的 revision")
+            
+            branch_results = []
+            skipped_tags = 0
+            prebuilt_count = 0
+            normal_count = 0
+            
+            for project in projects:
+                project_name = project.get('name', '')           # 專案名稱
+                target_branch = project.get('target_branch', '') # 目標分支（轉換後）
+                target_type = project.get('target_type', 'Branch')
+                revision = project.get('revision', '')           # 原始 revision（作為起始點）
+                
+                # 🆕 取得 remote 資訊
+                remote = project.get('remote', '')
+                
+                # 🔍 檢查必要資訊
+                if not all([project_name, target_branch, revision]):
+                    self.logger.debug(f"跳過專案 {project_name}：缺少必要資訊")
+                    self.logger.debug(f"  project_name: {'✓' if project_name else '✗'}")
+                    self.logger.debug(f"  target_branch: {'✓' if target_branch else '✗'}")
+                    self.logger.debug(f"  revision: {'✓' if revision else '✗'}")
+                    continue
+                
+                # 🏷️ 跳過 Tag 類型的專案
+                if target_type == 'Tag' or self._is_tag_reference(target_branch):
+                    skipped_tags += 1
+                    branch_result = {
+                        'SN': len(branch_results) + 1,
+                        'Project': project_name,
+                        'Target_Branch': target_branch,
+                        'Target_Type': 'Tag',
+                        'target_branch_link': project.get('target_branch_link', ''),
+                        'Revision': revision,
+                        'Status': '跳過',
+                        'Message': 'Tag 類型不建立分支',
+                        'Already_Exists': '-',
+                        'Force_Update': '-',  # 🆕 新增欄位
+                        'Remote': remote,
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)
+                    }
+                    branch_results.append(branch_result)
+                    self.logger.debug(f"跳過 Tag 類型專案: {project_name} -> {target_branch}")
+                    continue
+                
+                # 🌐 根據 remote 選擇正確的 GerritManager
+                if remote == 'rtk-prebuilt':
+                    # 使用 prebuilt 的 Gerrit 伺服器
+                    temp_gerrit = self._get_prebuilt_gerrit_manager()
+                    prebuilt_count += 1
+                    gerrit_server = self._get_gerrit_base_url('rtk-prebuilt')
+                    self.logger.debug(f"使用 rtk-prebuilt Gerrit 建立分支: {project_name}")
+                else:
+                    # 使用預設的 GerritManager
+                    temp_gerrit = self.gerrit_manager
+                    normal_count += 1
+                    gerrit_server = self._get_gerrit_base_url('')
+                    self.logger.debug(f"使用預設 Gerrit 建立分支: {project_name}")
+                
+                # 🔨 建立分支：從 revision 創建 target_branch
+                self.logger.debug(f"準備建立分支:")
+                self.logger.debug(f"  專案: {project_name}")
+                self.logger.debug(f"  目標分支: {target_branch}")
+                self.logger.debug(f"  起始點: {revision}")
+                self.logger.debug(f"  Gerrit 伺服器: {gerrit_server}")
+                self.logger.debug(f"  強制更新: {force_update}")
+                
+                # 🆕 首先檢查分支是否已存在（如果不是強制更新模式）
+                branch_exists = False
+                existing_revision = ''
+                
+                if not force_update:
+                    # 檢查分支是否已存在
+                    exists_info = self._check_target_branch_exists(project_name, target_branch, remote)
+                    branch_exists = exists_info['exists_status'] == 'Y'
+                    existing_revision = exists_info['revision']
+                    
+                    if branch_exists:
+                        # 分支已存在且不是強制更新模式，視為成功
+                        self.logger.info(f"✅ 分支已存在（跳過建立）: {project_name} -> {target_branch}")
+                        
+                        branch_result = {
+                            'SN': len(branch_results) + 1,
+                            'Project': project_name,
+                            'Target_Branch': target_branch,
+                            'Target_Type': 'Branch',
+                            'target_branch_link': project.get('target_branch_link', ''),
+                            'Revision': revision,
+                            'Status': '成功',
+                            'Message': f"分支已存在，無需建立 (當前 revision: {existing_revision})",
+                            'Already_Exists': '是',
+                            'Force_Update': '否',  # 🆕 新增欄位
+                            'Remote': remote,
+                            'Gerrit_Server': gerrit_server
+                        }
+                        branch_results.append(branch_result)
+                        continue
+                
+                # 🔥 如果是強制更新模式或分支不存在，執行建立/更新
+                self.logger.debug(f"執行分支建立/更新: force_update={force_update}, branch_exists={branch_exists}")
+                
+                # 調用 GerritManager.create_branch()
+                result = temp_gerrit.create_branch(project_name, target_branch, revision)
+                
+                # 📊 分析 GerritManager 返回的結果
+                success = result.get('success', False)
+                message = result.get('message', '')
+                already_exists = result.get('exists', False)
+                
+                # 🔍 根據結果判斷狀態
+                if success:
+                    if already_exists and not force_update:
+                        status = '成功'
+                        final_message = f"分支已存在且正確：{message}"
+                        self.logger.info(f"✅ 分支已存在: {project_name} -> {target_branch}")
+                    elif already_exists and force_update:
+                        status = '成功'
+                        final_message = f"分支已存在，已強制更新：{message}"
+                        self.logger.info(f"🔄 強制更新分支: {project_name} -> {target_branch}")
+                    else:
+                        status = '成功'
+                        final_message = f"成功建立分支：{message}"
+                        self.logger.info(f"🆕 成功建立分支: {project_name} -> {target_branch}")
+                else:
+                    # 🆕 特殊處理：如果失敗是因為分支已存在，且不是強制更新模式，改為成功
+                    if not force_update and ("已存在" in message or "already exists" in message.lower()):
+                        status = '成功'
+                        final_message = f"分支已存在，無需建立：{message}"
+                        already_exists = True
+                        self.logger.info(f"✅ 分支已存在（從失敗改為成功）: {project_name} -> {target_branch}")
+                    else:
+                        status = '失敗'
+                        final_message = f"建立失敗：{message}"
+                        self.logger.warning(f"❌ 建立失敗: {project_name} -> {target_branch}: {message}")
+                
+                # 📝 記錄詳細結果
+                branch_result = {
+                    'SN': len(branch_results) + 1,
+                    'Project': project_name,
+                    'Target_Branch': target_branch,
+                    'Target_Type': 'Branch',
+                    'target_branch_link': project.get('target_branch_link', ''),
+                    'Revision': revision,
+                    'Status': status,
+                    'Message': final_message,
+                    'Already_Exists': '是' if already_exists else '否',
+                    'Force_Update': '是' if force_update else '否',  # 🆕 新增欄位
+                    'Remote': remote,
+                    'Gerrit_Server': gerrit_server
+                }
+                branch_results.append(branch_result)
+                
+                # 📊 每處理 10 個專案輸出進度
+                if len(branch_results) % 10 == 0:
+                    success_count = len([r for r in branch_results if r['Status'] == '成功'])
+                    self.logger.info(f"已處理 {len(branch_results)} 個分支，成功 {success_count} 個")
+            
+            # 📄 更新 Excel 檔案，加入分支建立狀態頁籤
+            if output_folder:
+                full_output_path = os.path.join(output_folder, output_file)
+            else:
+                full_output_path = output_file
+                
+            self._add_branch_status_sheet(full_output_path, branch_results)
+            
+            # 📊 最終統計
+            success_count = len([r for r in branch_results if r['Status'] == '成功'])
+            failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
+            already_exists_count = len([r for r in branch_results if r['Already_Exists'] == '是'])
+            new_branch_count = len([r for r in branch_results if r['Status'] == '成功' and r['Already_Exists'] == '否'])
+            force_updated_count = len([r for r in branch_results if r['Force_Update'] == '是' and r['Status'] == '成功'])
+            
+            self.logger.info(f"🎉 分支建立完成，共處理 {len(branch_results)} 個專案")
+            self.logger.info(f"📊 處理統計:")
+            self.logger.info(f"  - ✅ 總成功: {success_count} 個")
+            self.logger.info(f"    - 🆕 新建立: {new_branch_count} 個")  
+            self.logger.info(f"    - 📍 已存在: {already_exists_count} 個")
+            if force_update and force_updated_count > 0:
+                self.logger.info(f"    - 🔄 強制更新: {force_updated_count} 個")
+            self.logger.info(f"  - ❌ 失敗: {failure_count} 個")
+            self.logger.info(f"  - ⏭️ 跳過 Tag: {skipped_tags} 個")
+            self.logger.info(f"  - 🟣 rtk-prebuilt Gerrit: {prebuilt_count} 個")
+            self.logger.info(f"  - 🔵 預設 Gerrit: {normal_count} 個")
+            
+            # 🎯 成功率計算
+            total_attempted = len(branch_results) - skipped_tags
+            if total_attempted > 0:
+                success_rate = (success_count / total_attempted * 100)
+                self.logger.info(f"  - 📈 成功率: {success_rate:.1f}%")
+            
+            # 💡 建議
+            if failure_count > 0:
+                self.logger.warning(f"⚠️ 有 {failure_count} 個分支建立失敗，請檢查 Excel 報告中的錯誤訊息")
+            if already_exists_count > 0:
+                if force_update:
+                    self.logger.info(f"💡 有 {already_exists_count} 個分支已存在，已根據強制更新設定處理")
+                else:
+                    self.logger.info(f"💡 有 {already_exists_count} 個分支已存在，已跳過建立（視為成功）")
+            
+        except Exception as e:
+            self.logger.error(f"建立分支失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
+
+    def _add_branch_status_sheet(self, excel_file: str, branch_results: List[Dict]):
+        """在 Excel 檔案中加入分支建立狀態頁籤 - 增強版 (🆕 包含 Force_Update 欄位)"""
+        try:
+            # 讀取現有的 Excel 檔案
+            with pd.ExcelFile(excel_file) as xls:
+                existing_sheets = {}
+                for sheet_name in xls.sheet_names:
+                    existing_sheets[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name)
+            
+            # 重新寫入，加上新的頁籤
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                # 寫入現有頁籤
+                for sheet_name, df in existing_sheets.items():
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                # 加入分支建立狀態頁籤
+                if branch_results:
+                    df_branch = pd.DataFrame(branch_results)
+                    # 🆕 調整欄位順序（加入 Force_Update）
+                    column_order = [
+                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
+                        'Revision', 'Status', 'Message', 'Already_Exists', 'Force_Update',  # 🆕 新增 Force_Update
+                        'Remote', 'Gerrit_Server'
+                    ]
+                    # 只保留存在的欄位
+                    column_order = [col for col in column_order if col in df_branch.columns]
+                    df_branch = df_branch[column_order]
+                else:
+                    df_branch = pd.DataFrame(columns=[
+                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
+                        'Revision', 'Status', 'Message', 'Already_Exists', 'Force_Update',  # 🆕 新增 Force_Update
+                        'Remote', 'Gerrit_Server'
+                    ])
+                
+                df_branch.to_excel(writer, sheet_name='Branch 建立狀態', index=False)
+                
+                # 格式化所有工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+                    
+                    # 特別格式化 Branch 建立狀態頁籤
+                    if sheet_name == 'Branch 建立狀態':
+                        self._format_branch_status_column(worksheet)
+                        # 也格式化連結欄位
+                        self._format_branch_status_links(worksheet)
+                        # 格式化 Remote 和 Gerrit_Server 欄位
+                        self._format_remote_columns(worksheet)
+                        # 🆕 格式化 Force_Update 欄位
+                        self._format_force_update_column(worksheet)
+            
+            self.logger.info("成功加入分支建立狀態頁籤")
+            
+        except Exception as e:
+            self.logger.error(f"加入分支狀態頁籤失敗: {str(e)}")
+
+    def _format_force_update_column(self, worksheet):
+        """
+        🆕 格式化 Force_Update 欄位
+        
+        Args:
+            worksheet: Excel 工作表
+        """
+        try:
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.utils import get_column_letter
+            
+            # 定義顏色
+            orange_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")  # 橘底
+            white_font = Font(color="FFFFFF", bold=True)  # 白字
+            orange_font = Font(color="FFC000", bold=True)  # 橘字（用於 "是"）
+            black_font = Font(color="000000")  # 黑字（用於其他）
+            
+            # 找到 Force_Update 欄位的位置
+            force_update_col = None
+            
+            for col_num, cell in enumerate(worksheet[1], 1):  # 標題列
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == 'Force_Update':
+                    force_update_col = col_num
+                    break
+            
+            # 格式化 Force_Update 欄位（橘底白字標題）
+            if force_update_col:
+                col_letter = get_column_letter(force_update_col)
+                
+                # 格式化標題
+                header_cell = worksheet[f"{col_letter}1"]
+                header_cell.fill = orange_fill
+                header_cell.font = white_font
+                
+                # 格式化資料列（"是" 用橘字，其他用黑字）
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    if cell_value == '是':
+                        cell.font = orange_font  # "是" 用橘字
+                    else:
+                        cell.font = black_font   # 其他用黑字
+            
+            self.logger.debug("已設定 Force_Update 欄位格式")
+            
+        except Exception as e:
+            self.logger.error(f"格式化 Force_Update 欄位失敗: {str(e)}")
+
+    # ====================================
+    # 以下方法保持原有邏輯不變
+    # ====================================
 
     def _parse_manifest(self, input_file: str) -> List[Dict]:
         """
@@ -1509,249 +1818,46 @@ class FeatureTwo:
                 
         except Exception as e:
             self.logger.error(f"格式化目標分支欄位失敗: {str(e)}")
-                
-    def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None):
-        """
-        建立分支並記錄結果 - 增強版 (跳過 Tag 類型，支援 remote 判斷)
-        
-        📋 建立分支的邏輯：
-        1. 遍歷所有專案
-        2. 取得關鍵資訊：project_name, target_branch, target_type, revision, remote
-        3. 跳過條件檢查：
-           - 缺少必要資訊的專案
-           - Tag 類型的專案（因為 Tag 不能建立分支）
-        4. 根據 remote 選擇 Gerrit 伺服器：
-           - remote="rtk-prebuilt" → 使用 prebuilt Gerrit (mm2sd-git2.rtkbf.com)
-           - 其他 remote → 使用預設 Gerrit (mm2sd.rtkbf.com)
-        5. 呼叫 GerritManager.create_branch(project_name, target_branch, revision)
-        6. 記錄結果到 Excel 的 "Branch 建立狀態" 頁籤
-        
-        🎯 建立邏輯重點：
-        - project_name: 專案名稱（如 "platform/frameworks/base"）
-        - target_branch: 目標分支名稱（轉換後的分支，如 "realtek/android-14/premp.google-refplus"）
-        - revision: 分支的起始點（原始 revision，如 "realtek/master"）
-        
-        🔄 分支存在性處理邏輯：
-        - 📍 已存在分支：GerritManager 會檢查分支是否已存在
-          * 如果已存在且指向相同 revision → 標記為成功，Already_Exists=是
-          * 如果已存在但指向不同 revision → 可能失敗或警告（取決於 GerritManager 實作）
-        - 🆕 不存在分支：正常建立新分支
-          * 成功建立 → Status=成功，Already_Exists=否
-          * 建立失敗 → Status=失敗，顯示錯誤訊息
-        - ❌ 權限或網路問題：Status=失敗，顯示具體錯誤
-        
-        ⚠️ 注意：這是從 revision 創建到 target_branch 的新分支
-        實際的分支存在性檢查和衝突處理由 GerritManager.create_branch() 負責
-        """
+
+    def _format_branch_status_column(self, worksheet):
+        """格式化分支建立狀態欄位"""
         try:
-            self.logger.info("開始建立分支...")
-            self.logger.info("🎯 建立邏輯：從原始 revision 創建目標 target_branch 分支")
-            self.logger.info("🔄 分支存在性會由 GerritManager 自動處理")
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.utils import get_column_letter
             
-            branch_results = []
-            skipped_tags = 0
-            prebuilt_count = 0
-            normal_count = 0
+            # 狀態顏色設定
+            status_colors = {
+                '成功': {'fill': PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                        'font': Font(color="006100", bold=True)},
+                '失敗': {'fill': PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                        'font': Font(color="9C0006", bold=True)},
+                '跳過': {'fill': PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid"),
+                        'font': Font(color="0070C0", bold=True)}
+            }
             
-            for project in projects:
-                project_name = project.get('name', '')           # 專案名稱
-                target_branch = project.get('target_branch', '') # 目標分支（轉換後）
-                target_type = project.get('target_type', 'Branch')
-                revision = project.get('revision', '')           # 原始 revision（作為起始點）
-                
-                # 🆕 取得 remote 資訊
-                remote = project.get('remote', '')
-                
-                # 🔍 檢查必要資訊
-                if not all([project_name, target_branch, revision]):
-                    self.logger.debug(f"跳過專案 {project_name}：缺少必要資訊")
-                    self.logger.debug(f"  project_name: {'✓' if project_name else '✗'}")
-                    self.logger.debug(f"  target_branch: {'✓' if target_branch else '✗'}")
-                    self.logger.debug(f"  revision: {'✓' if revision else '✗'}")
-                    continue
-                
-                # 🏷️ 跳過 Tag 類型的專案
-                if target_type == 'Tag' or self._is_tag_reference(target_branch):
-                    skipped_tags += 1
-                    branch_result = {
-                        'SN': len(branch_results) + 1,
-                        'Project': project_name,
-                        'Target_Branch': target_branch,
-                        'Target_Type': 'Tag',
-                        'target_branch_link': project.get('target_branch_link', ''),
-                        'Revision': revision,
-                        'Status': '跳過',
-                        'Message': 'Tag 類型不建立分支',
-                        'Already_Exists': '-',
-                        'Remote': remote,
-                        'Gerrit_Server': self._get_gerrit_base_url(remote)
-                    }
-                    branch_results.append(branch_result)
-                    self.logger.debug(f"跳過 Tag 類型專案: {project_name} -> {target_branch}")
-                    continue
-                
-                # 🌐 根據 remote 選擇正確的 GerritManager
-                if remote == 'rtk-prebuilt':
-                    # 使用 prebuilt 的 Gerrit 伺服器
-                    temp_gerrit = self._get_prebuilt_gerrit_manager()
-                    prebuilt_count += 1
-                    gerrit_server = self._get_gerrit_base_url('rtk-prebuilt')
-                    self.logger.debug(f"使用 rtk-prebuilt Gerrit 建立分支: {project_name}")
-                else:
-                    # 使用預設的 GerritManager
-                    temp_gerrit = self.gerrit_manager
-                    normal_count += 1
-                    gerrit_server = self._get_gerrit_base_url('')
-                    self.logger.debug(f"使用預設 Gerrit 建立分支: {project_name}")
-                
-                # 🔨 建立分支：從 revision 創建 target_branch
-                self.logger.debug(f"準備建立分支:")
-                self.logger.debug(f"  專案: {project_name}")
-                self.logger.debug(f"  目標分支: {target_branch}")
-                self.logger.debug(f"  起始點: {revision}")
-                self.logger.debug(f"  Gerrit 伺服器: {gerrit_server}")
-                
-                # 🔥 關鍵：呼叫 GerritManager.create_branch()
-                # 這個方法會處理：
-                # 1. 檢查分支是否已存在
-                # 2. 如果不存在，創建新分支
-                # 3. 如果已存在，檢查是否指向相同 revision
-                # 4. 返回詳細的結果資訊
-                result = temp_gerrit.create_branch(project_name, target_branch, revision)
-                
-                # 📊 分析 GerritManager 返回的結果
-                success = result.get('success', False)
-                message = result.get('message', '')
-                already_exists = result.get('exists', False)
-                
-                # 🔍 根據結果判斷狀態
-                if success:
-                    if already_exists:
-                        status = '成功'
-                        final_message = f"分支已存在且正確：{message}"
-                        self.logger.info(f"✅ 分支已存在: {project_name} -> {target_branch}")
-                    else:
-                        status = '成功'
-                        final_message = f"成功建立分支：{message}"
-                        self.logger.info(f"🆕 成功建立分支: {project_name} -> {target_branch}")
-                else:
-                    status = '失敗'
-                    final_message = f"建立失敗：{message}"
-                    self.logger.warning(f"❌ 建立失敗: {project_name} -> {target_branch}: {message}")
-                
-                # 📝 記錄詳細結果
-                branch_result = {
-                    'SN': len(branch_results) + 1,
-                    'Project': project_name,
-                    'Target_Branch': target_branch,
-                    'Target_Type': 'Branch',
-                    'target_branch_link': project.get('target_branch_link', ''),
-                    'Revision': revision,
-                    'Status': status,
-                    'Message': final_message,
-                    'Already_Exists': '是' if already_exists else '否',
-                    'Remote': remote,
-                    'Gerrit_Server': gerrit_server
-                }
-                branch_results.append(branch_result)
-                
-                # 📊 每處理 10 個專案輸出進度
-                if len(branch_results) % 10 == 0:
-                    success_count = len([r for r in branch_results if r['Status'] == '成功'])
-                    self.logger.info(f"已處理 {len(branch_results)} 個分支，成功 {success_count} 個")
+            # 找到 Status 欄位
+            status_col = None
+            for col_num, cell in enumerate(worksheet[1], 1):
+                if cell.value == 'Status':
+                    status_col = col_num
+                    break
             
-            # 📄 更新 Excel 檔案，加入分支建立狀態頁籤
-            if output_folder:
-                full_output_path = os.path.join(output_folder, output_file)
-            else:
-                full_output_path = output_file
+            if status_col:
+                col_letter = get_column_letter(status_col)
                 
-            self._add_branch_status_sheet(full_output_path, branch_results)
-            
-            # 📊 最終統計
-            success_count = len([r for r in branch_results if r['Status'] == '成功'])
-            failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
-            already_exists_count = len([r for r in branch_results if r['Already_Exists'] == '是'])
-            new_branch_count = len([r for r in branch_results if r['Status'] == '成功' and r['Already_Exists'] == '否'])
-            
-            self.logger.info(f"🎉 分支建立完成，共處理 {len(branch_results)} 個專案")
-            self.logger.info(f"📊 處理統計:")
-            self.logger.info(f"  - ✅ 總成功: {success_count} 個")
-            self.logger.info(f"    - 🆕 新建立: {new_branch_count} 個")  
-            self.logger.info(f"    - 📍 已存在: {already_exists_count} 個")
-            self.logger.info(f"  - ❌ 失敗: {failure_count} 個")
-            self.logger.info(f"  - ⏭️ 跳過 Tag: {skipped_tags} 個")
-            self.logger.info(f"  - 🟣 rtk-prebuilt Gerrit: {prebuilt_count} 個")
-            self.logger.info(f"  - 🔵 預設 Gerrit: {normal_count} 個")
-            
-            # 🎯 成功率計算
-            total_attempted = len(branch_results) - skipped_tags
-            if total_attempted > 0:
-                success_rate = (success_count / total_attempted * 100)
-                self.logger.info(f"  - 📈 成功率: {success_rate:.1f}%")
-            
-            # 💡 建議
-            if failure_count > 0:
-                self.logger.warning(f"⚠️ 有 {failure_count} 個分支建立失敗，請檢查 Excel 報告中的錯誤訊息")
-            if already_exists_count > 0:
-                self.logger.info(f"💡 有 {already_exists_count} 個分支已存在，這是正常情況")
-            
-        except Exception as e:
-            self.logger.error(f"建立分支失敗: {str(e)}")
-            import traceback
-            self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
-    
-    def _add_branch_status_sheet(self, excel_file: str, branch_results: List[Dict]):
-        """在 Excel 檔案中加入分支建立狀態頁籤 - 增強版 (包含連結、remote 和 Gerrit 伺服器)"""
-        try:
-            # 讀取現有的 Excel 檔案
-            with pd.ExcelFile(excel_file) as xls:
-                existing_sheets = {}
-                for sheet_name in xls.sheet_names:
-                    existing_sheets[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name)
-            
-            # 重新寫入，加上新的頁籤
-            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-                # 寫入現有頁籤
-                for sheet_name, df in existing_sheets.items():
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                
-                # 加入分支建立狀態頁籤
-                if branch_results:
-                    df_branch = pd.DataFrame(branch_results)
-                    # 調整欄位順序
-                    column_order = [
-                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
-                        'Revision', 'Status', 'Message', 'Already_Exists', 'Remote', 'Gerrit_Server'
-                    ]
-                    # 只保留存在的欄位
-                    column_order = [col for col in column_order if col in df_branch.columns]
-                    df_branch = df_branch[column_order]
-                else:
-                    df_branch = pd.DataFrame(columns=[
-                        'SN', 'Project', 'Target_Branch', 'Target_Type', 'target_branch_link', 
-                        'Revision', 'Status', 'Message', 'Already_Exists', 'Remote', 'Gerrit_Server'
-                    ])
-                
-                df_branch.to_excel(writer, sheet_name='Branch 建立狀態', index=False)
-                
-                # 格式化所有工作表
-                for sheet_name in writer.sheets:
-                    worksheet = writer.sheets[sheet_name]
-                    self.excel_handler._format_worksheet(worksheet)
+                # 格式化資料列
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row_num}"]
+                    status = str(cell.value) if cell.value else ''
                     
-                    # 特別格式化 Branch 建立狀態頁籤
-                    if sheet_name == 'Branch 建立狀態':
-                        self._format_branch_status_column(worksheet)
-                        # 也格式化連結欄位
-                        self._format_branch_status_links(worksheet)
-                        # 🆕 格式化 Remote 和 Gerrit_Server 欄位
-                        self._format_remote_columns(worksheet)
-            
-            self.logger.info("成功加入分支建立狀態頁籤")
+                    if status in status_colors:
+                        cell.fill = status_colors[status]['fill']
+                        cell.font = status_colors[status]['font']
+                
+                self.logger.info("已設定分支建立狀態欄位格式")
             
         except Exception as e:
-            self.logger.error(f"加入分支狀態頁籤失敗: {str(e)}")
+            self.logger.error(f"格式化分支建立狀態欄位失敗: {str(e)}")
 
     def _format_branch_status_links(self, worksheet):
         """格式化分支建立狀態頁籤中的連結欄位"""
@@ -1849,43 +1955,3 @@ class FeatureTwo:
             
         except Exception as e:
             self.logger.error(f"格式化 Remote 欄位失敗: {str(e)}")
-
-    def _format_branch_status_column(self, worksheet):
-        """格式化分支建立狀態欄位"""
-        try:
-            from openpyxl.styles import PatternFill, Font
-            from openpyxl.utils import get_column_letter
-            
-            # 狀態顏色設定
-            status_colors = {
-                '成功': {'fill': PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
-                        'font': Font(color="006100", bold=True)},
-                '失敗': {'fill': PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
-                        'font': Font(color="9C0006", bold=True)},
-                '跳過': {'fill': PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid"),
-                        'font': Font(color="0070C0", bold=True)}
-            }
-            
-            # 找到 Status 欄位
-            status_col = None
-            for col_num, cell in enumerate(worksheet[1], 1):
-                if cell.value == 'Status':
-                    status_col = col_num
-                    break
-            
-            if status_col:
-                col_letter = get_column_letter(status_col)
-                
-                # 格式化資料列
-                for row_num in range(2, worksheet.max_row + 1):
-                    cell = worksheet[f"{col_letter}{row_num}"]
-                    status = str(cell.value) if cell.value else ''
-                    
-                    if status in status_colors:
-                        cell.fill = status_colors[status]['fill']
-                        cell.font = status_colors[status]['font']
-                
-                self.logger.info("已設定分支建立狀態欄位格式")
-            
-        except Exception as e:
-            self.logger.error(f"格式化分支建立狀態欄位失敗: {str(e)}")
