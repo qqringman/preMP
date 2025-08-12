@@ -570,8 +570,8 @@ class FeatureThree:
     
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
         """
-        根據轉換類型進行 revision 轉換 - 使用字串替換保留所有原始格式
-        🔥 新增：處理 default revision - 當 revision 為空且 remote=rtk 時使用 default revision
+        根據轉換類型進行 revision 轉換 - 支援 Hash vs Branch Name 處理
+        🔥 新增：處理 default revision + Hash vs Branch Name 邏輯
         """
         try:
             self.logger.info(f"開始進行 revision 轉換: {overwrite_type}")
@@ -589,9 +589,16 @@ class FeatureThree:
                 default_revision = default_element.get('revision', '')
                 self.logger.info(f"找到預設 remote: {default_remote}, revision: {default_revision}")
             
+            # 儲存為實例變數供其他方法使用
+            self.default_remote = default_remote
+            self.default_revision = default_revision
+            
             conversion_info = []
             conversion_count = 0
             applied_default_count = 0
+            hash_revision_count = 0
+            branch_revision_count = 0
+            upstream_used_count = 0
             
             # 建立轉換後的內容（從原始字串開始）
             converted_content = xml_content
@@ -600,117 +607,81 @@ class FeatureThree:
             for project in temp_root.findall('project'):
                 project_name = project.get('name', '')
                 project_remote = project.get('remote', '') or default_remote
-                revision = project.get('revision', '')
+                original_revision = project.get('revision', '')
+                upstream = project.get('upstream', '')
                 
                 # 🔥 如果 revision 為空且 remote=rtk，使用 default revision
-                original_revision = revision
-                if not revision and project_remote == 'rtk' and default_revision:
-                    revision = default_revision
+                if not original_revision and project_remote == 'rtk' and default_revision:
+                    original_revision = default_revision
                     applied_default_count += 1
                     self.logger.debug(f"專案 {project_name} 使用預設 revision: {default_revision}")
                     
                     # 🔥 在 XML 字串中插入 default revision
-                    # 找到該專案的 project 標籤並添加 revision 屬性
                     import re
                     escaped_project_name = re.escape(project_name)
-                    
-                    # 模式匹配: <project name="xxx" 但沒有 revision 屬性
                     pattern = rf'(<project[^>]*name\s*=\s*["\']?{escaped_project_name}["\']?[^>]*?)(?<!revision\s*=\s*["\'][^"\']*)(>|/>)'
                     
                     def add_revision(match):
                         project_attrs = match.group(1)
                         closing = match.group(2)
-                        # 檢查是否已經有 revision 屬性
                         if 'revision=' not in project_attrs:
                             return f'{project_attrs} revision="{default_revision}"{closing}'
                         return match.group(0)
                     
                     converted_content = re.sub(pattern, add_revision, converted_content)
                 
-                if not revision:
+                # 🔥 使用新邏輯取得用於轉換的有效 revision
+                effective_revision = self._get_effective_revision_for_conversion(project)
+                
+                # 🔥 統計 revision 類型
+                if self._is_revision_hash(original_revision):
+                    hash_revision_count += 1
+                    if upstream:
+                        upstream_used_count += 1
+                elif original_revision:
+                    branch_revision_count += 1
+                
+                if not effective_revision:
                     continue
                 
-                old_revision = revision
-                new_revision = self._convert_single_revision(revision, overwrite_type)
+                old_revision = effective_revision
+                new_revision = self._convert_single_revision(effective_revision, overwrite_type)
                 
                 # 記錄轉換資訊
                 conversion_info.append({
                     'name': project_name,
                     'path': project.get('path', ''),
-                    'original_revision': old_revision,
+                    'original_revision': original_revision,  # 原始 revision（可能是 hash）
+                    'effective_revision': effective_revision,  # 🔥 用於轉換的有效 revision
                     'converted_revision': new_revision,
-                    'upstream': project.get('upstream', ''),
+                    'upstream': upstream,
                     'dest-branch': project.get('dest-branch', ''),
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
                     'remote': project_remote,
                     'changed': new_revision != old_revision,
-                    'used_default_revision': original_revision != old_revision  # 🔥 標記是否使用了預設 revision
+                    'used_default_revision': original_revision == default_revision,
+                    'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream  # 🔥 新增標記
                 })
                 
                 # 如果需要轉換，在字串中直接替換
                 if new_revision != old_revision:
-                    # 使用正規表達式精確替換該專案的 revision
-                    import re
+                    # 🔥 注意：這裡要替換的是 effective_revision，不是 original_revision
+                    replacement_success = self._replace_revision_in_xml(
+                        converted_content, project_name, old_revision, new_revision
+                    )
                     
-                    # 轉義專案名稱中的特殊字符
-                    escaped_project_name = re.escape(project_name)
-                    escaped_old_revision = re.escape(old_revision)
-                    
-                    replacement_success = False
-                    
-                    # 嘗試多種匹配模式
-                    patterns_to_try = [
-                        # 模式 1: name 在 revision 之前
-                        rf'(<project[^>]*name="{escaped_project_name}"[^>]*revision=")({escaped_old_revision})(")',
-                        # 模式 2: revision 在 name 之前  
-                        rf'(<project[^>]*revision=")({escaped_old_revision})("[^>]*name="{escaped_project_name}")',
-                        # 模式 3: 更寬鬆的匹配，允許更多空格和屬性
-                        rf'(<project[^>]*name\s*=\s*"{escaped_project_name}"[^>]*revision\s*=\s*")({escaped_old_revision})(")',
-                        rf'(<project[^>]*revision\s*=\s*")({escaped_old_revision})("[^>]*name\s*=\s*"{escaped_project_name}")',
-                        # 模式 4: 單引號版本
-                        rf"(<project[^>]*name='{escaped_project_name}'[^>]*revision=')({escaped_old_revision})(')",
-                        rf"(<project[^>]*revision=')({escaped_old_revision})('[^>]*name='{escaped_project_name}')",
-                    ]
-                    
-                    for i, pattern in enumerate(patterns_to_try):
-                        if re.search(pattern, converted_content):
-                            converted_content = re.sub(pattern, rf'\1{new_revision}\3', converted_content)
-                            replacement_success = True
-                            conversion_count += 1
-                            self.logger.debug(f"字串替換成功 (模式{i+1}): {project_name} - {old_revision} → {new_revision}")
-                            break
-                    
-                    if not replacement_success:
-                        # 提供詳細診斷資訊
-                        self.logger.warning(f"無法找到匹配的專案進行替換: {project_name}")
-                        self.logger.debug(f"  專案名稱: {project_name}")
-                        self.logger.debug(f"  原始 revision: {old_revision}")
-                        self.logger.debug(f"  目標 revision: {new_revision}")
-                        
-                        # 搜尋該專案在檔案中的所有出現位置
-                        project_matches = re.findall(rf'<project[^>]*name=.{escaped_project_name}.[^>]*>', converted_content)
-                        if project_matches:
-                            self.logger.debug(f"  找到的專案行數: {len(project_matches)}")
-                            for j, match in enumerate(project_matches[:3]):  # 只顯示前3個
-                                self.logger.debug(f"    專案行 {j+1}: {match}")
-                        else:
-                            self.logger.debug(f"  在 XML 中找不到該專案名稱")
-                        
-                        # 檢查是否該專案已經是目標 revision
-                        if new_revision in converted_content and project_name in converted_content:
-                            already_converted_matches = re.findall(
-                                rf'<project[^>]*name=.{escaped_project_name}.[^>]*revision=.{re.escape(new_revision)}.[^>]*>', 
-                                converted_content
-                            )
-                            if already_converted_matches:
-                                self.logger.info(f"  ✅ 專案 {project_name} 已經是目標 revision: {new_revision}")
-                                replacement_success = True
-                                # 不增加 conversion_count，因為實際上沒有轉換
+                    if replacement_success:
+                        conversion_count += 1
+                        self.logger.debug(f"字串替換成功: {project_name} - {old_revision} → {new_revision}")
             
             self.logger.info(f"revision 轉換完成，共轉換 {conversion_count} 個專案")
+            self.logger.info(f"📊 處理統計:")
             if applied_default_count > 0:
-                self.logger.info(f"✅ 已為 {applied_default_count} 個 rtk remote 專案應用預設 revision")
+                self.logger.info(f"  - ✅ 已為 {applied_default_count} 個 rtk remote 專案應用預設 revision")
+            self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
+            self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
+            self.logger.info(f"  - ⬆️ 使用 upstream 進行轉換: {upstream_used_count} 個")
             self.logger.info("✅ 保留了所有原始格式：XML 宣告、註釋、空格、換行等")
             
             return converted_content, conversion_info
@@ -718,7 +689,50 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"revision 轉換失敗: {str(e)}")
             return xml_content, []
-    
+
+    def _replace_revision_in_xml(self, xml_content: str, project_name: str, 
+                            old_revision: str, new_revision: str) -> bool:
+        """
+        在 XML 字串中替換指定專案的 revision
+        
+        Args:
+            xml_content: XML 內容
+            project_name: 專案名稱
+            old_revision: 舊的 revision
+            new_revision: 新的 revision
+            
+        Returns:
+            是否替換成功
+        """
+        import re
+        
+        # 轉義專案名稱中的特殊字符
+        escaped_project_name = re.escape(project_name)
+        escaped_old_revision = re.escape(old_revision)
+        
+        # 嘗試多種匹配模式
+        patterns_to_try = [
+            # 模式 1: name 在 revision 之前
+            rf'(<project[^>]*name="{escaped_project_name}"[^>]*revision=")({escaped_old_revision})(")',
+            # 模式 2: revision 在 name 之前  
+            rf'(<project[^>]*revision=")({escaped_old_revision})("[^>]*name="{escaped_project_name}")',
+            # 模式 3: 更寬鬆的匹配，允許更多空格和屬性
+            rf'(<project[^>]*name\s*=\s*"{escaped_project_name}"[^>]*revision\s*=\s*")({escaped_old_revision})(")',
+            rf'(<project[^>]*revision\s*=\s*")({escaped_old_revision})("[^>]*name\s*=\s*"{escaped_project_name}")',
+            # 模式 4: 單引號版本
+            rf"(<project[^>]*name='{escaped_project_name}'[^>]*revision=')({escaped_old_revision})(')",
+            rf"(<project[^>]*revision=')({escaped_old_revision})('[^>]*name='{escaped_project_name}')",
+        ]
+        
+        for i, pattern in enumerate(patterns_to_try):
+            if re.search(pattern, xml_content):
+                xml_content = re.sub(pattern, rf'\1{new_revision}\3', xml_content)
+                self.logger.debug(f"字串替換成功 (模式{i+1}): {project_name} - {old_revision} → {new_revision}")
+                return True
+        
+        self.logger.warning(f"無法找到匹配的專案進行替換: {project_name}")
+        return False
+            
     def _convert_single_revision(self, revision: str, overwrite_type: str) -> str:
         """轉換單一 revision"""
         if overwrite_type == 'master_to_premp':
@@ -2231,6 +2245,69 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"檔案檢查報告失敗: {str(e)}")
 
+    def _is_revision_hash(self, revision: str) -> bool:
+        """
+        判斷 revision 是否為 commit hash
+        
+        Args:
+            revision: revision 字串
+            
+        Returns:
+            True 如果是 hash，False 如果是 branch name
+        """
+        if not revision:
+            return False
+        
+        revision = revision.strip()
+        
+        # Hash 特徵：40 字符的十六進制字符串
+        if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
+            return True
+        
+        # Branch name 特徵：包含斜線和可讀名稱
+        if '/' in revision and any(c.isalpha() for c in revision):
+            return False
+        
+        # 其他情況當作 branch name 處理
+        return False
+
+    def _get_effective_revision_for_conversion(self, project_element) -> str:
+        """
+        取得用於轉換的有效 revision（XML 元素版本）
+        
+        邏輯：
+        - 如果 revision 是 hash → 使用 upstream
+        - 如果 revision 是 branch name → 使用 revision
+        - 如果都沒有 → 使用 default revision（如果 remote=rtk）
+        
+        Args:
+            project_element: XML project 元素
+            
+        Returns:
+            用於轉換的 revision 字串
+        """
+        revision = project_element.get('revision', '')
+        upstream = project_element.get('upstream', '')
+        remote = project_element.get('remote', '') or self.default_remote
+        
+        # 如果 revision 是 hash，使用 upstream
+        if self._is_revision_hash(revision):
+            if upstream:
+                self.logger.debug(f"專案 {project_element.get('name', '')} revision 是 hash，使用 upstream: {upstream}")
+                return upstream
+            else:
+                self.logger.warning(f"專案 {project_element.get('name', '')} revision 是 hash 但沒有 upstream")
+                return ''
+        
+        # 如果 revision 是 branch name，直接使用
+        if revision:
+            self.logger.debug(f"專案 {project_element.get('name', '')} revision 是 branch name: {revision}")
+            return revision
+        
+        # 如果沒有 revision，返回空字串（會由其他邏輯處理 default revision）
+        self.logger.debug(f"專案 {project_element.get('name', '')} 沒有 revision")
+        return ''
+                
 # ===============================
 # ===== 使用範例和說明 =====
 # ===============================

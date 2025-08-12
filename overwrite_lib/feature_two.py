@@ -5,7 +5,20 @@
 修正：branch_link 使用 dest-branch 欄位並移到最後一欄
 🔥 修正：master_vs_premp 使用 feature_three.py 的完整轉換邏輯
 🔥 修正：當 revision 為空且 remote=rtk 時，使用 default revision
-⚠️  重要：feature_three.py 也需要同步相同的 default revision 處理邏輯！
+🔥 修正：支援兩種 revision 格式 - Hash vs Branch Name
+⚠️  重要：feature_three.py 也需要同步相同的處理邏輯！
+
+📋 Revision 處理邏輯：
+1. Hash revision (40字符hex) + upstream 欄位 → 使用 upstream 進行轉換和建立連結
+2. Branch revision (包含/和字母) → 直接使用 revision 進行轉換和建立連結
+3. 空 revision + remote=rtk → 使用 default revision
+
+範例：
+第1種 (Hash): revision="5dccbb8e43926e4d54139640149b7b42afc30129" upstream="realtek/android-14/mp.google-refplus.upgrade-11.rtd2851a"
+→ 使用 upstream 進行轉換
+
+第2種 (Branch): revision="realtek/android-14/mp.google-refplus.upgrade-11.rtd2851a"  
+→ 直接使用 revision 進行轉換
 """
 import os
 import xml.etree.ElementTree as ET
@@ -116,8 +129,88 @@ class FeatureTwo:
             return False
 
     # ============================================
-    # 🔥 新增：從 feature_three.py 移植的轉換邏輯
+    # 🔥 新增：Hash vs Branch Name 判斷邏輯
     # ============================================
+
+    def _is_revision_hash(self, revision: str) -> bool:
+        """
+        判斷 revision 是否為 commit hash
+        
+        Args:
+            revision: revision 字串
+            
+        Returns:
+            True 如果是 hash，False 如果是 branch name
+        """
+        if not revision:
+            return False
+        
+        revision = revision.strip()
+        
+        # Hash 特徵：40 字符的十六進制字符串
+        if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
+            return True
+        
+        # Branch name 特徵：包含斜線和可讀名稱
+        if '/' in revision and any(c.isalpha() for c in revision):
+            return False
+        
+        # 其他情況當作 branch name 處理
+        return False
+
+    def _get_effective_revision_for_conversion(self, project: Dict) -> str:
+        """
+        取得用於轉換的有效 revision
+        
+        邏輯：
+        - 如果 revision 是 hash → 使用 upstream
+        - 如果 revision 是 branch name → 使用 revision
+        - 如果都沒有 → 使用 default revision（如果 remote=rtk）
+        
+        Args:
+            project: 專案字典
+            
+        Returns:
+            用於轉換的 revision 字串
+        """
+        revision = project.get('revision', '')
+        upstream = project.get('upstream', '')
+        remote = project.get('remote', '')
+        
+        # 如果 revision 是 hash，使用 upstream
+        if self._is_revision_hash(revision):
+            if upstream:
+                self.logger.debug(f"專案 {project.get('name', '')} revision 是 hash，使用 upstream: {upstream}")
+                return upstream
+            else:
+                self.logger.warning(f"專案 {project.get('name', '')} revision 是 hash 但沒有 upstream")
+                return ''
+        
+        # 如果 revision 是 branch name，直接使用
+        if revision:
+            self.logger.debug(f"專案 {project.get('name', '')} revision 是 branch name: {revision}")
+            return revision
+        
+        # 如果沒有 revision，返回空字串（會由其他邏輯處理 default revision）
+        self.logger.debug(f"專案 {project.get('name', '')} 沒有 revision")
+        return ''
+
+    def _get_effective_revision_for_link(self, project: Dict) -> str:
+        """
+        取得用於建立連結的有效 revision
+        
+        邏輯：
+        - 如果 revision 是 hash → 使用 upstream
+        - 如果 revision 是 branch name → 使用 revision
+        - 如果都沒有 → 使用 default revision（如果已應用）
+        
+        Args:
+            project: 專案字典
+            
+        Returns:
+            用於建立連結的 revision 字串
+        """
+        return self._get_effective_revision_for_conversion(project)
 
     def _should_skip_revision_conversion(self, revision: str) -> bool:
         """
@@ -349,10 +442,15 @@ class FeatureTwo:
     # ============================================
 
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False) -> List[Dict]:
-        """轉換專案的分支名稱 - 增強版 (支援 Tag 和 remote 判斷 + 完整 master_to_premp 轉換邏輯)"""
+        """
+        轉換專案的分支名稱 - 增強版 (支援 Hash vs Branch Name 判斷)
+        🔥 新增：根據 revision 類型（hash/branch）選擇不同的處理邏輯
+        """
         converted_projects = []
         tag_count = 0
         branch_count = 0
+        hash_revision_count = 0
+        branch_revision_count = 0
         
         self.logger.info(f"🔄 開始轉換專案分支，處理類型: {process_type}")
         
@@ -363,21 +461,31 @@ class FeatureTwo:
             # 🆕 取得 remote 資訊
             remote = project.get('remote', '')
             
-            # 🔥 修正：使用 revision 進行轉換，而不是 dest-branch 或 upstream
-            source_revision = project.get('revision', '')
+            # 🔥 使用新邏輯取得用於轉換的 revision
+            effective_revision = self._get_effective_revision_for_conversion(project)
             
-            # 如果沒有 revision，跳過轉換
-            if not source_revision:
+            # 🔥 統計 revision 類型
+            original_revision = project.get('revision', '')
+            if self._is_revision_hash(original_revision):
+                hash_revision_count += 1
+            elif original_revision:
+                branch_revision_count += 1
+            
+            # 如果沒有有效的 revision，跳過轉換
+            if not effective_revision:
                 target_branch = ''
-                self.logger.debug(f"專案 {project.get('name', '')} 沒有 revision，跳過轉換")
+                self.logger.debug(f"專案 {project.get('name', '')} 沒有有效的 revision，跳過轉換")
             else:
                 # 🔥 根據處理類型進行轉換
-                target_branch = self._convert_revision_by_type(source_revision, process_type)
+                target_branch = self._convert_revision_by_type(effective_revision, process_type)
                 
-                if target_branch != source_revision:
-                    self.logger.debug(f"專案 {project.get('name', '')} 轉換: {source_revision} → {target_branch}")
+                if target_branch != effective_revision:
+                    self.logger.debug(f"專案 {project.get('name', '')} 轉換: {effective_revision} → {target_branch}")
             
             converted_project['target_branch'] = target_branch
+            
+            # 🔥 記錄有效轉換用的 revision（用於後續比較）
+            converted_project['effective_revision'] = effective_revision
             
             # 判斷目標是 Tag 還是 Branch
             is_tag = self._is_tag_reference(target_branch)
@@ -388,7 +496,7 @@ class FeatureTwo:
             else:
                 branch_count += 1
             
-            # 根據參數決定是否檢查存在性
+            # 🔥 根據參數決定是否檢查存在性（使用有效 revision 進行比較）
             if check_branch_exists and target_branch:
                 if is_tag:
                     # 檢查 Tag 存在性（傳入 remote）
@@ -410,6 +518,9 @@ class FeatureTwo:
                 self.logger.info(f"已處理 {i}/{len(projects)} 個專案的存在性檢查")
         
         self.logger.info(f"轉換完成 - Branch: {branch_count}, Tag: {tag_count}")
+        self.logger.info(f"📊 Revision 類型統計:")
+        self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
+        self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
         return converted_projects
 
     def _convert_revision_by_type(self, revision: str, process_type: str) -> str:
@@ -655,6 +766,9 @@ class FeatureTwo:
         # 🔥 調試資訊：統計欄位使用情況
         revision_count = 0
         dest_branch_count = 0
+        hash_revision_count = 0
+        branch_revision_count = 0
+        upstream_used_count = 0
         
         for project in projects:
             enhanced_project = project.copy()
@@ -664,25 +778,36 @@ class FeatureTwo:
             # 🆕 取得 remote 資訊
             remote = project.get('remote', '')
             
-            # 🔥 修正：branch_link 使用 revision 欄位（原始分支），因為 dest-branch 經常是空的
+            # 🔥 統計原始資料
             revision = project.get('revision', '')
             dest_branch = project.get('dest-branch', '')
+            upstream = project.get('upstream', '')
             
-            # 🔥 統計欄位使用情況
             if revision:
                 revision_count += 1
+                if self._is_revision_hash(revision):
+                    hash_revision_count += 1
+                else:
+                    branch_revision_count += 1
             if dest_branch:
                 dest_branch_count += 1
             
-            # 🔥 建立 branch_link - 使用 revision（原始分支的連結）
-            if revision:
+            # 🔥 使用新邏輯取得用於建立連結的 revision
+            link_revision = self._get_effective_revision_for_link(project)
+            
+            # 🔥 記錄是否使用了 upstream
+            if self._is_revision_hash(revision) and upstream:
+                upstream_used_count += 1
+            
+            # 🔥 建立 branch_link - 使用有效的 revision
+            if link_revision:
                 # 判斷 revision 類型
-                revision_type = self._determine_revision_type(revision)
-                branch_link = self._build_gerrit_link(project_name, revision, revision_type, remote)
-                self.logger.debug(f"為專案 {project_name} 建立 branch_link: {revision} -> {branch_link[:50]}...")
+                revision_type = self._determine_revision_type(link_revision)
+                branch_link = self._build_gerrit_link(project_name, link_revision, revision_type, remote)
+                self.logger.debug(f"為專案 {project_name} 建立 branch_link: {link_revision} -> {branch_link[:50]}...")
             else:
                 branch_link = ""
-                self.logger.debug(f"專案 {project_name} 沒有 revision，branch_link 為空")
+                self.logger.debug(f"專案 {project_name} 沒有有效 revision，branch_link 為空")
             
             # 目標 branch 資訊（保持不變）
             target_branch = project.get('target_branch', '')
@@ -703,10 +828,19 @@ class FeatureTwo:
             projects_with_links.append(enhanced_project)
         
         self.logger.info(f"已為 {len(projects_with_links)} 個專案添加連結資訊")
-        self.logger.info(f"🔗 branch_link 使用 revision 欄位，target_branch_link 使用轉換後的 target_branch")
-        self.logger.info(f"📊 欄位統計: revision 欄位有值: {revision_count}, dest-branch 欄位有值: {dest_branch_count}")
-        if revision_count > dest_branch_count:
-            self.logger.info(f"✅ 修正說明: 使用 revision 而非 dest-branch 可以避免大部分 branch_link 為空的問題")
+        self.logger.info(f"🔗 branch_link 邏輯: Hash revision 使用 upstream，Branch revision 使用 revision")
+        self.logger.info(f"📊 欄位統計:")
+        self.logger.info(f"  - revision 欄位有值: {revision_count}")
+        self.logger.info(f"  - dest-branch 欄位有值: {dest_branch_count}")
+        self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count}")
+        self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count}")
+        self.logger.info(f"  - ⬆️ 使用 upstream 建立連結: {upstream_used_count}")
+        
+        if hash_revision_count > 0:
+            self.logger.info(f"✅ Hash revision 處理: 使用 upstream 欄位避免無效連結")
+        if branch_revision_count > 0:
+            self.logger.info(f"✅ Branch revision 處理: 直接使用 revision 欄位建立連結")
+            
         return projects_with_links
 
     def _write_excel_with_links(self, projects: List[Dict], duplicate_projects: List[Dict], 
@@ -741,18 +875,19 @@ class FeatureTwo:
                     df_main = pd.DataFrame(projects)
                     
                     # 🆕 調整欄位順序：
-                    # - revision: 原始分支
+                    # - revision: 原始 revision（可能是 hash 或 branch name）
+                    # - effective_revision: 用於轉換的有效 revision（hash→upstream, branch→revision）
                     # - target_branch: 轉換後分支 
-                    # - revision_diff: 比對結果（橘底白字，使用公式比對 revision）
+                    # - revision_diff: 比對結果（橘底白字，比對 effective_revision）
                     # - target_branch_link: 轉換後分支連結（綠底白字）
                     # - branch_link: 原始分支連結（藍底白字，移到最後）
                     main_column_order = [
-                        'SN', 'name', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
                         'target_branch', 
                         'target_type', 
                         'target_branch_exists', 
                         'target_branch_revision',
-                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 effective_revision
                         'target_branch_link'  # 綠底白字
                     ]
                     
@@ -770,7 +905,7 @@ class FeatureTwo:
                 else:
                     # 空的 DataFrame 結構
                     df_main = pd.DataFrame(columns=[
-                        'SN', 'name', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
                         'target_branch', 'target_type', 'target_branch_exists', 
                         'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link'
                     ])
@@ -786,12 +921,12 @@ class FeatureTwo:
                     # - branch_link（原始分支連結）在最後
                     # - target_branch_link（轉換後分支連結）在 revision_diff 右邊
                     dup_column_order = [
-                        'SN', 'name', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'name', 'revision', 'effective_revision', 'upstream', 'dest-branch',
                         'target_branch',
                         'target_type',
                         'target_branch_exists',
                         'target_branch_revision',
-                        'revision_diff',  # 🆕 橘底白字，使用公式比對 revision
+                        'revision_diff',  # 🆕 橘底白字，使用公式比對 effective_revision
                         'target_branch_link'  # 綠底白字
                     ]
                     
@@ -824,9 +959,10 @@ class FeatureTwo:
     def _set_revision_diff_formulas(self, writer):
         """
         設定 revision_diff 欄位的 Excel 公式
-        公式邏輯：比對 revision 前8碼與 target_branch_revision
+        🔥 修正：比對 effective_revision 前8碼與 target_branch_revision
+        公式邏輯：
         - 相同顯示 "N" (綠色)
-        - 不同顯示 "Y" (紅色)
+        - 不同顯示 "Y" (紅色)  
         - 任一為空或 "-" 顯示 "Y" (紅色)
         """
         try:
@@ -839,41 +975,52 @@ class FeatureTwo:
                 worksheet = writer.sheets[sheet_name]
                 
                 # 找到各欄位的位置
-                revision_col = None
+                effective_revision_col = None
                 target_revision_col = None
                 revision_diff_col = None
                 
                 for col_num, cell in enumerate(worksheet[1], 1):
                     header = str(cell.value) if cell.value else ''
-                    if header == 'revision':
-                        revision_col = col_num
+                    if header == 'effective_revision':
+                        effective_revision_col = col_num
                     elif header == 'target_branch_revision':
                         target_revision_col = col_num
                     elif header == 'revision_diff':
                         revision_diff_col = col_num
                 
-                if revision_col and target_revision_col and revision_diff_col:
-                    revision_letter = get_column_letter(revision_col)
+                # 🔥 如果沒有 effective_revision 欄位，嘗試使用 revision 欄位
+                if not effective_revision_col:
+                    for col_num, cell in enumerate(worksheet[1], 1):
+                        header = str(cell.value) if cell.value else ''
+                        if header == 'revision':
+                            effective_revision_col = col_num
+                            self.logger.info(f"使用 revision 欄位代替 effective_revision 進行比對")
+                            break
+                
+                if effective_revision_col and target_revision_col and revision_diff_col:
+                    effective_letter = get_column_letter(effective_revision_col)
                     target_letter = get_column_letter(target_revision_col)
                     diff_letter = get_column_letter(revision_diff_col)
                     
                     # 設定欄寬 - 縮小 revision_diff 欄位寬度
-                    worksheet.column_dimensions[diff_letter].width = 12  # 縮小寬度
+                    worksheet.column_dimensions[diff_letter].width = 12
                     
                     for row_num in range(2, worksheet.max_row + 1):
-                        # 修改公式邏輯：相同顯示 "N"，不同或空值顯示 "Y"
+                        # 🔥 修改公式邏輯：比對 effective_revision（或 revision）前8碼
                         formula = (
                             f'=IF(OR({target_letter}{row_num}="-", '
                             f'{target_letter}{row_num}="", '
-                            f'{revision_letter}{row_num}=""), '
+                            f'{effective_letter}{row_num}=""), '
                             f'"Y", '  # 空值顯示 Y
-                            f'IF(LEFT({revision_letter}{row_num},8)={target_letter}{row_num}, '
+                            f'IF(LEFT({effective_letter}{row_num},8)={target_letter}{row_num}, '
                             f'"N", "Y"))'  # 相同顯示 N，不同顯示 Y
                         )
                         
                         worksheet[f"{diff_letter}{row_num}"].value = formula
                     
-                    self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式")
+                    self.logger.info(f"已為 '{sheet_name}' 頁籤設定 revision_diff 公式（使用 effective_revision）")
+                else:
+                    self.logger.warning(f"無法為 '{sheet_name}' 頁籤設定公式，缺少必要欄位")
                     
         except Exception as e:
             self.logger.error(f"設定 revision_diff 公式失敗: {str(e)}")
@@ -1366,9 +1513,42 @@ class FeatureTwo:
             self.logger.error(f"格式化目標分支欄位失敗: {str(e)}")
                 
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None):
-        """建立分支並記錄結果 - 增強版 (跳過 Tag 類型，支援 remote 判斷)"""
+        """
+        建立分支並記錄結果 - 增強版 (跳過 Tag 類型，支援 remote 判斷)
+        
+        📋 建立分支的邏輯：
+        1. 遍歷所有專案
+        2. 取得關鍵資訊：project_name, target_branch, target_type, revision, remote
+        3. 跳過條件檢查：
+           - 缺少必要資訊的專案
+           - Tag 類型的專案（因為 Tag 不能建立分支）
+        4. 根據 remote 選擇 Gerrit 伺服器：
+           - remote="rtk-prebuilt" → 使用 prebuilt Gerrit (mm2sd-git2.rtkbf.com)
+           - 其他 remote → 使用預設 Gerrit (mm2sd.rtkbf.com)
+        5. 呼叫 GerritManager.create_branch(project_name, target_branch, revision)
+        6. 記錄結果到 Excel 的 "Branch 建立狀態" 頁籤
+        
+        🎯 建立邏輯重點：
+        - project_name: 專案名稱（如 "platform/frameworks/base"）
+        - target_branch: 目標分支名稱（轉換後的分支，如 "realtek/android-14/premp.google-refplus"）
+        - revision: 分支的起始點（原始 revision，如 "realtek/master"）
+        
+        🔄 分支存在性處理邏輯：
+        - 📍 已存在分支：GerritManager 會檢查分支是否已存在
+          * 如果已存在且指向相同 revision → 標記為成功，Already_Exists=是
+          * 如果已存在但指向不同 revision → 可能失敗或警告（取決於 GerritManager 實作）
+        - 🆕 不存在分支：正常建立新分支
+          * 成功建立 → Status=成功，Already_Exists=否
+          * 建立失敗 → Status=失敗，顯示錯誤訊息
+        - ❌ 權限或網路問題：Status=失敗，顯示具體錯誤
+        
+        ⚠️ 注意：這是從 revision 創建到 target_branch 的新分支
+        實際的分支存在性檢查和衝突處理由 GerritManager.create_branch() 負責
+        """
         try:
             self.logger.info("開始建立分支...")
+            self.logger.info("🎯 建立邏輯：從原始 revision 創建目標 target_branch 分支")
+            self.logger.info("🔄 分支存在性會由 GerritManager 自動處理")
             
             branch_results = []
             skipped_tags = 0
@@ -1376,18 +1556,23 @@ class FeatureTwo:
             normal_count = 0
             
             for project in projects:
-                project_name = project.get('name', '')
-                target_branch = project.get('target_branch', '')
+                project_name = project.get('name', '')           # 專案名稱
+                target_branch = project.get('target_branch', '') # 目標分支（轉換後）
                 target_type = project.get('target_type', 'Branch')
-                revision = project.get('revision', '')
+                revision = project.get('revision', '')           # 原始 revision（作為起始點）
                 
                 # 🆕 取得 remote 資訊
                 remote = project.get('remote', '')
                 
+                # 🔍 檢查必要資訊
                 if not all([project_name, target_branch, revision]):
+                    self.logger.debug(f"跳過專案 {project_name}：缺少必要資訊")
+                    self.logger.debug(f"  project_name: {'✓' if project_name else '✗'}")
+                    self.logger.debug(f"  target_branch: {'✓' if target_branch else '✗'}")
+                    self.logger.debug(f"  revision: {'✓' if revision else '✗'}")
                     continue
                 
-                # 跳過 Tag 類型的專案
+                # 🏷️ 跳過 Tag 類型的專案
                 if target_type == 'Tag' or self._is_tag_reference(target_branch):
                     skipped_tags += 1
                     branch_result = {
@@ -1401,27 +1586,62 @@ class FeatureTwo:
                         'Message': 'Tag 類型不建立分支',
                         'Already_Exists': '-',
                         'Remote': remote,
-                        'Gerrit_Server': self._get_gerrit_base_url(remote)  # 🆕 記錄使用的伺服器
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
+                    self.logger.debug(f"跳過 Tag 類型專案: {project_name} -> {target_branch}")
                     continue
                 
-                # 🆕 根據 remote 選擇正確的 GerritManager
+                # 🌐 根據 remote 選擇正確的 GerritManager
                 if remote == 'rtk-prebuilt':
                     # 使用 prebuilt 的 Gerrit 伺服器
                     temp_gerrit = self._get_prebuilt_gerrit_manager()
                     prebuilt_count += 1
+                    gerrit_server = self._get_gerrit_base_url('rtk-prebuilt')
                     self.logger.debug(f"使用 rtk-prebuilt Gerrit 建立分支: {project_name}")
                 else:
                     # 使用預設的 GerritManager
                     temp_gerrit = self.gerrit_manager
                     normal_count += 1
+                    gerrit_server = self._get_gerrit_base_url('')
                     self.logger.debug(f"使用預設 Gerrit 建立分支: {project_name}")
                 
-                # 建立分支
+                # 🔨 建立分支：從 revision 創建 target_branch
+                self.logger.debug(f"準備建立分支:")
+                self.logger.debug(f"  專案: {project_name}")
+                self.logger.debug(f"  目標分支: {target_branch}")
+                self.logger.debug(f"  起始點: {revision}")
+                self.logger.debug(f"  Gerrit 伺服器: {gerrit_server}")
+                
+                # 🔥 關鍵：呼叫 GerritManager.create_branch()
+                # 這個方法會處理：
+                # 1. 檢查分支是否已存在
+                # 2. 如果不存在，創建新分支
+                # 3. 如果已存在，檢查是否指向相同 revision
+                # 4. 返回詳細的結果資訊
                 result = temp_gerrit.create_branch(project_name, target_branch, revision)
                 
-                # 記錄結果
+                # 📊 分析 GerritManager 返回的結果
+                success = result.get('success', False)
+                message = result.get('message', '')
+                already_exists = result.get('exists', False)
+                
+                # 🔍 根據結果判斷狀態
+                if success:
+                    if already_exists:
+                        status = '成功'
+                        final_message = f"分支已存在且正確：{message}"
+                        self.logger.info(f"✅ 分支已存在: {project_name} -> {target_branch}")
+                    else:
+                        status = '成功'
+                        final_message = f"成功建立分支：{message}"
+                        self.logger.info(f"🆕 成功建立分支: {project_name} -> {target_branch}")
+                else:
+                    status = '失敗'
+                    final_message = f"建立失敗：{message}"
+                    self.logger.warning(f"❌ 建立失敗: {project_name} -> {target_branch}: {message}")
+                
+                # 📝 記錄詳細結果
                 branch_result = {
                     'SN': len(branch_results) + 1,
                     'Project': project_name,
@@ -1429,19 +1649,20 @@ class FeatureTwo:
                     'Target_Type': 'Branch',
                     'target_branch_link': project.get('target_branch_link', ''),
                     'Revision': revision,
-                    'Status': '成功' if result['success'] else '失敗',
-                    'Message': result['message'],
-                    'Already_Exists': '是' if result.get('exists', False) else '否',
+                    'Status': status,
+                    'Message': final_message,
+                    'Already_Exists': '是' if already_exists else '否',
                     'Remote': remote,
-                    'Gerrit_Server': self._get_gerrit_base_url(remote)  # 🆕 記錄使用的伺服器
+                    'Gerrit_Server': gerrit_server
                 }
                 branch_results.append(branch_result)
                 
-                # 每處理 10 個專案輸出進度
+                # 📊 每處理 10 個專案輸出進度
                 if len(branch_results) % 10 == 0:
-                    self.logger.info(f"已處理 {len(branch_results)} 個分支建立")
+                    success_count = len([r for r in branch_results if r['Status'] == '成功'])
+                    self.logger.info(f"已處理 {len(branch_results)} 個分支，成功 {success_count} 個")
             
-            # 更新 Excel 檔案，加入分支建立狀態頁籤
+            # 📄 更新 Excel 檔案，加入分支建立狀態頁籤
             if output_folder:
                 full_output_path = os.path.join(output_folder, output_file)
             else:
@@ -1449,13 +1670,38 @@ class FeatureTwo:
                 
             self._add_branch_status_sheet(full_output_path, branch_results)
             
-            self.logger.info(f"分支建立完成，共處理 {len(branch_results)} 個專案")
-            self.logger.info(f"  - 跳過 {skipped_tags} 個 Tag 類型專案")
-            self.logger.info(f"  - 在 rtk-prebuilt Gerrit 處理 {prebuilt_count} 個專案")
-            self.logger.info(f"  - 在預設 Gerrit 處理 {normal_count} 個專案")
+            # 📊 最終統計
+            success_count = len([r for r in branch_results if r['Status'] == '成功'])
+            failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
+            already_exists_count = len([r for r in branch_results if r['Already_Exists'] == '是'])
+            new_branch_count = len([r for r in branch_results if r['Status'] == '成功' and r['Already_Exists'] == '否'])
+            
+            self.logger.info(f"🎉 分支建立完成，共處理 {len(branch_results)} 個專案")
+            self.logger.info(f"📊 處理統計:")
+            self.logger.info(f"  - ✅ 總成功: {success_count} 個")
+            self.logger.info(f"    - 🆕 新建立: {new_branch_count} 個")  
+            self.logger.info(f"    - 📍 已存在: {already_exists_count} 個")
+            self.logger.info(f"  - ❌ 失敗: {failure_count} 個")
+            self.logger.info(f"  - ⏭️ 跳過 Tag: {skipped_tags} 個")
+            self.logger.info(f"  - 🟣 rtk-prebuilt Gerrit: {prebuilt_count} 個")
+            self.logger.info(f"  - 🔵 預設 Gerrit: {normal_count} 個")
+            
+            # 🎯 成功率計算
+            total_attempted = len(branch_results) - skipped_tags
+            if total_attempted > 0:
+                success_rate = (success_count / total_attempted * 100)
+                self.logger.info(f"  - 📈 成功率: {success_rate:.1f}%")
+            
+            # 💡 建議
+            if failure_count > 0:
+                self.logger.warning(f"⚠️ 有 {failure_count} 個分支建立失敗，請檢查 Excel 報告中的錯誤訊息")
+            if already_exists_count > 0:
+                self.logger.info(f"💡 有 {already_exists_count} 個分支已存在，這是正常情況")
             
         except Exception as e:
             self.logger.error(f"建立分支失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
     
     def _add_branch_status_sheet(self, excel_file: str, branch_results: List[Dict]):
         """在 Excel 檔案中加入分支建立狀態頁籤 - 增強版 (包含連結、remote 和 Gerrit 伺服器)"""
