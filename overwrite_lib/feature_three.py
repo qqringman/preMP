@@ -568,19 +568,21 @@ class FeatureThree:
             self.logger.warning(f"下載目標檔案異常: {str(e)}")
             return None
     
+    # 🔥 完全重寫 _convert_revisions 方法，移除有問題的正規表達式
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
         """
-        根據轉換類型進行 revision 轉換 - 支援 Hash vs Branch Name 處理
-        🔥 新增：處理 default revision + Hash vs Branch Name 邏輯
+        根據轉換類型進行 revision 轉換 - 修正正規表達式錯誤版本
+        🔥 只轉換原本就有 revision 的專案，不自動插入 default revision
         """
         try:
             self.logger.info(f"開始進行 revision 轉換: {overwrite_type}")
             self.logger.info("使用字串替換方式，保留所有原始格式（包含註釋、空格等）")
+            self.logger.info("🎯 轉換策略: 只轉換原本就有 revision 的專案")
             
-            # 🔥 先解析 XML 取得 default 資訊
+            # 先解析 XML 取得 default 資訊
             temp_root = ET.fromstring(xml_content)
             
-            # 🔥 讀取 default 標籤的 remote 和 revision 屬性
+            # 讀取 default 標籤的 remote 和 revision 屬性
             default_remote = ''
             default_revision = ''
             default_element = temp_root.find('default')
@@ -595,7 +597,7 @@ class FeatureThree:
             
             conversion_info = []
             conversion_count = 0
-            applied_default_count = 0
+            skipped_no_revision = 0  # 🔥 統計沒有 revision 而跳過的專案
             hash_revision_count = 0
             branch_revision_count = 0
             upstream_used_count = 0
@@ -607,33 +609,19 @@ class FeatureThree:
             for project in temp_root.findall('project'):
                 project_name = project.get('name', '')
                 project_remote = project.get('remote', '') or default_remote
-                original_revision = project.get('revision', '')
+                original_revision = project.get('revision', '')  # 🔥 只使用原始的 revision
                 upstream = project.get('upstream', '')
                 
-                # 🔥 如果 revision 為空且 remote=rtk，使用 default revision
-                if not original_revision and project_remote == 'rtk' and default_revision:
-                    original_revision = default_revision
-                    applied_default_count += 1
-                    self.logger.debug(f"專案 {project_name} 使用預設 revision: {default_revision}")
-                    
-                    # 🔥 在 XML 字串中插入 default revision
-                    import re
-                    escaped_project_name = re.escape(project_name)
-                    pattern = rf'(<project[^>]*name\s*=\s*["\']?{escaped_project_name}["\']?[^>]*?)(?<!revision\s*=\s*["\'][^"\']*)(>|/>)'
-                    
-                    def add_revision(match):
-                        project_attrs = match.group(1)
-                        closing = match.group(2)
-                        if 'revision=' not in project_attrs:
-                            return f'{project_attrs} revision="{default_revision}"{closing}'
-                        return match.group(0)
-                    
-                    converted_content = re.sub(pattern, add_revision, converted_content)
+                # 🔥 如果沒有 revision，直接跳過，不插入 default
+                if not original_revision:
+                    skipped_no_revision += 1
+                    self.logger.debug(f"跳過沒有 revision 的專案: {project_name}")
+                    continue
                 
-                # 🔥 使用新邏輯取得用於轉換的有效 revision
+                # 使用新邏輯取得用於轉換的有效 revision
                 effective_revision = self._get_effective_revision_for_conversion(project)
                 
-                # 🔥 統計 revision 類型
+                # 統計 revision 類型
                 if self._is_revision_hash(original_revision):
                     hash_revision_count += 1
                     if upstream:
@@ -642,17 +630,27 @@ class FeatureThree:
                     branch_revision_count += 1
                 
                 if not effective_revision:
+                    self.logger.debug(f"專案 {project_name} 沒有有效的轉換 revision，跳過")
                     continue
                 
                 old_revision = effective_revision
                 new_revision = self._convert_single_revision(effective_revision, overwrite_type)
                 
+                # 🔥 增強偵錯 - MP to MPBackup 專用
+                if overwrite_type == 'mp_to_mpbackup':
+                    self.logger.debug(f"🔍 MP to MPBackup 轉換偵錯:")
+                    self.logger.debug(f"  專案: {project_name}")
+                    self.logger.debug(f"  原始 revision: {original_revision}")
+                    self.logger.debug(f"  有效 revision: {effective_revision}")
+                    self.logger.debug(f"  轉換結果: {new_revision}")
+                    self.logger.debug(f"  是否改變: {new_revision != old_revision}")
+                
                 # 記錄轉換資訊
                 conversion_info.append({
                     'name': project_name,
                     'path': project.get('path', ''),
-                    'original_revision': original_revision,  # 原始 revision（可能是 hash）
-                    'effective_revision': effective_revision,  # 🔥 用於轉換的有效 revision
+                    'original_revision': original_revision,
+                    'effective_revision': effective_revision,
                     'converted_revision': new_revision,
                     'upstream': upstream,
                     'dest-branch': project.get('dest-branch', ''),
@@ -660,36 +658,140 @@ class FeatureThree:
                     'clone-depth': project.get('clone-depth', ''),
                     'remote': project_remote,
                     'changed': new_revision != old_revision,
-                    'used_default_revision': original_revision == default_revision,
-                    'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream  # 🔥 新增標記
+                    'used_default_revision': False,  # 🔥 不再插入 default revision
+                    'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream
                 })
                 
                 # 如果需要轉換，在字串中直接替換
                 if new_revision != old_revision:
-                    # 🔥 注意：這裡要替換的是 effective_revision，不是 original_revision
-                    replacement_success = self._replace_revision_in_xml(
+                    # 🔥 使用安全的替換方法
+                    replacement_success = self._safe_replace_revision_in_xml(
                         converted_content, project_name, old_revision, new_revision
                     )
                     
                     if replacement_success:
+                        converted_content = replacement_success
                         conversion_count += 1
                         self.logger.debug(f"字串替換成功: {project_name} - {old_revision} → {new_revision}")
+                        
+                        # 🔥 MP to MPBackup 特別記錄
+                        if overwrite_type == 'mp_to_mpbackup':
+                            self.logger.info(f"✅ MP to MPBackup 轉換成功: {project_name}")
+                            self.logger.info(f"  {old_revision} → {new_revision}")
             
             self.logger.info(f"revision 轉換完成，共轉換 {conversion_count} 個專案")
             self.logger.info(f"📊 處理統計:")
-            if applied_default_count > 0:
-                self.logger.info(f"  - ✅ 已為 {applied_default_count} 個 rtk remote 專案應用預設 revision")
+            self.logger.info(f"  - ⏭️ 跳過沒有 revision 的專案: {skipped_no_revision} 個")
             self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
             self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
             self.logger.info(f"  - ⬆️ 使用 upstream 進行轉換: {upstream_used_count} 個")
             self.logger.info("✅ 保留了所有原始格式：XML 宣告、註釋、空格、換行等")
             
+            # 🔥 特別檢查 MP to MPBackup 轉換效果
+            if overwrite_type == 'mp_to_mpbackup':
+                self._verify_mp_to_mpbackup_conversion(converted_content, xml_content)
+            
             return converted_content, conversion_info
             
         except Exception as e:
             self.logger.error(f"revision 轉換失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
             return xml_content, []
 
+    def _verify_mp_to_mpbackup_conversion(self, converted_content: str, original_content: str):
+        """驗證 MP to MPBackup 轉換是否成功"""
+        try:
+            # 統計轉換前後的 revision 差異
+            original_wave_count = original_content.count('mp.google-refplus.wave')
+            original_backup_count = original_content.count('mp.google-refplus.wave.backup')
+            
+            converted_wave_count = converted_content.count('mp.google-refplus.wave')
+            converted_backup_count = converted_content.count('mp.google-refplus.wave.backup')
+            
+            self.logger.info(f"🔍 MP to MPBackup 轉換驗證:")
+            self.logger.info(f"  轉換前: wave={original_wave_count}, backup={original_backup_count}")
+            self.logger.info(f"  轉換後: wave={converted_wave_count}, backup={converted_backup_count}")
+            
+            # 計算實際的變化
+            backup_increase = converted_backup_count - original_backup_count
+            wave_decrease = original_wave_count - converted_wave_count
+            
+            if backup_increase > 0:
+                self.logger.info(f"✅ 轉換成功: 新增了 {backup_increase} 個 backup")
+                self.logger.info(f"✅ 減少了 {wave_decrease} 個 wave")
+            elif original_backup_count > 0 and original_wave_count == original_backup_count:
+                self.logger.info(f"💡 所有 revision 可能已經是 backup 格式")
+            else:
+                self.logger.warning(f"❌ 轉換可能失敗: backup 數量沒有增加")
+                
+        except Exception as e:
+            self.logger.error(f"驗證 MP to MPBackup 轉換時發生錯誤: {str(e)}")
+            
+    def _safe_insert_revision(self, xml_content: str, project_name: str, revision: str) -> str:
+        """
+        安全地為專案插入 revision 屬性
+        """
+        try:
+            lines = xml_content.split('\n')
+            
+            for i, line in enumerate(lines):
+                if f'name="{project_name}"' in line and 'revision=' not in line:
+                    # 找到沒有 revision 的專案行，插入 revision
+                    if line.strip().endswith('/>'):
+                        # 單行標籤
+                        new_line = line.replace('/>', f' revision="{revision}"/>')
+                        lines[i] = new_line
+                        self.logger.debug(f"✅ 插入 revision: {project_name}")
+                        break
+                    elif line.strip().endswith('>'):
+                        # 多行標籤的開始
+                        new_line = line.replace('>', f' revision="{revision}">')
+                        lines[i] = new_line
+                        self.logger.debug(f"✅ 插入 revision (多行): {project_name}")
+                        break
+            
+            return '\n'.join(lines)
+            
+        except Exception as e:
+            self.logger.error(f"插入 revision 失敗: {str(e)}")
+            return xml_content
+            
+    def _safe_replace_revision_in_xml(self, xml_content: str, project_name: str, 
+                                 old_revision: str, new_revision: str) -> str:
+        """
+        安全的 XML 字串替換 - 避免有問題的正規表達式
+        """
+        try:
+            # 🔥 使用簡單的字串搜尋和替換，避免複雜的正規表達式
+            lines = xml_content.split('\n')
+            modified = False
+            
+            for i, line in enumerate(lines):
+                # 檢查這一行是否包含目標專案
+                if f'name="{project_name}"' in line and 'revision=' in line:
+                    # 找到目標行，進行替換
+                    if f'revision="{old_revision}"' in line:
+                        lines[i] = line.replace(f'revision="{old_revision}"', f'revision="{new_revision}"')
+                        modified = True
+                        self.logger.debug(f"✅ 替換成功: {project_name}")
+                        break
+                    elif f"revision='{old_revision}'" in line:
+                        lines[i] = line.replace(f"revision='{old_revision}'", f"revision='{new_revision}'")
+                        modified = True
+                        self.logger.debug(f"✅ 替換成功 (單引號): {project_name}")
+                        break
+            
+            if modified:
+                return '\n'.join(lines)
+            else:
+                self.logger.warning(f"❌ 未找到匹配的替換: {project_name} - {old_revision}")
+                return xml_content
+                
+        except Exception as e:
+            self.logger.error(f"安全替換失敗: {str(e)}")
+            return xml_content
+            
     def _replace_revision_in_xml(self, xml_content: str, project_name: str, 
                             old_revision: str, new_revision: str) -> bool:
         """
@@ -968,9 +1070,48 @@ class FeatureThree:
         return revision.replace('premp.google-refplus', 'mp.google-refplus.wave')
     
     def _convert_mp_to_mpbackup(self, revision: str) -> str:
-        """mp → mpbackup 轉換規則"""
-        # 將 mp.google-refplus.wave 關鍵字替換為 mp.google-refplus.wave.backup
-        return revision.replace('mp.google-refplus.wave', 'mp.google-refplus.wave.backup')
+        """mp → mpbackup 轉換規則 - 修正正規表達式錯誤"""
+        if not revision:
+            return revision
+        
+        original_revision = revision.strip()
+        
+        # 記錄轉換前的狀態
+        self.logger.debug(f"MP to MPBackup 轉換輸入: {original_revision}")
+        
+        # 檢查是否已經是 backup 格式
+        if 'mp.google-refplus.wave.backup' in original_revision:
+            self.logger.debug(f"已經是 backup 格式，不需轉換: {original_revision}")
+            return original_revision
+        
+        # 🔥 主要轉換邏輯 - 簡化版，避免複雜正規表達式
+        if 'mp.google-refplus.wave' in original_revision and 'backup' not in original_revision:
+            result = original_revision.replace('mp.google-refplus.wave', 'mp.google-refplus.wave.backup')
+            self.logger.debug(f"標準轉換: {original_revision} → {result}")
+            return result
+        
+        # 🔥 處理以 .wave 結尾但沒有 backup 的情況
+        if original_revision.endswith('.wave') and 'mp.google-refplus' in original_revision and 'backup' not in original_revision:
+            result = original_revision + '.backup'
+            self.logger.debug(f"後綴轉換: {original_revision} → {result}")
+            return result
+        
+        # 🔥 處理包含 wave 但格式特殊的情況 - 使用安全的字串操作
+        if 'mp.google-refplus' in original_revision and 'wave' in original_revision and 'backup' not in original_revision:
+            # 找到 wave 的位置，在後面加 .backup
+            wave_index = original_revision.find('wave')
+            if wave_index != -1:
+                # 檢查 wave 後面是否直接結束或跟著其他字符
+                after_wave = original_revision[wave_index + 4:]  # wave 有4個字符
+                if not after_wave or after_wave.startswith('.') or after_wave.startswith('/'):
+                    # 在 wave 後面插入 .backup
+                    result = original_revision[:wave_index + 4] + '.backup' + after_wave
+                    self.logger.debug(f"插入轉換: {original_revision} → {result}")
+                    return result
+        
+        # 如果沒有匹配，返回原值
+        self.logger.debug(f"MP to MPBackup 轉換無變化: {original_revision}")
+        return original_revision
     
     def _save_source_file(self, content: str, overwrite_type: str, output_folder: str) -> str:
         """保存源檔案（從 Gerrit 下載的源檔案） - 新增方法"""
