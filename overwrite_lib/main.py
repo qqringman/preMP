@@ -1317,7 +1317,10 @@ class MainApplication:
         return file1_path, file2_path
     
     def _perform_manifest_comparison(self, file1, file2, comparison_type=None):
-        """執行 manifest 比較分析 - 更新版本，支援不同類型的比較"""
+        """
+        執行 manifest 比較分析 - 🔥 修正版本，支援不同類型的比較
+        使用統一的 ManifestConversionTester 和 name+path composite key
+        """
         from datetime import datetime
         
         # 處理其中一個檔案為 None 的情況
@@ -1337,7 +1340,7 @@ class MainApplication:
         output_file_mapping = {
             'master_vs_premp': 'auto_master_vs_premp_manifest_compare.xlsx',
             'premp_vs_mp': 'auto_premp_vs_mp_manifest_compare.xlsx',
-            'mp_vs_mpbackup': 'auto_mp_vs_mabackup_manifest_compare.xlsx',
+            'mp_vs_mpbackup': 'auto_mp_vs_mpbackup_manifest_compare.xlsx',
             'custom': 'custom_manifest_compare.xlsx'
         }
         
@@ -1359,7 +1362,7 @@ class MainApplication:
         
         print("\n📄 開始比較分析...")
         
-        # 匯入並執行轉換測試
+        # 🔥 使用統一的 ManifestConversionTester 進行所有類型的比較
         import sys
         manifest_compare_path = os.path.join(os.path.dirname(__file__), 'manifest_compare')
         if manifest_compare_path not in sys.path:
@@ -1367,24 +1370,89 @@ class MainApplication:
         
         from manifest_conversion import ManifestConversionTester
         
-        # 根據比較類型調用不同的測試方法
-        if comparison_type == 'master_vs_premp':
-            # 使用原有的 Master to PreMP 測試邏輯
-            tester = ManifestConversionTester()
-            success = tester.test_conversion(file1, file2, output_path)
-        elif comparison_type in ['premp_vs_mp', 'mp_vs_mpbackup']:
-            # 需要實作新的比較邏輯或擴展現有邏輯
-            success = self._perform_generic_comparison(file1, file2, output_path, comparison_type)
-        else:
-            # 自定義比較
-            success = self._perform_generic_comparison(file1, file2, output_path, 'custom')
+        # 🔥 使用修正後的 ManifestConversionTester，支援所有比較類型
+        tester = ManifestConversionTester()
+        success = tester.test_conversion(file1, file2, output_path, comparison_type)
         
         # 顯示結果
-        if comparison_type == 'master_vs_premp':
-            self._show_comparison_results(tester, success, output_path)
-        else:
-            self._show_generic_comparison_results(success, output_path, comparison_type)
+        self._show_unified_comparison_results(tester, success, output_path, comparison_type)
 
+    def _show_unified_comparison_results(self, tester, success, output_path, comparison_type):
+        """🔥 新方法：顯示統一格式的比較結果"""
+        print("\n" + "="*60)
+        print(f"📊 {comparison_type} 比較結果摘要")
+        print("="*60)
+        
+        # 顯示統計結果
+        stats = tester.stats
+        source_name, target_name = self._get_comparison_names_for_display(comparison_type)
+        
+        print(f"📈 比較統計:")
+        print(f"  總專案數: {stats['total_projects']}")
+        
+        # 根據比較類型顯示不同的統計
+        if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
+            print(f"  🔵 參與比較專案: {stats['revision_projects']}")
+            print(f"  ⚪ 無revision專案: {stats['no_revision_projects']} (跳過比較)")
+            print(f"  🟢 原始相同專案: {stats['same_revision_projects']} ({source_name}={target_name})")
+            print(f"  🟣 跳過特殊專案: {stats['skipped_special_projects']}")
+            
+            if stats['revision_projects'] > 0:
+                success_rate = (stats['matched'] / stats['revision_projects'] * 100)
+                print(f"  📊 轉換成功率: {success_rate:.2f}%")
+        else:
+            print(f"  📊 純差異比較")
+            if stats['total_projects'] > 0:
+                match_rate = (stats['matched'] / stats['total_projects'] * 100)
+                print(f"  📊 匹配率: {match_rate:.2f}%")
+        
+        print(f"  ✅ 匹配/相同: {stats['matched']}")
+        print(f"  ❌ 不匹配/不同: {stats['mismatched']}")
+        print(f"  ⚠️ {target_name}中不存在: {stats['not_found_in_target']}")
+        print(f"  🔶 僅存在於{target_name}: {stats['extra_in_target']}")
+        
+        # 🔥 顯示失敗案例資訊（適用於轉換類型）
+        if hasattr(tester, 'failed_cases') and tester.failed_cases:
+            print(f"\n❌ 失敗案例分析:")
+            print(f"  失敗案例數: {len(tester.failed_cases)}")
+            print(f"  詳細對照已添加到 '失敗案例詳細對照' 頁籤")
+        
+        # 顯示結果
+        if success:
+            if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
+                print(f"\n✅ {comparison_type} 轉換規則測試通過！")
+                print(f"📄 所有參與轉換的專案規則都正確")
+            else:
+                print(f"\n✅ {comparison_type} 比較完成！")
+        else:
+            print(f"\n⚠️ 發現 {stats['mismatched']} 個差異")
+            print(f"📄 請查看詳細報告分析問題")
+        
+        print(f"\n📊 詳細分析報告: {output_path}")
+        print(f"💡 報告包含以下頁籤:")
+        print(f"  📋 比較摘要 - 整體統計")
+        print(f"  🔍 需要關注的項目 - 有差異的專案")
+        if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
+            print(f"  🔵 無需轉換專案 - 跳過的特殊專案")
+            if hasattr(tester, 'failed_cases') and tester.failed_cases:
+                print(f"  ❌ 失敗案例詳細對照 - 轉換錯誤分析")
+            print(f"  📊 轉換規則統計 - 規則使用情況")
+        print(f"  📄 所有專案對照 - 完整比較列表")
+        
+        # 詢問是否開啟報告
+        if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
+            self._open_file(output_path)
+
+    def _get_comparison_names_for_display(self, comparison_type):
+        """取得用於顯示的比較名稱"""
+        mapping = {
+            'master_vs_premp': ('Master', 'PreMP'),
+            'premp_vs_mp': ('PreMP', 'MP'),
+            'mp_vs_mpbackup': ('MP', 'MP Backup'),
+            'custom': ('檔案1', '檔案2')
+        }
+        return mapping.get(comparison_type, ('源檔案', '目標檔案'))
+        
     def _show_generic_comparison_results(self, success, output_path, comparison_type):
         """顯示通用比較結果"""
         print("\n" + "="*60)
@@ -1418,7 +1486,10 @@ class MainApplication:
             return 'custom'
 
     def _perform_generic_comparison(self, file1, file2, output_path, comparison_type):
-        """執行通用的 manifest 比較 - 修正版本"""
+        """
+        執行通用的 manifest 比較 - 🔥 修正版本：使用 name+path composite key
+        統一 Excel 格式，支援多種比較類型
+        """
         try:
             print(f"🔄 執行 {comparison_type} 比較...")
             
@@ -1429,69 +1500,160 @@ class MainApplication:
             
             print(f"📄 解析檔案...")
             
-            # 解析檔案1
+            # 🔥 修正：使用 name+path 作為 composite key 解析檔案1
             tree1 = ET.parse(file1)
             root1 = tree1.getroot()
             projects1 = {}
+            name_duplicates1 = {}
+            
             for project in root1.findall('project'):
                 name = project.get('name', '')
+                path = project.get('path', '')
                 if name:
-                    projects1[name] = {
+                    # 建立 composite key
+                    composite_key = f"{name}|{path}"
+                    
+                    # 追踪重複 name
+                    if name in name_duplicates1:
+                        name_duplicates1[name] += 1
+                    else:
+                        name_duplicates1[name] = 1
+                    
+                    projects1[composite_key] = {
                         'name': name,
+                        'path': path,
                         'revision': project.get('revision', ''),
                         'upstream': project.get('upstream', ''),
-                        'path': project.get('path', ''),
+                        'dest-branch': project.get('dest-branch', ''),
+                        'groups': project.get('groups', ''),
                         'remote': project.get('remote', ''),
+                        'composite_key': composite_key
                     }
             
-            # 解析檔案2
+            # 🔥 修正：使用 name+path 作為 composite key 解析檔案2
             tree2 = ET.parse(file2)
             root2 = tree2.getroot()
             projects2 = {}
+            name_duplicates2 = {}
+            
             for project in root2.findall('project'):
                 name = project.get('name', '')
+                path = project.get('path', '')
                 if name:
-                    projects2[name] = {
+                    # 建立 composite key
+                    composite_key = f"{name}|{path}"
+                    
+                    # 追踪重複 name
+                    if name in name_duplicates2:
+                        name_duplicates2[name] += 1
+                    else:
+                        name_duplicates2[name] = 1
+                    
+                    projects2[composite_key] = {
                         'name': name,
+                        'path': path,
                         'revision': project.get('revision', ''),
                         'upstream': project.get('upstream', ''),
-                        'path': project.get('path', ''),
+                        'dest-branch': project.get('dest-branch', ''),
+                        'groups': project.get('groups', ''),
                         'remote': project.get('remote', ''),
+                        'composite_key': composite_key
                     }
+            
+            # 🔥 報告重複 name 情況
+            duplicate_names1 = [name for name, count in name_duplicates1.items() if count > 1]
+            duplicate_names2 = [name for name, count in name_duplicates2.items() if count > 1]
+            
+            if duplicate_names1 or duplicate_names2:
+                print(f"🔍 發現重複 project name:")
+                if duplicate_names1:
+                    print(f"  檔案1: {len(duplicate_names1)} 個重複 name")
+                    for name in duplicate_names1[:3]:
+                        print(f"    - {name}: {name_duplicates1[name]} 個不同 path")
+                if duplicate_names2:
+                    print(f"  檔案2: {len(duplicate_names2)} 個重複 name")
+                    for name in duplicate_names2[:3]:
+                        print(f"    - {name}: {name_duplicates2[name]} 個不同 path")
+                print(f"✅ 使用 name+path composite key 避免資料遺失")
             
             print(f"📊 進行比較分析...")
             
-            # 進行比較
+            # 🔥 修正：使用 composite key 進行比較
             differences = []
-            all_projects = set(projects1.keys()) | set(projects2.keys())
+            all_composite_keys = set(projects1.keys()) | set(projects2.keys())
             
-            for i, name in enumerate(sorted(all_projects), 1):
-                proj1 = projects1.get(name, {})
-                proj2 = projects2.get(name, {})
+            # 統計資料
+            stats = {
+                'matched': 0,
+                'mismatched': 0,
+                'only_in_file1': 0,
+                'only_in_file2': 0,
+                'total': len(all_composite_keys)
+            }
+            
+            # 🔥 取得比較名稱
+            source_name, target_name = self._get_comparison_names_for_generic(comparison_type)
+            
+            for i, composite_key in enumerate(sorted(all_composite_keys), 1):
+                proj1 = projects1.get(composite_key, {})
+                proj2 = projects2.get(composite_key, {})
                 
-                status = "相同"
-                if name not in projects1:
-                    status = "僅存在於檔案2"
-                elif name not in projects2:
-                    status = "僅存在於檔案1"
-                elif proj1.get('revision', '') != proj2.get('revision', ''):
-                    status = "revision不同"
-                elif proj1.get('upstream', '') != proj2.get('upstream', ''):
-                    status = "upstream不同"
+                # 解析 composite key
+                if '|' in composite_key:
+                    name, path = composite_key.split('|', 1)
+                else:
+                    name, path = composite_key, ''
+                
+                # 判斷狀態
+                if composite_key not in projects1:
+                    status = f"僅存在於{target_name}"
+                    result = "N/A"
+                    description = f"專案僅存在於 {target_name}"
+                    stats['only_in_file2'] += 1
+                    status_icon = "🔶"
+                elif composite_key not in projects2:
+                    status = f"僅存在於{source_name}"
+                    result = "N/A"
+                    description = f"專案僅存在於 {source_name}"
+                    stats['only_in_file1'] += 1
+                    status_icon = "🔶"
+                elif proj1.get('revision', '') == proj2.get('revision', ''):
+                    status = "✅ 相同"
+                    result = "是"
+                    description = f"{source_name} 和 {target_name} 的 revision 完全相同"
+                    stats['matched'] += 1
+                    status_icon = "✅"
+                else:
+                    status = "❌ 不同"
+                    result = "否"
+                    rev1 = proj1.get('revision', 'N/A')
+                    rev2 = proj2.get('revision', 'N/A')
+                    description = f"{source_name}: {rev1}, {target_name}: {rev2}"
+                    stats['mismatched'] += 1
+                    status_icon = "❌"
                 
                 differences.append({
                     'SN': i,
                     '專案名稱': name,
-                    '檔案1_revision': proj1.get('revision', 'N/A'),
-                    '檔案2_revision': proj2.get('revision', 'N/A'),
-                    '檔案1_upstream': proj1.get('upstream', 'N/A'),
-                    '檔案2_upstream': proj2.get('upstream', 'N/A'),
+                    '專案路徑': path,
+                    f'{source_name} Revision': proj1.get('revision', 'N/A'),
+                    f'{target_name} Revision': proj2.get('revision', 'N/A'),
+                    f'{source_name} Upstream': proj1.get('upstream', 'N/A'),
+                    f'{target_name} Upstream': proj2.get('upstream', 'N/A'),
                     '比較狀態': status,
-                    '檔案1_path': proj1.get('path', 'N/A'),
-                    '檔案2_path': proj2.get('path', 'N/A'),
+                    '比較結果': result,
+                    '差異說明': description,
+                    '結果圖示': status_icon,
+                    'Composite Key': composite_key,
+                    f'{source_name} Path': proj1.get('path', 'N/A'),
+                    f'{target_name} Path': proj2.get('path', 'N/A'),
+                    f'{source_name} Groups': proj1.get('groups', 'N/A'),
+                    f'{target_name} Groups': proj2.get('groups', 'N/A'),
+                    f'{source_name} Remote': proj1.get('remote', 'N/A'),
+                    f'{target_name} Remote': proj2.get('remote', 'N/A')
                 })
             
-            print(f"📝 生成Excel報告...")
+            print(f"📝 生成統一格式 Excel 報告...")
             
             # 🔧 修正：確保輸出資料夾存在
             import os
@@ -1499,62 +1661,182 @@ class MainApplication:
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir)
             
-            # 生成 Excel 報告
+            # 🔥 生成統一格式的 Excel 報告
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                # 摘要頁籤
+                # 頁籤 1: 比較摘要（統一格式）
                 summary_data = [{
                     '比較時間': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    '檔案1': os.path.basename(file1),
-                    '檔案2': os.path.basename(file2),
+                    f'{source_name} Manifest': os.path.basename(file1),
+                    f'{target_name} Manifest': os.path.basename(file2),
                     '比較類型': comparison_type,
-                    '總專案數': len(all_projects),
-                    '檔案1專案數': len(projects1),
-                    '檔案2專案數': len(projects2),
-                    '相同專案數': len([d for d in differences if d['比較狀態'] == '相同']),
-                    '不同專案數': len([d for d in differences if d['比較狀態'] not in ['相同', '僅存在於檔案1', '僅存在於檔案2']]),
-                    '僅存在於檔案1': len([d for d in differences if d['比較狀態'] == '僅存在於檔案1']),
-                    '僅存在於檔案2': len([d for d in differences if d['比較狀態'] == '僅存在於檔案2']),
+                    '總專案數': stats['total'],
+                    f'檔案1 ({source_name}) 專案數': len(projects1),
+                    f'檔案2 ({target_name}) 專案數': len(projects2),
+                    '✅ 相同專案數': stats['matched'],
+                    '❌ 不同專案數': stats['mismatched'],
+                    f'僅存在於{source_name}': stats['only_in_file1'],
+                    f'僅存在於{target_name}': stats['only_in_file2'],
+                    '匹配率': f"{(stats['matched'] / max(stats['total'], 1) * 100):.2f}%",
+                    '備註': f"使用 name+path composite key 避免重複項目遺失，檔案1重複name: {len(duplicate_names1)}, 檔案2重複name: {len(duplicate_names2)}"
                 }]
                 
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='比較摘要', index=False)
                 
-                # 詳細比較頁籤
+                # 頁籤 2: 需要關注的項目（統一格式）
                 if differences:
                     df_details = pd.DataFrame(differences)
-                    df_details.to_excel(writer, sheet_name='詳細比較', index=False)
                     
-                    # 僅列出差異的頁籤
-                    diff_only = [d for d in differences if d['比較狀態'] != '相同']
-                    if diff_only:
-                        df_diff_only = pd.DataFrame(diff_only)
-                        df_diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
+                    # 需要關注的項目（有差異的）
+                    need_attention = df_details[
+                        (df_details['比較狀態'] != '✅ 相同')
+                    ]
+                    
+                    if not need_attention.empty:
+                        need_attention.to_excel(writer, sheet_name='需要關注的項目', index=False)
+                    
+                    # 頁籤 3: 僅顯示差異
+                    diff_only = df_details[
+                        (df_details['比較狀態'] == '❌ 不同') |
+                        (df_details['比較狀態'].str.contains('僅存在於', na=False))
+                    ]
+                    if not diff_only.empty:
+                        diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
+                    
+                    # 頁籤 4: 所有專案對照表（統一格式）
+                    all_comparisons = []
+                    for diff in differences:
+                        all_comparisons.append({
+                            'SN': diff['SN'],
+                            '專案名稱': diff['專案名稱'],
+                            '專案路徑': diff['專案路徑'],
+                            f'{source_name} Revision': diff[f'{source_name} Revision'],
+                            f'{target_name} Revision': diff[f'{target_name} Revision'],
+                            '結果': diff['結果圖示'],
+                            '狀態說明': diff['比較狀態'],
+                            'Composite Key': diff['Composite Key']
+                        })
+                    
+                    if all_comparisons:
+                        df_all = pd.DataFrame(all_comparisons)
+                        df_all.to_excel(writer, sheet_name='所有專案對照', index=False)
+                    
+                    # 頁籤 5: 詳細屬性比較
+                    df_details.to_excel(writer, sheet_name='詳細屬性比較', index=False)
                 
-                print(f"📋 設定格式...")
+                print(f"📋 設定統一格式...")
                 
-                # 🔧 修正：簡化格式化，避免複雜的依賴
-                try:
-                    for sheet_name in writer.sheets:
-                        worksheet = writer.sheets[sheet_name]
-                        # 簡單的格式化
-                        for column_cells in worksheet.columns:
-                            length = max(len(str(cell.value or '')) for cell in column_cells)
-                            worksheet.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 50)
-                except Exception as format_error:
-                    print(f"⚠️ 格式化警告: {format_error}")
-                    # 格式化失敗不影響檔案生成
-                    pass
+                # 🔥 統一格式化（使用與 manifest_conversion.py 相同的格式）
+                self._format_generic_comparison_excel(writer, comparison_type)
             
-            print(f"✅ 通用比較完成: {output_path}")
+            print(f"✅ {comparison_type} 比較完成: {output_path}")
+            print(f"📊 統計結果:")
+            print(f"  總專案數: {stats['total']}")
+            print(f"  ✅ 相同: {stats['matched']}")
+            print(f"  ❌ 不同: {stats['mismatched']}")
+            print(f"  🔶 僅存在於{source_name}: {stats['only_in_file1']}")
+            print(f"  🔶 僅存在於{target_name}: {stats['only_in_file2']}")
+            
             return True
             
         except Exception as e:
-            print(f"❌ 通用比較失敗: {str(e)}")
+            print(f"❌ {comparison_type} 比較失敗: {str(e)}")
             # 🔧 修正：顯示詳細錯誤信息
             import traceback
             print(f"📄 錯誤詳情:")
             traceback.print_exc()
             return False
+
+    def _format_generic_comparison_excel(self, writer, comparison_type):
+        """🔥 統一格式化通用比較的 Excel 檔案"""
+        from openpyxl.styles import PatternFill, Font, Alignment
+        from openpyxl.utils import get_column_letter
+        
+        # 定義統一顏色方案（與 manifest_conversion.py 一致）
+        colors = {
+            'header': PatternFill(start_color="366092", end_color="366092", fill_type="solid"),
+            'match': PatternFill(start_color="E6FFE6", end_color="E6FFE6", fill_type="solid"),      # 淺綠
+            'mismatch': PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid"),   # 淺紅
+            'not_found': PatternFill(start_color="FFFACD", end_color="FFFACD", fill_type="solid"),  # 淺黃
+            'no_conversion': PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid") # 淺藍
+        }
+        
+        header_font = Font(color="FFFFFF", bold=True)
+        
+        for sheet_name in writer.sheets:
+            worksheet = writer.sheets[sheet_name]
+            
+            # 設定標題格式
+            for cell in worksheet[1]:
+                cell.fill = colors['header']
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 根據頁籤設定內容格式
+            if sheet_name in ['需要關注的項目', '所有專案對照', '僅顯示差異', '詳細屬性比較']:
+                self._format_generic_comparison_sheet(worksheet, colors)
+            
+            # 自動調整欄寬
+            self._auto_adjust_columns_generic(worksheet)
+
+    def _auto_adjust_columns_generic(self, worksheet):
+        """自動調整欄寬（通用版本）"""
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            
+            adjusted_width = min(max_length + 2, 60)  # 最大寬度60
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+
+    def _format_generic_comparison_sheet(self, worksheet, colors):
+        """格式化通用比較頁籤"""
+        for row in range(2, worksheet.max_row + 1):
+            # 找到狀態相關欄位
+            status_cell = None
+            result_cell = None
+            
+            for col in range(1, worksheet.max_column + 1):
+                header = worksheet.cell(row=1, column=col).value
+                if header:
+                    header_str = str(header)
+                    if '比較狀態' in header_str or '狀態說明' in header_str:
+                        status_cell = worksheet.cell(row=row, column=col)
+                    elif '結果' in header_str and '圖示' not in header_str:
+                        result_cell = worksheet.cell(row=row, column=col)
+            
+            # 根據狀態設定顏色
+            if status_cell and status_cell.value:
+                status_value = str(status_cell.value)
+                fill_color = None
+                
+                if '不同' in status_value or '❌' in status_value:
+                    fill_color = colors['mismatch']
+                elif '相同' in status_value or '✅' in status_value:
+                    fill_color = colors['match']
+                elif '僅存在於' in status_value or '🔶' in status_value:
+                    fill_color = colors['not_found']
+                
+                # 套用背景色到整行
+                if fill_color:
+                    for col in range(1, worksheet.max_column + 1):
+                        worksheet.cell(row=row, column=col).fill = fill_color
+
+    def _get_comparison_names_for_generic(self, comparison_type):
+        """取得通用比較的名稱"""
+        mapping = {
+            'master_vs_premp': ('Master', 'PreMP'),
+            'premp_vs_mp': ('PreMP', 'MP'),
+            'mp_vs_mpbackup': ('MP', 'MP Backup'),
+            'custom': ('檔案1', '檔案2')
+        }
+        return mapping.get(comparison_type, ('檔案1', '檔案2'))
 
     def _show_comparison_results(self, tester, success, output_path):
         """顯示比較結果"""
