@@ -1072,8 +1072,8 @@ class MainApplication:
         print("\n" + "="*60)
         print("  📄 比較 Manifest 差異")
         print("="*60)
-        print("功能說明：測試 Master to PreMP 轉換規則的正確性")
-        print("比較從 Gerrit 下載的 Master 和 PreMP manifest，驗證轉換邏輯")
+        print("功能說明：測試不同類型 manifest 轉換規則的正確性")
+        print("比較從 Gerrit 下載的不同版本 manifest，驗證轉換邏輯")
         
         try:
             # 建立臨時目錄
@@ -1085,20 +1085,32 @@ class MainApplication:
             if choice == '0':
                 return
             
-            # 根據選擇執行不同的比較模式
+            # 根據選擇執行不同的比較模式 - 直接傳入比較類型
             if choice == '1':
-                master_file, premp_file = self._auto_download_manifests(temp_dir)
+                # Master vs PreMP
+                file1, file2 = self._auto_download_manifests(temp_dir, 'master_vs_premp')
+                comparison_type = 'master_vs_premp'
             elif choice == '2':
-                master_file, premp_file = self._get_local_manifest_files()
+                # PreMP vs MP
+                file1, file2 = self._auto_download_manifests(temp_dir, 'premp_vs_mp')
+                comparison_type = 'premp_vs_mp'
+            elif choice == '3':
+                # MP vs MP Backup
+                file1, file2 = self._auto_download_manifests(temp_dir, 'mp_vs_mpbackup')
+                comparison_type = 'mp_vs_mpbackup'
+            elif choice == '4':
+                # 使用本地檔案
+                file1, file2 = self._get_local_manifest_files()
+                comparison_type = 'custom'
             else:
                 print("❌ 無效的選項")
                 return
             
-            if not master_file or not premp_file:
+            if not file1 or not file2:
                 return
             
-            # 執行比較分析
-            self._perform_manifest_comparison(master_file, premp_file)
+            # 執行比較分析 - 傳入已知的比較類型
+            self._perform_manifest_comparison(file1, file2, comparison_type)
             
         except Exception as e:
             print(f"\n❌ 比較過程發生錯誤: {str(e)}")
@@ -1107,7 +1119,37 @@ class MainApplication:
             self.logger.debug(f"錯誤詳情:\n{traceback.format_exc()}")
         
         input("\n按 Enter 繼續...")
-    
+
+    def _get_local_manifest_files(self):
+        """取得本地 manifest 檔案 - 更新版本，不限定檔案類型"""
+        print("\n📁 請選擇本地 manifest 檔案...")
+        print("💡 提示：可以選擇任意兩個 manifest.xml 檔案進行比較")
+        
+        # 選擇第一個檔案
+        file1 = self.input_validator.get_input_file("請輸入第一個 manifest.xml 檔案路徑")
+        if not file1:
+            return None, None
+        
+        print(f"✅ 已選擇第一個檔案: {os.path.basename(file1)}")
+        
+        # 選擇第二個檔案
+        file2 = self.input_validator.get_input_file("請輸入第二個 manifest.xml 檔案路徑")
+        if not file2:
+            return None, None
+        
+        print(f"✅ 已選擇第二個檔案: {os.path.basename(file2)}")
+        
+        # 確認檔案選擇
+        print(f"\n📋 檔案比較配對:")
+        print(f"  📄 檔案1: {os.path.basename(file1)}")
+        print(f"  📄 檔案2: {os.path.basename(file2)}")
+        
+        if not self.input_validator.get_yes_no_input("確認使用這兩個檔案進行比較？", True):
+            print("❌ 已取消比較")
+            return None, None
+        
+        return file1, file2
+            
     def _download_gerrit_manifest(self):
         """下載 Gerrit manifest - 修正版"""
         print("\n" + "="*60)
@@ -1149,75 +1191,162 @@ class MainApplication:
     
     # 輔助方法實作
     def _get_compare_mode(self):
-        """取得比較模式選擇"""
+        """取得比較模式選擇 - 更新版本"""
         print("\n請選擇比較模式:")
-        print("  [1] 自動下載並比較 (推薦)")
+        print("  [1] 自動下載並比較 (Master vs PreMP)")
         print("      從 Gerrit 自動下載 Master 和 PreMP manifest 進行比較")
-        print("  [2] 使用本地檔案比較")
-        print("      選擇本地的 Master 和 PreMP manifest 檔案")
+        print("      測試 master_to_premp 轉換規則正確性")
+        print()
+        print("  [2] 自動下載並比較 (PreMP vs MP)")
+        print("      從 Gerrit 自動下載 PreMP 和 MP manifest 進行比較")
+        print("      測試 premp_to_mp 轉換規則正確性")
+        print()
+        print("  [3] 自動下載並比較 (MP vs MP Backup)")
+        print("      從 Gerrit 自動下載 MP 和 MP Backup manifest 進行比較")
+        print("      測試 mp_to_mpbackup 轉換規則正確性")
+        print()
+        print("  [4] 使用本地檔案比較")
+        print("      選擇任意兩個本地 manifest 檔案進行比較")
+        print("      不限定特定類型，可用於自定義比較")
+        print()
         print("  [0] 返回上層選單")
         
-        return input("\n請選擇 (1-2): ").strip()
+        return input("\n請選擇 (1-4): ").strip()
     
-    def _auto_download_manifests(self, temp_dir):
-        """自動下載 manifest 檔案"""
-        print("\n📄 從 Gerrit 自動下載 manifest 檔案...")
+    def _auto_download_manifests(self, temp_dir, comparison_type):
+        """自動下載 manifest 檔案 - 支援多種比較類型"""
+        print(f"\n📄 從 Gerrit 自動下載 manifest 檔案...")
         
         from gerrit_manager import GerritManager
         gerrit = GerritManager()
         
-        # 下載 Master manifest
-        master_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml"
-        master_file = os.path.join(temp_dir, "master_manifest.xml")
+        # 定義不同比較類型的檔案配置
+        comparison_configs = {
+            'master_vs_premp': {
+                'file1': {
+                    'name': 'Master',
+                    'filename': 'atv-google-refplus.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml',
+                    'local_name': 'master_manifest.xml'
+                },
+                'file2': {
+                    'name': 'PreMP',
+                    'filename': 'atv-google-refplus-premp.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
+                    'local_name': 'premp_manifest.xml'
+                }
+            },
+            'premp_vs_mp': {
+                'file1': {
+                    'name': 'PreMP',
+                    'filename': 'atv-google-refplus-premp.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
+                    'local_name': 'premp_manifest.xml'
+                },
+                'file2': {
+                    'name': 'MP Wave',
+                    'filename': 'atv-google-refplus-wave.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
+                    'local_name': 'mp_manifest.xml'
+                }
+            },
+            'mp_vs_mpbackup': {
+                'file1': {
+                    'name': 'MP Wave',
+                    'filename': 'atv-google-refplus-wave.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
+                    'local_name': 'mp_manifest.xml'
+                },
+                'file2': {
+                    'name': 'MP Backup',
+                    'filename': 'atv-google-refplus-wave-backup.xml',
+                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave-backup.xml',
+                    'local_name': 'mp_backup_manifest.xml'
+                }
+            }
+        }
         
-        print("⬇️ 正在下載 Master manifest...")
-        if not gerrit.download_file_from_link(master_url, master_file):
-            print("❌ 下載 Master manifest 失敗")
+        if comparison_type not in comparison_configs:
+            print(f"❌ 不支援的比較類型: {comparison_type}")
             return None, None
-        print(f"✅ Master manifest 下載完成")
         
-        # 下載 PreMP manifest
-        premp_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml"
-        premp_file = os.path.join(temp_dir, "premp_manifest.xml")
+        config = comparison_configs[comparison_type]
         
-        print("⬇️ 正在下載 PreMP manifest...")
-        if not gerrit.download_file_from_link(premp_url, premp_file):
-            print("❌ 下載 PreMP manifest 失敗")
+        # 下載第一個檔案
+        file1_config = config['file1']
+        file1_path = os.path.join(temp_dir, file1_config['local_name'])
+        
+        print(f"⬇️ 正在下載 {file1_config['name']} manifest...")
+        print(f"   檔案: {file1_config['filename']}")
+        
+        if not gerrit.download_file_from_link(file1_config['url'], file1_path):
+            print(f"❌ 下載 {file1_config['name']} manifest 失敗")
             return None, None
-        print(f"✅ PreMP manifest 下載完成")
+        print(f"✅ {file1_config['name']} manifest 下載完成")
         
-        return master_file, premp_file
+        # 下載第二個檔案
+        file2_config = config['file2']
+        file2_path = os.path.join(temp_dir, file2_config['local_name'])
+        
+        print(f"⬇️ 正在下載 {file2_config['name']} manifest...")
+        print(f"   檔案: {file2_config['filename']}")
+        
+        if not gerrit.download_file_from_link(file2_config['url'], file2_path):
+            print(f"❌ 下載 {file2_config['name']} manifest 失敗")
+            # 如果第二個檔案下載失敗，但第一個成功，可以選擇繼續或停止
+            choice = input(f"\n⚠️ {file2_config['name']} manifest 下載失敗，是否繼續？(y/N): ").strip().lower()
+            if choice != 'y':
+                return None, None
+            else:
+                print(f"⚠️ 將跳過 {file2_config['name']} manifest 的比較")
+                return file1_path, None
+        print(f"✅ {file2_config['name']} manifest 下載完成")
+        
+        # 顯示下載總結
+        print(f"\n📊 下載總結:")
+        print(f"  📄 {file1_config['name']}: {os.path.basename(file1_path)}")
+        print(f"  📄 {file2_config['name']}: {os.path.basename(file2_path)}")
+        print(f"  📁 位置: {temp_dir}")
+        
+        return file1_path, file2_path
     
-    def _get_local_manifest_files(self):
-        """取得本地 manifest 檔案"""
-        print("\n📁 請選擇本地 manifest 檔案...")
-        
-        master_file = self.input_validator.get_input_file("請輸入 Master manifest.xml 檔案路徑")
-        if not master_file:
-            return None, None
-            
-        premp_file = self.input_validator.get_input_file("請輸入 PreMP manifest.xml 檔案路徑")
-        if not premp_file:
-            return None, None
-        
-        return master_file, premp_file
-    
-    def _perform_manifest_comparison(self, master_file, premp_file):
-        """執行 manifest 比較分析"""
+    def _perform_manifest_comparison(self, file1, file2, comparison_type=None):
+        """執行 manifest 比較分析 - 更新版本，支援不同類型的比較"""
         from datetime import datetime
         
-        # 生成輸出檔案名稱
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_file = f'manifest_conversion_test_{timestamp}.xlsx'
+        # 處理其中一個檔案為 None 的情況
+        if not file1:
+            print("❌ 第一個檔案無效，無法進行比較")
+            return
+        
+        if not file2:
+            print("⚠️ 第二個檔案無效，將只分析第一個檔案")
+            return
+        
+        # 如果沒有傳入比較類型，才進行檢測
+        if not comparison_type:
+            comparison_type = self._detect_comparison_type(file1, file2)
+        
+        # 生成輸出檔案名稱 - 使用新的命名規則
+        output_file_mapping = {
+            'master_vs_premp': 'auto_master_vs_premp_manifest_compare.xlsx',
+            'premp_vs_mp': 'auto_premp_vs_mp_manifest_compare.xlsx',
+            'mp_vs_mpbackup': 'auto_mp_vs_mabackup_manifest_compare.xlsx',
+            'custom': 'custom_manifest_compare.xlsx'
+        }
+        
+        output_file = output_file_mapping.get(comparison_type, 'custom_manifest_compare.xlsx')
         
         # 取得輸出資料夾
         output_folder = self.input_validator.get_output_folder("請輸入輸出資料夾路徑")
         output_path = os.path.join(output_folder, output_file)
         
         print(f"\n📋 比較參數:")
-        print(f"  Master 檔案: {os.path.basename(master_file)}")
-        print(f"  PreMP 檔案: {os.path.basename(premp_file)}")
-        print(f"  輸出報告: {output_path}")
+        print(f"  檔案1: {os.path.basename(file1)}")
+        print(f"  檔案2: {os.path.basename(file2)}")
+        print(f"  比較類型: {comparison_type or '自定義比較'}")
+        print(f"  輸出報告: {output_file}")
+        print(f"  報告路徑: {output_path}")
         
         if not self.input_validator.confirm_execution():
             return
@@ -1232,13 +1361,172 @@ class MainApplication:
         
         from manifest_conversion import ManifestConversionTester
         
-        # 執行測試
-        tester = ManifestConversionTester()
-        success = tester.test_conversion(master_file, premp_file, output_path)
+        # 根據比較類型調用不同的測試方法
+        if comparison_type == 'master_vs_premp':
+            # 使用原有的 Master to PreMP 測試邏輯
+            tester = ManifestConversionTester()
+            success = tester.test_conversion(file1, file2, output_path)
+        elif comparison_type in ['premp_vs_mp', 'mp_vs_mpbackup']:
+            # 需要實作新的比較邏輯或擴展現有邏輯
+            success = self._perform_generic_comparison(file1, file2, output_path, comparison_type)
+        else:
+            # 自定義比較
+            success = self._perform_generic_comparison(file1, file2, output_path, 'custom')
         
         # 顯示結果
-        self._show_comparison_results(tester, success, output_path)
-    
+        if comparison_type == 'master_vs_premp':
+            self._show_comparison_results(tester, success, output_path)
+        else:
+            self._show_generic_comparison_results(success, output_path, comparison_type)
+
+    def _show_generic_comparison_results(self, success, output_path, comparison_type):
+        """顯示通用比較結果"""
+        print("\n" + "="*60)
+        print("📊 比較結果摘要")
+        print("="*60)
+        
+        if success:
+            print(f"✅ {comparison_type} 比較完成！")
+        else:
+            print(f"❌ {comparison_type} 比較失敗")
+        
+        print(f"\n📊 詳細分析報告: {output_path}")
+        
+        # 詢問是否開啟報告
+        if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
+            self._open_file(output_path)
+
+    def _detect_comparison_type(self, file1, file2):
+        """檢測比較類型"""
+        file1_name = os.path.basename(file1).lower()
+        file2_name = os.path.basename(file2).lower()
+        
+        # 檢測檔案名稱模式
+        if ('master' in file1_name or 'atv-google-refplus.xml' == file1_name) and 'premp' in file2_name:
+            return 'master_vs_premp'
+        elif 'premp' in file1_name and ('wave.xml' in file2_name and 'backup' not in file2_name):
+            return 'premp_vs_mp'
+        elif ('wave.xml' in file1_name and 'backup' not in file1_name) and 'backup' in file2_name:
+            return 'mp_vs_mpbackup'
+        else:
+            return 'custom'
+
+    def _perform_generic_comparison(self, file1, file2, output_path, comparison_type):
+        """執行通用的 manifest 比較 - 新增方法"""
+        try:
+            print(f"🔄 執行 {comparison_type} 比較...")
+            
+            # 這裡可以實作通用的比較邏輯
+            # 目前先使用簡化版本
+            
+            # 解析兩個 manifest 檔案
+            import xml.etree.ElementTree as ET
+            import pandas as pd
+            
+            # 解析檔案1
+            tree1 = ET.parse(file1)
+            root1 = tree1.getroot()
+            projects1 = {}
+            for project in root1.findall('project'):
+                name = project.get('name', '')
+                if name:
+                    projects1[name] = {
+                        'name': name,
+                        'revision': project.get('revision', ''),
+                        'upstream': project.get('upstream', ''),
+                        'path': project.get('path', ''),
+                        'remote': project.get('remote', ''),
+                    }
+            
+            # 解析檔案2
+            tree2 = ET.parse(file2)
+            root2 = tree2.getroot()
+            projects2 = {}
+            for project in root2.findall('project'):
+                name = project.get('name', '')
+                if name:
+                    projects2[name] = {
+                        'name': name,
+                        'revision': project.get('revision', ''),
+                        'upstream': project.get('upstream', ''),
+                        'path': project.get('path', ''),
+                        'remote': project.get('remote', ''),
+                    }
+            
+            # 進行比較
+            differences = []
+            
+            # 比較共同專案
+            all_projects = set(projects1.keys()) | set(projects2.keys())
+            
+            for i, name in enumerate(sorted(all_projects), 1):
+                proj1 = projects1.get(name, {})
+                proj2 = projects2.get(name, {})
+                
+                status = "相同"
+                if name not in projects1:
+                    status = "僅存在於檔案2"
+                elif name not in projects2:
+                    status = "僅存在於檔案1"
+                elif proj1.get('revision') != proj2.get('revision'):
+                    status = "revision不同"
+                elif proj1.get('upstream') != proj2.get('upstream'):
+                    status = "upstream不同"
+                
+                differences.append({
+                    'SN': i,
+                    '專案名稱': name,
+                    '檔案1_revision': proj1.get('revision', 'N/A'),
+                    '檔案2_revision': proj2.get('revision', 'N/A'),
+                    '檔案1_upstream': proj1.get('upstream', 'N/A'),
+                    '檔案2_upstream': proj2.get('upstream', 'N/A'),
+                    '比較狀態': status,
+                    '檔案1_path': proj1.get('path', 'N/A'),
+                    '檔案2_path': proj2.get('path', 'N/A'),
+                })
+            
+            # 生成 Excel 報告
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # 摘要頁籤
+                summary_data = [{
+                    '比較時間': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    '檔案1': os.path.basename(file1),
+                    '檔案2': os.path.basename(file2),
+                    '比較類型': comparison_type,
+                    '總專案數': len(all_projects),
+                    '檔案1專案數': len(projects1),
+                    '檔案2專案數': len(projects2),
+                    '相同專案數': len([d for d in differences if d['比較狀態'] == '相同']),
+                    '不同專案數': len([d for d in differences if d['比較狀態'] not in ['相同', '僅存在於檔案1', '僅存在於檔案2']]),
+                    '僅存在於檔案1': len([d for d in differences if d['比較狀態'] == '僅存在於檔案1']),
+                    '僅存在於檔案2': len([d for d in differences if d['比較狀態'] == '僅存在於檔案2']),
+                }]
+                
+                df_summary = pd.DataFrame(summary_data)
+                df_summary.to_excel(writer, sheet_name='比較摘要', index=False)
+                
+                # 詳細比較頁籤
+                df_details = pd.DataFrame(differences)
+                df_details.to_excel(writer, sheet_name='詳細比較', index=False)
+                
+                # 僅列出差異的頁籤
+                diff_only = [d for d in differences if d['比較狀態'] != '相同']
+                if diff_only:
+                    df_diff_only = pd.DataFrame(diff_only)
+                    df_diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
+                
+                # 格式化工作表
+                for sheet_name in writer.sheets:
+                    worksheet = writer.sheets[sheet_name]
+                    self.excel_handler._format_worksheet(worksheet)
+            
+            print(f"✅ 通用比較完成")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 通用比較失敗: {str(e)}")
+            return False
+
     def _show_comparison_results(self, tester, success, output_path):
         """顯示比較結果"""
         print("\n" + "="*60)
@@ -1274,7 +1562,7 @@ class MainApplication:
         print(f"\n📊 詳細分析報告: {output_path}")
         
         # 詢問是否開啟報告
-        if self.input_validator.get_yes_no_input("\n是否要開啟測試報告？", True):
+        if self.input_validator.get_yes_no_input("\n是否要開啟測試報告？", False):
             self._open_file(output_path)
     
     def _get_download_types(self):
