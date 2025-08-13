@@ -32,21 +32,21 @@ class FeatureThree:
         self.source_files = {
             'master_to_premp': 'atv-google-refplus.xml',
             'premp_to_mp': 'atv-google-refplus-premp.xml',
-            'mp_to_mpbackup': 'atv-google-refplus-wave.xml'  # 來源檔案
+            'mp_to_mpbackup': 'atv-google-refplus-wave.xml'
         }
-
+        
         # 輸出檔案映射表
         self.output_files = {
             'master_to_premp': 'atv-google-refplus-premp.xml',
             'premp_to_mp': 'atv-google-refplus-wave.xml',
-            'mp_to_mpbackup': 'atv-google-refplus-wave-backup.xml'  # 轉換後檔案
+            'mp_to_mpbackup': 'atv-google-refplus-wave-backup.xml'
         }
-
+        
         # 目標檔案映射表（用於比較）
         self.target_files = {
             'master_to_premp': 'atv-google-refplus-premp.xml',
             'premp_to_mp': 'atv-google-refplus-wave.xml', 
-            'mp_to_mpbackup': 'atv-google-refplus-wave-backup.xml'  # 比較目標檔案
+            'mp_to_mpbackup': 'atv-google-refplus-wave-backup.xml'
         }
     
     def process(self, overwrite_type: str, output_folder: str, 
@@ -752,21 +752,21 @@ class FeatureThree:
             converted_wave_count = converted_content.count('mp.google-refplus.wave')
             converted_backup_count = converted_content.count('mp.google-refplus.wave.backup')
             
-            self.logger.info(f"🔍 MP to MPBackup 轉換驗證:")
-            self.logger.info(f"  轉換前: wave={original_wave_count}, backup={original_backup_count}")
-            self.logger.info(f"  轉換後: wave={converted_wave_count}, backup={converted_backup_count}")
+            # self.logger.info(f"🔍 MP to MPBackup 轉換驗證:")
+            # self.logger.info(f"  轉換前: wave={original_wave_count}, backup={original_backup_count}")
+            # self.logger.info(f"  轉換後: wave={converted_wave_count}, backup={converted_backup_count}")
             
             # 計算實際的變化
-            backup_increase = converted_backup_count - original_backup_count
-            wave_decrease = original_wave_count - converted_wave_count
+            # backup_increase = converted_backup_count - original_backup_count
+            # wave_decrease = original_wave_count - converted_wave_count
             
-            if backup_increase > 0:
-                self.logger.info(f"✅ 轉換成功: 新增了 {backup_increase} 個 backup")
-                self.logger.info(f"✅ 減少了 {wave_decrease} 個 wave")
-            elif original_backup_count > 0 and original_wave_count == original_backup_count:
-                self.logger.info(f"💡 所有 revision 可能已經是 backup 格式")
-            else:
-                self.logger.warning(f"❌ 轉換可能失敗: backup 數量沒有增加")
+            # if backup_increase > 0:
+            #     self.logger.info(f"✅ 轉換成功: 新增了 {backup_increase} 個 backup")
+            #     self.logger.info(f"✅ 減少了 {wave_decrease} 個 wave")
+            # elif original_backup_count > 0 and original_wave_count == original_backup_count:
+            #     self.logger.info(f"💡 所有 revision 可能已經是 backup 格式")
+            # else:
+            #     self.logger.warning(f"❌ 轉換可能失敗: backup 數量沒有增加")
                 
         except Exception as e:
             self.logger.error(f"驗證 MP to MPBackup 轉換時發生錯誤: {str(e)}")
@@ -1604,9 +1604,9 @@ class FeatureThree:
             target_proj = target_index[conv_composite_key]
             
             # 🔥 添加調試日誌確認找到正確的對應專案
-            self.logger.info(f"🔍 比較專案 composite key: {conv_composite_key}")
-            self.logger.info(f"   轉換後: name='{conv_proj['name']}', path='{conv_proj['path']}'")
-            self.logger.info(f"   Gerrit:  name='{target_proj['name']}', path='{target_proj['path']}'")
+            # self.logger.info(f"🔍 比較專案 composite key: {conv_composite_key}")
+            # self.logger.info(f"   轉換後: name='{conv_proj['name']}', path='{conv_proj['path']}'")
+            # self.logger.info(f"   Gerrit:  name='{target_proj['name']}', path='{target_proj['path']}'")
             
             # 修正比較邏輯：忽略屬性順序，只比較實際值
             is_identical = self._compare_project_attributes_ignore_order(conv_proj, target_proj, use_converted_revision=True)
@@ -1722,9 +1722,9 @@ class FeatureThree:
             project_name = conv_proj.get('name', 'unknown')
             
             # 🔥 添加詳細比較日誌
-            self.logger.info(f"🔍 詳細比較專案: {project_name}")
-            self.logger.info(f"   轉換後 content: {conv_proj.get('content', 'N/A')}")
-            self.logger.info(f"   Gerrit content: {target_proj.get('full_line', 'N/A')}")
+            # self.logger.info(f"🔍 詳細比較專案: {project_name}")
+            # self.logger.info(f"   轉換後 content: {conv_proj.get('content', 'N/A')}")
+            # self.logger.info(f"   Gerrit content: {target_proj.get('full_line', 'N/A')}")
             
             # 要比較的屬性列表
             attrs_to_compare = ['name', 'path', 'revision', 'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote']
@@ -1739,10 +1739,10 @@ class FeatureThree:
                     conv_val = conv_proj.get('converted_revision', '').strip()
                 
                 # 🔥 詳細記錄每個屬性的比較
-                self.logger.info(f"   屬性 {attr}:")
-                self.logger.info(f"     轉換後: '{conv_val}'")
-                self.logger.info(f"     Gerrit:  '{target_val}'")
-                self.logger.info(f"     相同: {conv_val == target_val}")
+                # self.logger.info(f"   屬性 {attr}:")
+                # self.logger.info(f"     轉換後: '{conv_val}'")
+                # self.logger.info(f"     Gerrit:  '{target_val}'")
+                # self.logger.info(f"     相同: {conv_val == target_val}")
                 
                 # 如果不同，立即返回並記錄原因
                 if conv_val != target_val:
@@ -1759,7 +1759,7 @@ class FeatureThree:
                                 break
                     return False
             
-            self.logger.info(f"✅ 專案 {project_name} 所有屬性都相同")
+            # self.logger.info(f"✅ 專案 {project_name} 所有屬性都相同")
             return True
             
         except Exception as e:
@@ -2317,9 +2317,13 @@ class FeatureThree:
                 if diff_analysis['converted_projects']:
                     source_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['original_revision'])
+                        source_link = self._generate_source_link(proj['name'], proj['original_revision'], proj['remote'])
+                        # 🔥 修正：使用 gerrit_ 開頭的來源檔案名稱
+                        gerrit_source_filename = f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}"
+                        
                         source_data.append({
                             'SN': i,
+                            'source_file': gerrit_source_filename,  # 🔥 例如：gerrit_atv-google-refplus-wave.xml
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['original_revision'],
@@ -2328,7 +2332,7 @@ class FeatureThree:
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
                             'remote': proj['remote'],
-                            'source_link': self._generate_source_link(proj['name'], proj['original_revision'], proj['remote'])  # 添加這行
+                            'source_link': source_link
                         })
                     
                     df_source = pd.DataFrame(source_data)
@@ -2338,9 +2342,13 @@ class FeatureThree:
                 if diff_analysis['converted_projects']:
                     converted_manifest_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['converted_revision'])
+                        source_link = self._generate_source_link(proj['name'], proj['converted_revision'], proj['remote'])
+                        # 🔥 修正：使用轉換後的檔案名稱（即將用來比對的那份）
+                        output_filename = self.output_files.get(overwrite_type, 'unknown.xml')
+                        
                         converted_manifest_data.append({
                             'SN': i,
+                            'source_file': output_filename,  # 🔥 例如：atv-google-refplus-wave-backup.xml
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['converted_revision'],
@@ -2349,7 +2357,7 @@ class FeatureThree:
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
                             'remote': proj['remote'],
-                            'source_link': self._generate_source_link(proj['name'], proj['converted_revision'], proj['remote'])  # 添加這行
+                            'source_link': source_link
                         })
                     
                     df_converted_manifest = pd.DataFrame(converted_manifest_data)
@@ -2359,9 +2367,13 @@ class FeatureThree:
                 if diff_analysis['has_target'] and diff_analysis['target_projects']:
                     gerrit_data = []
                     for i, proj in enumerate(diff_analysis['target_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['revision'])
+                        source_link = self._generate_source_link(proj['name'], proj['revision'], proj['remote'])
+                        # 🔥 修正：使用 gerrit_ 開頭的目標檔案名稱
+                        gerrit_target_filename = f"gerrit_{self.target_files.get(overwrite_type, 'unknown.xml')}"
+                        
                         gerrit_data.append({
                             'SN': i,
+                            'source_file': gerrit_target_filename,  # 🔥 例如：gerrit_atv-google-refplus-wave-backup.xml
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['revision'],
@@ -2370,7 +2382,7 @@ class FeatureThree:
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
                             'remote': proj['remote'],
-                            'source_link': self._generate_source_link(proj['name'], proj['revision'], proj['remote'])  # 添加這行
+                            'source_link': source_link
                         })
                     
                     df_gerrit = pd.DataFrame(gerrit_data)
@@ -2769,6 +2781,8 @@ class FeatureThree:
                         worksheet.column_dimensions[col_letter].width = 40
                     elif header_value == 'source_link':
                         worksheet.column_dimensions[col_letter].width = 60
+                    elif header_value == 'source_file':  # 🔥 添加新欄位的欄寬設定
+                        worksheet.column_dimensions[col_letter].width = 30
                 
                 # 其他頁籤的一般欄寬調整
                 else:
