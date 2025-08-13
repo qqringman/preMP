@@ -311,7 +311,7 @@ MASTER_TO_PREMP_EXACT_MAPPING = {
     'realtek/linux-4.14/android-14/mp.google-refplus': 'realtek/linux-4.14/android-14/premp.google-refplus',
     
     # 特殊的保持不變的項目
-    'master-kernel-build-2022': 'master-kernel-build-2022',
+    # 'master-kernel-build-2022': 'master-kernel-build-2022',
 }
 
 # Master to PreMP 模式匹配規則（用於動態匹配）
@@ -342,16 +342,6 @@ MASTER_TO_PREMP_PATTERN_RULES = [
         'description': 'Git tags 保持不變'
     },
 ]
-
-# PreMP to MP 轉換規則
-PREMP_TO_MP_KEYWORD = 'premp.google-refplus'
-MP_TO_MPBACKUP_KEYWORD = 'mp.google-refplus.wave'
-
-# PreMP to MP 轉換目標
-PREMP_TO_MP_TARGET = 'mp.google-refplus.wave'
-
-# MP to MP Backup 轉換目標
-MP_TO_MPBACKUP_TARGET = 'mp.google-refplus.wave.backup'
 
 # =====================================
 # ===== 轉換選項設定 =====
