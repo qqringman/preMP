@@ -2820,7 +2820,7 @@ class FeatureThree:
 
     def _add_hyperlink_to_cell(self, worksheet, row: int, col: int, url: str, display_text: str):
         """
-        為 Excel 單元格添加超連結
+        為 Excel 單元格添加超連結 - 改進版本，減少安全警告
         
         Args:
             worksheet: Excel 工作表
@@ -2831,22 +2831,39 @@ class FeatureThree:
         """
         try:
             from openpyxl.worksheet.hyperlink import Hyperlink
+            from openpyxl.styles import Font
             
             cell = worksheet.cell(row=row, column=col)
-            cell.value = display_text
-            cell.hyperlink = Hyperlink(ref=f"{worksheet.cell(row=row, column=col).coordinate}", target=url)
             
-            # 設定連結樣式（藍色下劃線）
-            from openpyxl.styles import Font
+            # 🆕 方案1: 使用完整的 HYPERLINK 函數格式
+            try:
+                # 使用 Excel 的 HYPERLINK 函數，這樣 Excel 會更友善地處理
+                cell.value = f'=HYPERLINK("{url}","{display_text}")'
+                cell.font = Font(color="0000FF", underline="single")
+                self.logger.debug(f"添加 HYPERLINK 函數: {display_text} → {url}")
+                return
+            except Exception as e:
+                self.logger.warning(f"HYPERLINK 函數失敗，嘗試標準超連結: {str(e)}")
+            
+            # 🆕 方案2: 標準超連結（備用）
+            cell.value = display_text
+            cell.hyperlink = Hyperlink(ref=f"{cell.coordinate}", target=url)
             cell.font = Font(color="0000FF", underline="single")
             
-            self.logger.debug(f"添加超連結: {display_text} → {url}")
+            self.logger.debug(f"添加標準超連結: {display_text} → {url}")
             
         except Exception as e:
             self.logger.error(f"添加超連結失敗: {str(e)}")
-            # 備用方案：直接顯示檔名
+            # 備用方案：顯示文字 + URL 備註
             cell = worksheet.cell(row=row, column=col)
-            cell.value = display_text
+            cell.value = f"{display_text}"
+            
+            # 在註解中添加 URL
+            try:
+                from openpyxl.comments import Comment
+                cell.comment = Comment(f"Gerrit 連結:\n{url}", "System")
+            except:
+                pass
                                 
     def _format_worksheet_with_background_colors(self, worksheet, sheet_name: str):
         """格式化工作表 - 修正版本，設定Excel頁籤標籤顏色和新的表頭顏色"""
