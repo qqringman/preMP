@@ -1304,7 +1304,7 @@ class MainApplication:
             '4': {
                 'name': 'MP Backup',
                 'filename': 'atv-google-refplus-wave-backup.xml',
-                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.backup.xml',
+                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave-backup.xml',
                 'description': 'MP Wave Backup manifest',
                 'need_expand': False
             }
