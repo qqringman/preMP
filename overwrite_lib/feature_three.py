@@ -2190,14 +2190,14 @@ class FeatureThree:
                     '轉換類型': overwrite_type,
                     'Gerrit 源檔案': os.path.basename(source_file_path) if source_file_path else '無',
                     '源檔案下載狀態': '成功' if source_download_success else '失敗',
-                    '源檔案': self.source_files.get(overwrite_type, ''),
+                    '源檔案': self.source_files.get(overwrite_type, ''),  # 這個會被轉為連結
                     '包含 include 標籤': '是' if use_expanded else '否',
                     'Gerrit 展開檔案': os.path.basename(expanded_file_path) if expanded_file_path else '無',
                     '使用展開檔案轉換': '是' if use_expanded else '否',
                     '輸出檔案': os.path.basename(output_file_path) if output_file_path else '',
                     'Gerrit 目標檔案': os.path.basename(target_file_path) if target_file_path else '無',
                     '目標檔案下載狀態': '成功' if target_download_success else '失敗 (檔案不存在)',
-                    '目標檔案': self.target_files.get(overwrite_type, ''),
+                    '目標檔案': self.target_files.get(overwrite_type, ''),  # 這個會被轉為連結
                     '📊 總專案數': diff_analysis['summary'].get('converted_count', 0),
                     '🔄 實際轉換專案數': diff_analysis['summary'].get('actual_conversion_count', 0),
                     '⭕ 未轉換專案數': diff_analysis['summary'].get('unchanged_count', 0),
@@ -2206,7 +2206,7 @@ class FeatureThree:
                     '✅ 轉換後相同數': diff_analysis['summary'].get('identical_converted_count', 0),
                     '📈 轉換匹配率': diff_analysis['summary'].get('conversion_match_rate', 'N/A')
                 }]
-                
+
                 if push_result:
                     summary_data[0].update({
                         '推送狀態': '成功' if push_result['success'] else '失敗',
@@ -2221,9 +2221,13 @@ class FeatureThree:
                         'Commit ID': '',
                         'Review URL': ''
                     })
-                
+
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='轉換摘要', index=False)
+
+                # 🆕 為轉換摘要頁籤添加超連結
+                worksheet_summary = writer.sheets['轉換摘要']
+                self._add_summary_hyperlinks(worksheet_summary, overwrite_type)
                 
                 # 頁籤 2: 轉換後專案（淺藍色底色）
                 if diff_analysis['converted_projects']:
@@ -2392,6 +2396,20 @@ class FeatureThree:
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self._format_worksheet_with_background_colors(worksheet, sheet_name)
+                    
+                    # 🆕 為相關頁籤添加超連結
+                    if sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest', '轉換後與 Gerrit manifest 的差異']:
+                        self._add_manifest_hyperlinks(worksheet, sheet_name)
+                        
+                        # 🆕 額外日誌說明各頁籤的連結策略
+                        if sheet_name == '來源的 manifest':
+                            self.logger.info(f"📋 {sheet_name}: source_file 欄位已添加 Gerrit 連結")
+                        elif sheet_name == '轉換後的 manifest':
+                            self.logger.info(f"📋 {sheet_name}: source_file 欄位不添加連結（本地檔案）")
+                        elif sheet_name == 'gerrit 上的 manifest':
+                            self.logger.info(f"📋 {sheet_name}: source_file 欄位已添加 Gerrit 連結")
+                        elif sheet_name == '轉換後與 Gerrit manifest 的差異':
+                            self.logger.info(f"📋 {sheet_name}: 僅 gerrit_source_file 欄位添加連結，source_file 不添加")
             
             self.logger.info(f"成功產生 Excel 報告: {excel_file}")
             return excel_file
@@ -2400,6 +2418,94 @@ class FeatureThree:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
 
+    def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
+        """
+        為 manifest 相關頁籤添加 source_file 欄位的超連結
+        
+        Args:
+            worksheet: Excel 工作表
+            sheet_name: 頁籤名稱
+        """
+        try:
+            # 找到 source_file 欄位的位置
+            source_file_col = None
+            gerrit_source_file_col = None
+            
+            for col_num, cell in enumerate(worksheet[1], 1):  # 表頭行
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value == 'source_file':
+                    source_file_col = col_num
+                elif header_value == 'gerrit_source_file':
+                    gerrit_source_file_col = col_num
+            
+            # 🆕 只有特定頁籤的 source_file 欄位需要添加連結
+            source_file_need_link = sheet_name in ['來源的 manifest', 'gerrit 上的 manifest']
+            
+            # 為 source_file 欄位添加連結（僅限指定頁籤）
+            if source_file_col and source_file_need_link:
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row_num, column=source_file_col)
+                    filename = str(cell.value) if cell.value else ''
+                    
+                    if filename and filename not in ['', 'N/A']:
+                        gerrit_url = self._generate_gerrit_manifest_link(filename)
+                        self._add_hyperlink_to_cell(worksheet, row_num, source_file_col, gerrit_url, filename)
+            
+            # 為 gerrit_source_file 欄位添加連結（所有有此欄位的頁籤都需要）
+            if gerrit_source_file_col:
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row_num, column=gerrit_source_file_col)
+                    filename = str(cell.value) if cell.value else ''
+                    
+                    if filename and filename not in ['', 'N/A']:
+                        gerrit_url = self._generate_gerrit_manifest_link(filename)
+                        self._add_hyperlink_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
+            
+            # 🆕 記錄處理結果
+            if source_file_col and source_file_need_link:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_file 欄位連結")
+            elif source_file_col and not source_file_need_link:
+                self.logger.info(f"⏭️ 跳過 {sheet_name} 的 source_file 欄位連結（按需求不添加）")
+            
+            if gerrit_source_file_col:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_file 欄位連結")
+            
+        except Exception as e:
+            self.logger.error(f"添加 {sheet_name} 超連結失敗: {str(e)}")
+            
+    def _add_summary_hyperlinks(self, worksheet, overwrite_type: str):
+        """
+        為轉換摘要頁籤添加 Gerrit 超連結
+        
+        Args:
+            worksheet: Excel 工作表
+            overwrite_type: 轉換類型
+        """
+        try:
+            # 找到需要添加連結的欄位
+            target_columns = {
+                '源檔案': self.source_files.get(overwrite_type, ''),
+                '目標檔案': self.target_files.get(overwrite_type, '')
+            }
+            
+            # 為每個目標欄位添加連結
+            for col_num, cell in enumerate(worksheet[1], 1):  # 表頭行
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value in target_columns:
+                    filename = target_columns[header_value]
+                    if filename and filename != '':
+                        gerrit_url = self._generate_gerrit_manifest_link(filename)
+                        
+                        # 在數據行添加超連結（第2行）
+                        self._add_hyperlink_to_cell(worksheet, 2, col_num, gerrit_url, filename)
+                        
+                        self.logger.info(f"已為轉換摘要添加 {header_value} 連結: {filename}")
+            
+        except Exception as e:
+            self.logger.error(f"添加轉換摘要超連結失敗: {str(e)}")
+            
     def _add_revision_comparison_formula_converted_projects(self, worksheet):
         """為轉換後專案頁籤添加真正的動態條件格式"""
         try:
@@ -2683,9 +2789,67 @@ class FeatureThree:
             
         except Exception as e:
             self.logger.error(f"添加 Revision 比較公式失敗: {str(e)}")
+
+    def _generate_gerrit_manifest_link(self, filename: str) -> str:
+        """
+        生成 Gerrit manifest 檔案的連結
+        
+        Args:
+            filename: manifest 檔案名稱
             
+        Returns:
+            Gerrit 連結 URL
+        """
+        try:
+            if not filename or filename == '無':
+                return '無'
+            
+            # 移除 gerrit_ 前綴（如果有的話）
+            clean_filename = filename.replace('gerrit_', '') if filename.startswith('gerrit_') else filename
+            
+            # 構建 Gerrit 連結
+            base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master"
+            gerrit_link = f"{base_url}/{clean_filename}"
+            
+            self.logger.debug(f"生成 Gerrit 連結: {clean_filename} → {gerrit_link}")
+            return gerrit_link
+            
+        except Exception as e:
+            self.logger.error(f"生成 Gerrit 連結失敗: {str(e)}")
+            return filename  # 返回原始檔名作為備用
+
+    def _add_hyperlink_to_cell(self, worksheet, row: int, col: int, url: str, display_text: str):
+        """
+        為 Excel 單元格添加超連結
+        
+        Args:
+            worksheet: Excel 工作表
+            row: 行號
+            col: 列號  
+            url: 連結 URL
+            display_text: 顯示文字
+        """
+        try:
+            from openpyxl.worksheet.hyperlink import Hyperlink
+            
+            cell = worksheet.cell(row=row, column=col)
+            cell.value = display_text
+            cell.hyperlink = Hyperlink(ref=f"{worksheet.cell(row=row, column=col).coordinate}", target=url)
+            
+            # 設定連結樣式（藍色下劃線）
+            from openpyxl.styles import Font
+            cell.font = Font(color="0000FF", underline="single")
+            
+            self.logger.debug(f"添加超連結: {display_text} → {url}")
+            
+        except Exception as e:
+            self.logger.error(f"添加超連結失敗: {str(e)}")
+            # 備用方案：直接顯示檔名
+            cell = worksheet.cell(row=row, column=col)
+            cell.value = display_text
+                                
     def _format_worksheet_with_background_colors(self, worksheet, sheet_name: str):
-        """格式化工作表 - 修正版本，設定Excel頁籤標籤顏色"""
+        """格式化工作表 - 修正版本，設定Excel頁籤標籤顏色和新的表頭顏色"""
         try:
             from openpyxl.styles import PatternFill, Font, Alignment
             from openpyxl.utils import get_column_letter
@@ -2701,23 +2865,45 @@ class FeatureThree:
                 # 淺紅色頁籤
                 worksheet.sheet_properties.tabColor = "FFB6C1"  # Light Pink
             
-            # 表頭顏色
+            # 🆕 新增顏色定義
             blue_header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")  # 藍底
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")        # 綠底
             red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")         # 紅底
+            orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")      # 🆕 橘底
+            purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")      # 🆕 紫底
             
             white_font = Font(color="FFFFFF", bold=True)    # 白字
             blue_font = Font(color="0070C0", bold=True)     # 藍字
             gray_font = Font(color="808080", bold=True)     # 灰字
+            
+            # 🆕 定義特殊顏色的欄位
+            orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL"]
+            green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
+            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案"]
             
             # 設定表頭和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
                 col_letter = get_column_letter(col_num)
                 header_value = str(cell.value) if cell.value else ''
                 
-                # 預設所有表頭都是藍底白字
-                cell.fill = blue_header_fill
-                cell.font = white_font
+                # 🆕 根據欄位名稱設定特殊顏色
+                if header_value in orange_header_fields:
+                    cell.fill = orange_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定橘底白字表頭: {header_value}")
+                elif header_value in green_header_fields:
+                    cell.fill = green_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定綠底白字表頭: {header_value}")
+                elif header_value in purple_header_fields:
+                    cell.fill = purple_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定紫底白字表頭: {header_value}")
+                else:
+                    # 預設所有其他表頭都是藍底白字
+                    cell.fill = blue_header_fill
+                    cell.font = white_font
+                
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 
                 # 特殊處理差異頁籤
@@ -2730,7 +2916,7 @@ class FeatureThree:
                         cell.fill = red_fill
                         cell.font = white_font
                         worksheet.column_dimensions[col_letter].width = 35
-                    elif header_value == 'Revision 是否相等':  # 🔥 與 "轉換後 Revision" 同色
+                    elif header_value == 'Revision 是否相等':
                         cell.fill = red_fill
                         cell.font = white_font
                         worksheet.column_dimensions[col_letter].width = 15
@@ -2739,8 +2925,8 @@ class FeatureThree:
 
                 # 特殊處理差異頁籤
                 elif sheet_name == "轉換後與 Gerrit manifest 的差異":
-                    # gerrit_ 開頭的欄位用綠底白字
-                    if header_value.startswith('gerrit_'):
+                    # gerrit_ 開頭的欄位用綠底白字（但前面已經被特殊顏色覆蓋了）
+                    if header_value.startswith('gerrit_') and header_value not in green_header_fields:
                         cell.fill = green_fill
                         cell.font = white_font
                     
@@ -2748,8 +2934,6 @@ class FeatureThree:
                     elif header_value in ['gerrit_revision']:
                         cell.fill = red_fill
                         cell.font = white_font
-                    
-                    # 🔥 移除對 revision 和 Revision 是否相等 的處理，因為這些欄位已經移除
                     
                     # comparison_status 和 comparison_result 用紅底白字
                     elif header_value in ['comparison_status', 'comparison_result']:
@@ -2781,7 +2965,7 @@ class FeatureThree:
                         worksheet.column_dimensions[col_letter].width = 40
                     elif header_value == 'source_link':
                         worksheet.column_dimensions[col_letter].width = 60
-                    elif header_value == 'source_file':  # 🔥 添加新欄位的欄寬設定
+                    elif header_value == 'source_file':
                         worksheet.column_dimensions[col_letter].width = 30
                 
                 # 其他頁籤的一般欄寬調整
