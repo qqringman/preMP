@@ -902,10 +902,16 @@ class FeatureManager:
 
 
 class MainApplication:
-    """主應用程式類別 - 重構版"""
-    
     def __init__(self):
         self.logger = logger
+        
+        # 🔧 添加 excel_handler（如果還沒有）
+        try:
+            from excel_handler import ExcelHandler
+            self.excel_handler = ExcelHandler()
+        except ImportError:
+            self.excel_handler = None
+            print("⚠️ 無法載入 ExcelHandler，將使用簡化格式")
         
         # 初始化功能模組
         self.feature_one = FeatureOne()
@@ -1412,16 +1418,16 @@ class MainApplication:
             return 'custom'
 
     def _perform_generic_comparison(self, file1, file2, output_path, comparison_type):
-        """執行通用的 manifest 比較 - 新增方法"""
+        """執行通用的 manifest 比較 - 修正版本"""
         try:
             print(f"🔄 執行 {comparison_type} 比較...")
             
-            # 這裡可以實作通用的比較邏輯
-            # 目前先使用簡化版本
-            
-            # 解析兩個 manifest 檔案
+            # 🔧 修正：添加必要的導入
             import xml.etree.ElementTree as ET
             import pandas as pd
+            from datetime import datetime
+            
+            print(f"📄 解析檔案...")
             
             # 解析檔案1
             tree1 = ET.parse(file1)
@@ -1453,10 +1459,10 @@ class MainApplication:
                         'remote': project.get('remote', ''),
                     }
             
+            print(f"📊 進行比較分析...")
+            
             # 進行比較
             differences = []
-            
-            # 比較共同專案
             all_projects = set(projects1.keys()) | set(projects2.keys())
             
             for i, name in enumerate(sorted(all_projects), 1):
@@ -1468,9 +1474,9 @@ class MainApplication:
                     status = "僅存在於檔案2"
                 elif name not in projects2:
                     status = "僅存在於檔案1"
-                elif proj1.get('revision') != proj2.get('revision'):
+                elif proj1.get('revision', '') != proj2.get('revision', ''):
                     status = "revision不同"
-                elif proj1.get('upstream') != proj2.get('upstream'):
+                elif proj1.get('upstream', '') != proj2.get('upstream', ''):
                     status = "upstream不同"
                 
                 differences.append({
@@ -1484,6 +1490,14 @@ class MainApplication:
                     '檔案1_path': proj1.get('path', 'N/A'),
                     '檔案2_path': proj2.get('path', 'N/A'),
                 })
+            
+            print(f"📝 生成Excel報告...")
+            
+            # 🔧 修正：確保輸出資料夾存在
+            import os
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
             
             # 生成 Excel 報告
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
@@ -1506,25 +1520,40 @@ class MainApplication:
                 df_summary.to_excel(writer, sheet_name='比較摘要', index=False)
                 
                 # 詳細比較頁籤
-                df_details = pd.DataFrame(differences)
-                df_details.to_excel(writer, sheet_name='詳細比較', index=False)
+                if differences:
+                    df_details = pd.DataFrame(differences)
+                    df_details.to_excel(writer, sheet_name='詳細比較', index=False)
+                    
+                    # 僅列出差異的頁籤
+                    diff_only = [d for d in differences if d['比較狀態'] != '相同']
+                    if diff_only:
+                        df_diff_only = pd.DataFrame(diff_only)
+                        df_diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
                 
-                # 僅列出差異的頁籤
-                diff_only = [d for d in differences if d['比較狀態'] != '相同']
-                if diff_only:
-                    df_diff_only = pd.DataFrame(diff_only)
-                    df_diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
+                print(f"📋 設定格式...")
                 
-                # 格式化工作表
-                for sheet_name in writer.sheets:
-                    worksheet = writer.sheets[sheet_name]
-                    self.excel_handler._format_worksheet(worksheet)
+                # 🔧 修正：簡化格式化，避免複雜的依賴
+                try:
+                    for sheet_name in writer.sheets:
+                        worksheet = writer.sheets[sheet_name]
+                        # 簡單的格式化
+                        for column_cells in worksheet.columns:
+                            length = max(len(str(cell.value or '')) for cell in column_cells)
+                            worksheet.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 50)
+                except Exception as format_error:
+                    print(f"⚠️ 格式化警告: {format_error}")
+                    # 格式化失敗不影響檔案生成
+                    pass
             
-            print(f"✅ 通用比較完成")
+            print(f"✅ 通用比較完成: {output_path}")
             return True
             
         except Exception as e:
             print(f"❌ 通用比較失敗: {str(e)}")
+            # 🔧 修正：顯示詳細錯誤信息
+            import traceback
+            print(f"📄 錯誤詳情:")
+            traceback.print_exc()
             return False
 
     def _show_comparison_results(self, tester, success, output_path):
