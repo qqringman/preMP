@@ -732,64 +732,118 @@ class ManifestComparator:
     def _fix_revision_comparison_formulas_dynamic(self, worksheet, revision_equal_col: int, 
                                                 source_revision_col: int, target_revision_col: int):
         """
-        修正 "Revision 是否相等" 欄位的動態公式，支援用戶修改時自動更新
-        
-        Args:
-            worksheet: 工作表
-            revision_equal_col: "Revision 是否相等" 欄位位置
-            source_revision_col: 來源 Revision 欄位位置
-            target_revision_col: 目標 Revision 欄位位置
+        修正版：確保條件格式只設定到正確的"Revision 是否相等"欄位
         """
         try:
             from openpyxl.utils import get_column_letter
-            from openpyxl.styles import PatternFill, Font
+            from openpyxl.styles import Font
             from openpyxl.formatting.rule import FormulaRule
             
             source_col_letter = get_column_letter(source_revision_col)
             target_col_letter = get_column_letter(target_revision_col)
             equal_col_letter = get_column_letter(revision_equal_col)
             
-            self.logger.info(f"📊 設定動態 Revision 比較公式: {source_col_letter} 欄 vs {target_col_letter} 欄")
+            self.logger.info(f"📊 設定動態 Revision 比較公式:")
+            self.logger.info(f"   來源 Revision: {source_col_letter} 欄")
+            self.logger.info(f"   目標 Revision: {target_col_letter} 欄") 
+            self.logger.info(f"   Revision 是否相等: {equal_col_letter} 欄")
             
-            # 🔥 為每一行設定動態公式
+            # 🔥 步驟1：確認"Revision 是否相等"欄位確實存在
+            equal_header = str(worksheet.cell(row=1, column=revision_equal_col).value) if worksheet.cell(row=1, column=revision_equal_col).value else ''
+            if "Revision 是否相等" not in equal_header:
+                self.logger.error(f"❌ 第 {revision_equal_col} 欄不是 'Revision 是否相等' 欄位，實際是: '{equal_header}'")
+                return
+            
+            # 🔥 步驟2：為每一行設定動態公式
             for row in range(2, worksheet.max_row + 1):
                 cell = worksheet.cell(row=row, column=revision_equal_col)
-                
-                # 🔥 設定動態 Excel 公式 - Y/N 格式
                 formula = f'=IF({source_col_letter}{row}={target_col_letter}{row},"Y","N")'
                 cell.value = formula
             
-            # 🔥 設定條件格式 - 綠字和紅字
-            # 定義顏色
-            green_font = Font(color="00B050", bold=True)  # 綠字
-            red_font = Font(color="FF0000", bold=True)    # 紅字
+            # 🔥 步驟3：檢查並清除可能影響其他欄位的條件格式
+            self._clean_existing_conditional_formatting(worksheet)
             
-            # 🔥 條件格式規則 1: 當值為 "Y" 時顯示綠字
+            # 🔥 步驟4：只針對"Revision 是否相等"欄位設定條件格式
             green_rule = FormulaRule(
                 formula=[f'${equal_col_letter}2="Y"'],
-                font=green_font
+                font=Font(color="00B050", bold=True)
             )
             
-            # 🔥 條件格式規則 2: 當值為 "N" 時顯示紅字
             red_rule = FormulaRule(
                 formula=[f'${equal_col_letter}2="N"'],
-                font=red_font
+                font=Font(color="FF0000", bold=True)
             )
             
-            # 🔥 應用條件格式到整個欄位範圍
+            # 🔥 重要：確保範圍只包含"Revision 是否相等"欄位
             range_string = f"{equal_col_letter}2:{equal_col_letter}{worksheet.max_row}"
+            
+            # 🔥 確認範圍正確性
+            self.logger.info(f"🎯 條件格式範圍: {range_string}")
+            self.logger.info(f"🎯 該範圍只影響 '{equal_header}' 欄位")
+            
             worksheet.conditional_formatting.add(range_string, green_rule)
             worksheet.conditional_formatting.add(range_string, red_rule)
             
-            self.logger.info(f"✅ 已設定動態 Revision 比較公式和條件格式")
-            self.logger.info(f"   📍 公式範圍: {range_string}")
-            self.logger.info(f"   🟢 相等顯示: Y (綠字)")
-            self.logger.info(f"   🔴 不相等顯示: N (紅字)")
-            self.logger.info(f"   🔄 支援用戶修改 {source_col_letter} 或 {target_col_letter} 欄位時自動更新")
+            # 🔥 步驟5：驗證其他欄位不受影響
+            self._verify_other_columns_not_affected(worksheet, revision_equal_col)
+            
+            self.logger.info("✅ 已設定動態 Revision 比較公式和條件格式")
             
         except Exception as e:
             self.logger.error(f"設定動態 Revision 比較公式失敗: {str(e)}")
+
+    def _verify_other_columns_not_affected(self, worksheet, revision_equal_col: int):
+        """驗證其他欄位不受條件格式影響"""
+        try:
+            from openpyxl.utils import get_column_letter
             
+            # 🔥 檢查"比較檔案"欄位
+            for col in range(1, worksheet.max_column + 1):
+                if col == revision_equal_col:
+                    continue
+                    
+                header_value = str(worksheet.cell(row=1, column=col).value) if worksheet.cell(row=1, column=col).value else ''
+                
+                if header_value == '比較檔案':
+                    col_letter = get_column_letter(col)
+                    self.logger.info(f"✅ 驗證: '比較檔案' 欄位在 {col_letter} 欄，不在條件格式範圍內")
+                    
+                    # 🔥 立即設定黑色字體
+                    from openpyxl.styles import Font
+                    black_font = Font(color="000000", bold=False)
+                    
+                    for row in range(2, worksheet.max_row + 1):
+                        cell = worksheet.cell(row=row, column=col)
+                        cell.font = black_font
+                    
+                    self.logger.info(f"✅ 已預先設定 '比較檔案' 欄位為黑色字體")
+                    break
+                    
+        except Exception as e:
+            self.logger.warning(f"驗證其他欄位失敗: {str(e)}")
+            
+    def _clean_existing_conditional_formatting(self, worksheet):
+        """清除現有的條件格式，避免衝突"""
+        try:
+            # 🔥 記錄現有的條件格式
+            cf_count = len(worksheet.conditional_formatting)
+            if cf_count > 0:
+                self.logger.info(f"🗑️ 發現 {cf_count} 個現有條件格式，準備清除")
+                
+                # 🔥 記錄範圍
+                for i, cf in enumerate(worksheet.conditional_formatting):
+                    for cell_range in cf.cells:
+                        self.logger.info(f"   第 {i+1} 個條件格式範圍: {cell_range}")
+                
+                # 🔥 創建新的空的條件格式列表
+                worksheet.conditional_formatting = type(worksheet.conditional_formatting)()
+                self.logger.info("✅ 已清除所有現有條件格式")
+            else:
+                self.logger.info("ℹ️ 沒有現有的條件格式")
+                
+        except Exception as e:
+            self.logger.warning(f"清除現有條件格式失敗: {str(e)}")
+                        
     def _fix_sheet_filenames(self, workbook, excel_file: str, overwrite_type: str, 
                             source_file_path: Optional[str], target_file_path: Optional[str]):
         """
@@ -1291,10 +1345,10 @@ class ManifestComparator:
                 self.logger.info("✅ Excel 檔案修正完成（本地檔案比較模式 - 純文字顯示，無超連結）")
             else:
                 self.logger.info("✅ Excel 檔案修正完成（Gerrit 比較模式 - 完整功能含超連結 + 動態公式）")
-            
+    
         except Exception as e:
             self.logger.error(f"修正 Excel 檔案失敗: {str(e)}")
-
+            
     def _fix_target_revision_for_local_comparison(self, worksheet, target_revision_col: int, target_file_path: str):
         """
         修正本地比較模式下的目標 Revision 欄位，顯示真正的目標檔案 revision
