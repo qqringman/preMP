@@ -1074,49 +1074,30 @@ class MainApplication:
             print("繼續使用程式...")
     
     def _compare_manifest_diff(self):
-        """比較 manifest 差異 - 整合 manifest_conversion.py"""
+        """比較 manifest 差異 - 完全重新設計的選單和邏輯"""
         print("\n" + "="*60)
         print("  📄 比較 Manifest 差異")
         print("="*60)
-        print("功能說明：測試不同類型 manifest 轉換規則的正確性")
-        print("比較從 Gerrit 下載的不同版本 manifest，驗證轉換邏輯")
+        print("功能說明：本地檔案與 Gerrit manifest 或本地檔案間的比較")
+        print("🔧 使用邏輯：完全基於 feature_three.py（不執行轉換，純比對）")
+        print("📋 Excel 格式：與 feature_three.py 完全一致")
         
         try:
-            # 建立臨時目錄
-            temp_dir = tempfile.mkdtemp(prefix='manifest_compare_')
-            print(f"\n📁 臨時工作目錄: {temp_dir}")
-            
-            # 選擇比較模式
-            choice = self._get_compare_mode()
+            # 顯示新的選單選項
+            choice = self._get_compare_mode_new()
             if choice == '0':
                 return
             
-            # 根據選擇執行不同的比較模式 - 直接傳入比較類型
-            if choice == '1':
-                # Master vs PreMP
-                file1, file2 = self._auto_download_manifests(temp_dir, 'master_vs_premp')
-                comparison_type = 'master_vs_premp'
-            elif choice == '2':
-                # PreMP vs MP
-                file1, file2 = self._auto_download_manifests(temp_dir, 'premp_vs_mp')
-                comparison_type = 'premp_vs_mp'
-            elif choice == '3':
-                # MP vs MP Backup
-                file1, file2 = self._auto_download_manifests(temp_dir, 'mp_vs_mpbackup')
-                comparison_type = 'mp_vs_mpbackup'
-            elif choice == '4':
-                # 使用本地檔案
-                file1, file2 = self._get_local_manifest_files()
-                comparison_type = 'custom'
+            # 根據選擇執行不同的比較模式
+            if choice in ['1', '2', '3', '4']:
+                # 本地檔案與 Gerrit 比較
+                self._execute_local_vs_gerrit_comparison(choice)
+            elif choice == '5':
+                # 本地檔案比較
+                self._execute_local_files_comparison()
             else:
                 print("❌ 無效的選項")
                 return
-            
-            if not file1 or not file2:
-                return
-            
-            # 執行比較分析 - 傳入已知的比較類型
-            self._perform_manifest_comparison(file1, file2, comparison_type)
             
         except Exception as e:
             print(f"\n❌ 比較過程發生錯誤: {str(e)}")
@@ -1125,6 +1106,215 @@ class MainApplication:
             self.logger.debug(f"錯誤詳情:\n{traceback.format_exc()}")
         
         input("\n按 Enter 繼續...")
+
+    def _execute_local_files_comparison(self):
+        """執行本地檔案比較"""
+        print(f"\n📋 本地檔案比較")
+        print("="*50)
+        print("💡 提示：可以選擇任意兩個 manifest.xml 檔案進行比較")
+        print("🔧 處理引擎：ManifestComparator（基於 feature_three.py 邏輯）")
+        print("📄 處理模式：純比對（不執行轉換）")
+        
+        # 選擇第一個檔案
+        file1 = self.input_validator.get_input_file("請輸入第一個 manifest.xml 檔案路徑")
+        if not file1:
+            return
+        
+        print(f"✅ 已選擇第一個檔案: {os.path.basename(file1)}")
+        
+        # 選擇第二個檔案
+        file2 = self.input_validator.get_input_file("請輸入第二個 manifest.xml 檔案路徑")
+        if not file2:
+            return
+        
+        print(f"✅ 已選擇第二個檔案: {os.path.basename(file2)}")
+        
+        # 取得輸出資料夾和檔案名
+        output_folder = self.input_validator.get_output_folder("請輸入輸出資料夾路徑")
+        output_file = "local_files_comparison.xlsx"
+        output_path = os.path.join(output_folder, output_file)
+        
+        # 確認檔案選擇
+        print(f"\n📋 檔案比較配對:")
+        print(f"  📄 檔案1: {os.path.basename(file1)}")
+        print(f"     → 將處理為: local_{os.path.basename(file1)}")
+        print(f"  📄 檔案2: {os.path.basename(file2)}")
+        print(f"     → 將處理為: local_{os.path.basename(file2)}")
+        print(f"  📊 輸出報告: {output_file}")
+        print(f"  🔧 比較引擎: ManifestComparator（feature_three.py 邏輯）")
+        print(f"  📄 處理模式: 純比對（不執行轉換）")
+        
+        if not self.input_validator.get_yes_no_input("確認使用這兩個檔案進行比較？", True):
+            print("❌ 已取消比較")
+            return
+        
+        print(f"\n📄 開始比較分析...")
+        
+        # 使用新的 ManifestComparator
+        import sys
+        manifest_compare_path = os.path.join(os.path.dirname(__file__), 'manifest_compare')
+        if manifest_compare_path not in sys.path:
+            sys.path.insert(0, manifest_compare_path)
+        
+        from manifest_conversion import ManifestComparator
+        
+        comparator = ManifestComparator()
+        success = comparator.compare_local_files(file1, file2, output_path)
+        
+        # 顯示結果
+        self._show_local_files_results(comparator, success, output_path)
+
+    def _show_local_files_results(self, comparator, success, output_path):
+        """顯示本地檔案比較結果"""
+        print("\n" + "="*60)
+        print(f"📊 本地檔案比較結果摘要")
+        print("="*60)
+        
+        print(f"📈 處理說明:")
+        print(f"  🔧 使用邏輯: 完全基於 feature_three.py")
+        print(f"  📄 處理模式: 純比對（不執行轉換）")
+        print(f"  📊 差異分析: 使用 feature_three._analyze_differences()")
+        print(f"  📋 Excel 生成: 使用 feature_three._generate_excel_report_safe()")
+        
+        # 顯示結果
+        if success:
+            print(f"\n✅ 本地檔案比較完成！")
+            print(f"📄 所有處理步驟成功執行")
+        else:
+            print(f"\n❌ 本地檔案比較過程中發生問題")
+            print(f"📄 請查看詳細報告了解具體情況")
+        
+        print(f"\n📊 詳細分析報告: {output_path}")
+        print(f"💡 Excel 報告頁籤（與 feature_three.py 完全一致）:")
+        print(f"  📋 轉換摘要 - 整體統計和檔案資訊")
+        print(f"  🔍 轉換後專案 - 所有專案的比較狀態")
+        print(f"  ❌ 轉換後與 Gerrit manifest 的差異 - 詳細差異對照")
+        print(f"  📄 其他頁籤 - 依據 feature_three.py 格式")
+        
+        # 詢問是否開啟報告
+        if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
+            self._open_file(output_path)
+            
+    def _execute_local_vs_gerrit_comparison(self, choice):
+        """執行本地檔案與 Gerrit 比較"""
+        # 映射選擇到 Gerrit 類型
+        gerrit_type_mapping = {
+            '1': ('master', 'Master'),
+            '2': ('premp', 'PreMP'),
+            '3': ('mp', 'MP'),
+            '4': ('mp_backup', 'MP Backup')
+        }
+        
+        gerrit_type, gerrit_name = gerrit_type_mapping[choice]
+        
+        print(f"\n📋 本地檔案與 {gerrit_name} 比較")
+        print("="*50)
+        
+        # 取得本地檔案
+        local_file = self.input_validator.get_input_file(f"請輸入本地 manifest.xml 檔案路徑")
+        if not local_file:
+            return
+        
+        # 取得輸出資料夾和檔案名
+        output_folder = self.input_validator.get_output_folder("請輸入輸出資料夾路徑")
+        output_file = f"local_vs_{gerrit_type}_comparison.xlsx"
+        output_path = os.path.join(output_folder, output_file)
+        
+        print(f"\n📋 比較參數:")
+        print(f"  本地檔案: {os.path.basename(local_file)}")
+        print(f"  Gerrit 類型: {gerrit_name}")
+        print(f"  輸出報告: {output_file}")
+        print(f"  報告路徑: {output_path}")
+        print(f"  🔧 比較引擎: ManifestComparator（基於 feature_three.py）")
+        print(f"  📄 處理模式: 純比對（不執行轉換）")
+        print(f"  🗂️ 檔案處理: 自動下載並保存 Gerrit 檔案（gerrit_ 前綴）")
+        print(f"  🔍 include 處理: 自動檢測 Gerrit 檔案並展開")
+        
+        if not self.input_validator.confirm_execution():
+            return
+        
+        print(f"\n📄 開始比較分析...")
+        print(f"⬇️ 正在從 Gerrit 下載 {gerrit_name} manifest...")
+        
+        # 使用新的 ManifestComparator
+        import sys
+        manifest_compare_path = os.path.join(os.path.dirname(__file__), 'manifest_compare')
+        if manifest_compare_path not in sys.path:
+            sys.path.insert(0, manifest_compare_path)
+        
+        from manifest_conversion import ManifestComparator
+        
+        comparator = ManifestComparator()
+        success = comparator.compare_local_with_gerrit(local_file, gerrit_type, output_path)
+        
+        # 顯示結果
+        self._show_local_vs_gerrit_results(comparator, success, output_path, gerrit_name)
+
+    def _get_compare_mode_new(self):
+        """取得新的比較模式選擇"""
+        print("\n請選擇比較模式:")
+        print("  [1] 本地檔案與 Master 比較 (自動下載 Master)")
+        print("      從 Gerrit 自動下載 Master 和本地檔案進行比較")
+        print("      測試本地檔案與 Master 是否相等")
+        print()
+        print("  [2] 本地檔案與 PreMP 比較 (自動下載 PreMP)")
+        print("      從 Gerrit 自動下載 PreMP 和本地檔案進行比較")
+        print("      測試本地檔案與 PreMP 是否相等")
+        print()
+        print("  [3] 本地檔案與 MP 比較 (自動下載 MP)")
+        print("      從 Gerrit 自動下載 MP 和本地檔案進行比較")
+        print("      測試本地檔案與 MP 是否相等")
+        print()
+        print("  [4] 本地檔案與 MP Backup 比較 (自動下載 MP Backup)")
+        print("      從 Gerrit 自動下載 MP Backup 和本地檔案進行比較")
+        print("      測試本地檔案與 MP Backup 是否相等")
+        print()
+        print("  [5] 使用本地檔案比較")
+        print("      選擇任意兩個本地 manifest 檔案進行比較")
+        print("      不限定特定類型，可用於自定義比較")
+        print()
+        print("  [0] 返回上層選單")
+        
+        return input("\n請選擇 (1-5): ").strip()
+
+    def _show_local_vs_gerrit_results(self, comparator, success, output_path, gerrit_name):
+        """顯示本地檔案與 Gerrit 比較結果"""
+        print("\n" + "="*60)
+        print(f"📊 本地檔案與 {gerrit_name} 比較結果摘要")
+        print("="*60)
+        
+        print(f"📈 處理說明:")
+        print(f"  🔧 使用邏輯: 完全基於 feature_three.py")
+        print(f"  📄 處理模式: 純比對（不執行轉換）")
+        print(f"  📊 差異分析: 使用 feature_three._analyze_differences()")
+        print(f"  📋 Excel 生成: 使用 feature_three._generate_excel_report_safe()")
+        print(f"  🗂️ 檔案處理: 自動下載並保存 Gerrit 檔案")
+        
+        if hasattr(comparator, 'use_expanded') and comparator.use_expanded:
+            print(f"  ✅ include 展開: 已成功展開 Gerrit 檔案")
+            if hasattr(comparator, 'expanded_file_path') and comparator.expanded_file_path:
+                print(f"  📄 展開檔案: {os.path.basename(comparator.expanded_file_path)}")
+        else:
+            print(f"  ℹ️ include 展開: 未檢測到 include 標籤或展開失敗")
+        
+        # 顯示結果
+        if success:
+            print(f"\n✅ 本地檔案與 {gerrit_name} 比較完成！")
+            print(f"📄 所有處理步驟成功執行")
+        else:
+            print(f"\n❌ 本地檔案與 {gerrit_name} 比較過程中發生問題")
+            print(f"📄 請查看詳細報告了解具體情況")
+        
+        print(f"\n📊 詳細分析報告: {output_path}")
+        print(f"💡 Excel 報告頁籤（與 feature_three.py 完全一致）:")
+        print(f"  📋 轉換摘要 - 整體統計和檔案資訊")
+        print(f"  🔍 轉換後專案 - 所有專案的比較狀態")
+        print(f"  ❌ 轉換後與 Gerrit manifest 的差異 - 詳細差異對照")
+        print(f"  📄 其他頁籤 - 依據 feature_three.py 格式")
+        
+        # 詢問是否開啟報告
+        if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
+            self._open_file(output_path)
 
     def _get_local_manifest_files(self):
         """取得本地 manifest 檔案 - 更新版本，不限定檔案類型"""
@@ -1220,7 +1410,7 @@ class MainApplication:
         return input("\n請選擇 (1-4): ").strip()
     
     def _auto_download_manifests(self, temp_dir, comparison_type):
-        """自動下載 manifest 檔案 - 支援多種比較類型"""
+        """自動下載 manifest 檔案 - 🔥 特別處理 master_vs_premp 的 include 展開"""
         print(f"\n📄 從 Gerrit 自動下載 manifest 檔案...")
         
         from gerrit_manager import GerritManager
@@ -1233,13 +1423,15 @@ class MainApplication:
                     'name': 'Master',
                     'filename': 'atv-google-refplus.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml',
-                    'local_name': 'master_manifest.xml'
+                    'local_name': 'master_manifest.xml',
+                    'need_expand_check': True  # 🔥 標記需要檢查 include
                 },
                 'file2': {
                     'name': 'PreMP',
                     'filename': 'atv-google-refplus-premp.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
-                    'local_name': 'premp_manifest.xml'
+                    'local_name': 'premp_manifest.xml',
+                    'need_expand_check': False
                 }
             },
             'premp_vs_mp': {
@@ -1247,13 +1439,15 @@ class MainApplication:
                     'name': 'PreMP',
                     'filename': 'atv-google-refplus-premp.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
-                    'local_name': 'premp_manifest.xml'
+                    'local_name': 'premp_manifest.xml',
+                    'need_expand_check': False
                 },
                 'file2': {
                     'name': 'MP Wave',
                     'filename': 'atv-google-refplus-wave.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
-                    'local_name': 'mp_manifest.xml'
+                    'local_name': 'mp_manifest.xml',
+                    'need_expand_check': False
                 }
             },
             'mp_vs_mpbackup': {
@@ -1261,13 +1455,15 @@ class MainApplication:
                     'name': 'MP Wave',
                     'filename': 'atv-google-refplus-wave.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
-                    'local_name': 'mp_manifest.xml'
+                    'local_name': 'mp_manifest.xml',
+                    'need_expand_check': False
                 },
                 'file2': {
                     'name': 'MP Backup',
                     'filename': 'atv-google-refplus-wave-backup.xml',
                     'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave-backup.xml',
-                    'local_name': 'mp_backup_manifest.xml'
+                    'local_name': 'mp_backup_manifest.xml',
+                    'need_expand_check': False
                 }
             }
         }
@@ -1290,6 +1486,27 @@ class MainApplication:
             return None, None
         print(f"✅ {file1_config['name']} manifest 下載完成")
         
+        # 🔥 特殊處理：檢查第一個檔案是否需要展開（主要針對 master_vs_premp）
+        if file1_config.get('need_expand_check', False):
+            print(f"🔍 檢查 {file1_config['name']} manifest 是否包含 include 標籤...")
+            
+            try:
+                with open(file1_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 使用 feature_three 的邏輯檢查 include 標籤
+                from overwrite_lib.feature_three import FeatureThree
+                feature_three = FeatureThree()
+                
+                if feature_three._has_include_tags(content):
+                    print(f"📄 檢測到 include 標籤，比較工具會自動處理展開")
+                    print(f"💡 ManifestComparator 會在比較時自動展開 include")
+                else:
+                    print(f"ℹ️ 未檢測到 include 標籤，使用原始檔案")
+            except Exception as e:
+                print(f"⚠️ 檢查 include 標籤時發生錯誤: {str(e)}")
+                print(f"⚠️ 將繼續使用原始檔案進行比較")
+        
         # 下載第二個檔案
         file2_config = config['file2']
         file2_path = os.path.join(temp_dir, file2_config['local_name'])
@@ -1311,15 +1528,17 @@ class MainApplication:
         # 顯示下載總結
         print(f"\n📊 下載總結:")
         print(f"  📄 {file1_config['name']}: {os.path.basename(file1_path)}")
+        if file1_config.get('need_expand_check', False):
+            print(f"    💡 將由 ManifestComparator 自動處理 include 展開")
         print(f"  📄 {file2_config['name']}: {os.path.basename(file2_path)}")
         print(f"  📁 位置: {temp_dir}")
+        print(f"  🔧 比較引擎: ManifestComparator（基於 feature_three.py）")
         
         return file1_path, file2_path
     
     def _perform_manifest_comparison(self, file1, file2, comparison_type=None):
         """
-        執行 manifest 比較分析 - 🔥 修正版本，支援不同類型的比較
-        使用統一的 ManifestConversionTester 和 name+path composite key
+        執行 manifest 比較分析 - 🔥 完全使用新的 ManifestComparator（基於 feature_three.py）
         """
         from datetime import datetime
         
@@ -1362,82 +1581,54 @@ class MainApplication:
         
         print("\n📄 開始比較分析...")
         
-        # 🔥 使用統一的 ManifestConversionTester 進行所有類型的比較
+        # 🔥 使用新的 ManifestComparator（基於 feature_three.py）
         import sys
         manifest_compare_path = os.path.join(os.path.dirname(__file__), 'manifest_compare')
         if manifest_compare_path not in sys.path:
             sys.path.insert(0, manifest_compare_path)
         
-        from manifest_conversion import ManifestConversionTester
+        from manifest_conversion import ManifestComparator
         
-        # 🔥 使用修正後的 ManifestConversionTester，支援所有比較類型
-        tester = ManifestConversionTester()
-        success = tester.test_conversion(file1, file2, output_path, comparison_type)
+        # 🔥 使用新的 ManifestComparator，完全基於 feature_three.py 邏輯
+        comparator = ManifestComparator()
+        success = comparator.compare_manifests(file1, file2, output_path, comparison_type)
         
         # 顯示結果
-        self._show_unified_comparison_results(tester, success, output_path, comparison_type)
+        self._show_unified_comparison_results(comparator, success, output_path, comparison_type)
 
-    def _show_unified_comparison_results(self, tester, success, output_path, comparison_type):
-        """🔥 新方法：顯示統一格式的比較結果"""
+    def _show_unified_comparison_results(self, comparator, success, output_path, comparison_type):
+        """🔥 顯示統一格式的比較結果（使用 ManifestComparator 的統計）"""
         print("\n" + "="*60)
-        print(f"📊 {comparison_type} 比較結果摘要")
+        print(f"📊 {comparison_type} 比較結果摘要（基於 feature_three.py 邏輯）")
         print("="*60)
         
-        # 顯示統計結果
-        stats = tester.stats
+        # 顯示基本資訊
         source_name, target_name = self._get_comparison_names_for_display(comparison_type)
         
-        print(f"📈 比較統計:")
-        print(f"  總專案數: {stats['total_projects']}")
+        print(f"📈 比較說明:")
+        print(f"  🔧 使用邏輯: 完全基於 feature_three.py")
+        print(f"  📋 Excel 格式: 與 feature_three.py 完全一致")
         
-        # 根據比較類型顯示不同的統計
-        if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
-            print(f"  🔵 參與比較專案: {stats['revision_projects']}")
-            print(f"  ⚪ 無revision專案: {stats['no_revision_projects']} (跳過比較)")
-            print(f"  🟢 原始相同專案: {stats['same_revision_projects']} ({source_name}={target_name})")
-            print(f"  🟣 跳過特殊專案: {stats['skipped_special_projects']}")
-            
-            if stats['revision_projects'] > 0:
-                success_rate = (stats['matched'] / stats['revision_projects'] * 100)
-                print(f"  📊 轉換成功率: {success_rate:.2f}%")
-        else:
-            print(f"  📊 純差異比較")
-            if stats['total_projects'] > 0:
-                match_rate = (stats['matched'] / stats['total_projects'] * 100)
-                print(f"  📊 匹配率: {match_rate:.2f}%")
+        if comparison_type == 'master_vs_premp':
+            print(f"  🔍 特殊處理: 自動檢測並展開 include 標籤")
+            print(f"  📄 展開邏輯: 使用 feature_three._expand_manifest_with_repo_fixed()")
         
-        print(f"  ✅ 匹配/相同: {stats['matched']}")
-        print(f"  ❌ 不匹配/不同: {stats['mismatched']}")
-        print(f"  ⚠️ {target_name}中不存在: {stats['not_found_in_target']}")
-        print(f"  🔶 僅存在於{target_name}: {stats['extra_in_target']}")
-        
-        # 🔥 顯示失敗案例資訊（適用於轉換類型）
-        if hasattr(tester, 'failed_cases') and tester.failed_cases:
-            print(f"\n❌ 失敗案例分析:")
-            print(f"  失敗案例數: {len(tester.failed_cases)}")
-            print(f"  詳細對照已添加到 '失敗案例詳細對照' 頁籤")
+        print(f"  📊 比較對象: {source_name} vs {target_name}")
         
         # 顯示結果
         if success:
-            if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
-                print(f"\n✅ {comparison_type} 轉換規則測試通過！")
-                print(f"📄 所有參與轉換的專案規則都正確")
-            else:
-                print(f"\n✅ {comparison_type} 比較完成！")
+            print(f"\n✅ {comparison_type} 比較完成！")
+            print(f"📄 所有比較處理成功")
         else:
-            print(f"\n⚠️ 發現 {stats['mismatched']} 個差異")
-            print(f"📄 請查看詳細報告分析問題")
+            print(f"\n❌ {comparison_type} 比較過程中發生問題")
+            print(f"📄 請查看詳細報告了解具體情況")
         
         print(f"\n📊 詳細分析報告: {output_path}")
-        print(f"💡 報告包含以下頁籤:")
-        print(f"  📋 比較摘要 - 整體統計")
-        print(f"  🔍 需要關注的項目 - 有差異的專案")
-        if comparison_type in ['master_vs_premp', 'premp_vs_mp', 'mp_vs_mpbackup']:
-            print(f"  🔵 無需轉換專案 - 跳過的特殊專案")
-            if hasattr(tester, 'failed_cases') and tester.failed_cases:
-                print(f"  ❌ 失敗案例詳細對照 - 轉換錯誤分析")
-            print(f"  📊 轉換規則統計 - 規則使用情況")
-        print(f"  📄 所有專案對照 - 完整比較列表")
+        print(f"💡 報告頁籤說明:")
+        print(f"  📋 轉換摘要 - 整體統計和設定資訊")
+        print(f"  🔍 轉換後專案 - 所有專案的比較狀態")
+        print(f"  ❌ 轉換後與 Gerrit manifest 的差異 - 詳細差異對照")
+        print(f"  📄 其他頁籤 - 依據 feature_three.py 格式")
         
         # 詢問是否開啟報告
         if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
@@ -1484,316 +1675,6 @@ class MainApplication:
             return 'mp_vs_mpbackup'
         else:
             return 'custom'
-
-    def _perform_generic_comparison(self, file1, file2, output_path, comparison_type):
-        """
-        執行通用的 manifest 比較 - 🔥 修正版本：使用 name+path composite key
-        統一 Excel 格式，支援多種比較類型
-        """
-        try:
-            print(f"🔄 執行 {comparison_type} 比較...")
-            
-            # 🔧 修正：添加必要的導入
-            import xml.etree.ElementTree as ET
-            import pandas as pd
-            from datetime import datetime
-            
-            print(f"📄 解析檔案...")
-            
-            # 🔥 修正：使用 name+path 作為 composite key 解析檔案1
-            tree1 = ET.parse(file1)
-            root1 = tree1.getroot()
-            projects1 = {}
-            name_duplicates1 = {}
-            
-            for project in root1.findall('project'):
-                name = project.get('name', '')
-                path = project.get('path', '')
-                if name:
-                    # 建立 composite key
-                    composite_key = f"{name}|{path}"
-                    
-                    # 追踪重複 name
-                    if name in name_duplicates1:
-                        name_duplicates1[name] += 1
-                    else:
-                        name_duplicates1[name] = 1
-                    
-                    projects1[composite_key] = {
-                        'name': name,
-                        'path': path,
-                        'revision': project.get('revision', ''),
-                        'upstream': project.get('upstream', ''),
-                        'dest-branch': project.get('dest-branch', ''),
-                        'groups': project.get('groups', ''),
-                        'remote': project.get('remote', ''),
-                        'composite_key': composite_key
-                    }
-            
-            # 🔥 修正：使用 name+path 作為 composite key 解析檔案2
-            tree2 = ET.parse(file2)
-            root2 = tree2.getroot()
-            projects2 = {}
-            name_duplicates2 = {}
-            
-            for project in root2.findall('project'):
-                name = project.get('name', '')
-                path = project.get('path', '')
-                if name:
-                    # 建立 composite key
-                    composite_key = f"{name}|{path}"
-                    
-                    # 追踪重複 name
-                    if name in name_duplicates2:
-                        name_duplicates2[name] += 1
-                    else:
-                        name_duplicates2[name] = 1
-                    
-                    projects2[composite_key] = {
-                        'name': name,
-                        'path': path,
-                        'revision': project.get('revision', ''),
-                        'upstream': project.get('upstream', ''),
-                        'dest-branch': project.get('dest-branch', ''),
-                        'groups': project.get('groups', ''),
-                        'remote': project.get('remote', ''),
-                        'composite_key': composite_key
-                    }
-            
-            # 🔥 報告重複 name 情況
-            duplicate_names1 = [name for name, count in name_duplicates1.items() if count > 1]
-            duplicate_names2 = [name for name, count in name_duplicates2.items() if count > 1]
-            
-            if duplicate_names1 or duplicate_names2:
-                print(f"🔍 發現重複 project name:")
-                if duplicate_names1:
-                    print(f"  檔案1: {len(duplicate_names1)} 個重複 name")
-                    for name in duplicate_names1[:3]:
-                        print(f"    - {name}: {name_duplicates1[name]} 個不同 path")
-                if duplicate_names2:
-                    print(f"  檔案2: {len(duplicate_names2)} 個重複 name")
-                    for name in duplicate_names2[:3]:
-                        print(f"    - {name}: {name_duplicates2[name]} 個不同 path")
-                print(f"✅ 使用 name+path composite key 避免資料遺失")
-            
-            print(f"📊 進行比較分析...")
-            
-            # 🔥 修正：使用 composite key 進行比較
-            differences = []
-            all_composite_keys = set(projects1.keys()) | set(projects2.keys())
-            
-            # 統計資料
-            stats = {
-                'matched': 0,
-                'mismatched': 0,
-                'only_in_file1': 0,
-                'only_in_file2': 0,
-                'total': len(all_composite_keys)
-            }
-            
-            # 🔥 取得比較名稱
-            source_name, target_name = self._get_comparison_names_for_generic(comparison_type)
-            
-            for i, composite_key in enumerate(sorted(all_composite_keys), 1):
-                proj1 = projects1.get(composite_key, {})
-                proj2 = projects2.get(composite_key, {})
-                
-                # 解析 composite key
-                if '|' in composite_key:
-                    name, path = composite_key.split('|', 1)
-                else:
-                    name, path = composite_key, ''
-                
-                # 判斷狀態
-                if composite_key not in projects1:
-                    status = f"僅存在於{target_name}"
-                    result = "N/A"
-                    description = f"專案僅存在於 {target_name}"
-                    stats['only_in_file2'] += 1
-                    status_icon = "🔶"
-                elif composite_key not in projects2:
-                    status = f"僅存在於{source_name}"
-                    result = "N/A"
-                    description = f"專案僅存在於 {source_name}"
-                    stats['only_in_file1'] += 1
-                    status_icon = "🔶"
-                elif proj1.get('revision', '') == proj2.get('revision', ''):
-                    status = "✅ 相同"
-                    result = "是"
-                    description = f"{source_name} 和 {target_name} 的 revision 完全相同"
-                    stats['matched'] += 1
-                    status_icon = "✅"
-                else:
-                    status = "❌ 不同"
-                    result = "否"
-                    rev1 = proj1.get('revision', 'N/A')
-                    rev2 = proj2.get('revision', 'N/A')
-                    description = f"{source_name}: {rev1}, {target_name}: {rev2}"
-                    stats['mismatched'] += 1
-                    status_icon = "❌"
-                
-                differences.append({
-                    'SN': i,
-                    '專案名稱': name,
-                    '專案路徑': path,
-                    f'{source_name} Revision': proj1.get('revision', 'N/A'),
-                    f'{target_name} Revision': proj2.get('revision', 'N/A'),
-                    f'{source_name} Upstream': proj1.get('upstream', 'N/A'),
-                    f'{target_name} Upstream': proj2.get('upstream', 'N/A'),
-                    '比較狀態': status,
-                    '比較結果': result,
-                    '差異說明': description,
-                    '結果圖示': status_icon,
-                    'Composite Key': composite_key,
-                    f'{source_name} Path': proj1.get('path', 'N/A'),
-                    f'{target_name} Path': proj2.get('path', 'N/A'),
-                    f'{source_name} Groups': proj1.get('groups', 'N/A'),
-                    f'{target_name} Groups': proj2.get('groups', 'N/A'),
-                    f'{source_name} Remote': proj1.get('remote', 'N/A'),
-                    f'{target_name} Remote': proj2.get('remote', 'N/A')
-                })
-            
-            print(f"📝 生成統一格式 Excel 報告...")
-            
-            # 🔧 修正：確保輸出資料夾存在
-            import os
-            output_dir = os.path.dirname(output_path)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            
-            # 🔥 生成統一格式的 Excel 報告
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                # 頁籤 1: 比較摘要（統一格式）
-                summary_data = [{
-                    '比較時間': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    f'{source_name} Manifest': os.path.basename(file1),
-                    f'{target_name} Manifest': os.path.basename(file2),
-                    '比較類型': comparison_type,
-                    '總專案數': stats['total'],
-                    f'檔案1 ({source_name}) 專案數': len(projects1),
-                    f'檔案2 ({target_name}) 專案數': len(projects2),
-                    '✅ 相同專案數': stats['matched'],
-                    '❌ 不同專案數': stats['mismatched'],
-                    f'僅存在於{source_name}': stats['only_in_file1'],
-                    f'僅存在於{target_name}': stats['only_in_file2'],
-                    '匹配率': f"{(stats['matched'] / max(stats['total'], 1) * 100):.2f}%",
-                    '備註': f"使用 name+path composite key 避免重複項目遺失，檔案1重複name: {len(duplicate_names1)}, 檔案2重複name: {len(duplicate_names2)}"
-                }]
-                
-                df_summary = pd.DataFrame(summary_data)
-                df_summary.to_excel(writer, sheet_name='比較摘要', index=False)
-                
-                # 頁籤 2: 需要關注的項目（統一格式）
-                if differences:
-                    df_details = pd.DataFrame(differences)
-                    
-                    # 需要關注的項目（有差異的）
-                    need_attention = df_details[
-                        (df_details['比較狀態'] != '✅ 相同')
-                    ]
-                    
-                    if not need_attention.empty:
-                        need_attention.to_excel(writer, sheet_name='需要關注的項目', index=False)
-                    
-                    # 頁籤 3: 僅顯示差異
-                    diff_only = df_details[
-                        (df_details['比較狀態'] == '❌ 不同') |
-                        (df_details['比較狀態'].str.contains('僅存在於', na=False))
-                    ]
-                    if not diff_only.empty:
-                        diff_only.to_excel(writer, sheet_name='僅顯示差異', index=False)
-                    
-                    # 頁籤 4: 所有專案對照表（統一格式）
-                    all_comparisons = []
-                    for diff in differences:
-                        all_comparisons.append({
-                            'SN': diff['SN'],
-                            '專案名稱': diff['專案名稱'],
-                            '專案路徑': diff['專案路徑'],
-                            f'{source_name} Revision': diff[f'{source_name} Revision'],
-                            f'{target_name} Revision': diff[f'{target_name} Revision'],
-                            '結果': diff['結果圖示'],
-                            '狀態說明': diff['比較狀態'],
-                            'Composite Key': diff['Composite Key']
-                        })
-                    
-                    if all_comparisons:
-                        df_all = pd.DataFrame(all_comparisons)
-                        df_all.to_excel(writer, sheet_name='所有專案對照', index=False)
-                    
-                    # 頁籤 5: 詳細屬性比較
-                    df_details.to_excel(writer, sheet_name='詳細屬性比較', index=False)
-                
-                print(f"📋 設定統一格式...")
-                
-                # 🔥 統一格式化（使用與 manifest_conversion.py 相同的格式）
-                self._format_generic_comparison_excel(writer, comparison_type)
-            
-            print(f"✅ {comparison_type} 比較完成: {output_path}")
-            print(f"📊 統計結果:")
-            print(f"  總專案數: {stats['total']}")
-            print(f"  ✅ 相同: {stats['matched']}")
-            print(f"  ❌ 不同: {stats['mismatched']}")
-            print(f"  🔶 僅存在於{source_name}: {stats['only_in_file1']}")
-            print(f"  🔶 僅存在於{target_name}: {stats['only_in_file2']}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ {comparison_type} 比較失敗: {str(e)}")
-            # 🔧 修正：顯示詳細錯誤信息
-            import traceback
-            print(f"📄 錯誤詳情:")
-            traceback.print_exc()
-            return False
-
-    def _format_generic_comparison_excel(self, writer, comparison_type):
-        """🔥 統一格式化通用比較的 Excel 檔案"""
-        from openpyxl.styles import PatternFill, Font, Alignment
-        from openpyxl.utils import get_column_letter
-        
-        # 定義統一顏色方案（與 manifest_conversion.py 一致）
-        colors = {
-            'header': PatternFill(start_color="366092", end_color="366092", fill_type="solid"),
-            'match': PatternFill(start_color="E6FFE6", end_color="E6FFE6", fill_type="solid"),      # 淺綠
-            'mismatch': PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid"),   # 淺紅
-            'not_found': PatternFill(start_color="FFFACD", end_color="FFFACD", fill_type="solid"),  # 淺黃
-            'no_conversion': PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid") # 淺藍
-        }
-        
-        header_font = Font(color="FFFFFF", bold=True)
-        
-        for sheet_name in writer.sheets:
-            worksheet = writer.sheets[sheet_name]
-            
-            # 設定標題格式
-            for cell in worksheet[1]:
-                cell.fill = colors['header']
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-            
-            # 根據頁籤設定內容格式
-            if sheet_name in ['需要關注的項目', '所有專案對照', '僅顯示差異', '詳細屬性比較']:
-                self._format_generic_comparison_sheet(worksheet, colors)
-            
-            # 自動調整欄寬
-            self._auto_adjust_columns_generic(worksheet)
-
-    def _auto_adjust_columns_generic(self, worksheet):
-        """自動調整欄寬（通用版本）"""
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = get_column_letter(column[0].column)
-            
-            for cell in column:
-                try:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-            
-            adjusted_width = min(max_length + 2, 60)  # 最大寬度60
-            worksheet.column_dimensions[column_letter].width = adjusted_width
 
     def _format_generic_comparison_sheet(self, worksheet, colors):
         """格式化通用比較頁籤"""
