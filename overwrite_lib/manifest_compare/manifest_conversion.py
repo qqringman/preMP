@@ -706,7 +706,7 @@ class ManifestComparator:
 
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                     target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異（修正版：確保本地比較時正確區分來源和目標檔案資料）"""
+        """使用轉換資訊比較專案差異（修正版：只記錄真正有差異的專案）"""
         differences = []
         
         # 🔥 判斷比較模式
@@ -723,6 +723,11 @@ class ManifestComparator:
         # 取得正確的檔案名稱
         source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
+        # 🔥 新增：統計計數器
+        total_compared = 0
+        identical_count = 0
+        different_count = 0
+        
         for conv_proj in converted_projects:
             project_name = conv_proj['name']
             project_path = conv_proj['path']
@@ -733,21 +738,24 @@ class ManifestComparator:
             if not has_conversion:
                 continue
             
+            total_compared += 1
+            
             # 使用 composite key 查找對應專案
             if conv_composite_key not in target_index:
                 # 專案在來源檔案存在，但在目標檔案中不存在
+                different_count += 1
                 comparison_result = '專案僅存在於來源檔案，目標檔案中無此專案'
                     
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': self._build_project_line_content_for_source(conv_proj),  # 🔥 修正：來源檔案資料
+                    'content': self._build_project_line_content_for_source(conv_proj) if is_local_comparison else self._build_project_line_content(conv_proj, use_converted_revision=False),
                     'name': conv_proj['name'],
                     'path': conv_proj['path'],
                     'revision': conv_proj['converted_revision'],
                     'original_revision': conv_proj['original_revision'],
                     'Revision 是否相等': '',
-                    'upstream': conv_proj.get('_source_upstream', conv_proj['upstream']) if is_local_comparison else conv_proj['upstream'],  # 🔥 修正：來源檔案的 upstream
+                    'upstream': conv_proj.get('_source_upstream', conv_proj['upstream']) if is_local_comparison else conv_proj['upstream'],
                     'dest-branch': conv_proj.get('_source_dest_branch', conv_proj['dest-branch']) if is_local_comparison else conv_proj['dest-branch'],
                     'groups': conv_proj.get('_source_groups', conv_proj['groups']) if is_local_comparison else conv_proj['groups'],
                     'clone-depth': conv_proj.get('_source_clone_depth', conv_proj['clone-depth']) if is_local_comparison else conv_proj['clone-depth'],
@@ -794,12 +802,13 @@ class ManifestComparator:
             
             is_identical = len(diff_details) == 0
             
-            # 判斷比較狀態和結果文字
+            # 🔥 修正：只有真正有差異的專案才加入 differences 陣列
             if is_identical:
-                comparison_status = '✅ 相同'
-                comparison_result = '兩檔案中此專案的所有屬性完全一致'
-                status_color = 'green'
+                identical_count += 1
+                # 🔥 相同的專案不加入 differences，讓 "比較專案內容差異明細" 頁籤只顯示有差異的專案
+                continue
             else:
+                different_count += 1
                 comparison_status = '❌ 不同'
                 # 詳細說明差異內容
                 diff_summary = self._format_difference_summary(diff_details)
@@ -846,6 +855,7 @@ class ManifestComparator:
 
         for composite_key, target_proj in target_index.items():
             if composite_key not in converted_composite_keys:
+                different_count += 1
                 comparison_result = '專案僅存在於目標檔案，來源檔案中已移除此專案'
                     
                 difference = {
@@ -863,21 +873,28 @@ class ManifestComparator:
                     'remote': 'N/A',
                     'source_link': 'N/A',
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': target_proj['full_line'],  # 🔥 目標檔案資料
-                    'gerrit_name': target_proj['name'],  # 🔥 目標檔案資料
-                    'gerrit_path': target_proj['path'],  # 🔥 目標檔案資料
-                    'gerrit_revision': target_proj['revision'],  # 🔥 目標檔案資料
-                    'gerrit_upstream': target_proj['upstream'],  # 🔥 目標檔案資料
-                    'gerrit_dest-branch': target_proj['dest-branch'],  # 🔥 目標檔案資料
-                    'gerrit_groups': target_proj['groups'],  # 🔥 目標檔案資料
-                    'gerrit_clone-depth': target_proj['clone-depth'],  # 🔥 目標檔案資料
-                    'gerrit_remote': target_proj['remote'],  # 🔥 目標檔案資料
-                    'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),  # 🔥 目標檔案資料
+                    'gerrit_content': target_proj['full_line'],
+                    'gerrit_name': target_proj['name'],
+                    'gerrit_path': target_proj['path'],
+                    'gerrit_revision': target_proj['revision'],
+                    'gerrit_upstream': target_proj['upstream'],
+                    'gerrit_dest-branch': target_proj['dest-branch'],
+                    'gerrit_groups': target_proj['groups'],
+                    'gerrit_clone-depth': target_proj['clone-depth'],
+                    'gerrit_remote': target_proj['remote'],
+                    'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
                     'comparison_status': '🗑️ 刪除',
                     'comparison_result': comparison_result,
                     'status_color': 'orange'
                 }
                 differences.append(difference)
+        
+        # 🔥 新增：統計報告
+        self.logger.info(f"📊 專案比較統計:")
+        self.logger.info(f"   總比較專案數: {total_compared}")
+        self.logger.info(f"   完全相同專案: {identical_count}")
+        self.logger.info(f"   有差異專案: {different_count}")
+        self.logger.info(f"   差異明細記錄數: {len(differences)}")
         
         return differences
 
@@ -3181,7 +3198,7 @@ class ManifestComparator:
             self.logger.error(f"設定原因欄位格式失敗: {str(e)}")
 
     def _update_summary_statistics(self, workbook, diff_analysis: Dict):
-        """更新比較摘要頁籤的統計數據"""
+        """更新比較摘要頁籤的統計數據（修正版：直接從差異明細統計）"""
         try:
             if '比較摘要' in workbook.sheetnames:
                 ws = workbook['比較摘要']
@@ -3191,26 +3208,57 @@ class ManifestComparator:
                 differences = diff_analysis.get('differences', [])
                 converted_projects = diff_analysis.get('converted_projects', [])
                 
-                # 計算版號差異統計
-                revision_diff_count = 0
+                # 🔥 修正：直接從 differences 統計比較狀態
+                content_same_count = 0
+                content_diff_count = 0
                 revision_same_count = 0
+                revision_diff_count = 0
                 
-                for proj in converted_projects:
-                    original_rev = proj.get('original_revision', '')
-                    converted_rev = proj.get('converted_revision', '')
+                for diff in differences:
+                    comparison_status = diff.get('comparison_status', '')
+                    original_rev = diff.get('original_revision', '')
+                    target_rev = diff.get('gerrit_revision', diff.get('compare_revision', ''))  # 適應重新命名
                     
-                    if original_rev != converted_rev:
-                        revision_diff_count += 1
-                    else:
+                    # 統計比較狀態
+                    if '✅ 相同' in comparison_status:
+                        content_same_count += 1
+                    elif '❌ 不同' in comparison_status:
+                        content_diff_count += 1
+                    elif '🆕 新增' in comparison_status:
+                        content_diff_count += 1
+                    elif '🗑️ 刪除' in comparison_status:
+                        content_diff_count += 1
+                    
+                    # 統計 revision 差異
+                    if original_rev == target_rev and original_rev and target_rev:
                         revision_same_count += 1
+                    elif original_rev != target_rev:
+                        revision_diff_count += 1
                 
-                # 內容差異統計來自 differences
-                content_diff_count = len(differences)
-                content_same_count = summary.get('identical_converted_count', 0)
+                # 🔥 新增：檢查是否有專案沒有出現在差異明細中（表示完全相同）
+                total_projects_in_diff = len(differences)
+                total_projects = summary.get('converted_count', 0)
+                
+                if total_projects > total_projects_in_diff:
+                    # 有專案完全相同，沒有出現在差異明細中
+                    completely_same_count = total_projects - total_projects_in_diff
+                    content_same_count += completely_same_count
+                    revision_same_count += completely_same_count
+                    
+                    self.logger.info(f"📊 發現 {completely_same_count} 個專案完全相同，未出現在差異明細中")
+                
+                # 🔥 除錯輸出
+                self.logger.info(f"📊 統計除錯:")
+                self.logger.info(f"   差異明細中的專案數: {total_projects_in_diff}")
+                self.logger.info(f"   總專案數: {total_projects}")
+                self.logger.info(f"   內容相同數: {content_same_count}")
+                self.logger.info(f"   內容差異數: {content_diff_count}")
+                self.logger.info(f"   版號相同數: {revision_same_count}")
+                self.logger.info(f"   版號差異數: {revision_diff_count}")
                 
                 # 找到統計相關欄位的位置並更新
                 stats_mapping = {
-                    '📊 總專案數': summary.get('converted_count', 0),
+                    '📊 總專案數': total_projects,
                     '🎯 目標檔案專案數': summary.get('target_count', 0),
                     '❌ 與現行版本版號差異數': revision_diff_count,
                     '✅ 與現行版本版號相同數': revision_same_count,
@@ -3223,8 +3271,9 @@ class ManifestComparator:
                     
                     if header_value in stats_mapping:
                         ws.cell(row=2, column=col).value = stats_mapping[header_value]
+                        self.logger.debug(f"更新統計: {header_value} = {stats_mapping[header_value]}")
                 
-                self.logger.info("✅ 已更新比較摘要頁籤的統計數據")
+                self.logger.info("✅ 已更新比較摘要頁籤的統計數據（修正版）")
         
         except Exception as e:
             self.logger.error(f"更新統計數據失敗: {str(e)}")
