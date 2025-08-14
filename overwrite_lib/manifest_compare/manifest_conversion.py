@@ -146,14 +146,6 @@ class ManifestComparator:
     def compare_local_files(self, file1: str, file2: str, output_file: str) -> bool:
         """
         比較兩個本地檔案 - 純比對，不執行轉換
-        
-        Args:
-            file1: 本地檔案1路徑
-            file2: 本地檔案2路徑
-            output_file: 輸出 Excel 檔案路徑
-            
-        Returns:
-            比較是否成功
         """
         try:
             self.logger.info("=" * 80)
@@ -166,10 +158,10 @@ class ManifestComparator:
                 output_folder = "."
             utils.ensure_dir(output_folder)
             
-            # 複製檔案到 output 目錄
+            # 保留原始檔案名稱
             self.logger.info("\n📋 複製檔案到輸出目錄")
-            file1_dest = self._copy_local_file_to_output(file1, output_folder, "local_file1.xml")
-            file2_dest = self._copy_local_file_to_output(file2, output_folder, "local_file2.xml")
+            file1_dest = self._copy_local_file_to_output(file1, output_folder)
+            file2_dest = self._copy_local_file_to_output(file2, output_folder)
             
             # 讀取檔案內容
             with open(file1_dest, 'r', encoding='utf-8') as f:
@@ -178,8 +170,8 @@ class ManifestComparator:
             with open(file2_dest, 'r', encoding='utf-8') as f:
                 content2 = f.read()
             
-            # 創建 conversion_info（不執行轉換）
-            conversion_info = self._create_conversion_info_without_conversion(content1)
+            # 🔥 修正：為本地檔案比較創建正確的 conversion_info
+            conversion_info = self._create_conversion_info_for_local_comparison(content1, content2)
             
             # 執行差異分析
             diff_analysis = self._analyze_differences_like_feature_three(
@@ -202,7 +194,101 @@ class ManifestComparator:
             import traceback
             self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
             return False
-    
+
+    def _create_conversion_info_for_local_comparison(self, source_content: str, target_content: str) -> List[Dict]:
+        """
+        為本地檔案比較創建正確的 conversion_info - 同時支持兩個頁籤的正確顯示
+        """
+        try:
+            # 解析源檔案和目標檔案 XML
+            source_root = ET.fromstring(source_content)
+            target_root = ET.fromstring(target_content)
+            
+            # 讀取源檔案 default 資訊
+            source_default_remote = ''
+            source_default_revision = ''
+            source_default = source_root.find('default')
+            if source_default is not None:
+                source_default_remote = source_default.get('remote', '')
+                source_default_revision = source_default.get('revision', '')
+            
+            # 讀取目標檔案 default 資訊
+            target_default_remote = ''
+            target_default_revision = ''
+            target_default = target_root.find('default')
+            if target_default is not None:
+                target_default_remote = target_default.get('remote', '')
+                target_default_revision = target_default.get('revision', '')
+            
+            # 創建目標檔案的專案字典（使用 name+path 作為 key）
+            target_projects = {}
+            for project in target_root.findall('project'):
+                project_name = project.get('name', '')
+                project_path = project.get('path', '')
+                key = f"{project_name}|||{project_path}"
+                
+                target_projects[key] = {
+                    'name': project_name,
+                    'path': project_path,
+                    'revision': project.get('revision', '') or target_default_revision,
+                    'upstream': project.get('upstream', ''),
+                    'dest-branch': project.get('dest-branch', ''),
+                    'groups': project.get('groups', ''),
+                    'clone-depth': project.get('clone-depth', ''),
+                    'remote': project.get('remote', '')
+                }
+            
+            projects = []
+            
+            # 遍歷源檔案的所有 project 元素
+            for project in source_root.findall('project'):
+                project_name = project.get('name', '')
+                project_path = project.get('path', '')
+                project_remote = project.get('remote', '') or source_default_remote
+                original_revision = project.get('revision', '') or source_default_revision
+                upstream = project.get('upstream', '')
+                
+                # 🔥 查找目標檔案中的對應專案
+                key = f"{project_name}|||{project_path}"
+                target_project = target_projects.get(key)
+                target_revision = target_project['revision'] if target_project else original_revision
+                
+                # 🔥 關鍵修正：
+                # - converted_revision = original_revision (讓 feature_three._analyze_differences 能正確比較)
+                # - 但添加 _actual_target_revision 記錄真實的目標檔案 revision
+                project_info = {
+                    'name': project_name,
+                    'path': project_path,
+                    'original_revision': original_revision,     # 源檔案的 revision
+                    'effective_revision': original_revision,
+                    'converted_revision': original_revision,    # 🔥 保持為源檔案 revision (for feature_three._analyze_differences)
+                    'upstream': upstream,
+                    'dest-branch': project.get('dest-branch', ''),
+                    'groups': project.get('groups', ''),
+                    'clone-depth': project.get('clone-depth', ''),
+                    'remote': project.get('remote', ''),
+                    'original_remote': project.get('remote', ''),
+                    'changed': True,  # 標記為 changed，讓所有專案都參與比較
+                    'used_default_revision': not project.get('revision'),
+                    'used_upstream_for_conversion': False,
+                    # 🔥 新增：記錄目標檔案的實際 revision
+                    '_actual_target_revision': target_revision,
+                    '_target_found': target_project is not None
+                }
+                
+                projects.append(project_info)
+            
+            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（本地比較模式）")
+            self.logger.info(f"目標檔案包含 {len(target_projects)} 個專案")
+            
+            return projects
+            
+        except Exception as e:
+            self.logger.error(f"創建本地比較 conversion_info 失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
+            return []
+                
     def _copy_local_file_to_output(self, local_file: str, output_folder: str, 
                                 custom_name: Optional[str] = None) -> str:
         """
@@ -390,7 +476,7 @@ class ManifestComparator:
             return []
     
     def _analyze_differences_like_feature_three(self, local_content: str, gerrit_content: str,
-                                              comparison_type: str, conversion_info: List[Dict]) -> Dict[str, Any]:
+                                            comparison_type: str, conversion_info: List[Dict]) -> Dict[str, Any]:
         """
         使用與 feature_three.py 完全相同的差異分析邏輯
         
@@ -440,7 +526,125 @@ class ManifestComparator:
                     'conversion_match_rate': "N/A (比對模式)"
                 }
             }
-    
+
+    def _analyze_local_file_differences(self, source_content: str, target_content: str, 
+                                    conversion_info: List[Dict]) -> Dict[str, Any]:
+        """
+        專門處理本地檔案比較的差異分析
+        
+        Args:
+            source_content: 源檔案內容
+            target_content: 目標檔案內容
+            conversion_info: 包含兩個檔案專案資訊的列表
+            
+        Returns:
+            差異分析結果
+        """
+        try:
+            # 解析目標檔案
+            target_root = ET.fromstring(target_content)
+            
+            # 讀取目標檔案 default 資訊
+            target_default_remote = ''
+            target_default_revision = ''
+            target_default = target_root.find('default')
+            if target_default is not None:
+                target_default_remote = target_default.get('remote', '')
+                target_default_revision = target_default.get('revision', '')
+            
+            # 創建目標專案列表
+            target_projects = []
+            for project in target_root.findall('project'):
+                project_name = project.get('name', '')
+                project_path = project.get('path', '')
+                project_remote = project.get('remote', '') or target_default_remote
+                revision = project.get('revision', '') or target_default_revision
+                
+                target_project = {
+                    'name': project_name,
+                    'path': project_path,
+                    'revision': revision,
+                    'upstream': project.get('upstream', ''),
+                    'dest-branch': project.get('dest-branch', ''),
+                    'groups': project.get('groups', ''),
+                    'clone-depth': project.get('clone-depth', ''),
+                    'remote': project.get('remote', ''),
+                }
+                target_projects.append(target_project)
+            
+            # 🔥 分析差異
+            differences = []
+            identical_count = 0
+            
+            for conv_proj in conversion_info:
+                source_revision = conv_proj.get('original_revision', '')
+                target_revision = conv_proj.get('target_revision', '')
+                
+                if source_revision != target_revision and conv_proj.get('target_found', False):
+                    # 🔥 有差異的專案
+                    difference = {
+                        'project_name': conv_proj['name'],
+                        'project_path': conv_proj['path'],
+                        'converted_revision': source_revision,  # 源檔案 revision
+                        'gerrit_revision': target_revision,     # 目標檔案 revision
+                        'difference_type': 'revision_mismatch',
+                        'source_file': os.path.basename(self.local_file_path) if self.local_file_path else 'manifest_235.xml',
+                        'gerrit_source_file': os.path.basename(self.gerrit_file_path) if self.gerrit_file_path else 'manifest_234.xml',
+                        'comparison_result': '與比較檔案的內容有差異',
+                        'details': f"源檔案: {source_revision}, 目標檔案: {target_revision}"
+                    }
+                    differences.append(difference)
+                elif source_revision == target_revision and conv_proj.get('target_found', False):
+                    # 相同的專案
+                    identical_count += 1
+            
+            # 🔥 創建分析結果
+            analysis = {
+                'has_target': True,
+                'converted_projects': conversion_info,
+                'target_projects': target_projects,
+                'differences': differences,
+                'summary': {
+                    'converted_count': len(conversion_info),
+                    'target_count': len(target_projects),
+                    'actual_conversion_count': 0,  # 本地比較模式不執行轉換
+                    'unchanged_count': len(conversion_info) - len(differences),
+                    'differences_count': len(differences),
+                    'identical_converted_count': identical_count,
+                    'conversion_match_rate': f"{identical_count}/{len(conversion_info)} ({(identical_count/len(conversion_info)*100):.1f}%)" if conversion_info else "0%"
+                }
+            }
+            
+            self.logger.info(f"本地檔案差異分析完成:")
+            self.logger.info(f"  📊 源檔案專案數: {len(conversion_info)}")
+            self.logger.info(f"  📊 目標檔案專案數: {len(target_projects)}")
+            self.logger.info(f"  ❌ 差異專案數: {len(differences)}")
+            self.logger.info(f"  ✅ 相同專案數: {identical_count}")
+            
+            return analysis
+            
+        except Exception as e:
+            self.logger.error(f"本地檔案差異分析失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
+            
+            # 返回基本結果
+            return {
+                'has_target': True,
+                'converted_projects': conversion_info,
+                'target_projects': [],
+                'differences': [],
+                'summary': {
+                    'converted_count': len(conversion_info),
+                    'target_count': 0,
+                    'actual_conversion_count': 0,
+                    'unchanged_count': len(conversion_info),
+                    'differences_count': 0,
+                    'identical_converted_count': 0,
+                    'conversion_match_rate': "0%"
+                }
+            }
+                
     def _generate_excel_report_like_feature_three(self, overwrite_type: str, source_file_path: Optional[str],
                                                 output_file_path: Optional[str], target_file_path: Optional[str], 
                                                 diff_analysis: Dict, output_folder: str, 
@@ -599,6 +803,13 @@ class ManifestComparator:
             target_file_path: 目標檔案路徑
         """
         try:
+            # 🔥 判斷是否為本地檔案比較模式
+            is_local_comparison = (overwrite_type == "local_vs_local")
+            
+            # 🔥 取得正確的檔案名稱
+            source_filename = os.path.basename(source_file_path) if source_file_path else '無'
+            target_filename = os.path.basename(target_file_path) if target_file_path else '無'
+            
             # 🔥 定義表頭顏色和頁籤顏色 - 新增紫底白字和頁籤顏色
             from openpyxl.styles import PatternFill, Font
             blue_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")   # 藍底
@@ -658,43 +869,54 @@ class ManifestComparator:
                     else:
                         cell.fill = blue_fill    # 預設藍底白字
                 
-                # 🔥 準備數據 - 修正目標檔案類型顯示實際檔案名稱
-                target_type_mapping = {
-                    'local_vs_master': 'atv-google-refplus.xml',
-                    'local_vs_premp': 'atv-google-refplus-premp.xml', 
-                    'local_vs_mp': 'atv-google-refplus-wave.xml',
-                    'local_vs_mp_backup': 'atv-google-refplus-wave-backup.xml',
-                    'local_vs_local': '本地檔案'
-                }
-                
-                # 🔥 如果有實際的目標檔案，優先使用實際檔案名稱
-                if target_file_path:
-                    actual_filename = os.path.basename(target_file_path)
-                    # 移除 gerrit_ 前綴來顯示原始檔名
-                    if actual_filename.startswith('gerrit_'):
-                        target_type = actual_filename[7:]  # 移除 "gerrit_" 前綴
-                    else:
-                        target_type = actual_filename
+                # 🔥 準備數據 - 根據比較模式決定內容
+                if is_local_comparison:
+                    # 🔥 本地檔案比較模式：使用用戶輸入的檔案名稱
+                    target_type = target_filename  # 直接使用目標檔案名稱
+                    actual_target_file = target_filename  # 直接使用目標檔案名稱
+                    download_status = 'N/A (本地檔案)'
+                    include_status = '否'
+                    expanded_status = '否'
                 else:
-                    target_type = target_type_mapping.get(overwrite_type, '未知')
+                    # 🔥 Gerrit 比較模式：原有邏輯
+                    target_type_mapping = {
+                        'local_vs_master': 'atv-google-refplus.xml',
+                        'local_vs_premp': 'atv-google-refplus-premp.xml', 
+                        'local_vs_mp': 'atv-google-refplus-wave.xml',
+                        'local_vs_mp_backup': 'atv-google-refplus-wave-backup.xml'
+                    }
+                    
+                    if target_file_path:
+                        actual_filename = os.path.basename(target_file_path)
+                        if actual_filename.startswith('gerrit_'):
+                            target_type = actual_filename[7:]
+                        else:
+                            target_type = actual_filename
+                    else:
+                        target_type = target_type_mapping.get(overwrite_type, '未知')
+                    
+                    # 獲取實際比較的目標檔案名稱
+                    if hasattr(self, 'expanded_file_path') and self.expanded_file_path:
+                        actual_target_file = os.path.basename(self.expanded_file_path)
+                    elif target_file_path:
+                        actual_target_file = os.path.basename(target_file_path)
+                    else:
+                        actual_target_file = ""
+                    
+                    download_status = '成功' if target_file_path else '失敗'
+                    include_status = '是' if hasattr(self, 'use_expanded') and hasattr(self, 'expanded_file_path') and self.expanded_file_path else '否'
+                    expanded_status = '是' if hasattr(self, 'use_expanded') and self.use_expanded else '否'
                 
-                # 獲取實際比較的目標檔案名稱
-                actual_target_file = ""
-                if hasattr(self, 'expanded_file_path') and self.expanded_file_path:
-                    actual_target_file = os.path.basename(self.expanded_file_path)
-                elif target_file_path:
-                    actual_target_file = os.path.basename(target_file_path)
-                
-                # 🔥 寫入數據（第2行）- 只寫檔案名稱，不寫路徑
+                # 🔥 寫入數據（第2行）
                 data_row = [
                     1,  # SN
                     overwrite_type,  # 比較類型
-                    os.path.basename(source_file_path) if source_file_path else '無',  # 來源檔案名稱（只要檔名）
-                    target_type,  # 目標檔案類型
-                    '成功' if target_file_path else '失敗',  # 目標檔案下載狀態
-                    '是' if hasattr(self, 'use_expanded') and hasattr(self, 'expanded_file_path') and self.expanded_file_path else '否',  # 包含 include 標籤
-                    '是' if hasattr(self, 'use_expanded') and self.use_expanded else '否',  # 已展開
-                    actual_target_file,  # 實際比較的目標檔案
+                    source_filename,  # 🔥 來源檔案名稱：使用實際檔案名稱
+                    target_type,      # 🔥 目標檔案類型：本地比較時為目標檔案名稱
+                    download_status,  # 目標檔案下載狀態
+                    include_status,   # 包含 include 標籤
+                    expanded_status,  # 已展開
+                    actual_target_file,  # 🔥 實際比較的目標檔案：本地比較時為目標檔案名稱
                     '',  # 總專案數 - 會被後續邏輯填入
                     '',  # 目標檔案專案數 - 會被後續邏輯填入
                     '',  # 版號差異數 - 會被後續邏輯填入
@@ -706,10 +928,10 @@ class ManifestComparator:
                 for col, value in enumerate(data_row, 1):
                     ws.cell(row=2, column=col).value = value
                 
-                # 🔥 添加 "實際比較的目標檔案" 欄位超連結（第8欄）
-                if actual_target_file and target_type != '本地檔案':
-                    target_filename = actual_target_file.replace('gerrit_', '')
-                    gerrit_url = self.feature_three._generate_gerrit_manifest_link(target_filename)
+                # 🔥 添加超連結（只有非本地比較模式才添加）
+                if not is_local_comparison and actual_target_file and target_type != '本地檔案':
+                    target_filename_clean = actual_target_file.replace('gerrit_', '')
+                    gerrit_url = self.feature_three._generate_gerrit_manifest_link(target_filename_clean)
                     self.feature_three._add_hyperlink_to_cell(ws, 2, 8, gerrit_url, actual_target_file)
                 
                 self.logger.info("✅ 已重新設計 '比較摘要' 頁籤欄位（包含新統計欄位和顏色）")
@@ -742,8 +964,7 @@ class ManifestComparator:
                     header_cell.fill = purple_fill
                     header_cell.font = white_font
                     
-                    # 為所有資料行填入來源檔案名稱
-                    source_filename = os.path.basename(source_file_path) if source_file_path else '無'
+                    # 🔥 使用實際的來源檔案名稱
                     for row in range(2, ws.max_row + 1):
                         ws.cell(row=row, column=source_revision_col).value = source_filename
                     
@@ -760,31 +981,43 @@ class ManifestComparator:
                     header_cell.fill = purple_fill
                     header_cell.font = white_font
                     
-                    # 為所有資料行填入比較檔案名稱並添加超連結
-                    actual_target_file = ""
-                    if hasattr(self, 'expanded_file_path') and self.expanded_file_path:
-                        actual_target_file = os.path.basename(self.expanded_file_path)
-                    elif target_file_path:
-                        actual_target_file = os.path.basename(target_file_path)
-                    
-                    for row in range(2, ws.max_row + 1):
-                        ws.cell(row=row, column=target_revision_col).value = actual_target_file
+                    # 🔥 根據比較模式決定檔案名稱和是否添加超連結
+                    if is_local_comparison:
+                        # 🔥 本地檔案比較模式：使用實際目標檔案名稱，無超連結，使用黑色字體
+                        from openpyxl.styles import Font
+                        black_font = Font(color="000000", underline=None)  # 🔥 明確指定黑色字體
                         
-                        # 添加超連結
-                        if actual_target_file:
-                            clean_filename = actual_target_file.replace('gerrit_', '')
-                            gerrit_url = self.feature_three._generate_gerrit_manifest_link(clean_filename)
-                            self.feature_three._add_hyperlink_to_cell(ws, row, target_revision_col, gerrit_url, actual_target_file)
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=target_revision_col)
+                            cell.value = target_filename
+                            cell.hyperlink = None
+                            cell.font = black_font  # 🔥 設定為黑色字體
+                    else:
+                        # Gerrit 比較模式：原有邏輯，添加超連結
+                        actual_target_file = ""
+                        if hasattr(self, 'expanded_file_path') and self.expanded_file_path:
+                            actual_target_file = os.path.basename(self.expanded_file_path)
+                        elif target_file_path:
+                            actual_target_file = os.path.basename(target_file_path)
+                        
+                        for row in range(2, ws.max_row + 1):
+                            ws.cell(row=row, column=target_revision_col).value = actual_target_file
+                            
+                            # 添加超連結
+                            if actual_target_file:
+                                clean_filename = actual_target_file.replace('gerrit_', '')
+                                gerrit_url = self.feature_three._generate_gerrit_manifest_link(clean_filename)
+                                self.feature_three._add_hyperlink_to_cell(ws, row, target_revision_col, gerrit_url, actual_target_file)
                     
                     # 🔥 更新 revision_equal_col 位置
                     if revision_equal_col and revision_equal_col > target_revision_col:
                         revision_equal_col += 1
                 
-                # 🔥 找到插入後的實際欄位位置
+                # 🔥 找到插入後的實際欄位位置，並修正目標 Revision 的內容
                 final_source_revision_col = None
                 final_target_revision_col = None
                 final_revision_equal_col = None
-                
+
                 for col in range(1, ws.max_column + 1):
                     header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
                     
@@ -800,17 +1033,21 @@ class ManifestComparator:
                         ws.cell(row=1, column=col).value = '比較狀態'
                     elif header_value in ['轉換說明', '比較說明']:
                         ws.cell(row=1, column=col).value = '比較說明'
-                
-                # 🔥 修正 "Revision 是否相等" 欄位的動態公式
+
+                # 🔥 步驟1: 修正本地比較模式下的 "目標 Revision" 欄位內容
+                if is_local_comparison and final_target_revision_col:
+                    self._fix_target_revision_for_local_comparison(ws, final_target_revision_col, target_file_path)
+
+                # 🔥 步驟2: 重新設定 "Revision 是否相等" 欄位的動態公式（必須在修正目標 Revision 後）
                 if final_revision_equal_col and final_source_revision_col and final_target_revision_col:
                     self._fix_revision_comparison_formulas_dynamic(ws, final_revision_equal_col, final_source_revision_col, final_target_revision_col)
-                
-                # 🔥 設定頁籤顏色與 "比較專案內容差異明細" 頁籤一樣
+
+                # 🔥 步驟3: 設定頁籤顏色
                 if reference_tab_color:
                     ws.sheet_properties.tabColor = reference_tab_color
                     self.logger.info("✅ 已設定 '與現行版本比較差異' 頁籤顏色與 '比較專案內容差異明細' 一致")
-                
-                self.logger.info("✅ 已完成 '與現行版本比較差異' 頁籤修正（保持所有原有欄位 + 動態公式）")
+
+                self.logger.info("✅ 已完成 '與現行版本比較差異' 頁籤修正（保持所有原有欄位 + 動態公式 + 修正目標 Revision）")
             
             # 🔥 修正 "比較差異明細" 頁籤名稱和 source_file 問題
             if '轉換後與 Gerrit manifest 的差異' in workbook.sheetnames or '比較差異明細' in workbook.sheetnames:
@@ -818,8 +1055,9 @@ class ManifestComparator:
                 ws = workbook[ws_name]
                 ws.title = '比較專案內容差異明細'
                 
-                # 🔥 修正 source_file 欄位內容和表頭顏色
+                # 🔥 修正 source_file 和 gerrit_source_file 欄位內容和表頭顏色
                 source_file_col = None
+                gerrit_source_file_col = None
                 comparison_result_col = None
                 for col in range(1, ws.max_column + 1):
                     header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
@@ -829,26 +1067,106 @@ class ManifestComparator:
                         header_cell = ws.cell(row=1, column=col)
                         header_cell.fill = purple_fill
                         header_cell.font = white_font
+                    elif header_value == 'gerrit_source_file':
+                        gerrit_source_file_col = col
+                        # 🔥 設定表頭為紫底白字
+                        header_cell = ws.cell(row=1, column=col)
+                        header_cell.fill = purple_fill
+                        header_cell.font = white_font
                     elif header_value == 'comparison_result':
                         comparison_result_col = col
                 
-                if source_file_col and source_file_path:
-                    source_filename = os.path.basename(source_file_path)
-                    for row in range(2, ws.max_row + 1):
-                        ws.cell(row=row, column=source_file_col).value = source_filename
+                # 🔥 處理 source_file 欄位
+                if source_file_col:
+                    if is_local_comparison:
+                        # 本地檔案比較模式：使用純文字，移除超連結
+                        from openpyxl.styles import Font
+                        normal_font = Font(color="000000", underline=None)
+                        
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=source_file_col)
+                            cell.value = source_filename  # 🔥 使用來源檔案名稱
+                            cell.hyperlink = None
+                            cell.font = normal_font
+                    else:
+                        # Gerrit 比較模式：保持原有邏輯
+                        for row in range(2, ws.max_row + 1):
+                            ws.cell(row=row, column=source_file_col).value = source_filename
                     
                     self.logger.info(f"✅ 修正 '比較專案內容差異明細' 頁籤 source_file 欄位: {source_filename}")
+                
+                # 🔥 處理 gerrit_source_file 欄位
+                if gerrit_source_file_col:
+                    if is_local_comparison:
+                        # 本地檔案比較模式：使用目標檔案名稱，無超連結
+                        from openpyxl.styles import Font
+                        normal_font = Font(color="000000", underline=None)
+                        
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=gerrit_source_file_col)
+                            cell.value = target_filename  # 🔥 使用目標檔案名稱
+                            cell.hyperlink = None
+                            cell.font = normal_font
+                    else:
+                        # Gerrit 比較模式：保持原有邏輯
+                        gerrit_filename = os.path.basename(target_file_path) if target_file_path else 'gerrit_unknown.xml'
+                        if hasattr(self, 'expanded_file_path') and self.expanded_file_path:
+                            gerrit_filename = os.path.basename(self.expanded_file_path)
+                        
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=gerrit_source_file_col)
+                            cell.value = gerrit_filename
+                            if not gerrit_filename.startswith('gerrit_unknown'):
+                                clean_filename = gerrit_filename.replace('gerrit_', '')
+                                gerrit_url = self.feature_three._generate_gerrit_manifest_link(clean_filename)
+                                self.feature_three._add_hyperlink_to_cell(ws, row, gerrit_source_file_col, gerrit_url, gerrit_filename)
+                    
+                    self.logger.info(f"✅ 修正 '比較專案內容差異明細' 頁籤 gerrit_source_file 欄位: {target_filename if is_local_comparison else gerrit_filename}")
                 
                 # 🔥 修正 comparison_result 欄位內容
                 if comparison_result_col:
                     for row in range(2, ws.max_row + 1):
                         cell = ws.cell(row=row, column=comparison_result_col)
-                        if cell.value and "差異" in str(cell.value):
-                            cell.value = "與現行 Gerrit 版本的內容有差異"
+                        
+                        # 🔥 根據實際的差異情況來設定內容
+                        # 這裡需要檢查該行專案是否真的有差異
+                        # 可以通過檢查來源 Revision 和目標 Revision 是否相同來判斷
+                        
+                        # 先嘗試找到來源和目標 revision 欄位
+                        source_rev_col = None
+                        target_rev_col = None
+                        for col in range(1, ws.max_column + 1):
+                            header = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
+                            if '來源' in header and 'Revision' in header:
+                                source_rev_col = col
+                            elif '目標' in header and 'Revision' in header:
+                                target_rev_col = col
+                        
+                        if source_rev_col and target_rev_col:
+                            source_rev = str(ws.cell(row=row, column=source_rev_col).value) if ws.cell(row=row, column=source_rev_col).value else ''
+                            target_rev = str(ws.cell(row=row, column=target_rev_col).value) if ws.cell(row=row, column=target_rev_col).value else ''
+                            
+                            if source_rev.strip() != target_rev.strip():
+                                # 🔥 有差異
+                                if is_local_comparison:
+                                    cell.value = "與比較檔案的內容有差異"
+                                else:
+                                    cell.value = "與現行 Gerrit 版本的內容有差異"
+                            else:
+                                # 🔥 相同
+                                if is_local_comparison:
+                                    cell.value = "與比較檔案的內容相同"
+                                else:
+                                    cell.value = "與現行 Gerrit 版本的內容相同"
+                        else:
+                            # 🔥 如果找不到 revision 欄位，使用預設邏輯
+                            if cell.value and "差異" in str(cell.value):
+                                if is_local_comparison:
+                                    cell.value = "與比較檔案的內容有差異"
+                                else:
+                                    cell.value = "與現行 Gerrit 版本的內容有差異"
                     
                     self.logger.info("✅ 已修正 comparison_result 欄位內容")
-                
-                self.logger.info("✅ 已重新命名頁籤: '比較專案內容差異明細'")
             
             # 🔥 修正 "相同專案" 頁籤
             if '未轉換專案' in workbook.sheetnames or '相同專案' in workbook.sheetnames:
@@ -892,7 +1210,7 @@ class ManifestComparator:
                 
                 self.logger.info("✅ 已完成 '相同專案' 頁籤修正")
             
-            # 🔥 修正其他頁籤...（保持原有邏輯並新增表頭顏色）
+            # 🔥 修正 "來源的 manifest" 頁籤
             if '來源的 manifest' in workbook.sheetnames:
                 ws = workbook['來源的 manifest']
                 
@@ -907,21 +1225,25 @@ class ManifestComparator:
                         header_cell.font = white_font
                         break
                 
-                if source_file_col and source_file_path:
+                if source_file_col:
                     from openpyxl.styles import Font
                     normal_font = Font(color="000000", underline=None)
                     
-                    correct_filename = os.path.basename(source_file_path)
                     for row in range(2, ws.max_row + 1):
                         cell = ws.cell(row=row, column=source_file_col)
-                        cell.value = correct_filename
+                        cell.value = source_filename  # 🔥 使用來源檔案名稱
                         cell.hyperlink = None
                         cell.font = normal_font
                     
-                    self.logger.info(f"✅ 修正 '來源的 manifest' 頁籤檔案名稱（純文字）: {correct_filename}")
+                    self.logger.info(f"✅ 修正 '來源的 manifest' 頁籤檔案名稱: {source_filename}")
             
+            # 🔥 修正 "gerrit 上的 manifest" 頁籤（本地比較時重命名為 "目標的 manifest"）
             if 'gerrit 上的 manifest' in workbook.sheetnames:
                 ws = workbook['gerrit 上的 manifest']
+                
+                # 🔥 本地比較模式時重命名頁籤
+                if is_local_comparison:
+                    ws.title = '目標的 manifest'
                 
                 source_file_col = None
                 for col in range(1, ws.max_column + 1):
@@ -934,27 +1256,108 @@ class ManifestComparator:
                         header_cell.font = white_font
                         break
                 
-                if source_file_col and target_file_path:
-                    correct_filename = os.path.basename(target_file_path)
-                    gerrit_clean_filename = correct_filename.replace('gerrit_', '')
-                    
-                    for row in range(2, ws.max_row + 1):
-                        ws.cell(row=row, column=source_file_col).value = correct_filename
-                        gerrit_url = self.feature_three._generate_gerrit_manifest_link(gerrit_clean_filename)
-                        self.feature_three._add_hyperlink_to_cell(ws, row, source_file_col, gerrit_url, correct_filename)
-                    
-                    self.logger.info(f"✅ 修正 'gerrit 上的 manifest' 頁籤檔案名稱和超連結: {correct_filename}")
+                if source_file_col:
+                    if is_local_comparison:
+                        # 🔥 本地比較模式：使用目標檔案名稱，無超連結
+                        from openpyxl.styles import Font
+                        normal_font = Font(color="000000", underline=None)
+                        
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=source_file_col)
+                            cell.value = target_filename  # 🔥 使用目標檔案名稱
+                            cell.hyperlink = None
+                            cell.font = normal_font
+                        
+                        self.logger.info(f"✅ 修正 '目標的 manifest' 頁籤檔案名稱: {target_filename}")
+                    else:
+                        # Gerrit 比較模式：保持原有邏輯，添加超連結
+                        correct_filename = os.path.basename(target_file_path)
+                        gerrit_clean_filename = correct_filename.replace('gerrit_', '')
+                        
+                        for row in range(2, ws.max_row + 1):
+                            ws.cell(row=row, column=source_file_col).value = correct_filename
+                            gerrit_url = self.feature_three._generate_gerrit_manifest_link(gerrit_clean_filename)
+                            self.feature_three._add_hyperlink_to_cell(ws, row, source_file_col, gerrit_url, correct_filename)
+                        
+                        self.logger.info(f"✅ 修正 'gerrit 上的 manifest' 頁籤檔案名稱和超連結: {correct_filename}")
             
             # 🔥 自動調整所有頁籤的欄寬
             self._auto_adjust_column_width(workbook)
             
             # 保存修改
             workbook.save(excel_file)
-            self.logger.info("✅ Excel 檔案修正完成（完整比較模式優化 + 自動調整欄寬 + 動態公式）")
+            
+            if is_local_comparison:
+                self.logger.info("✅ Excel 檔案修正完成（本地檔案比較模式 - 純文字顯示，無超連結）")
+            else:
+                self.logger.info("✅ Excel 檔案修正完成（Gerrit 比較模式 - 完整功能含超連結 + 動態公式）")
             
         except Exception as e:
             self.logger.error(f"修正 Excel 檔案失敗: {str(e)}")
 
+    def _fix_target_revision_for_local_comparison(self, worksheet, target_revision_col: int, target_file_path: str):
+        """
+        修正本地比較模式下的目標 Revision 欄位，顯示真正的目標檔案 revision
+        
+        Args:
+            worksheet: 工作表
+            target_revision_col: 目標 Revision 欄位位置
+            target_file_path: 目標檔案路徑
+        """
+        try:
+            # 重新解析目標檔案
+            with open(target_file_path, 'r', encoding='utf-8') as f:
+                target_content = f.read()
+            
+            target_root = ET.fromstring(target_content)
+            
+            # 讀取目標檔案 default 資訊
+            target_default_revision = ''
+            target_default = target_root.find('default')
+            if target_default is not None:
+                target_default_revision = target_default.get('revision', '')
+            
+            # 創建目標檔案的專案字典（使用 name+path 作為 key）
+            target_projects = {}
+            for project in target_root.findall('project'):
+                project_name = project.get('name', '')
+                project_path = project.get('path', '')
+                key = f"{project_name}|||{project_path}"
+                
+                target_projects[key] = project.get('revision', '') or target_default_revision
+            
+            # 找到專案名稱和路徑的欄位
+            name_col = None
+            path_col = None
+            for col in range(1, worksheet.max_column + 1):
+                header_value = str(worksheet.cell(row=1, column=col).value) if worksheet.cell(row=1, column=col).value else ''
+                if header_value in ['專案名稱', 'name']:
+                    name_col = col
+                elif header_value in ['專案路徑', 'path']:
+                    path_col = col
+            
+            if not name_col or not path_col:
+                self.logger.warning("無法找到專案名稱或路徑欄位，跳過目標 Revision 修正")
+                return
+            
+            # 🔥 更新每一行的目標 Revision
+            updated_count = 0
+            for row in range(2, worksheet.max_row + 1):
+                project_name = str(worksheet.cell(row=row, column=name_col).value) if worksheet.cell(row=row, column=name_col).value else ''
+                project_path = str(worksheet.cell(row=row, column=path_col).value) if worksheet.cell(row=row, column=path_col).value else ''
+                
+                key = f"{project_name}|||{project_path}"
+                target_revision = target_projects.get(key, '')
+                
+                if target_revision:
+                    worksheet.cell(row=row, column=target_revision_col).value = target_revision
+                    updated_count += 1
+            
+            self.logger.info(f"✅ 已更新 {updated_count} 個專案的目標 Revision")
+            
+        except Exception as e:
+            self.logger.error(f"修正目標 Revision 失敗: {str(e)}")
+            
     def _auto_adjust_column_width(self, workbook):
         """
         自動調整所有頁籤的欄寬
