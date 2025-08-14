@@ -661,10 +661,10 @@ class ManifestComparator:
 
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                     target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異（修正版：統一文字描述）"""
+        """使用轉換資訊比較專案差異（修正版：確保 compare_ 欄位使用正確的目標檔案資料）"""
         differences = []
         
-        # 🔥 判斷比較模式（但統一使用來源/目標檔案描述）
+        # 🔥 判斷比較模式
         is_local_comparison = (overwrite_type == "local_vs_local")
         
         # 建立目標專案的索引
@@ -690,8 +690,7 @@ class ManifestComparator:
             
             # 使用 composite key 查找對應專案
             if conv_composite_key not in target_index:
-                # 專案在來源檔案存在，但在目標檔案中不存在 - 新增
-                # 🔥 修正：統一使用來源檔案/目標檔案描述
+                # 專案在來源檔案存在，但在目標檔案中不存在
                 comparison_result = '專案僅存在於來源檔案，目標檔案中無此專案'
                     
                 difference = {
@@ -727,14 +726,14 @@ class ManifestComparator:
                 differences.append(difference)
                 continue
             
-            # 使用 composite key 取得目標專案
+            # 🔥 修正：使用 composite key 取得目標專案，確保資料來源正確
             target_proj = target_index[conv_composite_key]
             
             # 詳細比較各個屬性並生成差異說明
             diff_details = self._get_detailed_differences(conv_proj, target_proj, use_converted_revision=True)
             is_identical = len(diff_details) == 0
             
-            # 🔥 修正：統一比較狀態和結果文字
+            # 判斷比較狀態和結果文字
             if is_identical:
                 comparison_status = '✅ 相同'
                 comparison_result = '兩檔案中此專案的所有屬性完全一致'
@@ -746,32 +745,32 @@ class ManifestComparator:
                 comparison_result = f'屬性差異：{diff_summary}'
                 status_color = 'red'
             
-            # 記錄所有比較結果
+            # 🔥 修正：確保 gerrit_ 欄位使用正確的目標檔案資料
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'content': self._build_project_line_content(conv_proj, use_converted_revision=True),
-                'name': conv_proj['name'],
-                'path': conv_proj['path'],
-                'revision': conv_proj['converted_revision'],
-                'original_revision': conv_proj['original_revision'],
-                'upstream': conv_proj['upstream'],
+                'content': self._build_project_line_content(conv_proj, use_converted_revision=False),  # 🔥 來源檔案資料
+                'name': conv_proj['name'],  # 🔥 來源檔案的專案名稱
+                'path': conv_proj['path'],  # 🔥 來源檔案的專案路徑
+                'revision': conv_proj['converted_revision'],  # 這裡實際是目標檔案的 revision
+                'original_revision': conv_proj['original_revision'],  # 🔥 來源檔案的 revision
+                'upstream': conv_proj['upstream'],  # 🔥 來源檔案的 upstream
                 'dest-branch': conv_proj['dest-branch'],
                 'groups': conv_proj['groups'],
                 'clone-depth': conv_proj['clone-depth'],
                 'remote': conv_proj['remote'],
-                'source_link': self._generate_source_link(conv_proj['name'], conv_proj['converted_revision'], conv_proj['remote']),
+                'source_link': self._generate_source_link(conv_proj['name'], conv_proj['original_revision'], conv_proj['remote']),  # 🔥 使用來源檔案的 revision
                 'gerrit_source_file': gerrit_source_file,
-                'gerrit_content': target_proj['full_line'],
-                'gerrit_name': target_proj['name'],
-                'gerrit_path': target_proj['path'],
-                'gerrit_revision': target_proj['revision'],
-                'gerrit_upstream': target_proj['upstream'],
-                'gerrit_dest-branch': target_proj['dest-branch'],
-                'gerrit_groups': target_proj['groups'],
-                'gerrit_clone-depth': target_proj['clone-depth'],
-                'gerrit_remote': target_proj['remote'],
-                'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
+                'gerrit_content': target_proj['full_line'],  # 🔥 目標檔案的完整行內容
+                'gerrit_name': target_proj['name'],  # 🔥 目標檔案的專案名稱
+                'gerrit_path': target_proj['path'],  # 🔥 目標檔案的專案路徑
+                'gerrit_revision': target_proj['revision'],  # 🔥 目標檔案的 revision
+                'gerrit_upstream': target_proj['upstream'],  # 🔥 目標檔案的 upstream
+                'gerrit_dest-branch': target_proj['dest-branch'],  # 🔥 目標檔案的 dest-branch
+                'gerrit_groups': target_proj['groups'],  # 🔥 目標檔案的 groups
+                'gerrit_clone-depth': target_proj['clone-depth'],  # 🔥 目標檔案的 clone-depth
+                'gerrit_remote': target_proj['remote'],  # 🔥 目標檔案的 remote
+                'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),  # 🔥 使用目標檔案的資料
                 'comparison_status': comparison_status,
                 'comparison_result': comparison_result,
                 'status_color': status_color
@@ -786,7 +785,6 @@ class ManifestComparator:
 
         for composite_key, target_proj in target_index.items():
             if composite_key not in converted_composite_keys:
-                # 🔥 修正：統一使用來源檔案/目標檔案描述
                 comparison_result = '專案僅存在於目標檔案，來源檔案中已移除此專案'
                     
                 difference = {
@@ -804,16 +802,16 @@ class ManifestComparator:
                     'remote': 'N/A',
                     'source_link': 'N/A',
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': target_proj['full_line'],
-                    'gerrit_name': target_proj['name'],
-                    'gerrit_path': target_proj['path'],
-                    'gerrit_revision': target_proj['revision'],
-                    'gerrit_upstream': target_proj['upstream'],
-                    'gerrit_dest-branch': target_proj['dest-branch'],
-                    'gerrit_groups': target_proj['groups'],
-                    'gerrit_clone-depth': target_proj['clone-depth'],
-                    'gerrit_remote': target_proj['remote'],
-                    'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
+                    'gerrit_content': target_proj['full_line'],  # 🔥 目標檔案資料
+                    'gerrit_name': target_proj['name'],  # 🔥 目標檔案資料
+                    'gerrit_path': target_proj['path'],  # 🔥 目標檔案資料
+                    'gerrit_revision': target_proj['revision'],  # 🔥 目標檔案資料
+                    'gerrit_upstream': target_proj['upstream'],  # 🔥 目標檔案資料
+                    'gerrit_dest-branch': target_proj['dest-branch'],  # 🔥 目標檔案資料
+                    'gerrit_groups': target_proj['groups'],  # 🔥 目標檔案資料
+                    'gerrit_clone-depth': target_proj['clone-depth'],  # 🔥 目標檔案資料
+                    'gerrit_remote': target_proj['remote'],  # 🔥 目標檔案資料
+                    'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),  # 🔥 目標檔案資料
                     'comparison_status': '🗑️ 刪除',
                     'comparison_result': comparison_result,
                     'status_color': 'orange'
@@ -1486,7 +1484,7 @@ class ManifestComparator:
                         excel_filename: Optional[str], source_download_success: bool,
                         target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
                         expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
-        """產生 Excel 報告（完整修正版：統一描述、正確檔案映射、完整格式化）"""
+        """產生 Excel 報告（完整修正版：處理所有比較模式和欄位命名）"""
         try:
             # 🔥 判斷比較模式
             is_local_comparison = (overwrite_type == "local_vs_local")
@@ -1543,18 +1541,18 @@ class ManifestComparator:
                 worksheet_summary = writer.sheets['轉換摘要']
                 self._add_summary_hyperlinks(worksheet_summary, overwrite_type)
                 
-                # 頁籤 2: 轉換後專案 (🔥 修正：統一使用來源→目標描述)
+                # 頁籤 2: 轉換後專案 (🔥 統一使用來源→目標描述)
                 if diff_analysis['converted_projects']:
                     converted_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
                         has_conversion = proj.get('changed', False)
                         if has_conversion:
                             conversion_status = '🔄 已轉換'
-                            # 🔥 修正：所有比較模式都統一使用來源檔案→目標檔案
+                            # 🔥 統一：所有比較模式都使用來源檔案→目標檔案
                             status_description = f"來源檔案: {proj['original_revision']} → 目標檔案: {proj['converted_revision']}"
                         else:
                             conversion_status = '⭕ 未轉換'
-                            # 🔥 修正：統一描述為版本相同
+                            # 🔥 統一：版本相同描述
                             status_description = f"兩檔案版本相同: {proj['original_revision']}"
                         
                         converted_data.append({
@@ -1565,7 +1563,7 @@ class ManifestComparator:
                             '原始 Revision': proj['original_revision'],
                             '轉換後 Revision': proj['converted_revision'],
                             'Revision 是否相等': '',
-                            '轉換說明': status_description,  # 🔥 統一的說明內容
+                            '轉換說明': status_description,
                             'Upstream': proj['upstream'],
                             'Dest-Branch': proj['dest-branch'],
                             'Groups': proj['groups'],
@@ -1580,21 +1578,50 @@ class ManifestComparator:
                     worksheet_converted = writer.sheets['轉換後專案']
                     self._add_revision_comparison_formula_converted_projects(worksheet_converted)
                 
-                # 頁籤 3: 差異
+                # 頁籤 3: 差異（🔥 修正：處理本地比較的欄位重新命名）
                 if diff_analysis['has_target'] and diff_analysis['differences']:
                     diff_sheet_name = "轉換後與 Gerrit manifest 的差異"
-                    df_diff = pd.DataFrame(diff_analysis['differences'])
                     
-                    # 修正欄位順序
-                    diff_columns = [
-                        'SN', 'comparison_status', 'comparison_result',
-                        'source_file', 'content', 'name', 'path', 
-                        'original_revision',
-                        'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
-                        'gerrit_source_file', 'gerrit_content', 'gerrit_name', 
-                        'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 
-                        'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote', 'gerrit_source_link'
-                    ]
+                    # 🔥 為本地比較模式重新命名欄位
+                    if is_local_comparison:
+                        differences_data = []
+                        for diff in diff_analysis['differences']:
+                            # 創建新的字典，將 gerrit_ 欄位重新命名為 compare_
+                            new_diff = {}
+                            for key, value in diff.items():
+                                if key.startswith('gerrit_'):
+                                    new_key = key.replace('gerrit_', 'compare_')
+                                    new_diff[new_key] = value
+                                else:
+                                    new_diff[key] = value
+                            differences_data.append(new_diff)
+                        
+                        df_diff = pd.DataFrame(differences_data)
+                        
+                        # 修正欄位順序（本地比較版本）
+                        diff_columns = [
+                            'SN', 'comparison_status', 'comparison_result',
+                            'source_file', 'content', 'name', 'path', 
+                            'original_revision',
+                            'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
+                            'compare_source_file', 'compare_content', 'compare_name', 
+                            'compare_path', 'compare_revision', 'compare_upstream', 
+                            'compare_dest-branch', 'compare_groups', 'compare_clone-depth', 'compare_remote', 'compare_source_link'
+                        ]
+                    else:
+                        # Gerrit 比較模式，保持原有欄位名稱
+                        df_diff = pd.DataFrame(diff_analysis['differences'])
+                        
+                        # 修正欄位順序（Gerrit 比較版本）
+                        diff_columns = [
+                            'SN', 'comparison_status', 'comparison_result',
+                            'source_file', 'content', 'name', 'path', 
+                            'original_revision',
+                            'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
+                            'gerrit_source_file', 'gerrit_content', 'gerrit_name', 
+                            'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 
+                            'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote', 'gerrit_source_link'
+                        ]
                     
                     available_columns = [col for col in diff_columns if col in df_diff.columns]
                     df_diff = df_diff[available_columns]
@@ -1652,7 +1679,7 @@ class ManifestComparator:
                         
                         source_data.append({
                             'SN': i,
-                            'source_file': source_filename,  # 🔥 使用實際的來源檔案名稱
+                            'source_file': source_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['original_revision'],
@@ -1686,7 +1713,7 @@ class ManifestComparator:
                         
                         converted_manifest_data.append({
                             'SN': i,
-                            'source_file': output_filename,  # 🔥 使用正確的檔案名稱
+                            'source_file': output_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['converted_revision'],
@@ -1716,7 +1743,7 @@ class ManifestComparator:
                         
                         gerrit_data.append({
                             'SN': i,
-                            'source_file': gerrit_target_filename,  # 🔥 使用實際的目標檔案名稱
+                            'source_file': gerrit_target_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['revision'],
@@ -1746,6 +1773,7 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
+
 
     def _validate_file_mapping(self, overwrite_type: str) -> None:
         """驗證檔案名稱映射是否正確"""
@@ -1941,19 +1969,18 @@ class ManifestComparator:
             self.logger.error(f"設定原因欄位紅字格式失敗: {str(e)}")
 
     def _format_worksheet_with_background_colors(self, worksheet, sheet_name: str):
-        """格式化工作表（修正版：統一頁籤顏色）"""
+        """格式化工作表（修正版：只針對 [5] 本地比較調整顏色，不影響 [1]-[4]）"""
         try:
             from openpyxl.styles import PatternFill, Font, Alignment
             from openpyxl.utils import get_column_letter
             
-            # 🔥 修正：設定Excel頁籤標籤顏色
+            # 設定Excel頁籤標籤顏色
             if sheet_name in ['轉換摘要', '比較摘要']:
                 worksheet.sheet_properties.tabColor = "ADD8E6"  # Light Blue
             elif sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest', '目標的 manifest']:
                 worksheet.sheet_properties.tabColor = "90EE90"  # Light Green
             elif sheet_name in ['轉換後與 Gerrit manifest 的差異', '未轉換專案', '相同專案', 
                             '比較專案內容差異明細', '與現行版本比較差異', '轉換後專案']:
-                # 🔥 修正：讓 "與現行版本比較差異" 頁籤使用與 "比較專案內容差異明細" 相同的顏色
                 worksheet.sheet_properties.tabColor = "FFB6C1"  # Light Pink
             
             # 顏色定義
@@ -1970,15 +1997,42 @@ class ManifestComparator:
             # 定義特殊顏色的欄位
             orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL"]
             green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
-            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "比較檔案", "實際比較的目標檔案"]
+            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "比較檔案", "實際比較的目標檔案", "source_file"]
+            
+            # 🔥 檢查是否為本地比較模式（通過檢查是否有 compare_ 欄位）
+            has_compare_fields = any(str(cell.value).startswith('compare_') for cell in worksheet[1] if cell.value)
             
             # 設定表頭和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
                 col_letter = get_column_letter(col_num)
                 header_value = str(cell.value) if cell.value else ''
                 
+                # 🔥 只針對本地比較模式（有 compare_ 欄位）處理特殊顏色
+                if has_compare_fields and header_value.startswith('compare_'):
+                    # 🔥 修正：compare_ 欄位顏色設定
+                    if header_value == 'compare_revision':
+                        cell.fill = red_fill  # 版本號：紅色
+                    elif header_value == 'compare_source_file':
+                        cell.fill = purple_fill  # 檔案名稱：紫色
+                    else:
+                        # 🔥 修正：其他 compare_ 欄位改為綠底白字
+                        cell.fill = green_fill  # 綠底白字
+                    cell.font = white_font
+                # 處理 gerrit_ 開頭的欄位（適用於 [1]-[4] Gerrit 比較）
+                elif header_value.startswith('gerrit_') and header_value not in green_header_fields:
+                    if header_value == 'gerrit_revision':
+                        cell.fill = red_fill  # 版本號：紅色
+                    elif header_value == 'gerrit_source_file':
+                        cell.fill = green_fill  # Gerrit 檔案名稱：綠色
+                    else:
+                        cell.fill = green_fill  # 其他 gerrit_ 欄位：綠色
+                    cell.font = white_font
+                # 🔥 修正："original_revision" 顏色要跟 "compare_revision" 一樣（紅色）
+                elif header_value == 'original_revision':
+                    cell.fill = red_fill  # 紅色
+                    cell.font = white_font
                 # 根據欄位名稱設定特殊顏色
-                if header_value in orange_header_fields:
+                elif header_value in orange_header_fields:
                     cell.fill = orange_fill
                     cell.font = white_font
                 elif header_value in green_header_fields:
@@ -1994,7 +2048,7 @@ class ManifestComparator:
                 
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 
-                # 特殊處理各種頁籤的欄寬...
+                # 特殊處理各種頁籤的欄寬
                 if sheet_name in ["轉換後專案", "與現行版本比較差異"]:
                     if header_value == '原始 Revision' or header_value == '來源 Revision':
                         cell.fill = red_fill
@@ -2012,25 +2066,22 @@ class ManifestComparator:
                         worksheet.column_dimensions[col_letter].width = 35
 
                 elif sheet_name == "比較專案內容差異明細":
-                    if header_value.startswith('gerrit_') and header_value not in green_header_fields:
-                        cell.fill = green_fill
-                        cell.font = white_font
-                    elif header_value in ['gerrit_revision']:
-                        cell.fill = red_fill
-                        cell.font = white_font
-                    elif header_value in ['comparison_status', 'comparison_result']:
-                        cell.fill = red_fill
-                        cell.font = white_font
-                    
-                    # 設定欄寬
-                    if 'content' in header_value or 'gerrit_content' in header_value:
+                    if 'content' in header_value or ('compare_content' in header_value or 'gerrit_content' in header_value):
                         worksheet.column_dimensions[col_letter].width = 80
                     elif 'revision' in header_value.lower():
                         worksheet.column_dimensions[col_letter].width = 35
                     elif 'comparison' in header_value:
                         worksheet.column_dimensions[col_letter].width = 20
-                    elif header_value in ['name', 'gerrit_name']:
+                    elif header_value in ['name', 'gerrit_name', 'compare_name']:
                         worksheet.column_dimensions[col_letter].width = 25
+                    elif header_value in ['path', 'gerrit_path', 'compare_path']:
+                        worksheet.column_dimensions[col_letter].width = 30
+                    elif header_value in ['groups', 'gerrit_groups', 'compare_groups']:
+                        worksheet.column_dimensions[col_letter].width = 40
+                    elif header_value in ['source_link', 'gerrit_source_link', 'compare_source_link']:
+                        worksheet.column_dimensions[col_letter].width = 60
+                    elif header_value in ['source_file', 'gerrit_source_file', 'compare_source_file']:
+                        worksheet.column_dimensions[col_letter].width = 30
                     
                     # 根據比較狀態設定行的背景色
                     self._set_comparison_row_colors(worksheet, col_num, header_value)
@@ -2315,8 +2366,8 @@ class ManifestComparator:
             self.logger.error(f"修正比較摘要頁籤失敗: {str(e)}")
             
     def _fix_other_sheets(self, workbook, is_local_comparison: bool, source_filename: str, 
-                        target_filename: str, target_file_path: Optional[str]):
-        """修正其他頁籤的內容 - 確保本地比較模式的檔案欄位無超連結"""
+                     target_filename: str, target_file_path: Optional[str]):
+        """修正其他頁籤的內容 - 增強版：特別處理本地比較模式的字體問題"""
         try:
             from openpyxl.styles import PatternFill, Font
             
@@ -2348,13 +2399,14 @@ class ManifestComparator:
                     header_cell.fill = purple_fill
                     header_cell.font = white_font
                     
-                    # 🔥 修正：來源檔案欄位 - 確保無超連結
+                    # 🔥 來源檔案欄位 - 確保無超連結（所有模式）
                     normal_font = Font(color="000000", underline=None)
                     for row in range(2, ws.max_row + 1):
                         cell = ws.cell(row=row, column=source_revision_col)
                         cell.value = source_filename
-                        cell.hyperlink = None  # 確保移除任何超連結
+                        cell.hyperlink = None
                         cell.font = normal_font
+                        cell.style = 'Normal'
                     
                     # 更新目標欄位位置
                     target_revision_col += 1
@@ -2367,18 +2419,22 @@ class ManifestComparator:
                     header_cell.fill = purple_fill
                     header_cell.font = white_font
                     
-                    # 🔥 修正：比較檔案欄位 - 確保本地比較模式無超連結
+                    # 🔥 重點修正：比較檔案欄位的處理
                     if is_local_comparison:
-                        # 本地檔案比較：使用黑色字體，確保無超連結
-                        normal_font = Font(color="000000", underline=None)
+                        # 🔥 本地比較模式：特別強化黑色字體設定
+                        normal_font = Font(color="000000", underline=None, bold=False)
                         for row in range(2, ws.max_row + 1):
                             cell = ws.cell(row=row, column=target_revision_col)
                             cell.value = target_filename
                             cell.hyperlink = None  # 🔥 重要：確保移除任何超連結
                             cell.font = normal_font
+                            cell.style = 'Normal'  # 🔥 重要：重設樣式
                             
-                            # 🔥 額外確保：移除可能的樣式
-                            cell.style = 'Normal'
+                            # 🔥 額外確保：移除可能的樣式屬性
+                            if hasattr(cell, '_style'):
+                                cell._style = None
+                        
+                        self.logger.info(f"✅ 本地比較模式：'比較檔案'欄位已強化設定為黑色字體")
                     else:
                         # Gerrit 比較：添加超連結
                         actual_target_file = os.path.basename(target_file_path) if target_file_path else ""
@@ -2402,11 +2458,15 @@ class ManifestComparator:
                     elif header_value in ['轉換說明', '比較說明']:
                         ws.cell(row=1, column=col).value = '比較說明'
                 
-                # 統一處理目標 Revision，不論是否為本地比較
+                # 統一處理目標 Revision
                 self._fix_target_revision_unified(ws, target_revision_col + 1, target_file_path, is_local_comparison)
                 
-                # 重新設定動態公式
+                # 🔥 重要：使用修正版的公式設定方法
                 self._reapply_revision_comparison_formulas(ws)
+                
+                # 🔥 額外保護：針對本地比較模式再次確認"比較檔案"欄位
+                if is_local_comparison:
+                    self._ensure_compare_file_black_text(ws, target_revision_col)
             
             # 修正其他頁籤...
             self._fix_difference_sheet(workbook, is_local_comparison, source_filename, target_filename)
@@ -2415,6 +2475,24 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"修正其他頁籤失敗: {str(e)}")
 
+    def _ensure_compare_file_black_text(self, worksheet, compare_file_col: int):
+        """確保比較檔案欄位是黑色字體（本地比較模式專用）"""
+        try:
+            from openpyxl.styles import Font
+            
+            black_font = Font(color="000000", bold=False, underline=None)
+            
+            for row in range(2, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row, column=compare_file_col)
+                cell.font = black_font
+                cell.hyperlink = None
+                cell.style = 'Normal'
+            
+            self.logger.info("🔒 額外確保：'比較檔案'欄位為黑色字體（本地比較模式）")
+            
+        except Exception as e:
+            self.logger.error(f"確保比較檔案黑色字體失敗: {str(e)}")
+            
     def _fix_target_revision_unified(self, worksheet, target_revision_col: int, target_file_path: str, is_local_comparison: bool):
         """統一修正目標 Revision 欄位 - 適用於所有比較模式"""
         try:
@@ -2539,17 +2617,17 @@ class ManifestComparator:
             self.logger.error(f"修正目標 Revision 失敗: {str(e)}")
 
     def _reapply_revision_comparison_formulas(self, worksheet):
-        """重新設定 Revision 比較公式"""
+        """重新設定 Revision 比較公式（修正版：防止影響其他欄位）"""
         try:
             from openpyxl.utils import get_column_letter
             from openpyxl.styles import Font
-            from openpyxl.formatting.rule import Rule
-            from openpyxl.styles.differential import DifferentialStyle
+            from openpyxl.formatting.rule import FormulaRule
             
             # 找到相關欄位的位置
             source_revision_col = None
             target_revision_col = None
             comparison_col = None
+            compare_file_col = None
             
             for col in range(1, worksheet.max_column + 1):
                 header_value = str(worksheet.cell(row=1, column=col).value) if worksheet.cell(row=1, column=col).value else ''
@@ -2559,126 +2637,244 @@ class ManifestComparator:
                     target_revision_col = col
                 elif header_value == 'Revision 是否相等':
                     comparison_col = col
+                elif header_value == '比較檔案':
+                    compare_file_col = col
             
             if not all([source_revision_col, target_revision_col, comparison_col]):
+                self.logger.warning("無法找到所需的 Revision 欄位")
                 return
             
-            # 取得欄位字母
-            source_col_letter = get_column_letter(source_revision_col)
-            target_col_letter = get_column_letter(target_revision_col)
-            comparison_col_letter = get_column_letter(comparison_col)
+            # 🔥 步驟1：預先保護"比較檔案"欄位
+            if compare_file_col:
+                self._protect_compare_file_column(worksheet, compare_file_col)
             
-            # 設定動態公式
-            for row in range(2, worksheet.max_row + 1):
-                formula = f'=IF({source_col_letter}{row}={target_col_letter}{row},"Y","N")'
-                cell = worksheet[f"{comparison_col_letter}{row}"]
-                cell.value = formula
+            # 🔥 步驟2：清除現有的條件格式，避免衝突
+            self._clean_existing_conditional_formatting(worksheet)
             
-            # 設定條件格式
-            green_font = Font(color="00B050", bold=True)
-            red_font = Font(color="FF0000", bold=True)
+            # 🔥 步驟3：設定動態公式
+            self._set_revision_comparison_formulas(worksheet, source_revision_col, target_revision_col, comparison_col)
             
-            range_string = f"{comparison_col_letter}2:{comparison_col_letter}{worksheet.max_row}"
+            # 🔥 步驟4：只對"Revision 是否相等"欄位設定條件格式
+            self._set_conditional_formatting_for_revision_column(worksheet, comparison_col)
             
-            green_rule = Rule(
-                type="containsText",
-                operator="containsText",
-                text="Y",
-                dxf=DifferentialStyle(font=green_font)
-            )
-            green_rule.formula = [f'NOT(ISERROR(SEARCH("Y",{comparison_col_letter}2)))']
+            # 🔥 步驟5：最終確認"比較檔案"欄位格式
+            if compare_file_col:
+                self._final_verify_compare_file_column(worksheet, compare_file_col)
             
-            red_rule = Rule(
-                type="containsText",
-                operator="containsText",
-                text="N",
-                dxf=DifferentialStyle(font=red_font)
-            )
-            red_rule.formula = [f'NOT(ISERROR(SEARCH("N",{comparison_col_letter}2)))']
-            
-            worksheet.conditional_formatting.add(range_string, green_rule)
-            worksheet.conditional_formatting.add(range_string, red_rule)
-            
-            self.logger.info("✅ 已重新設定 Revision 比較公式和條件格式")
+            self.logger.info("✅ 已重新設定 Revision 比較公式和條件格式（防護版）")
             
         except Exception as e:
             self.logger.error(f"重新設定 Revision 比較公式失敗: {str(e)}")
 
+    def _final_verify_compare_file_column(self, worksheet, compare_file_col: int):
+        """最終確認"比較檔案"欄位格式正確"""
+        try:
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+            
+            col_letter = get_column_letter(compare_file_col)
+            black_font = Font(color="000000", bold=False, underline=None)
+            
+            # 🔥 最終確認並強制設定黑色字體
+            for row in range(2, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row, column=compare_file_col)
+                
+                # 檢查當前字體顏色
+                current_color = cell.font.color.rgb if cell.font.color and hasattr(cell.font.color, 'rgb') else "未知"
+                
+                # 強制設定為黑色字體
+                cell.font = black_font
+                cell.hyperlink = None
+                cell.style = 'Normal'
+            
+            self.logger.info(f"✅ 最終確認：'比較檔案'欄位({col_letter})已設定為黑色字體")
+            
+        except Exception as e:
+            self.logger.error(f"最終確認失敗: {str(e)}")
+            
+    def _set_conditional_formatting_for_revision_column(self, worksheet, comparison_col: int):
+        """只對"Revision 是否相等"欄位設定條件格式"""
+        try:
+            from openpyxl.utils import get_column_letter
+            from openpyxl.styles import Font
+            from openpyxl.formatting.rule import FormulaRule
+            
+            equal_col_letter = get_column_letter(comparison_col)
+            
+            # 🔥 確認"Revision 是否相等"欄位確實存在
+            equal_header = str(worksheet.cell(row=1, column=comparison_col).value) if worksheet.cell(row=1, column=comparison_col).value else ''
+            if "Revision 是否相等" not in equal_header:
+                self.logger.error(f"❌ 第 {comparison_col} 欄不是 'Revision 是否相等' 欄位，實際是: '{equal_header}'")
+                return
+            
+            # 🔥 設定條件格式規則
+            green_rule = FormulaRule(
+                formula=[f'${equal_col_letter}2="Y"'],
+                font=Font(color="00B050", bold=True)
+            )
+            
+            red_rule = FormulaRule(
+                formula=[f'${equal_col_letter}2="N"'],
+                font=Font(color="FF0000", bold=True)
+            )
+            
+            # 🔥 重要：確保範圍只包含"Revision 是否相等"欄位
+            range_string = f"{equal_col_letter}2:{equal_col_letter}{worksheet.max_row}"
+            
+            # 🔥 確認範圍正確性
+            self.logger.info(f"🎯 條件格式範圍: {range_string}")
+            self.logger.info(f"🎯 該範圍只影響 '{equal_header}' 欄位")
+            
+            worksheet.conditional_formatting.add(range_string, green_rule)
+            worksheet.conditional_formatting.add(range_string, red_rule)
+            
+            self.logger.info("✅ 已設定條件格式（僅限 Revision 是否相等欄位）")
+            
+        except Exception as e:
+            self.logger.error(f"設定條件格式失敗: {str(e)}")
+            
+    def _set_revision_comparison_formulas(self, worksheet, source_col: int, target_col: int, comparison_col: int):
+        """設定 Revision 比較公式"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            source_col_letter = get_column_letter(source_col)
+            target_col_letter = get_column_letter(target_col)
+            
+            self.logger.info(f"📊 設定動態 Revision 比較公式:")
+            self.logger.info(f"   來源 Revision: {source_col_letter} 欄")
+            self.logger.info(f"   目標 Revision: {target_col_letter} 欄")
+            
+            # 為每一行設定動態公式
+            for row in range(2, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row, column=comparison_col)
+                formula = f'=IF({source_col_letter}{row}={target_col_letter}{row},"Y","N")'
+                cell.value = formula
+            
+            self.logger.info("✅ 已設定動態比較公式")
+            
+        except Exception as e:
+            self.logger.error(f"設定比較公式失敗: {str(e)}")
+            
+    def _clean_existing_conditional_formatting(self, worksheet):
+        """清除現有的條件格式，避免衝突"""
+        try:
+            # 🔥 記錄現有的條件格式
+            cf_count = len(worksheet.conditional_formatting)
+            if cf_count > 0:
+                self.logger.info(f"🗑️ 發現 {cf_count} 個現有條件格式，準備清除")
+                
+                # 🔥 記錄範圍（用於除錯）
+                for i, cf in enumerate(worksheet.conditional_formatting):
+                    for cell_range in cf.cells:
+                        self.logger.debug(f"   第 {i+1} 個條件格式範圍: {cell_range}")
+                
+                # 🔥 創建新的空的條件格式列表
+                worksheet.conditional_formatting = type(worksheet.conditional_formatting)()
+                self.logger.info("✅ 已清除所有現有條件格式")
+            else:
+                self.logger.debug("ℹ️ 沒有現有的條件格式")
+                
+        except Exception as e:
+            self.logger.warning(f"清除現有條件格式失敗: {str(e)}")
+            
+    def _protect_compare_file_column(self, worksheet, compare_file_col: int):
+        """預先保護"比較檔案"欄位，設定為黑色字體"""
+        try:
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+            
+            col_letter = get_column_letter(compare_file_col)
+            black_font = Font(color="000000", bold=False, underline=None)
+            
+            self.logger.info(f"🛡️ 預先保護 '比較檔案' 欄位 ({col_letter} 欄)")
+            
+            for row in range(2, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row, column=compare_file_col)
+                cell.font = black_font
+                cell.hyperlink = None  # 移除超連結
+                cell.style = 'Normal'  # 重設為一般樣式
+            
+            self.logger.info("✅ '比較檔案' 欄位已預先設定為黑色字體")
+            
+        except Exception as e:
+            self.logger.error(f"保護比較檔案欄位失敗: {str(e)}")
+            
     def _fix_difference_sheet(self, workbook, is_local_comparison: bool, source_filename: str, target_filename: str):
-        """修正差異頁籤 - 根據比較模式調整文字描述"""
+        """修正差異頁籤 - 處理本地比較的欄位名稱"""
         try:
             from openpyxl.styles import PatternFill, Font
             
             purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")
+            green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
             white_font = Font(color="FFFFFF", bold=True)
             
             if '轉換後與 Gerrit manifest 的差異' in workbook.sheetnames:
                 ws = workbook['轉換後與 Gerrit manifest 的差異']
                 ws.title = '比較專案內容差異明細'
                 
-                # 修正 source_file 和 gerrit_source_file 欄位
+                # 🔥 修正：處理本地比較模式的欄位名稱和顏色
                 for col in range(1, ws.max_column + 1):
                     header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
+                    header_cell = ws.cell(row=1, column=col)
                     
                     if header_value == 'source_file':
                         # 設定表頭為紫底白字
-                        header_cell = ws.cell(row=1, column=col)
                         header_cell.fill = purple_fill
                         header_cell.font = white_font
                         
-                        # 處理內容
-                        if is_local_comparison:
-                            normal_font = Font(color="000000", underline=None)
-                            for row in range(2, ws.max_row + 1):
-                                cell = ws.cell(row=row, column=col)
-                                cell.value = source_filename
-                                cell.hyperlink = None
-                                cell.font = normal_font
-                        else:
-                            for row in range(2, ws.max_row + 1):
-                                ws.cell(row=row, column=col).value = source_filename
+                        # 處理內容 - 都使用黑色字體，無超連結
+                        normal_font = Font(color="000000", underline=None)
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=col)
+                            cell.value = source_filename
+                            cell.hyperlink = None
+                            cell.font = normal_font
+                            cell.style = 'Normal'
                     
-                    elif header_value == 'gerrit_source_file':
-                        # 設定表頭為紫底白字
-                        header_cell = ws.cell(row=1, column=col)
-                        header_cell.fill = purple_fill
+                    elif header_value in ['gerrit_source_file', 'compare_source_file']:
+                        # 🔥 修正表頭名稱（本地比較模式）
+                        if is_local_comparison:
+                            header_cell.value = 'compare_source_file'
+                        
+                        # 設定表頭顏色
+                        if is_local_comparison:
+                            header_cell.fill = purple_fill  # 本地比較：紫色
+                        else:
+                            header_cell.fill = green_fill   # Gerrit 比較：綠色
                         header_cell.font = white_font
                         
                         # 處理內容
-                        if is_local_comparison:
-                            normal_font = Font(color="000000", underline=None)
-                            for row in range(2, ws.max_row + 1):
-                                cell = ws.cell(row=row, column=col)
+                        normal_font = Font(color="000000", underline=None)
+                        for row in range(2, ws.max_row + 1):
+                            cell = ws.cell(row=row, column=col)
+                            if is_local_comparison:
                                 cell.value = target_filename
                                 cell.hyperlink = None
                                 cell.font = normal_font
+                                cell.style = 'Normal'
+                            # Gerrit 比較模式保持原有邏輯
+                    
+                    # 🔥 處理其他 gerrit_ 開頭的欄位（本地比較模式）
+                    elif header_value.startswith('gerrit_') and is_local_comparison:
+                        # 將 gerrit_ 替換為 compare_
+                        new_header = header_value.replace('gerrit_', 'compare_')
+                        header_cell.value = new_header
+                        
+                        # 根據欄位類型設定顏色
+                        if new_header in ['compare_revision']:
+                            header_cell.fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")  # 紅色
+                        elif new_header.startswith('compare_'):
+                            header_cell.fill = purple_fill  # 紫色（本地比較的目標檔案相關欄位）
                         else:
-                            # Gerrit 比較模式的處理...
-                            pass
+                            header_cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")  # 藍色
+                        
+                        header_cell.font = white_font
                     
                     elif header_value == 'comparison_result':
-                        # 🔥 修正：根據比較模式調整 comparison_result 內容
-                        for row in range(2, ws.max_row + 1):
-                            cell = ws.cell(row=row, column=col)
-                            cell_value = str(cell.value) if cell.value else ''
-                            
-                            # 🔥 重要：不直接修改已經格式化好的詳細差異說明
-                            # 只修改舊版本的籠統描述
-                            if is_local_comparison:
-                                if cell_value == "轉換後與 Gerrit 完全一致":
-                                    cell.value = "兩檔案內容完全一致"
-                                elif cell_value == "轉換後與 Gerrit 有差異":
-                                    cell.value = "兩檔案內容有差異"
-                                elif "與現行 Gerrit 版本" in cell_value:
-                                    cell.value = cell_value.replace("與現行 Gerrit 版本", "與目標檔案")
-                                elif "與比較檔案" in cell_value:
-                                    # 這個已經是正確的，保持不變
-                                    pass
-                            else:
-                                # Gerrit 比較模式
-                                if "與比較檔案" in cell_value:
-                                    cell.value = cell_value.replace("與比較檔案", "與現行 Gerrit 版本")
-                    
+                        # 🔥 修正 comparison_result 內容的自動替換已在生成時處理
+                        pass
+            
         except Exception as e:
             self.logger.error(f"修正差異頁籤失敗: {str(e)}")
 
