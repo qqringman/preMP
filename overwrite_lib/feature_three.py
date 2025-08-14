@@ -2170,11 +2170,11 @@ class FeatureThree:
     - {rddb_number}"""
         
     def _generate_excel_report(self, overwrite_type: str, source_file_path: Optional[str],
-                         output_file_path: Optional[str], target_file_path: Optional[str], 
-                         diff_analysis: Dict, output_folder: str, 
-                         excel_filename: Optional[str], source_download_success: bool,
-                         target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
-                         expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
+                        output_file_path: Optional[str], target_file_path: Optional[str], 
+                        diff_analysis: Dict, output_folder: str, 
+                        excel_filename: Optional[str], source_download_success: bool,
+                        target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
+                        expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
         """產生 Excel 報告 - 修正版本，新的頁籤順序和底色"""
         try:
             if excel_filename:
@@ -2291,12 +2291,18 @@ class FeatureThree:
                 if unchanged_projects:
                     unchanged_data = []
                     for i, proj in enumerate(unchanged_projects, 1):
-                        # 🔥 修改原因說明
+                        # 🔥 修改原因說明 - 區分 hash 和非 hash revision
                         reason = "符合跳過轉換條件或無需轉換"
                         needs_red_font = False
+                        
                         if proj['original_revision']:  # 如果有保持的 Revision
-                            reason = "需檢查是否來源端是否有問題"
-                            needs_red_font = True
+                            # 🔥 檢查是否為 hash
+                            if self._is_revision_hash(proj['original_revision']):
+                                reason = "符合跳過轉換條件或無需轉換 (Hash Revision)"
+                                needs_red_font = False  # hash 不需要紅字
+                            else:
+                                reason = "需檢查是否來源端是否有問題"
+                                needs_red_font = True   # 非 hash 但有值，需要紅字
                             
                         unchanged_data.append({
                             'SN': i,
@@ -2486,7 +2492,7 @@ class FeatureThree:
             # 找到需要添加連結的欄位
             target_columns = {
                 '源檔案': self.source_files.get(overwrite_type, ''),
-                '目標檔案': self.target_files.get(overwrite_type, '')
+                '目標檔案': self.target_files.get(overwrite_type, '')  # 🔥 確保包含目標檔案
             }
             
             # 為每個目標欄位添加連結
@@ -2689,7 +2695,7 @@ class FeatureThree:
             self.logger.error(f"添加公式失敗: {str(e)}")
                                     
     def _format_unchanged_projects_reason_column(self, worksheet):
-        """格式化未轉換專案的原因欄位 - 設定紅字"""
+        """格式化未轉換專案的原因欄位 - 設定紅字，區分 hash 和非 hash revision"""
         try:
             from openpyxl.styles import Font
             
@@ -2698,6 +2704,7 @@ class FeatureThree:
             # 找到原因欄位的位置
             reason_col = None
             needs_red_col = None
+            revision_col = None
             
             for col_num, cell in enumerate(worksheet[1], 1):
                 header_value = str(cell.value) if cell.value else ''
@@ -2705,6 +2712,8 @@ class FeatureThree:
                     reason_col = col_num
                 elif header_value == '需要紅字':
                     needs_red_col = col_num
+                elif header_value == '保持的 Revision':
+                    revision_col = col_num
             
             if not reason_col:
                 self.logger.warning("無法找到原因欄位，跳過紅字格式設定")
@@ -2718,7 +2727,7 @@ class FeatureThree:
                     if needs_red_cell.value:
                         reason_cell = worksheet.cell(row=row_num, column=reason_col)
                         reason_cell.font = red_font
-                
+            
             # 🔥 隱藏 "需要紅字" 輔助欄位
             if needs_red_col:
                 from openpyxl.utils import get_column_letter
@@ -3713,12 +3722,17 @@ class FeatureThree:
         if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
             return True
         
+        # Hash 特徵：較短的 hash (7-12 字符的十六進制)
+        if 7 <= len(revision) <= 12 and all(c in '0123456789abcdefABCDEF' for c in revision):
+            return True
+        
         # Branch name 特徵：包含斜線和可讀名稱
         if '/' in revision and any(c.isalpha() for c in revision):
             return False
         
         # 其他情況當作 branch name 處理
         return False
+
 
     def _get_effective_revision_for_conversion(self, project_element) -> str:
         """

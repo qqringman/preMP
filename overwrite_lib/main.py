@@ -1175,6 +1175,9 @@ class MainApplication:
         print(f"  📄 處理模式: 純比對（不執行轉換）")
         print(f"  📊 差異分析: 使用 feature_three._analyze_differences()")
         print(f"  📋 Excel 生成: 使用 feature_three._generate_excel_report_safe()")
+        print(f"  🗂️ 檔案處理: 保留使用者原始檔案名稱")
+        print(f"  📄 特殊處理: 已移除 '轉換後的 manifest' 頁籤（比較模式不需要）")
+        print(f"  🔥 未轉換專案: 改進的原因判斷（區分 hash 和非 hash revision）")
         
         # 顯示結果
         if success:
@@ -1185,16 +1188,19 @@ class MainApplication:
             print(f"📄 請查看詳細報告了解具體情況")
         
         print(f"\n📊 詳細分析報告: {output_path}")
-        print(f"💡 Excel 報告頁籤（與 feature_three.py 完全一致）:")
+        print(f"💡 Excel 報告頁籤（比較模式優化）:")
         print(f"  📋 轉換摘要 - 整體統計和檔案資訊")
         print(f"  🔍 轉換後專案 - 所有專案的比較狀態")
         print(f"  ❌ 轉換後與 Gerrit manifest 的差異 - 詳細差異對照")
-        print(f"  📄 其他頁籤 - 依據 feature_three.py 格式")
+        print(f"  📄 未轉換專案 - 區分 hash 和非 hash revision 的原因說明")
+        print(f"  📄 來源的 manifest - 保留原始檔案名稱")
+        print(f"  📄 gerrit 上的 manifest - 正確的檔案名稱")
+        print(f"  🚫 已移除: '轉換後的 manifest'（比較模式不需要）")
         
         # 詢問是否開啟報告
         if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
             self._open_file(output_path)
-            
+
     def _execute_local_vs_gerrit_comparison(self, choice):
         """執行本地檔案與 Gerrit 比較"""
         # 映射選擇到 Gerrit 類型
@@ -1289,6 +1295,8 @@ class MainApplication:
         print(f"  📊 差異分析: 使用 feature_three._analyze_differences()")
         print(f"  📋 Excel 生成: 使用 feature_three._generate_excel_report_safe()")
         print(f"  🗂️ 檔案處理: 自動下載並保存 Gerrit 檔案")
+        print(f"  📄 特殊處理: 已移除 '轉換後的 manifest' 頁籤（比較模式不需要）")
+        print(f"  🔥 檔案命名: 保留使用者原始檔案名稱")
         
         if hasattr(comparator, 'use_expanded') and comparator.use_expanded:
             print(f"  ✅ include 展開: 已成功展開 Gerrit 檔案")
@@ -1306,11 +1314,14 @@ class MainApplication:
             print(f"📄 請查看詳細報告了解具體情況")
         
         print(f"\n📊 詳細分析報告: {output_path}")
-        print(f"💡 Excel 報告頁籤（與 feature_three.py 完全一致）:")
+        print(f"💡 Excel 報告頁籤（比較模式優化）:")
         print(f"  📋 轉換摘要 - 整體統計和檔案資訊")
-        print(f"  🔍 轉換後專案 - 所有專案的比較狀態")
+        print(f"  🔍 轉換後專案 - 所有專案的比較狀態（含 hash 判斷）")
         print(f"  ❌ 轉換後與 Gerrit manifest 的差異 - 詳細差異對照")
-        print(f"  📄 其他頁籤 - 依據 feature_three.py 格式")
+        print(f"  📄 未轉換專案 - 改進的原因判斷（區分 hash 和非 hash）")
+        print(f"  📄 來源的 manifest - 保留原始檔案名稱")
+        print(f"  📄 gerrit 上的 manifest - 正確的 Gerrit 檔案名稱")
+        print(f"  🚫 已移除: '轉換後的 manifest'（比較模式不需要）")
         
         # 詢問是否開啟報告
         if self.input_validator.get_yes_no_input("\n是否要開啟比較報告？", False):
