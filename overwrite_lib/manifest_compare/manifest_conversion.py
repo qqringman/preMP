@@ -1827,19 +1827,22 @@ class ManifestComparator:
                                 if key.startswith('gerrit_'):
                                     new_key = key.replace('gerrit_', 'compare_')
                                     new_diff[new_key] = value
+                                elif key == 'original_revision':
+                                    # 🔥 修正：將 original_revision 改名為 revision
+                                    new_diff['revision'] = value
                                 else:
                                     new_diff[key] = value
                             differences_data.append(new_diff)
                         
                         df_diff = pd.DataFrame(differences_data)
                         
-                        self.logger.info("✅ 本地比較模式：gerrit_ 欄位已重新命名為 compare_")
+                        self.logger.info("✅ 本地比較模式：gerrit_ 欄位已重新命名為 compare_，original_revision 已改名為 revision")
                         
                         # 修正欄位順序（本地比較版本）
                         diff_columns = [
                             'SN', 'comparison_status', 'comparison_result',
                             'source_file', 'content', 'name', 'path', 
-                            'original_revision',
+                            'revision',  # 🔥 修正：使用 revision 而非 original_revision
                             'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                             'compare_source_file', 'compare_content', 'compare_name', 
                             'compare_path', 'compare_revision', 'compare_upstream', 
@@ -1847,13 +1850,24 @@ class ManifestComparator:
                         ]
                     else:
                         # Gerrit 比較模式，保持原有欄位名稱
-                        df_diff = pd.DataFrame(diff_analysis['differences'])
+                        differences_data = []
+                        for diff in diff_analysis['differences']:
+                            # 🔥 修正：將 original_revision 改名為 revision
+                            new_diff = {}
+                            for key, value in diff.items():
+                                if key == 'original_revision':
+                                    new_diff['revision'] = value
+                                else:
+                                    new_diff[key] = value
+                            differences_data.append(new_diff)
+                        
+                        df_diff = pd.DataFrame(differences_data)
                         
                         # 修正欄位順序（Gerrit 比較版本）
                         diff_columns = [
                             'SN', 'comparison_status', 'comparison_result',
                             'source_file', 'content', 'name', 'path', 
-                            'original_revision',
+                            'revision',  # 🔥 修正：使用 revision 而非 original_revision
                             'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                             'gerrit_source_file', 'gerrit_content', 'gerrit_name', 
                             'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 
@@ -2014,7 +2028,6 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
-
 
     def _validate_file_mapping(self, overwrite_type: str) -> None:
         """驗證檔案名稱映射是否正確"""
@@ -2410,7 +2423,7 @@ class ManifestComparator:
         return width
 
     def _adjust_summary_column_widths_enhanced(self, worksheet):
-        """專門調整轉換摘要頁籤的欄寬（從 feature_three.py 複製並修改）"""
+        """專門調整轉換摘要頁籤的欄寬（修正版：確保完整顯示）"""
         try:
             from openpyxl.utils import get_column_letter
             
@@ -2444,7 +2457,7 @@ class ManifestComparator:
                             if content_width > max_content_width:
                                 max_content_width = content_width
                     
-                    # 根據欄位類型設定基礎寬度
+                    # 🔥 根據欄位類型設定基礎寬度（確保完整顯示）
                     if header_value == 'SN':
                         base_width = 8
                     elif 'revision' in header_value.lower():
@@ -2454,9 +2467,11 @@ class ManifestComparator:
                     elif 'URL' in header_value:
                         base_width = 60
                     elif '❌' in header_value or '✅' in header_value or '✔️' in header_value:
-                        base_width = 40  # 長的統計欄位
+                        # 🔥 修正：長的統計欄位確保完整顯示
+                        base_width = max(header_display_width + 8, 35)  # 增加基礎寬度
                     elif '📊' in header_value or '🔄' in header_value or '⭕' in header_value or '🎯' in header_value:
-                        base_width = max(header_display_width + 5, 20)  # 根據實際內容調整
+                        # 🔥 修正：統計欄位確保完整顯示
+                        base_width = max(header_display_width + 8, 25)  # 增加基礎寬度
                     elif '狀態' in header_value:
                         base_width = max(header_display_width + 5, 20)
                     elif 'ID' in header_value:
@@ -2464,13 +2479,17 @@ class ManifestComparator:
                     elif '檔案' in header_value:
                         base_width = max(max_content_width + 5, 25)  # 根據檔名長度調整
                     else:
-                        base_width = max(header_display_width + 5, 15)  # 確保表頭能完整顯示
+                        # 🔥 修正：確保表頭能完整顯示
+                        base_width = max(header_display_width + 8, 18)  # 增加基礎寬度
                     
                     # 確保寬度足夠顯示所有內容
-                    final_width = max(base_width, header_display_width + 5, max_content_width + 5)
+                    final_width = max(base_width, header_display_width + 8, max_content_width + 5)
                     
-                    # 設定合理的最大寬度限制
-                    final_width = min(final_width, 100)
+                    # 🔥 修正：設定合理的最大寬度限制
+                    final_width = min(final_width, 120)
+                    
+                    # 🔥 確保最小寬度不會太小
+                    final_width = max(final_width, 12)
                     
                 else:
                     final_width = 15  # 空表頭的預設寬度
@@ -2486,7 +2505,7 @@ class ManifestComparator:
             self.logger.error(f"調整比較摘要欄寬失敗: {str(e)}")
 
     def _auto_adjust_column_widths_enhanced(self, worksheet, sheet_name: str):
-        """自動調整欄寬以適應內容（從 feature_three.py 複製並修改）"""
+        """自動調整欄寬以適應內容（修正版：優化特定欄位寬度）"""
         try:
             from openpyxl.utils import get_column_letter
             
@@ -2554,9 +2573,6 @@ class ManifestComparator:
                         min_width = 8
                     elif header_value in ['comparison_status', 'comparison_result']:
                         min_width = 25  # 增加比較狀態欄位寬度
-                    elif header_value in ['目標 Revision', 'Revision 是否相等']:
-                        # 🔥 讓這些欄位使用自動計算寬度，不設定最小寬度
-                        min_width = max(header_width + 3, 12)  # 只比表頭稍微寬一點                        
                     elif 'upstream' in header_value.lower():
                         min_width = 25  # 增加 upstream 欄位寬度
                     elif 'dest-branch' in header_value.lower():
@@ -2634,7 +2650,7 @@ class ManifestComparator:
             self.logger.error(f"設定轉換狀態顏色失敗: {str(e)}")
 
     def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
-        """為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結（修正版：使用 HYPERLINK 函數）"""
+        """為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結（修正版：確保所有連結都有HYPERLINK）"""
         try:
             # 找到需要處理的欄位
             source_file_col = None
@@ -2685,7 +2701,7 @@ class ManifestComparator:
                 for row_num in range(2, worksheet.max_row + 1):
                     # 取得該行的專案資訊
                     name_cell = self._find_cell_value_in_row(worksheet, row_num, ['name'])
-                    revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['revision'])
+                    revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['revision', 'original_revision'])
                     remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['remote'])
                     
                     if name_cell:
@@ -2697,7 +2713,7 @@ class ManifestComparator:
                         gerrit_project_url = self._generate_source_link(project_name, revision, remote)
                         
                         if gerrit_project_url and gerrit_project_url != 'N/A':
-                            # 🔥 使用 HYPERLINK 格式，顯示連結本身
+                            # 🔥 確保使用 HYPERLINK 格式，顯示連結本身
                             self._add_hyperlink_formula_to_cell(worksheet, row_num, source_link_col, gerrit_project_url, gerrit_project_url)
             
             # 🔥 修正：為 gerrit_source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
@@ -2718,7 +2734,7 @@ class ManifestComparator:
                         if gerrit_project_url and gerrit_project_url != 'N/A':
                             self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_link_col, gerrit_project_url, gerrit_project_url)
             
-            # 🔥 新增：為 compare_source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
+            # 🔥 修正：為 compare_source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
             if compare_source_link_col:
                 for row_num in range(2, worksheet.max_row + 1):
                     # 取得該行的 compare 專案資訊
@@ -2867,7 +2883,7 @@ class ManifestComparator:
 
     def _fix_summary_sheet_unified(self, workbook, overwrite_type: str, source_filename: str, 
                                 target_filename: str, target_file_path: Optional[str]):
-        """統一修正比較摘要頁籤"""
+        """統一修正比較摘要頁籤（新增背景色設定）"""
         try:
             from openpyxl.styles import PatternFill, Font
             
@@ -2876,7 +2892,14 @@ class ManifestComparator:
             purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")
             orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+            
+            # 🔥 新增：內容背景色
+            light_blue_fill = PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid")  # 淺藍底
+            light_red_fill = PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid")   # 淺紅底
+            light_green_fill = PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid") # 淺綠底
+            
             white_font = Font(color="FFFFFF", bold=True)
+            black_font = Font(color="000000", bold=False)
             
             ws = workbook['轉換摘要']
             ws.title = '比較摘要'
@@ -2952,7 +2975,21 @@ class ManifestComparator:
             ]
             
             for col, value in enumerate(data_row, 1):
-                ws.cell(row=2, column=col).value = value
+                cell = ws.cell(row=2, column=col)
+                cell.value = value
+                
+                # 🔥 新增：設定特定欄位的內容背景色
+                header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
+                
+                if header_value in ['📊 總專案數', '🎯 目標檔案專案數']:
+                    cell.fill = light_blue_fill  # 淺藍底
+                    cell.font = black_font
+                elif header_value in ['❌ 與現行版本版號差異數', '❌ 比較現行版本內容差異數']:
+                    cell.fill = light_red_fill   # 淺紅底
+                    cell.font = black_font
+                elif header_value in ['✔️ 與現行版本版號相同數', '✔️ 比較現行版本內容相同數']:
+                    cell.fill = light_green_fill # 淺綠底
+                    cell.font = black_font
             
             # 添加超連結（僅非本地比較模式）
             if not is_local_comparison and actual_target_file and target_type != '本地檔案':
@@ -2960,7 +2997,7 @@ class ManifestComparator:
                 gerrit_url = self._generate_gerrit_manifest_link(target_filename_clean)
                 self._add_hyperlink_to_cell(ws, 2, 8, gerrit_url, actual_target_file)
             
-            self.logger.info("✅ 比較摘要頁籤修正完成（統一邏輯）")
+            self.logger.info("✅ 比較摘要頁籤修正完成（統一邏輯+背景色）")
             
         except Exception as e:
             self.logger.error(f"修正比較摘要頁籤失敗: {str(e)}")
@@ -3259,11 +3296,9 @@ class ManifestComparator:
                 if header_value == '來源 Revision':
                     source_revision_col = col
                 elif header_value == '目標 Revision':
-                    # 🔥 目標 Revision 使用較小的寬度
-                    min_width = max(header_width + 2, 25)  # 固定合理寬度
+                    target_revision_col = col
                 elif header_value == 'Revision 是否相等':
-                    # 🔥 Revision 是否相等 用更小的寬度
-                    min_width = max(header_width + 2, 12)  # 很小的寬度
+                    comparison_col = col
                 elif header_value == '比較檔案':
                     compare_file_col = col
             
@@ -3765,8 +3800,16 @@ class ManifestComparator:
             self.logger.error(f"設定原因欄位格式失敗: {str(e)}")
 
     def _update_summary_statistics(self, workbook, diff_analysis: Dict):
-        """更新比較摘要頁籤的統計數據（安全版：根據比較類型使用不同邏輯）"""
+        """更新比較摘要頁籤的統計數據（修正版：包含背景色設定）"""
         try:
+            from openpyxl.styles import PatternFill, Font
+            
+            # 🔥 定義內容背景色
+            light_blue_fill = PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid")  # 淺藍底
+            light_red_fill = PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid")   # 淺紅底
+            light_green_fill = PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid") # 淺綠底
+            black_font = Font(color="000000", bold=False)
+            
             if '比較摘要' in workbook.sheetnames:
                 ws = workbook['比較摘要']
                 
@@ -3841,10 +3884,23 @@ class ManifestComparator:
                     header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
                     
                     if header_value in stats_mapping:
-                        ws.cell(row=2, column=col).value = stats_mapping[header_value]
+                        cell = ws.cell(row=2, column=col)
+                        cell.value = stats_mapping[header_value]
+                        
+                        # 🔥 新增：根據欄位類型設定背景色
+                        if header_value in ['📊 總專案數', '🎯 目標檔案專案數']:
+                            cell.fill = light_blue_fill  # 淺藍底
+                            cell.font = black_font
+                        elif header_value in ['❌ 與現行版本版號差異數', '❌ 比較現行版本內容差異數']:
+                            cell.fill = light_red_fill   # 淺紅底
+                            cell.font = black_font
+                        elif header_value in ['✔️ 與現行版本版號相同數', '✔️ 比較現行版本內容相同數']:
+                            cell.fill = light_green_fill # 淺綠底
+                            cell.font = black_font
+                        
                         self.logger.debug(f"更新統計: {header_value} = {stats_mapping[header_value]}")
                 
-                self.logger.info("✅ 已更新比較摘要頁籤的統計數據（分類型處理）")
+                self.logger.info("✅ 已更新比較摘要頁籤的統計數據（分類型處理+背景色設定）")
         
         except Exception as e:
             self.logger.error(f"更新統計數據失敗: {str(e)}")
