@@ -115,6 +115,9 @@ class ManifestComparator:
         比較本地檔案與 Gerrit manifest 檔案 - 修正版：確保使用正確的比較邏輯
         """
         try:
+            # 🔥 設定比較模式標記
+            self._current_is_local_comparison = False
+            
             self.logger.info("=" * 80)
             self.logger.info(f"開始執行本地檔案與 {gerrit_type.upper()} 比較（修正版）")
             self.logger.info("=" * 80)
@@ -185,6 +188,9 @@ class ManifestComparator:
         比較兩個本地檔案 - 純比對，不執行轉換（修正版：確保資料正確）
         """
         try:
+            # 🔥 設定比較模式標記
+            self._current_is_local_comparison = True
+            
             self.logger.info("=" * 80)
             self.logger.info(f"開始執行本地檔案比較（修正版：確保 compare_ 欄位使用第二個檔案資料）")
             self.logger.info("=" * 80)
@@ -2711,8 +2717,8 @@ class ManifestComparator:
                 # 統一處理目標 Revision
                 self._fix_target_revision_unified(ws, target_revision_col + 1, target_file_path, is_local_comparison)
                 
-                # 🔥 重要：使用修正版的公式設定方法
-                self._reapply_revision_comparison_formulas(ws)
+                # 🔥 重要：使用修正版的公式設定方法，確保向後兼容
+                self._reapply_revision_comparison_formulas(ws, is_local_comparison)
                 
                 # 🔥 額外保護：針對本地比較模式再次確保"比較檔案"欄位
                 if is_local_comparison:
@@ -2866,12 +2872,17 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"修正目標 Revision 失敗: {str(e)}")
 
-    def _reapply_revision_comparison_formulas(self, worksheet):
-        """重新設定 Revision 比較公式（修正版：防止影響其他欄位）"""
+    def _reapply_revision_comparison_formulas(self, worksheet, is_local_comparison: bool = None):
+        """重新設定 Revision 比較公式（修正版：根據比較模式處理）"""
         try:
             from openpyxl.utils import get_column_letter
             from openpyxl.styles import Font
             from openpyxl.formatting.rule import FormulaRule
+            
+            # 🔥 如果沒有傳入 is_local_comparison，自動判斷
+            if is_local_comparison is None:
+                # 通過檢查工作表內容或類別變數來判斷
+                is_local_comparison = getattr(self, '_current_is_local_comparison', False)
             
             # 找到相關欄位的位置
             source_revision_col = None
@@ -2894,50 +2905,57 @@ class ManifestComparator:
                 self.logger.warning("無法找到所需的 Revision 欄位")
                 return
             
-            # 🔥 步驟1：預先保護"比較檔案"欄位
+            # 🔥 步驟1：根據比較模式保護"比較檔案"欄位
             if compare_file_col:
-                self._protect_compare_file_column(worksheet, compare_file_col)
+                self._protect_compare_file_column(worksheet, compare_file_col, is_local_comparison)
             
             # 🔥 步驟2：清除現有的條件格式，避免衝突
             self._clean_existing_conditional_formatting(worksheet)
             
-            # 🔥 步驟3：設定動態公式
+            # 🔥 步驟3：設定動態公式（核心邏輯不變）
             self._set_revision_comparison_formulas(worksheet, source_revision_col, target_revision_col, comparison_col)
             
             # 🔥 步驟4：只對"Revision 是否相等"欄位設定條件格式
             self._set_conditional_formatting_for_revision_column(worksheet, comparison_col)
             
-            # 🔥 步驟5：最終確認"比較檔案"欄位格式
+            # 🔥 步驟5：根據比較模式最終確認"比較檔案"欄位格式
             if compare_file_col:
-                self._final_verify_compare_file_column(worksheet, compare_file_col)
+                self._final_verify_compare_file_column(worksheet, compare_file_col, is_local_comparison)
             
-            self.logger.info("✅ 已重新設定 Revision 比較公式和條件格式（防護版）")
+            self.logger.info("✅ 已重新設定 Revision 比較公式和條件格式（核心邏輯保持不變）")
             
         except Exception as e:
             self.logger.error(f"重新設定 Revision 比較公式失敗: {str(e)}")
 
-    def _final_verify_compare_file_column(self, worksheet, compare_file_col: int):
-        """最終確認"比較檔案"欄位格式正確"""
+    def _final_verify_compare_file_column(self, worksheet, compare_file_col: int, is_local_comparison: bool = None):
+        """根據比較模式最終確認"比較檔案"欄位格式"""
         try:
             from openpyxl.styles import Font
             from openpyxl.utils import get_column_letter
             
+            # 🔥 如果沒有傳入參數，使用類別變數
+            if is_local_comparison is None:
+                is_local_comparison = getattr(self, '_current_is_local_comparison', False)
+            
             col_letter = get_column_letter(compare_file_col)
-            black_font = Font(color="000000", bold=False, underline=None)
             
-            # 🔥 最終確認並強制設定黑色字體
-            for row in range(2, worksheet.max_row + 1):
-                cell = worksheet.cell(row=row, column=compare_file_col)
+            if is_local_comparison:
+                # 🔥 只有本地比較模式才強制設定黑色字體
+                black_font = Font(color="000000", bold=False, underline=None)
                 
-                # 檢查當前字體顏色
-                current_color = cell.font.color.rgb if cell.font.color and hasattr(cell.font.color, 'rgb') else "未知"
+                # 🔥 最終確認並強制設定黑色字體
+                for row in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row, column=compare_file_col)
+                    
+                    # 強制設定為黑色字體
+                    cell.font = black_font
+                    cell.hyperlink = None
+                    cell.style = 'Normal'
                 
-                # 強制設定為黑色字體
-                cell.font = black_font
-                cell.hyperlink = None
-                cell.style = 'Normal'
-            
-            self.logger.info(f"✅ 最終確認：'比較檔案'欄位({col_letter})已設定為黑色字體")
+                self.logger.info(f"✅ 最終確認：'比較檔案'欄位({col_letter})已設定為黑色字體（僅限本地比較）")
+            else:
+                # 🔥 Gerrit 比較模式：不改變現有樣式
+                self.logger.info(f"✅ 最終確認：'比較檔案'欄位({col_letter})保持 Gerrit 超連結樣式")
             
         except Exception as e:
             self.logger.error(f"最終確認失敗: {str(e)}")
@@ -3028,24 +3046,34 @@ class ManifestComparator:
         except Exception as e:
             self.logger.warning(f"清除現有條件格式失敗: {str(e)}")
             
-    def _protect_compare_file_column(self, worksheet, compare_file_col: int):
-        """預先保護"比較檔案"欄位，設定為黑色字體"""
+    def _protect_compare_file_column(self, worksheet, compare_file_col: int, is_local_comparison: bool = None):
+        """根據比較模式保護"比較檔案"欄位"""
         try:
             from openpyxl.styles import Font
             from openpyxl.utils import get_column_letter
             
+            # 🔥 如果沒有傳入參數，使用類別變數
+            if is_local_comparison is None:
+                is_local_comparison = getattr(self, '_current_is_local_comparison', False)
+            
             col_letter = get_column_letter(compare_file_col)
-            black_font = Font(color="000000", bold=False, underline=None)
             
-            self.logger.info(f"🛡️ 預先保護 '比較檔案' 欄位 ({col_letter} 欄)")
-            
-            for row in range(2, worksheet.max_row + 1):
-                cell = worksheet.cell(row=row, column=compare_file_col)
-                cell.font = black_font
-                cell.hyperlink = None  # 移除超連結
-                cell.style = 'Normal'  # 重設為一般樣式
-            
-            self.logger.info("✅ '比較檔案' 欄位已預先設定為黑色字體")
+            if is_local_comparison:
+                # 🔥 只有本地比較模式才設定黑色字體
+                black_font = Font(color="000000", bold=False, underline=None)
+                
+                self.logger.info(f"🛡️ 預先保護 '比較檔案' 欄位 ({col_letter} 欄) - 本地比較模式")
+                
+                for row in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row, column=compare_file_col)
+                    cell.font = black_font
+                    cell.hyperlink = None  # 移除超連結
+                    cell.style = 'Normal'  # 重設為一般樣式
+                
+                self.logger.info("✅ '比較檔案' 欄位已預先設定為黑色字體（僅限本地比較）")
+            else:
+                # 🔥 Gerrit 比較模式：保持原有超連結樣式
+                self.logger.info(f"🛡️ '比較檔案' 欄位 ({col_letter} 欄) - Gerrit比較模式，保持超連結樣式")
             
         except Exception as e:
             self.logger.error(f"保護比較檔案欄位失敗: {str(e)}")
