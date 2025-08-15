@@ -889,6 +889,7 @@ class FeatureThree:
         """
         master → premp 轉換規則 - 與 test_manifest_conversion.py 完全同步
         修改：確保與測試模組使用完全相同的轉換邏輯
+        新增：支援 vX.X.X 版本格式的特殊轉換
         
         Args:
             revision: 原始 revision
@@ -941,6 +942,16 @@ class FeatureThree:
         
         # 🆕 模式匹配轉換規則（使用正則表達式）- 與測試模組完全同步
         import re
+        
+        # 🔥 新增規則：vX.X.X 版本轉換 - 保留版本號
+        # 規則 0: realtek/vX.X.X/master → realtek/vX.X.X/premp.google-refplus
+        pattern_version = r'realtek/(v\d+\.\d+(?:\.\d+)?)/master$'
+        match_version = re.match(pattern_version, original_revision)
+        if match_version:
+            version = match_version.group(1)
+            result = f'realtek/{version}/premp.google-refplus'
+            self.logger.debug(f"版本格式轉換: {original_revision} → {result}")
+            return result
         
         # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
         pattern1 = r'realtek/android-(\d+)/mp\.google-refplus\.upgrade-(\d+)\.(rtd\w+)'
@@ -1030,13 +1041,6 @@ class FeatureThree:
                 result = f'realtek/android-14/premp.google-refplus.{rtd_model}'
                 self.logger.debug(f"晶片轉換: {original_revision} → {result}")
                 return result
-        
-        # 規則 10: v3.16 版本轉換
-        pattern10 = r'realtek/v3\.16/mp\.google-refplus$'
-        if re.match(pattern10, original_revision):
-            result = 'realtek/v3.16/premp.google-refplus'
-            self.logger.debug(f"v3.16轉換: {original_revision} → {result}")
-            return result
         
         # 🆕 如果沒有匹配的規則，根據關鍵字進行智能轉換
         smart_result = self._smart_conversion_fallback(original_revision)
@@ -1610,9 +1614,10 @@ class FeatureThree:
             # 使用 composite key 取得目標專案
             target_proj = target_index[conv_composite_key]
             
-            # 修正比較邏輯：忽略屬性順序，只比較實際值
-            is_identical = self._compare_project_attributes_ignore_order(conv_proj, target_proj, use_converted_revision=True)
-            
+            # 🔥 修正比較邏輯：取得詳細差異
+            diff_details = self._get_detailed_differences_between_projects(conv_proj, target_proj, use_converted_revision=True)
+            is_identical = len(diff_details) == 0
+
             # 判斷比較狀態並計數
             if is_identical:
                 comparison_status = '✔️ 相同'
@@ -1621,7 +1626,8 @@ class FeatureThree:
                 same_count += 1
             else:
                 comparison_status = '❌ 不同'
-                comparison_result = '轉換後與 Gerrit 有差異'
+                # 🔥 使用詳細的差異摘要
+                comparison_result = self._format_difference_summary(diff_details)
                 status_color = 'red'
                 different_count += 1
             
@@ -1707,6 +1713,101 @@ class FeatureThree:
         
         return differences
     
+    def _get_detailed_differences_between_projects(self, source_proj: Dict, target_proj: Dict, use_converted_revision: bool = True) -> List[Dict]:
+        """
+        取得兩個專案之間的詳細差異列表
+        
+        Args:
+            source_proj: 來源專案資訊
+            target_proj: 目標專案資訊
+            use_converted_revision: 是否使用轉換後的 revision
+            
+        Returns:
+            差異詳情列表
+        """
+        differences = []
+        
+        try:
+            # 要比較的屬性列表
+            attrs_to_compare = ['name', 'path', 'revision', 'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote']
+            
+            # 逐一比較每個屬性
+            for attr in attrs_to_compare:
+                if attr == 'revision' and use_converted_revision:
+                    source_val = source_proj.get('converted_revision', '').strip()
+                else:
+                    source_val = source_proj.get(attr, '').strip()
+                
+                target_val = target_proj.get(attr, '').strip()
+                
+                # 如果不同，記錄差異
+                if source_val != target_val:
+                    diff_info = {
+                        'attribute': attr,
+                        'source_value': source_val,
+                        'target_value': target_val
+                    }
+                    differences.append(diff_info)
+            
+            return differences
+            
+        except Exception as e:
+            self.logger.error(f"取得專案間詳細差異失敗: {str(e)}")
+            return []
+
+    def _format_difference_summary(self, diff_details: List[Dict]) -> str:
+        """
+        格式化差異摘要（與 manifest_conversion.py 完全相同的邏輯）
+        
+        Args:
+            diff_details: 差異詳情列表
+            
+        Returns:
+            格式化的差異摘要字串
+        """
+        try:
+            if not diff_details:
+                return "無差異"
+            
+            # 按屬性重要性排序
+            attr_priority = {'revision': 1, 'name': 2, 'path': 3, 'upstream': 4, 'dest-branch': 5, 
+                            'groups': 6, 'clone-depth': 7, 'remote': 8}
+            
+            diff_details.sort(key=lambda x: attr_priority.get(x['attribute'], 99))
+            
+            # 格式化差異說明
+            diff_parts = []
+            for diff in diff_details[:3]:  # 最多顯示前3個差異
+                attr = diff['attribute']
+                source_val = diff['source_value'] or '(空)'
+                target_val = diff['target_value'] or '(空)'
+                
+                # 特殊處理不同屬性的顯示
+                if attr == 'revision':
+                    diff_parts.append(f"版本號[{source_val} ≠ {target_val}]")
+                elif attr == 'upstream':
+                    diff_parts.append(f"上游分支[{source_val} ≠ {target_val}]")
+                elif attr == 'dest-branch':
+                    diff_parts.append(f"目標分支[{source_val} ≠ {target_val}]")
+                elif attr == 'groups':
+                    diff_parts.append(f"群組[{source_val} ≠ {target_val}]")
+                elif attr == 'clone-depth':
+                    diff_parts.append(f"克隆深度[{source_val} ≠ {target_val}]")
+                elif attr == 'remote':
+                    diff_parts.append(f"遠端[{source_val} ≠ {target_val}]")
+                else:
+                    diff_parts.append(f"{attr}[{source_val} ≠ {target_val}]")
+            
+            # 如果差異超過3個，加上省略號
+            if len(diff_details) > 3:
+                diff_parts.append(f"等{len(diff_details)}項差異")
+            
+            return "、".join(diff_parts)
+            
+        except Exception as e:
+            self.logger.error(f"格式化差異摘要失敗: {str(e)}")
+            return "差異格式化失敗"
+            
     def _compare_project_attributes_ignore_order(self, conv_proj: Dict, target_proj: Dict, use_converted_revision: bool = False) -> bool:
         """比較專案屬性，忽略順序差異 - 完全修正版本"""
         try:
