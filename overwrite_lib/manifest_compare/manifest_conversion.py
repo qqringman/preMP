@@ -2311,7 +2311,7 @@ class ManifestComparator:
                     elif 'revision' in header_value.lower():
                         worksheet.column_dimensions[col_letter].width = 35
 
-                elif sheet_name == "比較專案內容差異明細":
+                elif sheet_name in ["轉換後與 Gerrit manifest 的差異", "比較專案內容差異明細"]:
                     if 'content' in header_value or ('compare_content' in header_value or 'gerrit_content' in header_value):
                         worksheet.column_dimensions[col_letter].width = 80
                     elif 'revision' in header_value.lower():
@@ -2361,41 +2361,18 @@ class ManifestComparator:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
         
     def _set_comparison_row_colors(self, worksheet, status_col_num: int, header_value: str):
-        """設定比較狀態的行顏色（修正版：更新顏色配置）"""
+        """設定比較狀態的行顏色（保持原方法，增加除錯）"""
         try:
-            from openpyxl.styles import PatternFill
+            # 🔥 增加除錯資訊
+            self.logger.debug(f"_set_comparison_row_colors 被調用: col={status_col_num}, header='{header_value}'")
             
             # 找到比較狀態欄位
             if header_value != 'comparison_status':
                 return
             
-            # 🔥 更新狀態顏色配置
-            status_colors = {
-                '✔️ 相同': PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid"),      # 淺綠底
-                '❌ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),      # 淺紅底
-                '➕ 新增': PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid"),      # 淺藍底
-                '❓ 無此專案': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid"),  # 淺橘底
+            self.logger.info(f"🎨 找到 comparison_status 欄位，開始設定行顏色")
+            self._apply_comparison_row_colors(worksheet, status_col_num)
                 
-                # 🔥 保留舊的狀態以防萬一
-                '⚠️ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),     # 淺紅底
-                '🗑️ 刪除': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid")      # 淺橘底
-            }
-            
-            # 設定每一行的背景色
-            for row_num in range(2, worksheet.max_row + 1):
-                status_cell = worksheet.cell(row=row_num, column=status_col_num)
-                status_value = str(status_cell.value) if status_cell.value else ''
-                
-                # 根據狀態設定整行背景色
-                for status, fill_color in status_colors.items():
-                    if status in status_value:
-                        # 設定整行的背景色
-                        for col in range(1, worksheet.max_column + 1):
-                            worksheet.cell(row=row_num, column=col).fill = fill_color
-                        break
-            
-            self.logger.info("✅ 已設定比較專案內容差異明細的行顏色")
-            
         except Exception as e:
             self.logger.error(f"設定比較狀態行顏色失敗: {str(e)}")
 
@@ -3074,7 +3051,7 @@ class ManifestComparator:
             self.logger.error(f"保護比較檔案欄位失敗: {str(e)}")
             
     def _fix_difference_sheet(self, workbook, is_local_comparison: bool, source_filename: str, target_filename: str):
-        """修正差異頁籤 - 處理本地比較的欄位名稱"""
+        """修正差異頁籤 - 處理本地比較的欄位名稱（增加顏色重新設定）"""
         try:
             from openpyxl.styles import PatternFill, Font
             
@@ -3086,10 +3063,17 @@ class ManifestComparator:
                 ws = workbook['轉換後與 Gerrit manifest 的差異']
                 ws.title = '比較專案內容差異明細'
                 
+                # 記錄 comparison_status 欄位位置（重新設定顏色用）
+                comparison_status_col = None
+                
                 # 🔥 修正：處理本地比較模式的欄位名稱和顏色
                 for col in range(1, ws.max_column + 1):
                     header_value = str(ws.cell(row=1, column=col).value) if ws.cell(row=1, column=col).value else ''
                     header_cell = ws.cell(row=1, column=col)
+                    
+                    # 🔥 記錄 comparison_status 欄位位置
+                    if header_value == 'comparison_status':
+                        comparison_status_col = col
                     
                     if header_value == 'source_file':
                         # 設定表頭為紫底白字
@@ -3143,14 +3127,89 @@ class ManifestComparator:
                             header_cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")  # 藍色
                         
                         header_cell.font = white_font
-                    
-                    elif header_value == 'comparison_result':
-                        # 🔥 修正 comparison_result 內容的自動替換已在生成時處理
-                        pass
-            
+                
+                # 🔥 新增：重新設定行背景色
+                if comparison_status_col:
+                    self.logger.info(f"🎨 重新設定比較專案內容差異明細的行背景色（第 {comparison_status_col} 欄）")
+                    self._apply_comparison_row_colors(ws, comparison_status_col)
+                else:
+                    self.logger.warning("⚠️ 找不到 comparison_status 欄位，無法設定行背景色")
+        
         except Exception as e:
             self.logger.error(f"修正差異頁籤失敗: {str(e)}")
 
+    def _apply_comparison_row_colors(self, worksheet, status_col: int):
+        """套用比較狀態的行背景色（獨立方法）"""
+        try:
+            from openpyxl.styles import PatternFill
+            
+            self.logger.info(f"🎨 開始設定行背景色，comparison_status 在第 {status_col} 欄")
+            
+            # 🔥 狀態顏色配置
+            status_colors = {
+                '✔️ 相同': PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid"),      # 淺綠底
+                '❌ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),      # 淺紅底
+                '➕ 新增': PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid"),      # 淺藍底
+                '❓ 無此專案': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid"),  # 淺橘底
+                
+                # 🔥 保留舊的狀態以防萬一
+                '⚠️ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),     # 淺紅底
+                '🗑️ 刪除': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid")      # 淺橘底
+            }
+            
+            # 統計各種狀態的數量
+            status_counts = {}
+            applied_count = 0
+            
+            # 設定每一行的背景色
+            for row_num in range(2, worksheet.max_row + 1):
+                status_cell = worksheet.cell(row=row_num, column=status_col)
+                status_value = str(status_cell.value) if status_cell.value else ''
+                
+                # 統計狀態數量
+                status_counts[status_value] = status_counts.get(status_value, 0) + 1
+                
+                # 根據狀態設定整行背景色
+                color_applied = False
+                for status_pattern, fill_color in status_colors.items():
+                    if status_pattern in status_value:
+                        # 設定整行的背景色
+                        for col in range(1, worksheet.max_column + 1):
+                            worksheet.cell(row=row_num, column=col).fill = fill_color
+                        applied_count += 1
+                        color_applied = True
+                        break
+                
+                # 🔥 除錯：記錄前5行的狀態
+                if row_num <= 6:
+                    color_info = "✅ 已套用" if color_applied else "❌ 未套用"
+                    self.logger.debug(f"第 {row_num} 行: '{status_value}' -> {color_info}")
+            
+            # 🔥 統計報告
+            total_rows = worksheet.max_row - 1
+            self.logger.info(f"📊 行背景色設定完成:")
+            self.logger.info(f"   總資料行數: {total_rows}")
+            self.logger.info(f"   已套用顏色: {applied_count}")
+            self.logger.info(f"   套用率: {applied_count/total_rows*100:.1f}%" if total_rows > 0 else "N/A")
+            
+            self.logger.info("📈 狀態統計:")
+            for status, count in status_counts.items():
+                color_info = "有顏色" if any(s in status for s in status_colors.keys()) else "無顏色"
+                self.logger.info(f"   '{status}': {count} 個 ({color_info})")
+            
+            if applied_count == 0 and total_rows > 0:
+                self.logger.warning("⚠️ 沒有任何行套用到背景色，請檢查狀態值格式")
+                # 顯示實際的狀態值以便除錯
+                sample_statuses = []
+                for row in range(2, min(6, worksheet.max_row + 1)):
+                    status = str(worksheet.cell(row=row, column=status_col).value) if worksheet.cell(row=row, column=status_col).value else ''
+                    if status:
+                        sample_statuses.append(f"'{status}'")
+                self.logger.info(f"實際狀態值範例: {', '.join(sample_statuses)}")
+            
+        except Exception as e:
+            self.logger.error(f"套用比較狀態行顏色失敗: {str(e)}")
+            
     def _fix_manifest_sheets(self, workbook, is_local_comparison: bool, source_filename: str, 
                         target_filename: str, target_file_path: Optional[str]):
         """修正 manifest 相關頁籤 - 確保 gerrit 上的 manifest 使用原始檔案名稱"""
