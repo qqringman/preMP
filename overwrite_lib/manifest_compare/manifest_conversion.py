@@ -540,7 +540,7 @@ class ManifestComparator:
                 self.logger.info(f"  🔄 實際轉換專案: {converted_projects}")
                 self.logger.info(f"  ⭕ 未轉換專案: {unchanged_projects}")
                 self.logger.info(f"  ❌ 轉換後有差異: {len(differences)}")
-                self.logger.info(f"  ✅ 轉換後相同: {max(0, converted_projects - len(differences))}")
+                self.logger.info(f"  ✔️ 轉換後相同: {max(0, converted_projects - len(differences))}")
                 if converted_projects > 0:
                     match_rate = max(0, converted_projects - len(differences)) / converted_projects * 100
                     self.logger.info(f"  📊 轉換匹配率: {match_rate:.1f}%")
@@ -773,7 +773,7 @@ class ManifestComparator:
                     'gerrit_clone-depth': 'N/A',
                     'gerrit_remote': 'N/A',
                     'gerrit_source_link': 'N/A',
-                    'comparison_status': '🆕 新增',
+                    'comparison_status': '➕ 新增',
                     'comparison_result': comparison_result,
                     'status_color': 'yellow'
                 }
@@ -819,7 +819,7 @@ class ManifestComparator:
             # 🔥 修正：不論相同或不同，都要加入到 differences 陣列中
             if is_identical:
                 identical_count += 1
-                comparison_status = '✅ 相同'
+                comparison_status = '✔️ 相同'
                 comparison_result = '兩檔案中此專案的所有屬性完全一致'
                 status_color = 'green'
             else:
@@ -907,7 +907,7 @@ class ManifestComparator:
                     'gerrit_clone-depth': target_proj['clone-depth'],
                     'gerrit_remote': target_proj['remote'],
                     'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
-                    'comparison_status': '🔍 無此專案',  # 🔥 修改狀態圖示和文字
+                    'comparison_status': '❓ 無此專案',  # 🔥 修改狀態圖示和文字
                     'comparison_result': comparison_result,
                     'status_color': 'orange'
                 }
@@ -1736,7 +1736,7 @@ class ManifestComparator:
                     '⭕ 未轉換專案數': diff_analysis['summary'].get('unchanged_count', 0),
                     '🎯 目標檔案專案數': diff_analysis['summary'].get('target_count', 0),
                     '❌ 轉換後有差異數': diff_analysis['summary'].get('differences_count', 0),
-                    '✅ 轉換後相同數': diff_analysis['summary'].get('identical_converted_count', 0),
+                    '✔️ 轉換後相同數': diff_analysis['summary'].get('identical_converted_count', 0),
                     '📈 轉換匹配率': diff_analysis['summary'].get('conversion_match_rate', 'N/A')
                 }]
 
@@ -1762,63 +1762,34 @@ class ManifestComparator:
                 worksheet_summary = writer.sheets['轉換摘要']
                 self._add_summary_hyperlinks(worksheet_summary, overwrite_type)
                 
-                # 🔥 頁籤 2: 轉換後專案 - 針對本地比較移除比較狀態欄位
+                # 🔥 頁籤 2: 轉換後專案 - 移除所有比較狀態欄位
                 if diff_analysis['converted_projects']:
                     converted_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
                         has_conversion = proj.get('changed', False)
                         if has_conversion:
-                            if is_local_comparison:
-                                # 🔥 本地比較：不顯示轉換狀態，改為更直接的描述
-                                status_description = f"來源檔案: {proj['original_revision']} → 目標檔案: {proj['converted_revision']}"
-                            else:
-                                # Gerrit 比較：保持原有邏輯
-                                conversion_status = '🔄 已轉換'
-                                status_description = f"來源檔案: {proj['original_revision']} → 目標檔案: {proj['converted_revision']}"
+                            # 🔥 統一：不論哪種比較模式都不顯示轉換狀態
+                            status_description = f"來源檔案: {proj['original_revision']} → 目標檔案: {proj['converted_revision']}"
                         else:
-                            if is_local_comparison:
-                                # 🔥 本地比較：版本相同描述
-                                status_description = f"兩檔案版本相同: {proj['original_revision']}"
-                            else:
-                                # Gerrit 比較：保持原有邏輯
-                                conversion_status = '⭕ 未轉換'
-                                status_description = f"兩檔案版本相同: {proj['original_revision']}"
+                            # 🔥 統一：版本相同描述
+                            status_description = f"兩檔案版本相同: {proj['original_revision']}"
                         
-                        # 🔥 根據比較模式決定欄位結構
-                        if is_local_comparison:
-                            # 本地比較：移除比較狀態欄位
-                            row_data = {
-                                'SN': i,
-                                '專案名稱': proj['name'],
-                                '專案路徑': proj['path'],
-                                # 🔥 移除：'轉換狀態': conversion_status,
-                                '原始 Revision': proj['original_revision'],
-                                '轉換後 Revision': proj['converted_revision'],
-                                'Revision 是否相等': '',
-                                '轉換說明': status_description,
-                                'Upstream': proj['upstream'],
-                                'Dest-Branch': proj['dest-branch'],
-                                'Groups': proj['groups'],
-                                'Clone-Depth': proj['clone-depth'],
-                                'Remote': proj['remote']
-                            }
-                        else:
-                            # Gerrit 比較：保持完整欄位
-                            row_data = {
-                                'SN': i,
-                                '專案名稱': proj['name'],
-                                '專案路徑': proj['path'],
-                                '轉換狀態': conversion_status,  # 🔥 保留這個欄位
-                                '原始 Revision': proj['original_revision'],
-                                '轉換後 Revision': proj['converted_revision'],
-                                'Revision 是否相等': '',
-                                '轉換說明': status_description,
-                                'Upstream': proj['upstream'],
-                                'Dest-Branch': proj['dest-branch'],
-                                'Groups': proj['groups'],
-                                'Clone-Depth': proj['clone-depth'],
-                                'Remote': proj['remote']
-                            }
+                        # 🔥 統一的欄位結構：移除所有 "轉換狀態" 欄位
+                        row_data = {
+                            'SN': i,
+                            '專案名稱': proj['name'],
+                            '專案路徑': proj['path'],
+                            # 🔥 移除：'轉換狀態': conversion_status,  # 完全移除這個欄位
+                            '原始 Revision': proj['original_revision'],
+                            '轉換後 Revision': proj['converted_revision'],
+                            'Revision 是否相等': '',
+                            '轉換說明': status_description,
+                            'Upstream': proj['upstream'],
+                            'Dest-Branch': proj['dest-branch'],
+                            'Groups': proj['groups'],
+                            'Clone-Depth': proj['clone-depth'],
+                            'Remote': proj['remote']
+                        }
                         
                         converted_data.append(row_data)
                     
@@ -2233,7 +2204,7 @@ class ManifestComparator:
             self.logger.error(f"設定原因欄位紅字格式失敗: {str(e)}")
 
     def _format_worksheet_with_background_colors(self, worksheet, sheet_name: str, is_local_comparison: bool = False):
-        """格式化工作表（修正版：針對本地比較模式調整轉換狀態欄位處理）"""
+        """格式化工作表（修正版：為比較說明欄位設定橘底白字）"""
         try:
             from openpyxl.styles import PatternFill, Font, Alignment
             from openpyxl.utils import get_column_letter
@@ -2263,7 +2234,12 @@ class ManifestComparator:
             green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
             purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "比較檔案", "實際比較的目標檔案", "source_file"]
             
-            # 🔥 檢查是否為本地比較模式（通過檢查是否有 compare_ 欄位）
+            # 🔥 新增：特定頁籤的橘色欄位
+            if sheet_name == "與現行版本比較差異":
+                orange_header_fields.append("比較說明")
+                orange_header_fields.append("轉換說明")  # 以防萬一有其他名稱
+            
+            # 檢查是否為本地比較模式（通過檢查是否有 compare_ 欄位）
             has_compare_fields = any(str(cell.value).startswith('compare_') for cell in worksheet[1] if cell.value)
             
             # 設定表頭和欄寬
@@ -2271,18 +2247,16 @@ class ManifestComparator:
                 col_letter = get_column_letter(col_num)
                 header_value = str(cell.value) if cell.value else ''
                 
-                # 🔥 只針對本地比較模式（有 compare_ 欄位）處理特殊顏色
+                # 處理 compare_ 欄位（本地比較模式）
                 if has_compare_fields and header_value.startswith('compare_'):
-                    # 🔥 修正：compare_ 欄位顏色設定
                     if header_value == 'compare_revision':
                         cell.fill = red_fill  # 版本號：紅色
                     elif header_value == 'compare_source_file':
                         cell.fill = purple_fill  # 檔案名稱：紫色
                     else:
-                        # 🔥 修正：其他 compare_ 欄位改為綠底白字
-                        cell.fill = green_fill  # 綠底白字
+                        cell.fill = green_fill  # 其他 compare_ 欄位：綠色
                     cell.font = white_font
-                # 處理 gerrit_ 開頭的欄位（適用於 [1]-[4] Gerrit 比較）
+                # 處理 gerrit_ 開頭的欄位（Gerrit 比較）
                 elif header_value.startswith('gerrit_') and header_value not in green_header_fields:
                     if header_value == 'gerrit_revision':
                         cell.fill = red_fill  # 版本號：紅色
@@ -2291,14 +2265,17 @@ class ManifestComparator:
                     else:
                         cell.fill = green_fill  # 其他 gerrit_ 欄位：綠色
                     cell.font = white_font
-                # 🔥 修正："original_revision" 顏色要跟 "compare_revision" 一樣（紅色）
+                # "original_revision" 顏色設定
                 elif header_value == 'original_revision':
                     cell.fill = red_fill  # 紅色
                     cell.font = white_font
-                # 根據欄位名稱設定特殊顏色
+                # 🔥 橘色欄位設定（包含新增的比較說明）
                 elif header_value in orange_header_fields:
                     cell.fill = orange_fill
                     cell.font = white_font
+                    # 🔥 記錄橘色欄位設定
+                    if header_value in ["比較說明", "轉換說明"]:
+                        self.logger.debug(f"✅ 設定橘底白字: {header_value} (欄位 {col_letter})")
                 elif header_value in green_header_fields:
                     cell.fill = green_fill
                     cell.font = white_font
@@ -2326,6 +2303,11 @@ class ManifestComparator:
                         cell.fill = red_fill
                         cell.font = white_font
                         worksheet.column_dimensions[col_letter].width = 15
+                    # 🔥 新增：比較說明欄位的特殊處理
+                    elif header_value in ["比較說明", "轉換說明"]:
+                        cell.fill = orange_fill  # 確保橘底
+                        cell.font = white_font   # 確保白字
+                        worksheet.column_dimensions[col_letter].width = 50  # 設定較寬的欄寬
                     elif 'revision' in header_value.lower():
                         worksheet.column_dimensions[col_letter].width = 35
 
@@ -2373,17 +2355,13 @@ class ManifestComparator:
                     elif '路徑' in header_value or 'path' in header_value:
                         worksheet.column_dimensions[col_letter].width = 30
             
-            # 🔥 修正：只有非本地比較模式才設定轉換狀態顏色
-            if sheet_name in ["轉換後專案", "與現行版本比較差異"] and not is_local_comparison:
-                self._set_conversion_status_colors_v2(worksheet)
-            
             self.logger.debug(f"已格式化工作表: {sheet_name}")
             
         except Exception as e:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
         
     def _set_comparison_row_colors(self, worksheet, status_col_num: int, header_value: str):
-        """設定比較狀態的行顏色（從 feature_three.py 複製）"""
+        """設定比較狀態的行顏色（修正版：更新顏色配置）"""
         try:
             from openpyxl.styles import PatternFill
             
@@ -2391,13 +2369,16 @@ class ManifestComparator:
             if header_value != 'comparison_status':
                 return
             
-            # 定義狀態顏色
+            # 🔥 更新狀態顏色配置
             status_colors = {
-                '✅ 相同': PatternFill(start_color="D4FFCD", end_color="D4FFCD", fill_type="solid"),
-                '❌ 不同': PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid"),
-                '🆕 新增': PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
-                '🔍 無此專案': PatternFill(start_color="FFDAB9", end_color="FFDAB9", fill_type="solid"),  # 🔥 新增
-                '🗑️ 刪除': PatternFill(start_color="FFDAB9", end_color="FFDAB9", fill_type="solid")  # 保留舊的以防萬一
+                '✔️ 相同': PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid"),      # 淺綠底
+                '❌ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),      # 淺紅底
+                '➕ 新增': PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid"),      # 淺藍底
+                '❓ 無此專案': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid"),  # 淺橘底
+                
+                # 🔥 保留舊的狀態以防萬一
+                '⚠️ 不同': PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid"),     # 淺紅底
+                '🗑️ 刪除': PatternFill(start_color="FFE8CC", end_color="FFE8CC", fill_type="solid")      # 淺橘底
             }
             
             # 設定每一行的背景色
@@ -2408,9 +2389,12 @@ class ManifestComparator:
                 # 根據狀態設定整行背景色
                 for status, fill_color in status_colors.items():
                     if status in status_value:
+                        # 設定整行的背景色
                         for col in range(1, worksheet.max_column + 1):
                             worksheet.cell(row=row_num, column=col).fill = fill_color
                         break
+            
+            self.logger.info("✅ 已設定比較專案內容差異明細的行顏色")
             
         except Exception as e:
             self.logger.error(f"設定比較狀態行顏色失敗: {str(e)}")
@@ -2558,8 +2542,8 @@ class ManifestComparator:
                 'SN', '比較類型', '來源檔案名稱', '目標檔案類型',
                 '目標檔案下載狀態', '目標檔案包含 include 標籤', '目標檔案已展開',
                 '實際比較的目標檔案', '📊 總專案數', '🎯 目標檔案專案數',
-                '❌ 與現行版本版號差異數', '✅ 與現行版本版號相同數',
-                '❌ 比較現行版本內容差異數', '✅ 比較現行版本內容相同數'
+                '❌ 與現行版本版號差異數', '✔️ 與現行版本版號相同數',
+                '❌ 比較現行版本內容差異數', '✔️ 比較現行版本內容相同數'
             ]
             
             # 寫入表頭並設定顏色
@@ -2571,9 +2555,9 @@ class ManifestComparator:
                 # 根據欄位設定顏色
                 if header in ['來源檔案名稱', '實際比較的目標檔案']:
                     cell.fill = purple_fill
-                elif header in ['❌ 與現行版本版號差異數', '✅ 與現行版本版號相同數']:
+                elif header in ['❌ 與現行版本版號差異數', '✔️ 與現行版本版號相同數']:
                     cell.fill = orange_fill
-                elif header in ['❌ 比較現行版本內容差異數', '✅ 比較現行版本內容相同數']:
+                elif header in ['❌ 比較現行版本內容差異數', '✔️ 比較現行版本內容相同數']:
                     cell.fill = green_fill
                 else:
                     cell.fill = blue_fill
@@ -2744,14 +2728,6 @@ class ManifestComparator:
                         ws.cell(row=1, column=col).value = '來源 Revision'
                     elif header_value in ['轉換後 Revision', '目標 Revision']:
                         ws.cell(row=1, column=col).value = '目標 Revision'
-                    elif header_value in ['轉換狀態', '比較狀態']:
-                        # 🔥 重要：只有非本地比較模式才保留此欄位
-                        if is_local_comparison:
-                            # 本地比較模式：理論上這個欄位應該已經在生成時移除了
-                            # 但如果還存在，我們保持不變，因為可能是舊邏輯的遺留
-                            ws.cell(row=1, column=col).value = '比較狀態'
-                        else:
-                            ws.cell(row=1, column=col).value = '比較狀態'
                     elif header_value in ['轉換說明', '比較說明']:
                         ws.cell(row=1, column=col).value = '比較說明'
                 
@@ -3356,10 +3332,10 @@ class ManifestComparator:
                 for diff in differences:
                     comparison_status = diff.get('comparison_status', '')
                     
-                    if '✅ 相同' in comparison_status:
+                    if '✔️ 相同' in comparison_status:
                         content_same_count += 1
                     else:
-                        # 所有不是 "✅ 相同" 的都算差異
+                        # 所有不是 "✔️ 相同" 的都算差異
                         content_diff_count += 1
                 
                 # 統計 2：版號差異統計（根據比較類型使用不同邏輯）
@@ -3400,9 +3376,9 @@ class ManifestComparator:
                     '📊 總專案數': summary.get('converted_count', 0),
                     '🎯 目標檔案專案數': summary.get('target_count', 0),
                     '❌ 與現行版本版號差異數': revision_diff_count,
-                    '✅ 與現行版本版號相同數': revision_same_count,
+                    '✔️ 與現行版本版號相同數': revision_same_count,
                     '❌ 比較現行版本內容差異數': content_diff_count,
-                    '✅ 比較現行版本內容相同數': content_same_count
+                    '✔️ 比較現行版本內容相同數': content_same_count
                 }
                 
                 for col in range(1, ws.max_column + 1):
