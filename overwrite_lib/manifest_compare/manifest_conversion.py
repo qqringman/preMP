@@ -706,12 +706,12 @@ class ManifestComparator:
 
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                     target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異（完整版：包含所有邏輯和原始行內容）"""
+        """使用轉換資訊比較專案差異（完整版：確保所有content欄位使用原始資料）"""
         differences = []
         
         # 🔥 判斷比較模式
         is_local_comparison = (overwrite_type == "local_vs_local")
-        is_gerrit_comparison = overwrite_type.startswith("local_vs_") and overwrite_type != "local_vs_local"  # [1]-[4]
+        is_gerrit_comparison = overwrite_type.startswith("local_vs_") and overwrite_type != "local_vs_local"
         
         # 建立目標專案的索引
         target_index = {}
@@ -721,7 +721,7 @@ class ManifestComparator:
             composite_key = f"{name}|{path}"
             target_index[composite_key] = proj
         
-        # 取得正確的檔案名稱
+        # 獲得正確的檔案名稱
         source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
         # 🔥 新增：統計計數器
@@ -780,7 +780,7 @@ class ManifestComparator:
                 differences.append(difference)
                 continue
             
-            # 🔥 修正：使用 composite key 取得目標專案，確保資料來源正確
+            # 🔥 修正：使用 composite key 獲得目標專案，確保資料來源正確
             target_proj = target_index[conv_composite_key]
             
             # 🔥 修正：針對不同比較模式使用正確的比較邏輯
@@ -830,11 +830,20 @@ class ManifestComparator:
                 comparison_result = f'屬性差異：{diff_summary}'
                 status_color = 'red'
             
-            # 🔥 修正：確保資料欄位使用正確的來源
+            # 🔥 關鍵修正：確保content欄位使用正確的原始資料來源
+            if is_local_comparison:
+                # 本地比較模式：content使用來源檔案，gerrit_content使用目標檔案
+                content_value = conv_proj.get('source_full_line', '')
+                gerrit_content_value = conv_proj.get('target_full_line', target_proj.get('full_line', ''))
+            else:
+                # Gerrit比較模式：content使用本地檔案，gerrit_content使用Gerrit檔案
+                content_value = conv_proj.get('source_full_line', '')
+                gerrit_content_value = target_proj.get('full_line', '')
+            
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'content': conv_proj.get('source_full_line', ''),  # 🔥 使用來源檔案原始行內容
+                'content': content_value,  # 🔥 確保使用正確的原始資料
                 'name': conv_proj['name'],
                 'path': conv_proj['path'],
                 'revision': conv_proj['converted_revision'],
@@ -846,7 +855,7 @@ class ManifestComparator:
                 'remote': conv_proj.get('_source_remote', conv_proj['remote']) if is_local_comparison else conv_proj['remote'],
                 'source_link': self._generate_source_link(conv_proj['name'], conv_proj['original_revision'], conv_proj.get('_source_remote', conv_proj['remote']) if is_local_comparison else conv_proj['remote']),
                 'gerrit_source_file': gerrit_source_file,
-                'gerrit_content': target_proj['full_line'],
+                'gerrit_content': gerrit_content_value,  # 🔥 確保使用正確的原始資料
                 'gerrit_name': target_proj['name'],
                 'gerrit_path': target_proj['path'],
                 'gerrit_revision': target_proj['revision'],
@@ -888,7 +897,7 @@ class ManifestComparator:
                     'remote': 'N/A',
                     'source_link': 'N/A',
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': target_proj['full_line'],
+                    'gerrit_content': target_proj.get('full_line', ''),  # 🔥 使用目標檔案原始行內容
                     'gerrit_name': target_proj['name'],
                     'gerrit_path': target_proj['path'],
                     'gerrit_revision': target_proj['revision'],
@@ -1450,18 +1459,24 @@ class ManifestComparator:
             return []
 
     def _create_conversion_info_for_local_comparison(self, source_content: str, target_content: str) -> List[Dict]:
-        """為本地檔案比較創建正確的 conversion_info - 修正版：保存來源檔案原始行內容"""
+        """為本地檔案比較創建正確的 conversion_info - 修正版：完整保存原始行內容"""
         try:
             # 解析源檔案和目標檔案 XML
             source_root = ET.fromstring(source_content)
             target_root = ET.fromstring(target_content)
             
-            # 🔥 新增：解析來源檔案的原始行內容
+            # 🔥 改進：同時解析兩個檔案的原始行內容
             source_projects_with_lines = self._extract_projects_with_line_numbers(source_content)
             source_full_lines = {}
             for proj in source_projects_with_lines:
                 key = f"{proj['name']}|||{proj['path']}"
                 source_full_lines[key] = proj['full_line']
+            
+            target_projects_with_lines = self._extract_projects_with_line_numbers(target_content)
+            target_full_lines = {}
+            for proj in target_projects_with_lines:
+                key = f"{proj['name']}|||{proj['path']}"
+                target_full_lines[key] = proj['full_line']
             
             # 讀取源檔案 default 資訊
             source_default_remote = ''
@@ -1494,7 +1509,9 @@ class ManifestComparator:
                     'dest-branch': project.get('dest-branch', ''),
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
-                    'remote': project.get('remote', '') or target_default_remote
+                    'remote': project.get('remote', '') or target_default_remote,
+                    # 🔥 關鍵改進：保存目標檔案的原始行內容
+                    'full_line': target_full_lines.get(key, '')
                 }
             
             projects = []
@@ -1507,11 +1524,11 @@ class ManifestComparator:
                 original_revision = project.get('revision', '') or source_default_revision
                 upstream = project.get('upstream', '')
                 
-                # 🔥 取得來源檔案的原始行內容
+                # 🔥 獲得來源檔案的原始行內容
                 key = f"{project_name}|||{project_path}"
                 source_full_line = source_full_lines.get(key, '')
                 
-                # 🔥 修正：查找目標檔案中的對應專案，取得正確的 target 資料
+                # 🔥 修正：查找目標檔案中的對應專案，獲得正確的 target 資料
                 target_project = target_projects.get(key)
                 
                 if target_project:
@@ -1522,6 +1539,7 @@ class ManifestComparator:
                     target_groups = target_project['groups']
                     target_clone_depth = target_project['clone-depth']
                     target_remote = target_project['remote']
+                    target_full_line = target_project['full_line']  # 🔥 新增：目標檔案原始行內容
                     target_found = True
                 else:
                     # 專案在目標檔案中不存在
@@ -1531,6 +1549,7 @@ class ManifestComparator:
                     target_groups = 'N/A'
                     target_clone_depth = 'N/A'
                     target_remote = 'N/A'
+                    target_full_line = 'N/A (專案不存在)'  # 🔥 新增
                     target_found = False
                 
                 project_info = {
@@ -1545,7 +1564,7 @@ class ManifestComparator:
                     'clone-depth': target_clone_depth,             # 🔥 修正：目標檔案的 clone-depth
                     'remote': target_remote,                       # 🔥 修正：目標檔案的 remote
                     'original_remote': project.get('remote', ''), # 🔥 保留：來源檔案的 remote
-                    'changed': True,  # 標記為 changed，讓所有專案都參與比較
+                    'changed': True,  # 標記為參與比較
                     'used_default_revision': not project.get('revision'),
                     'used_upstream_for_conversion': False,
                     # 🔥 額外記錄：方便後續除錯
@@ -1557,13 +1576,14 @@ class ManifestComparator:
                     '_source_groups': project.get('groups', ''),
                     '_source_clone_depth': project.get('clone-depth', ''),
                     '_source_remote': project_remote,
-                    # 🔥 新增：保存來源檔案的原始行內容
-                    'source_full_line': source_full_line
+                    # 🔥 關鍵改進：保存兩個檔案的原始行內容
+                    'source_full_line': source_full_line,      # 來源檔案原始行
+                    'target_full_line': target_full_line       # 目標檔案原始行
                 }
                 
                 projects.append(project_info)
             
-            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（修正版本地比較模式 - 完整屬性+原始行內容）")
+            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（修正版本地比較模式 - 完整屬性+雙重原始行內容）")
             self.logger.info(f"目標檔案包含 {len(target_projects)} 個專案")
             
             # 🔥 修正版除錯輸出：檢查前幾個專案的所有屬性
@@ -1576,7 +1596,8 @@ class ManifestComparator:
                 self.logger.info(f"  來源 groups: {proj['_source_groups']}")
                 self.logger.info(f"  目標 groups: {proj['groups']}")
                 self.logger.info(f"  是否找到目標: {proj['_target_found']}")
-                self.logger.info(f"  原始行內容: {proj['source_full_line'][:100]}...")
+                self.logger.info(f"  來源原始行內容: {proj['source_full_line'][:100]}...")
+                self.logger.info(f"  目標原始行內容: {proj['target_full_line'][:100]}...")
             
             return projects
             
