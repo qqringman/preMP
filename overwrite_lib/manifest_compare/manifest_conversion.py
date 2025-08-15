@@ -2230,7 +2230,8 @@ class ManifestComparator:
             red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")
             orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")
             purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")
-            
+            link_blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")   # 連結藍色背景
+
             white_font = Font(color="FFFFFF", bold=True)
             blue_font = Font(color="0070C0", bold=True)
             gray_font = Font(color="808080", bold=True)
@@ -2239,7 +2240,8 @@ class ManifestComparator:
             orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL"]
             green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
             purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "比較檔案", "實際比較的目標檔案", "source_file"]
-            
+            link_blue_header_fields = ["source_link", "gerrit_source_link", "compare_source_link"]
+
             # 🔥 新增：特定頁籤的橘色欄位
             if sheet_name == "與現行版本比較差異":
                 orange_header_fields.append("比較說明")
@@ -2259,6 +2261,9 @@ class ManifestComparator:
                         cell.fill = red_fill  # 版本號：紅色
                     elif header_value == 'compare_source_file':
                         cell.fill = purple_fill  # 檔案名稱：紫色
+                    elif header_value == 'compare_source_link':  # 🔥 新增：特殊處理 compare_source_link
+                        cell.fill = link_blue_fill  # 連結：藍色
+                        self.logger.debug(f"設定藍色白字表頭: {header_value}")
                     else:
                         cell.fill = green_fill  # 其他 compare_ 欄位：綠色
                     cell.font = white_font
@@ -2288,6 +2293,10 @@ class ManifestComparator:
                 elif header_value in purple_header_fields:
                     cell.fill = purple_fill
                     cell.font = white_font
+                elif header_value in link_blue_header_fields:  # 🔥 新增藍色背景欄位
+                    cell.fill = link_blue_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定藍色白字表頭: {header_value}")                    
                 else:
                     # 預設所有其他表頭都是藍底白字
                     cell.fill = blue_header_fill
@@ -2360,12 +2369,223 @@ class ManifestComparator:
                         worksheet.column_dimensions[col_letter].width = 25
                     elif '路徑' in header_value or 'path' in header_value:
                         worksheet.column_dimensions[col_letter].width = 30
-            
+
+            # 🔥 使用增強版的自動調整欄寬功能
+            self._auto_adjust_column_widths_enhanced(worksheet, sheet_name)
+
             self.logger.debug(f"已格式化工作表: {sheet_name}")
             
         except Exception as e:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
+
+    def _calculate_display_width(self, text: str) -> float:
+        """
+        計算文字的顯示寬度（從 feature_three.py 複製）
+        中文字符通常需要2個單位寬度，英文字符需要1個單位寬度
         
+        Args:
+            text: 要計算的文字
+            
+        Returns:
+            顯示寬度
+        """
+        if not text:
+            return 0
+        
+        width = 0
+        for char in str(text):
+            # 判斷是否為中文字符、全形字符或特殊符號
+            if ord(char) > 127:  # 非 ASCII 字符
+                if ord(char) >= 0x4e00 and ord(char) <= 0x9fff:  # 中文字符
+                    width += 2
+                elif ord(char) >= 0xff00 and ord(char) <= 0xffef:  # 全形字符
+                    width += 2
+                elif char in '📊🔄⭕🎯❌✅✔️':  # emoji 符號
+                    width += 2.5
+                else:
+                    width += 1.5  # 其他特殊字符
+            else:
+                width += 1  # ASCII 字符
+        
+        return width
+
+    def _adjust_summary_column_widths_enhanced(self, worksheet):
+        """專門調整轉換摘要頁籤的欄寬（從 feature_three.py 複製並修改）"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 動態計算每個欄位的適當寬度
+            for col_num, cell in enumerate(worksheet[1], 1):
+                col_letter = get_column_letter(col_num)
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value:
+                    # 使用精確的寬度計算
+                    header_display_width = self._calculate_display_width(header_value)
+                    
+                    # 計算該欄位內容的最大寬度
+                    max_content_width = 0
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet.cell(row=row_num, column=col_num)
+                        if content_cell.value:
+                            content_str = str(content_cell.value)
+                            # 特別處理 HYPERLINK 函數
+                            if content_str.startswith('=HYPERLINK('):
+                                import re
+                                match = re.search(r'=HYPERLINK\("[^"]*","([^"]*)"', content_str)
+                                if match:
+                                    display_text = match.group(1)
+                                    content_width = self._calculate_display_width(display_text)
+                                else:
+                                    content_width = self._calculate_display_width(content_str)
+                            else:
+                                content_width = self._calculate_display_width(content_str)
+                            
+                            if content_width > max_content_width:
+                                max_content_width = content_width
+                    
+                    # 根據欄位類型設定基礎寬度
+                    if header_value == 'SN':
+                        base_width = 8
+                    elif 'revision' in header_value.lower():
+                        base_width = 40
+                    elif 'content' in header_value:
+                        base_width = 80
+                    elif 'URL' in header_value:
+                        base_width = 60
+                    elif '❌' in header_value or '✅' in header_value or '✔️' in header_value:
+                        base_width = 40  # 長的統計欄位
+                    elif '📊' in header_value or '🔄' in header_value or '⭕' in header_value or '🎯' in header_value:
+                        base_width = max(header_display_width + 5, 20)  # 根據實際內容調整
+                    elif '狀態' in header_value:
+                        base_width = max(header_display_width + 5, 20)
+                    elif 'ID' in header_value:
+                        base_width = 15
+                    elif '檔案' in header_value:
+                        base_width = max(max_content_width + 5, 25)  # 根據檔名長度調整
+                    else:
+                        base_width = max(header_display_width + 5, 15)  # 確保表頭能完整顯示
+                    
+                    # 確保寬度足夠顯示所有內容
+                    final_width = max(base_width, header_display_width + 5, max_content_width + 5)
+                    
+                    # 設定合理的最大寬度限制
+                    final_width = min(final_width, 100)
+                    
+                else:
+                    final_width = 15  # 空表頭的預設寬度
+                
+                # 設定欄寬
+                worksheet.column_dimensions[col_letter].width = final_width
+                
+                self.logger.debug(f"比較摘要欄位 '{header_value}' 計算寬度: {final_width}")
+            
+            self.logger.info("✅ 已調整比較摘要頁籤的欄寬（增強版，確保所有內容完整顯示）")
+            
+        except Exception as e:
+            self.logger.error(f"調整比較摘要欄寬失敗: {str(e)}")
+
+    def _auto_adjust_column_widths_enhanced(self, worksheet, sheet_name: str):
+        """自動調整欄寬以適應內容（從 feature_three.py 複製並修改）"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 特別處理比較摘要頁籤
+            if sheet_name in ["比較摘要", "轉換摘要"]:
+                self._adjust_summary_column_widths_enhanced(worksheet)
+                return
+            
+            # 遍歷所有欄位
+            for col in worksheet.columns:
+                max_content_width = 0
+                header_width = 0
+                column = col[0].column_letter
+                
+                # 計算表頭的顯示寬度
+                header_cell = worksheet[f"{column}1"]
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    header_width = self._calculate_display_width(header_value)
+                    self.logger.debug(f"欄位 {column} 表頭 '{header_value}' 顯示寬度: {header_width}")
+                
+                # 計算內容的最大顯示寬度（檢查所有行）
+                for cell in col[1:]:  # 跳過表頭行
+                    try:
+                        if cell.value:
+                            cell_content = str(cell.value)
+                            # 特別處理 HYPERLINK 函數內容
+                            if cell_content.startswith('=HYPERLINK('):
+                                # 從 HYPERLINK 函數中提取顯示文字
+                                import re
+                                match = re.search(r'=HYPERLINK\("[^"]*","([^"]*)"', cell_content)
+                                if match:
+                                    display_text = match.group(1)
+                                    cell_width = self._calculate_display_width(display_text)
+                                else:
+                                    cell_width = self._calculate_display_width(cell_content)
+                            else:
+                                cell_width = self._calculate_display_width(cell_content)
+                            
+                            if cell_width > max_content_width:
+                                max_content_width = cell_width
+                    except:
+                        pass
+                
+                # 取表頭寬度和內容寬度的較大值，加上足夠的邊距
+                required_width = max(header_width, max_content_width) + 5  # 增加邊距
+                
+                # 設定特殊欄位的最小寬度
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    
+                    if 'revision' in header_value.lower():
+                        min_width = 40  # 增加 revision 欄位寬度
+                    elif 'content' in header_value:
+                        min_width = 80  # 增加 content 欄位寬度
+                    elif header_value in ['name', 'gerrit_name', 'compare_name', '專案名稱']:
+                        min_width = 30  # 增加專案名稱欄位寬度
+                    elif header_value in ['path', '專案路徑']:
+                        min_width = 35  # 增加路徑欄位寬度
+                    elif 'source_link' in header_value or 'gerrit_source_link' in header_value or 'compare_source_link' in header_value:
+                        min_width = 60  # 增加連結欄位寬度
+                    elif header_value in ['groups']:
+                        min_width = 45  # 增加 groups 欄位寬度
+                    elif header_value == 'SN':
+                        min_width = 8
+                    elif header_value in ['comparison_status', 'comparison_result']:
+                        min_width = 25  # 增加比較狀態欄位寬度
+                    elif header_value in ['目標 Revision', 'Revision 是否相等']:
+                        # 🔥 讓這些欄位使用自動計算寬度，不設定最小寬度
+                        min_width = max(header_width + 3, 12)  # 只比表頭稍微寬一點                        
+                    elif 'upstream' in header_value.lower():
+                        min_width = 25  # 增加 upstream 欄位寬度
+                    elif 'dest-branch' in header_value.lower():
+                        min_width = 25  # 增加 dest-branch 欄位寬度
+                    elif 'clone-depth' in header_value.lower():
+                        min_width = 15  # clone-depth 欄位寬度
+                    elif 'remote' in header_value.lower():
+                        min_width = 15  # remote 欄位寬度
+                    else:
+                        # 一般欄位最小寬度 = max(表頭寬度 + 邊距, 15)
+                        min_width = max(header_width + 5, 15)
+                    
+                    final_width = max(required_width, min_width)
+                else:
+                    final_width = max(required_width, 15)
+                
+                # 設定最大寬度限制（增加到 120）
+                final_width = min(final_width, 120)
+                
+                # 應用欄寬
+                worksheet.column_dimensions[column].width = final_width
+                
+                self.logger.debug(f"欄位 {column} 最終寬度: {final_width} (表頭:{header_width}, 內容:{max_content_width})")
+            
+            self.logger.debug(f"已自動調整 {sheet_name} 的欄寬（增強版，確保所有內容完整顯示）")
+            
+        except Exception as e:
+            self.logger.error(f"自動調整欄寬失敗 {sheet_name}: {str(e)}")
+                    
     def _set_comparison_row_colors(self, worksheet, status_col_num: int, header_value: str):
         """設定比較狀態的行顏色（保持原方法，增加除錯）"""
         try:
@@ -2414,16 +2634,14 @@ class ManifestComparator:
             self.logger.error(f"設定轉換狀態顏色失敗: {str(e)}")
 
     def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
-        """為 manifest 相關頁籤添加 source_file 欄位的超連結（從 feature_three.py 複製）"""
+        """為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結（修正版：使用 HYPERLINK 函數）"""
         try:
-            from openpyxl.styles import PatternFill, Font
-            
-            purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")
-            white_font = Font(color="FFFFFF", bold=True)
-            
-            # 找到 source_file 欄位的位置
+            # 找到需要處理的欄位
             source_file_col = None
             gerrit_source_file_col = None
+            source_link_col = None
+            gerrit_source_link_col = None
+            compare_source_link_col = None
             
             for col_num, cell in enumerate(worksheet[1], 1):  # 表頭行
                 header_value = str(cell.value) if cell.value else ''
@@ -2432,9 +2650,15 @@ class ManifestComparator:
                     source_file_col = col_num
                 elif header_value == 'gerrit_source_file':
                     gerrit_source_file_col = col_num
+                elif header_value == 'source_link':
+                    source_link_col = col_num
+                elif header_value == 'gerrit_source_link':
+                    gerrit_source_link_col = col_num
+                elif header_value == 'compare_source_link':
+                    compare_source_link_col = col_num
             
-            # 只有特定頁籤的 source_file 欄位需要添加連結
-            source_file_need_link = sheet_name in ['來源的 manifest', 'gerrit 上的 manifest']
+            # 🔥 只有特定頁籤的 source_file 欄位需要添加連結
+            source_file_need_link = sheet_name in ['來源的 manifest', 'gerrit 上的 manifest', '目標的 manifest']
             
             # 為 source_file 欄位添加連結（僅限指定頁籤）
             if source_file_col and source_file_need_link:
@@ -2444,7 +2668,7 @@ class ManifestComparator:
                     
                     if filename and filename not in ['', 'N/A']:
                         gerrit_url = self._generate_gerrit_manifest_link(filename)
-                        self._add_hyperlink_to_cell(worksheet, row_num, source_file_col, gerrit_url, filename)
+                        self._add_hyperlink_formula_to_cell(worksheet, row_num, source_file_col, gerrit_url, filename)
             
             # 為 gerrit_source_file 欄位添加連結
             if gerrit_source_file_col:
@@ -2454,11 +2678,151 @@ class ManifestComparator:
                     
                     if filename and filename not in ['', 'N/A']:
                         gerrit_url = self._generate_gerrit_manifest_link(filename)
-                        self._add_hyperlink_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
+                        self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
+            
+            # 🔥 修正：為 source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
+            if source_link_col:
+                for row_num in range(2, worksheet.max_row + 1):
+                    # 取得該行的專案資訊
+                    name_cell = self._find_cell_value_in_row(worksheet, row_num, ['name'])
+                    revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['revision'])
+                    remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['remote'])
+                    
+                    if name_cell:
+                        project_name = str(name_cell)
+                        revision = str(revision_cell) if revision_cell else ''
+                        remote = str(remote_cell) if remote_cell else ''
+                        
+                        # 🔥 使用新的生成邏輯
+                        gerrit_project_url = self._generate_source_link(project_name, revision, remote)
+                        
+                        if gerrit_project_url and gerrit_project_url != 'N/A':
+                            # 🔥 使用 HYPERLINK 格式，顯示連結本身
+                            self._add_hyperlink_formula_to_cell(worksheet, row_num, source_link_col, gerrit_project_url, gerrit_project_url)
+            
+            # 🔥 修正：為 gerrit_source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
+            if gerrit_source_link_col:
+                for row_num in range(2, worksheet.max_row + 1):
+                    # 取得該行的 Gerrit 專案資訊
+                    gerrit_name_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_name'])
+                    gerrit_revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_revision'])
+                    gerrit_remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_remote'])
+                    
+                    if gerrit_name_cell:
+                        project_name = str(gerrit_name_cell)
+                        revision = str(gerrit_revision_cell) if gerrit_revision_cell else ''
+                        remote = str(gerrit_remote_cell) if gerrit_remote_cell else ''
+                        
+                        gerrit_project_url = self._generate_source_link(project_name, revision, remote)
+                        
+                        if gerrit_project_url and gerrit_project_url != 'N/A':
+                            self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_link_col, gerrit_project_url, gerrit_project_url)
+            
+            # 🔥 新增：為 compare_source_link 欄位添加正確的專案連結（使用 HYPERLINK 函數）
+            if compare_source_link_col:
+                for row_num in range(2, worksheet.max_row + 1):
+                    # 取得該行的 compare 專案資訊
+                    compare_name_cell = self._find_cell_value_in_row(worksheet, row_num, ['compare_name'])
+                    compare_revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['compare_revision'])
+                    compare_remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['compare_remote'])
+                    
+                    if compare_name_cell:
+                        project_name = str(compare_name_cell)
+                        revision = str(compare_revision_cell) if compare_revision_cell else ''
+                        remote = str(compare_remote_cell) if compare_remote_cell else ''
+                        
+                        gerrit_project_url = self._generate_source_link(project_name, revision, remote)
+                        
+                        if gerrit_project_url and gerrit_project_url != 'N/A':
+                            self._add_hyperlink_formula_to_cell(worksheet, row_num, compare_source_link_col, gerrit_project_url, gerrit_project_url)
+            
+            # 記錄處理結果
+            if source_file_col and source_file_need_link:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_file 欄位連結")
+            
+            if gerrit_source_file_col:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_file 欄位連結")
+            
+            if source_link_col:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_link 欄位正確的專案連結（HYPERLINK函數）")
+            
+            if gerrit_source_link_col:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_link 欄位正確的專案連結（HYPERLINK函數）")
+                
+            if compare_source_link_col:
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 compare_source_link 欄位正確的專案連結（HYPERLINK函數）")
             
         except Exception as e:
             self.logger.error(f"添加 {sheet_name} 超連結失敗: {str(e)}")
 
+    def _find_cell_value_in_row(self, worksheet, row_num: int, header_names: List[str]):
+        """
+        在指定行中尋找指定表頭名稱對應的值
+        
+        Args:
+            worksheet: Excel 工作表
+            row_num: 行號
+            header_names: 要尋找的表頭名稱列表
+            
+        Returns:
+            找到的值，如果沒找到則返回 None
+        """
+        try:
+            # 先找到表頭對應的欄位號
+            for col_num, header_cell in enumerate(worksheet[1], 1):  # 表頭行
+                header_value = str(header_cell.value) if header_cell.value else ''
+                
+                if header_value in header_names:
+                    # 找到對應欄位，取得該行該欄的值
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    return cell.value
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"尋找行中欄位值失敗: {str(e)}")
+            return None
+        
+    def _add_hyperlink_formula_to_cell(self, worksheet, row: int, col: int, url: str, display_text: str = None):
+        """
+        為 Excel 單元格添加 HYPERLINK 函數格式的超連結（增強版）
+        """
+        try:
+            from openpyxl.styles import Font
+            
+            cell = worksheet.cell(row=row, column=col)
+            
+            # 🔥 確保 URL 和顯示文字不為空
+            if not url or url == 'N/A':
+                self.logger.debug(f"跳過無效的 URL: {url}")
+                return
+            
+            # 清理 URL 中的特殊字符
+            clean_url = str(url).replace('"', '""')
+            
+            # 🔥 修正：如果沒有 display_text，直接顯示 URL
+            if not display_text or display_text == url:
+                cell.value = f'=HYPERLINK("{clean_url}")'
+                self.logger.debug(f"設定 HYPERLINK (URL only): {clean_url}")
+            else:
+                clean_display_text = str(display_text).replace('"', '""')
+                cell.value = f'=HYPERLINK("{clean_url}","{clean_display_text}")'
+                self.logger.debug(f"設定 HYPERLINK (with text): {clean_display_text} → {clean_url}")
+            
+            # 設定藍色超連結樣式
+            cell.font = Font(color="0000FF", underline="single")
+            
+        except Exception as e:
+            self.logger.error(f"添加 HYPERLINK 函數失敗: {str(e)}")
+            # 🔥 備用方案：直接顯示URL
+            try:
+                cell = worksheet.cell(row=row, column=col)
+                cell.value = url
+                cell.font = Font(color="0000FF")
+                self.logger.debug(f"使用備用方案顯示連結: {url}")
+            except:
+                pass
+            
     # ===============================
     # ===== 比較模式專用的後處理方法 =====
     # ===============================
@@ -2895,9 +3259,11 @@ class ManifestComparator:
                 if header_value == '來源 Revision':
                     source_revision_col = col
                 elif header_value == '目標 Revision':
-                    target_revision_col = col
+                    # 🔥 目標 Revision 使用較小的寬度
+                    min_width = max(header_width + 2, 25)  # 固定合理寬度
                 elif header_value == 'Revision 是否相等':
-                    comparison_col = col
+                    # 🔥 Revision 是否相等 用更小的寬度
+                    min_width = max(header_width + 2, 12)  # 很小的寬度
                 elif header_value == '比較檔案':
                     compare_file_col = col
             
@@ -3018,6 +3384,9 @@ class ManifestComparator:
                 cell = worksheet.cell(row=row, column=comparison_col)
                 formula = f'=IF({source_col_letter}{row}={target_col_letter}{row},"Y","N")'
                 cell.value = formula
+                # 🔥 新增：設定置中對齊
+                from openpyxl.styles import Alignment
+                cell.alignment = Alignment(horizontal='center', vertical='center')
             
             self.logger.info("✅ 已設定動態比較公式")
             
