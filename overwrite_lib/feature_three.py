@@ -1,7 +1,7 @@
 """
 功能三：Manifest 轉換工具 - 微調版本
 從 Gerrit 下載源檔案，進行 revision 轉換，並與目標檔案比較差異
-微調：確保 Gerrit 檔案正確保存，增加 revision 比較資訊，標頭格式化
+微調：確保 Gerrit 檔案正確保存，增加 revision 比較資訊，標題格式化
 修正：確保展開檔案正確保存到 output 資料夾
 修改：改進特殊項目處理邏輯，通用檢查master和premp是否相同
 """
@@ -78,7 +78,7 @@ class FeatureThree:
             
             # 驗證參數
             if overwrite_type not in self.source_files:
-                self.logger.error(f"不支援的轉換類型: {overwrite_type}")
+                self.logger.error(f"不支持的轉換類型: {overwrite_type}")
                 return False
             
             # 確保輸出資料夾存在
@@ -166,7 +166,7 @@ class FeatureThree:
                 self.logger.info("🚀 開始推送到 Gerrit...")
                 push_result = self._push_to_gerrit(overwrite_type, converted_content, target_content, output_folder)
             else:
-                self.logger.info("⏭️ 跳過 Gerrit 推送")
+                self.logger.info("⭐ 跳過 Gerrit 推送")
             
             # 步驟 7: 產生 Excel 報告（包含展開檔案資訊）
             excel_file = self._generate_excel_report_safe(
@@ -210,7 +210,7 @@ class FeatureThree:
         try:
             import re
             
-            # 使用正規表達式檢查 include 標籤
+            # 使用正則表達式檢查 include 標籤
             include_pattern = r'<include\s+name\s*=\s*["\'][^"\']*["\'][^>]*/?>'
             matches = re.findall(include_pattern, xml_content, re.IGNORECASE)
             
@@ -250,7 +250,7 @@ class FeatureThree:
             
             # 🆕 生成展開檔案名稱 - 使用絕對路徑解決臨時目錄問題
             expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expand.xml')}"
-            # 🔥 關鍵修正：轉換為絕對路徑，避免在臨時目錄中誤保存
+            # 🔥 關鍵修正：轉為絕對路徑，避免在臨時目錄中誤保存
             final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
             
             self.logger.info(f"🎯 準備展開 manifest...")
@@ -296,7 +296,7 @@ class FeatureThree:
                 self.logger.info(f"📂 切換到臨時目錄: {temp_work_dir}")
                 
                 # 步驟 1: repo init
-                self.logger.info(f"🔄 執行 repo init...")
+                self.logger.info(f"📄 執行 repo init...")
                 init_cmd = [
                     "repo", "init", 
                     "-u", repo_url,
@@ -334,7 +334,7 @@ class FeatureThree:
                     return None, None
                 
                 # 步驟 2: repo manifest 展開
-                self.logger.info(f"🔄 執行 repo manifest 展開...")
+                self.logger.info(f"📄 執行 repo manifest 展開...")
                 
                 manifest_cmd = ["repo", "manifest"]
                 self.logger.info(f"🎯 Manifest 指令: {' '.join(manifest_cmd)}")
@@ -371,7 +371,7 @@ class FeatureThree:
                 
                 # 🆕 步驟 3A: 在臨時目錄保存一份展開檔案
                 temp_expanded_path = os.path.join(temp_work_dir, expanded_filename)
-                self.logger.info(f"📝 在臨時目錄保存展開檔案: {temp_expanded_path}")
+                self.logger.info(f"📁 在臨時目錄保存展開檔案: {temp_expanded_path}")
                 
                 try:
                     with open(temp_expanded_path, 'w', encoding='utf-8') as f:
@@ -388,9 +388,9 @@ class FeatureThree:
                     return None, None
                 
                 # 🆕 步驟 3B: 同時複製到輸出資料夾（使用絕對路徑）
-                self.logger.info(f"📝 複製展開檔案到輸出資料夾...")
-                self.logger.info(f"📝 目標絕對路徑: {final_expanded_path}")
-                self.logger.info(f"📝 當前工作目錄: {os.getcwd()}")
+                self.logger.info(f"📁 複製展開檔案到輸出資料夾...")
+                self.logger.info(f"📁 目標絕對路徑: {final_expanded_path}")
+                self.logger.info(f"📁 當前工作目錄: {os.getcwd()}")
                 
                 # 🔥 關鍵：確保目標資料夾存在（使用絕對路徑）
                 target_dir = os.path.dirname(final_expanded_path)
@@ -568,7 +568,7 @@ class FeatureThree:
             self.logger.warning(f"下載目標檔案異常: {str(e)}")
             return None
     
-    # 🔥 完全重寫 _convert_revisions 方法，移除有問題的正規表達式
+    # 🔥 完全重寫 _convert_revisions 方法，移除有問題的正則表達式
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
         """
         根據轉換類型進行 revision 轉換 - 修正正則表達式錯誤版本
@@ -724,8 +724,8 @@ class FeatureThree:
             self.logger.info(f"revision 轉換完成，共轉換 {conversion_count} 個專案")
             self.logger.info(f"📊 處理統計:")
             self.logger.info(f"  - ⭐ 跳過沒有 revision 的專案: {skipped_no_revision} 個")
-            self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
-            self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
+            self.logger.info(f"  - 📸 Hash revision: {hash_revision_count} 個")
+            self.logger.info(f"  - 📹 Branch revision: {branch_revision_count} 個")
             self.logger.info(f"  - ⬆️ 使用 upstream 進行轉換: {upstream_used_count} 個")
             self.logger.info(f"  - 📋 總記錄專案數: {len(conversion_info)} 個")
             self.logger.info("✅ 保留了所有原始格式：XML 宣告、註解、空格、換行等")
@@ -803,10 +803,10 @@ class FeatureThree:
     def _safe_replace_revision_in_xml(self, xml_content: str, project_name: str, 
                                  old_revision: str, new_revision: str) -> str:
         """
-        安全的 XML 字串替換 - 避免有問題的正規表達式
+        安全的 XML 字串替換 - 避免有問題的正則表達式
         """
         try:
-            # 🔥 使用簡單的字串搜尋和替換，避免複雜的正規表達式
+            # 🔥 使用簡單的字串搜尋和替換，避免複雜的正則表達式
             lines = xml_content.split('\n')
             modified = False
             
@@ -943,7 +943,7 @@ class FeatureThree:
             self.logger.debug(f"精確匹配轉換: {original_revision} → {exact_mappings[original_revision]}")
             return exact_mappings[original_revision]
         
-        # 🆕 模式匹配轉換規則（使用正規表達式）- 與測試模組完全同步
+        # 🆕 模式匹配轉換規則（使用正則表達式）- 與測試模組完全同步
         import re
         
         # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
@@ -1113,7 +1113,7 @@ class FeatureThree:
         return revision.replace('premp.google-refplus', 'mp.google-refplus.wave')
     
     def _convert_mp_to_mpbackup(self, revision: str) -> str:
-        """mp → mpbackup 轉換規則 - 修正正規表達式錯誤"""
+        """mp → mpbackup 轉換規則 - 修正正則表達式錯誤"""
         if not revision:
             return revision
         
@@ -1127,7 +1127,7 @@ class FeatureThree:
             self.logger.debug(f"已經是 backup 格式，不需轉換: {original_revision}")
             return original_revision
         
-        # 🔥 主要轉換邏輯 - 簡化版，避免複雜正規表達式
+        # 🔥 主要轉換邏輯 - 簡化版，避免複雜正則表達式
         if 'mp.google-refplus.wave' in original_revision and 'backup' not in original_revision:
             result = original_revision.replace('mp.google-refplus.wave', 'mp.google-refplus.wave.backup')
             self.logger.debug(f"標準轉換: {original_revision} → {result}")
@@ -1380,10 +1380,10 @@ class FeatureThree:
                 
                 self.logger.info(f"差異分析完成:")
                 self.logger.info(f"  📋 總專案數: {total_projects}")
-                self.logger.info(f"  🔄 實際轉換專案: {converted_projects}")
+                self.logger.info(f"  📄 實際轉換專案: {converted_projects}")
                 self.logger.info(f"  ⭕ 未轉換專案: {unchanged_projects}")
                 self.logger.info(f"  ❌ 轉換後有差異: {len(differences)}")
-                self.logger.info(f"  ✅ 轉換後相同: {max(0, converted_projects - len(differences))}")
+                self.logger.info(f"  ✔️ 轉換後相同: {max(0, converted_projects - len(differences))}")
                 if converted_projects > 0:
                     match_rate = max(0, converted_projects - len(differences)) / converted_projects * 100
                     self.logger.info(f"  📊 轉換匹配率: {match_rate:.1f}%")
@@ -1455,7 +1455,7 @@ class FeatureThree:
                 if f'name="{project_name}"' in line:
                     line_number = i
                     
-                    # 🆕 使用正規表達式只抓取 project 標籤本身
+                    # 🆕 使用正則表達式只抓取 project 標籤本身
                     if stripped_line.startswith('<project') and stripped_line.endswith('/>'):
                         # 單行 project 標籤
                         full_content = stripped_line
@@ -1475,7 +1475,7 @@ class FeatureThree:
                                     project_content += " " + next_line
                                 
                                 if next_line.endswith('>'):
-                                    # 🆕 使用正規表達式提取完整的 project 標籤
+                                    # 🆕 使用正則表達式提取完整的 project 標籤
                                     project_match = re.search(r'<project[^>]*>', project_content)
                                     if project_match:
                                         full_content = project_match.group(0)
@@ -1485,7 +1485,7 @@ class FeatureThree:
                         for k in range(i-2, -1, -1):
                             prev_line = lines[k].strip()
                             if prev_line.startswith('<project'):
-                                # 組合完整內容，然後用正規表達式提取
+                                # 組合完整內容，然後用正則表達式提取
                                 combined_content = prev_line
                                 for m in range(k+1, i):
                                     combined_content += " " + lines[m].strip()
@@ -1613,7 +1613,7 @@ class FeatureThree:
             
             # 判斷比較狀態
             if is_identical:
-                comparison_status = '✅ 相同'
+                comparison_status = '✔️ 相同'
                 comparison_result = '轉換後與 Gerrit 完全一致'
                 status_color = 'green'
             else:
@@ -1858,7 +1858,7 @@ class FeatureThree:
             self.logger.info("📋 轉換結果與目標檔案相同，無需推送")
             return False
         else:
-            self.logger.info("🔄 轉換結果與目標檔案不同，需要推送更新")
+            self.logger.info("📄 轉換結果與目標檔案不同，需要推送更新")
             return True
     
     def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
@@ -1940,7 +1940,7 @@ class FeatureThree:
             with open(target_file_path, 'w', encoding='utf-8') as f:
                 f.write(converted_content)
             
-            self.logger.info(f"📝 寫入檔案: {target_filename}")
+            self.logger.info(f"📁 寫入檔案: {target_filename}")
             
             # 步驟 4: 檢查 Git 狀態
             status_result = subprocess.run(
@@ -2202,9 +2202,8 @@ class FeatureThree:
                     '🔄 實際轉換專案數': diff_analysis['summary'].get('actual_conversion_count', 0),
                     '⭕ 未轉換專案數': diff_analysis['summary'].get('unchanged_count', 0),
                     '🎯 目標檔案專案數': diff_analysis['summary'].get('target_count', 0),
-                    '❌ 轉換後有差異數': diff_analysis['summary'].get('differences_count', 0),
-                    '✅ 轉換後相同數': diff_analysis['summary'].get('identical_converted_count', 0),
-                    '📈 轉換匹配率': diff_analysis['summary'].get('conversion_match_rate', 'N/A')
+                    '❌ 轉換後與 Gerrit Manifest 差異數': diff_analysis['summary'].get('differences_count', 0),
+                    '✅ 轉換後與 Gerrit Manifest 相同數': diff_analysis['summary'].get('identical_converted_count', 0)
                 }]
 
                 if push_result:
@@ -2229,7 +2228,7 @@ class FeatureThree:
                 worksheet_summary = writer.sheets['轉換摘要']
                 self._add_summary_hyperlinks(worksheet_summary, overwrite_type)
                 
-                # 頁籤 2: 轉換後專案（淺藍色底色）
+                # 頁籤 2: 轉換後專案（淺藍色底色）- 修改欄位順序和內容
                 if diff_analysis['converted_projects']:
                     converted_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
@@ -2241,15 +2240,18 @@ class FeatureThree:
                             conversion_status = '⭕ 未轉換'
                             status_description = f"保持原值: {proj['original_revision']}"
                         
+                        # 🆕 根據需求修改欄位順序和名稱
                         converted_data.append({
                             'SN': i,
                             '專案名稱': proj['name'],
                             '專案路徑': proj['path'],
                             '轉換狀態': conversion_status,
+                            '來源檔案': f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}",  # 🆕 新增欄位 (紫底白字)
                             '原始 Revision': proj['original_revision'],
+                            '轉換後檔案': self.output_files.get(overwrite_type, 'unknown.xml'),  # 🆕 新增欄位 (紫底白字)
                             '轉換後 Revision': proj['converted_revision'],
-                            'Revision 是否相等': '',  # 🔥 添加新欄位，空值將由 Excel 公式填充
-                            '轉換說明': status_description,
+                            'Revision 是否相等': '',  # 🔥 添加新欄位，空值將由 Excel 公式填充，不要粗體
+                            '轉換說明': status_description,  # 🆕 橘底白字
                             'Upstream': proj['upstream'],
                             'Dest-Branch': proj['dest-branch'],
                             'Groups': proj['groups'],
@@ -2285,45 +2287,7 @@ class FeatureThree:
                     
                     df_diff.to_excel(writer, sheet_name=diff_sheet_name, index=False)
                 
-                # 頁籤 4: 未轉換專案
-                unchanged_projects = [proj for proj in diff_analysis['converted_projects'] 
-                                    if not proj.get('changed', False)]
-                if unchanged_projects:
-                    unchanged_data = []
-                    for i, proj in enumerate(unchanged_projects, 1):
-                        # 🔥 修改原因說明 - 區分 hash 和非 hash revision
-                        reason = "符合跳過轉換條件或無需轉換"
-                        needs_red_font = False
-                        
-                        if proj['original_revision']:  # 如果有保持的 Revision
-                            # 🔥 檢查是否為 hash
-                            if self._is_revision_hash(proj['original_revision']):
-                                reason = "符合跳過轉換條件或無需轉換 (Hash Revision)"
-                                needs_red_font = False  # hash 不需要紅字
-                            else:
-                                reason = "需檢查是否來源端是否有問題"
-                                needs_red_font = True   # 非 hash 但有值，需要紅字
-                            
-                        unchanged_data.append({
-                            'SN': i,
-                            '專案名稱': proj['name'],
-                            '專案路徑': proj['path'],
-                            '保持的 Revision': proj['original_revision'],
-                            '原因': reason,
-                            '需要紅字': needs_red_font,  # 🔥 標記是否需要紅字
-                            'Upstream': proj['upstream'],
-                            'Groups': proj['groups'],
-                            'Remote': proj['remote']
-                        })
-                    
-                    df_unchanged = pd.DataFrame(unchanged_data)
-                    df_unchanged.to_excel(writer, sheet_name='未轉換專案', index=False)
-                    
-                    # 🔥 設定原因欄位的紅字格式
-                    worksheet_unchanged = writer.sheets['未轉換專案']
-                    self._format_unchanged_projects_reason_column(worksheet_unchanged)
-                
-                # 🆕 頁籤 5: 來源的 manifest（淺綠色底色）
+                # 🆕 頁籤 4: 來源的 manifest（淺綠色底色）
                 if diff_analysis['converted_projects']:
                     source_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
@@ -2348,7 +2312,7 @@ class FeatureThree:
                     df_source = pd.DataFrame(source_data)
                     df_source.to_excel(writer, sheet_name='來源的 manifest', index=False)
                 
-                # 🆕 頁籤 6: 轉換後的 manifest（淺綠色底色）
+                # 🆕 頁籤 5: 轉換後的 manifest（淺綠色底色）
                 if diff_analysis['converted_projects']:
                     converted_manifest_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
@@ -2373,7 +2337,7 @@ class FeatureThree:
                     df_converted_manifest = pd.DataFrame(converted_manifest_data)
                     df_converted_manifest.to_excel(writer, sheet_name='轉換後的 manifest', index=False)
                 
-                # 🆕 頁籤 7: gerrit 上的 manifest（淺綠色底色）
+                # 🆕 頁籤 6: gerrit 上的 manifest（淺綠色底色）
                 if diff_analysis['has_target'] and diff_analysis['target_projects']:
                     gerrit_data = []
                     for i, proj in enumerate(diff_analysis['target_projects'], 1):
@@ -2416,6 +2380,10 @@ class FeatureThree:
                             self.logger.info(f"📋 {sheet_name}: source_file 欄位已添加 Gerrit 連結")
                         elif sheet_name == '轉換後與 Gerrit manifest 的差異':
                             self.logger.info(f"📋 {sheet_name}: 僅 gerrit_source_file 欄位添加連結，source_file 不添加")
+                    
+                    # 🆕 為轉換後專案頁籤添加特殊的 Gerrit 連結
+                    if sheet_name == '轉換後專案':
+                        self._add_converted_projects_hyperlinks(worksheet, overwrite_type)
             
             self.logger.info(f"成功產生 Excel 報告: {excel_file}")
             return excel_file
@@ -2423,6 +2391,40 @@ class FeatureThree:
         except Exception as e:
             self.logger.error(f"產生 Excel 報告失敗: {str(e)}")
             raise
+
+    def _add_converted_projects_hyperlinks(self, worksheet, overwrite_type: str):
+        """
+        為轉換後專案頁籤添加來源檔案的 Gerrit 超連結
+        
+        Args:
+            worksheet: Excel 工作表
+            overwrite_type: 轉換類型
+        """
+        try:
+            # 找到來源檔案欄位的位置
+            source_file_col = None
+            
+            for col_num, cell in enumerate(worksheet[1], 1):  # 表頭行
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == '來源檔案':
+                    source_file_col = col_num
+                    break
+            
+            # 為來源檔案欄位添加連結
+            if source_file_col:
+                source_filename = self.source_files.get(overwrite_type, '')
+                if source_filename:
+                    gerrit_url = self._generate_gerrit_manifest_link(source_filename)
+                    display_text = f"gerrit_{source_filename}"
+                    
+                    # 在數據行添加超連結（從第2行開始）
+                    for row_num in range(2, worksheet.max_row + 1):
+                        self._add_hyperlink_to_cell(worksheet, row_num, source_file_col, gerrit_url, display_text)
+                    
+                    self.logger.info(f"已為轉換後專案添加來源檔案連結: {display_text}")
+            
+        except Exception as e:
+            self.logger.error(f"添加轉換後專案超連結失敗: {str(e)}")
 
     def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
         """
@@ -2472,7 +2474,7 @@ class FeatureThree:
             if source_file_col and source_file_need_link:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 source_file 欄位連結")
             elif source_file_col and not source_file_need_link:
-                self.logger.info(f"⏭️ 跳過 {sheet_name} 的 source_file 欄位連結（按需求不添加）")
+                self.logger.info(f"⭐ 跳過 {sheet_name} 的 source_file 欄位連結（按需求不添加）")
             
             if gerrit_source_file_col:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_file 欄位連結")
@@ -2887,7 +2889,7 @@ class FeatureThree:
             elif sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest']:
                 # 淺綠色頁籤
                 worksheet.sheet_properties.tabColor = "90EE90"  # Light Green
-            elif sheet_name in ['轉換後與 Gerrit manifest 的差異', '未轉換專案']:
+            elif sheet_name in ['轉換後與 Gerrit manifest 的差異']:
                 # 淺紅色頁籤
                 worksheet.sheet_properties.tabColor = "FFB6C1"  # Light Pink
             
@@ -2897,15 +2899,18 @@ class FeatureThree:
             red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")         # 紅底
             orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")      # 🆕 橘底
             purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")      # 🆕 紫底
+            dark_cyan_fill = PatternFill(start_color="008B8B", end_color="008B8B", fill_type="solid")   # 🆕 藍深青色
             
             white_font = Font(color="FFFFFF", bold=True)    # 白字
             blue_font = Font(color="0070C0", bold=True)     # 藍字
             gray_font = Font(color="808080", bold=True)     # 灰字
             
             # 🆕 定義特殊顏色的欄位
-            orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL"]
+            orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL", "轉換說明"]
             green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
-            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案"]
+            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "轉換後檔案"]
+            blue_header_fields = ["📊 總專案數", "🔄 實際轉換專案數", "⭕ 未轉換專案數"]
+            dark_cyan_header_fields = ["🎯 目標檔案專案數", "❌ 轉換後與 Gerrit Manifest 差異數", "✅ 轉換後與 Gerrit Manifest 相同數"]
             
             # 設定表頭和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
@@ -2925,6 +2930,14 @@ class FeatureThree:
                     cell.fill = purple_fill
                     cell.font = white_font
                     self.logger.debug(f"設定紫底白字表頭: {header_value}")
+                elif header_value in blue_header_fields:
+                    cell.fill = blue_header_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定藍底白字表頭: {header_value}")
+                elif header_value in dark_cyan_header_fields:
+                    cell.fill = dark_cyan_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定藍深青色白字表頭: {header_value}")
                 else:
                     # 預設所有其他表頭都是藍底白字
                     cell.fill = blue_header_fill
@@ -3197,7 +3210,7 @@ class FeatureThree:
             
             # 定義狀態顏色（覆蓋頁籤底色）
             status_colors = {
-                '✅ 相同': PatternFill(start_color="D4FFCD", end_color="D4FFCD", fill_type="solid"),     # 深一點的綠
+                '✔️ 相同': PatternFill(start_color="D4FFCD", end_color="D4FFCD", fill_type="solid"),     # 深一點的綠
                 '❌ 不同': PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid"),     # 深一點的紅
                 '🆕 新增': PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),     # 深一點的黃
                 '🗑️ 刪除': PatternFill(start_color="FFDAB9", end_color="FFDAB9", fill_type="solid")      # 深一點的橘
@@ -3417,7 +3430,7 @@ class FeatureThree:
             self.logger.error(f"格式化轉換後專案頁籤失敗: {str(e)}")
 
     def _format_diff_sheet(self, worksheet):
-        """格式化差異部份頁籤 - 新版本（綠底白字 vs 藍底白字 vs 紅底白字，包含來源檔案欄位）"""
+        """格式化差異部分頁籤 - 新版本（綠底白字 vs 藍底白字 vs 紅底白字，包含來源檔案欄位）"""
         try:
             from openpyxl.styles import PatternFill, Font
             from openpyxl.utils import get_column_letter
@@ -3489,7 +3502,7 @@ class FeatureThree:
                     worksheet.column_dimensions[col_letter].width = 30
                     self.logger.debug(f"設定分支欄位: {header_value} -> 30")
             
-            self.logger.info("已設定差異部份頁籤格式：綠底白字 vs 藍底白字 vs 紅底白字（revision），包含來源檔案欄位")
+            self.logger.info("已設定差異部分頁籤格式：綠底白字 vs 藍底白字 vs 紅底白字（revision），包含來源檔案欄位")
             
         except Exception as e:
             self.logger.error(f"格式化差異頁籤失敗: {str(e)}")
@@ -3609,7 +3622,7 @@ class FeatureThree:
                           expanded_file_path: Optional[str] = None):
         """最終檔案檢查和報告 - 增強版本，包含展開檔案"""
         try:
-            self.logger.info("📁 最終檔案檢查報告:")
+            self.logger.info("🔍 最終檔案檢查報告:")
             self.logger.info(f"📂 輸出資料夾: {output_folder}")
             
             # 檢查所有應該存在的檔案
@@ -3718,7 +3731,7 @@ class FeatureThree:
         
         revision = revision.strip()
         
-        # Hash 特徵：40 字符的十六進制字符串
+        # Hash 特徵：40 字符的十六進制字串
         if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
             return True
         
