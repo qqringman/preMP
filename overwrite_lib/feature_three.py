@@ -1331,9 +1331,9 @@ class FeatureThree:
     
     def _analyze_differences(self, converted_content: str, target_content: Optional[str], 
                     overwrite_type: str, conversion_info: List[Dict]) -> Dict[str, Any]:
-        """分析轉換檔案與目標檔案的差異 - 修正版本，更準確的統計"""
+        """分析轉換檔案與目標檔案的差異 - 修正版本，基於差異頁籤重新計算統計"""
         
-        # 🔥 添加檔案來源確認日誌
+        # 檔案來源確認日誌
         self.logger.info(f"🔍 差異分析檔案確認:")
         self.logger.info(f"   轉換類型: {overwrite_type}")
         self.logger.info(f"   來源檔案: {self.source_files.get(overwrite_type, 'unknown')}")
@@ -1363,30 +1363,38 @@ class FeatureThree:
                 )
                 analysis['differences'] = differences
                 
-                # 🆕 修正統計摘要 - 更準確的計算
+                # 🔥 修正統計摘要 - 基於差異頁籤的實際結果重新計算
                 total_projects = len(conversion_info)
                 converted_projects = sum(1 for proj in conversion_info if proj.get('changed', False))
                 unchanged_projects = total_projects - converted_projects
+                
+                # 🔥 重新統計：基於差異頁籤的實際結果
+                same_count = sum(1 for diff in differences if diff.get('comparison_status') == '✔️ 相同')
+                different_count = sum(1 for diff in differences if diff.get('comparison_status') not in ['✔️ 相同'])
+                
+                self.logger.info(f"🔍 差異頁籤統計詳情:")
+                self.logger.info(f"   差異頁籤總項目數: {len(differences)}")
+                for status in ['✔️ 相同', '❌ 不同', '🆕 新增', '🗑️ 刪除']:
+                    count = sum(1 for diff in differences if diff.get('comparison_status') == status)
+                    self.logger.info(f"   {status}: {count}")
                 
                 analysis['summary'] = {
                     'converted_count': total_projects,  # 總專案數
                     'target_count': len(target_projects),
                     'actual_conversion_count': converted_projects,  # 實際轉換數
                     'unchanged_count': unchanged_projects,  # 未轉換數
-                    'differences_count': len(differences),  # 有差異數
-                    'identical_converted_count': max(0, converted_projects - len(differences)),  # 轉換後相同數
-                    'conversion_match_rate': f"{(max(0, converted_projects - len(differences)) / max(converted_projects, 1) * 100):.1f}%" if converted_projects > 0 else "N/A"
+                    'differences_count': different_count,  # 🔥 修正：差異數量（不是相同的數量）
+                    'identical_converted_count': same_count,  # 🔥 修正：相同數量（✔️ 相同的數量）
+                    'conversion_match_rate': f"{(same_count / max(len(differences), 1) * 100):.1f}%" if len(differences) > 0 else "N/A"
                 }
                 
                 self.logger.info(f"差異分析完成:")
                 self.logger.info(f"  📋 總專案數: {total_projects}")
                 self.logger.info(f"  📄 實際轉換專案: {converted_projects}")
                 self.logger.info(f"  ⭕ 未轉換專案: {unchanged_projects}")
-                self.logger.info(f"  ❌ 轉換後有差異: {len(differences)}")
-                self.logger.info(f"  ✔️ 轉換後相同: {max(0, converted_projects - len(differences))}")
-                if converted_projects > 0:
-                    match_rate = max(0, converted_projects - len(differences)) / converted_projects * 100
-                    self.logger.info(f"  📊 轉換匹配率: {match_rate:.1f}%")
+                self.logger.info(f"  ✔️ 轉換後相同: {same_count}")
+                self.logger.info(f"  ❌ 轉換後有差異: {different_count}")
+                self.logger.info(f"  📊 基於差異頁籤的匹配率: {analysis['summary']['conversion_match_rate']}")
             else:
                 analysis['summary'] = {
                     'converted_count': len(conversion_info),
@@ -1538,8 +1546,8 @@ class FeatureThree:
             return ''
     
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
-                                     target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異 - 修正版本，使用 name+path composite key"""
+                                    target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
+        """使用轉換資訊比較專案差異 - 修正版本，比較所有專案並修正統計"""
         differences = []
         
         # 🔥 修改：建立目標專案的索引 - 使用 name+path 組合作為 key
@@ -1553,29 +1561,32 @@ class FeatureThree:
         # 取得正確的檔案名稱
         source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
+        # 🔥 統計計數器
+        total_compared = 0
+        same_count = 0
+        different_count = 0
+        new_count = 0
+        
         for conv_proj in converted_projects:
             project_name = conv_proj['name']
             project_path = conv_proj['path']
-            # 🔥 修改：建立轉換專案的 composite key
             conv_composite_key = f"{project_name}|{project_path}"
             has_conversion = conv_proj.get('changed', False)
             
-            # 只有真正有轉換的專案才進行差異比較
-            if not has_conversion:
-                continue
+            # 🔥 移除轉換過濾條件 - 比較所有專案，不管是否有轉換
+            total_compared += 1
             
-            # 🔥 修改：使用 composite key 查找對應專案
+            # 檢查專案是否在目標中存在
             if conv_composite_key not in target_index:
                 # 專案在轉換後存在，但在 Gerrit 中不存在 - 新增
+                new_count += 1
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': self._build_project_line_content(conv_proj, use_converted_revision=True),
+                    'content': conv_proj.get('content', self._build_project_line_content(conv_proj, use_converted_revision=True)),
                     'name': conv_proj['name'],
                     'path': conv_proj['path'],
                     'revision': conv_proj['converted_revision'],
-                    'original_revision': conv_proj['original_revision'],
-                    'Revision 是否相等': '',  # 🔥 添加新欄位，空值將由 Excel 公式填充
                     'upstream': conv_proj['upstream'],
                     'dest-branch': conv_proj['dest-branch'],
                     'groups': conv_proj['groups'],
@@ -1600,36 +1611,32 @@ class FeatureThree:
                 differences.append(difference)
                 continue
             
-            # 🔥 修改：使用 composite key 取得目標專案
+            # 使用 composite key 取得目標專案
             target_proj = target_index[conv_composite_key]
-            
-            # 🔥 添加調試日誌確認找到正確的對應專案
-            # self.logger.info(f"🔍 比較專案 composite key: {conv_composite_key}")
-            # self.logger.info(f"   轉換後: name='{conv_proj['name']}', path='{conv_proj['path']}'")
-            # self.logger.info(f"   Gerrit:  name='{target_proj['name']}', path='{target_proj['path']}'")
             
             # 修正比較邏輯：忽略屬性順序，只比較實際值
             is_identical = self._compare_project_attributes_ignore_order(conv_proj, target_proj, use_converted_revision=True)
             
-            # 判斷比較狀態
+            # 判斷比較狀態並計數
             if is_identical:
                 comparison_status = '✔️ 相同'
                 comparison_result = '轉換後與 Gerrit 完全一致'
                 status_color = 'green'
+                same_count += 1
             else:
                 comparison_status = '❌ 不同'
                 comparison_result = '轉換後與 Gerrit 有差異'
                 status_color = 'red'
+                different_count += 1
             
             # 記錄所有比較結果（包含相同的）
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'content': self._build_project_line_content(conv_proj, use_converted_revision=True),
+                'content': conv_proj.get('content', self._build_project_line_content(conv_proj, use_converted_revision=True)),
                 'name': conv_proj['name'],
                 'path': conv_proj['path'],
                 'revision': conv_proj['converted_revision'],
-                'original_revision': conv_proj['original_revision'],
                 'upstream': conv_proj['upstream'],
                 'dest-branch': conv_proj['dest-branch'],
                 'groups': conv_proj['groups'],
@@ -1637,7 +1644,7 @@ class FeatureThree:
                 'remote': conv_proj['remote'],
                 'source_link': self._generate_source_link(conv_proj['name'], conv_proj['converted_revision'], conv_proj['remote']),
                 'gerrit_source_file': gerrit_source_file,
-                'gerrit_content': target_proj['full_line'],
+                'gerrit_content': target_proj.get('full_line', target_proj['full_line']),
                 'gerrit_name': target_proj['name'],
                 'gerrit_path': target_proj['path'],
                 'gerrit_revision': target_proj['revision'],
@@ -1653,36 +1660,16 @@ class FeatureThree:
             }
             differences.append(difference)
         
-        # 🔥 修正：檢查 Gerrit 中存在但轉換後不存在的專案（刪除）
+        # 檢查 Gerrit 中存在但轉換後不存在的專案（刪除）
         converted_composite_keys = set()
         for proj in converted_projects:
             composite_key = f"{proj['name']}|{proj['path']}"
             converted_composite_keys.add(composite_key)
-            
-            # 🔥 添加調試日誌 - 記錄每個轉換專案的狀態
-            changed_status = proj.get('changed', False)
-            self.logger.debug(f"轉換專案: {composite_key}, changed: {changed_status}")
 
-        self.logger.info(f"🔍 轉換後存在的專案數量: {len(converted_composite_keys)}")
-        self.logger.info(f"🔍 Gerrit 目標專案數量: {len(target_index)}")
-
-        # 檢查被誤判為刪除的專案
-        potentially_deleted = []
+        deleted_count = 0
         for composite_key, target_proj in target_index.items():
             if composite_key not in converted_composite_keys:
-                potentially_deleted.append(composite_key)
-
-        if potentially_deleted:
-            self.logger.warning(f"🔍 被判定為刪除的專案: {len(potentially_deleted)} 個")
-            for key in potentially_deleted[:5]:  # 只顯示前5個
-                self.logger.warning(f"   - {key}")
-
-        for composite_key, target_proj in target_index.items():
-            if composite_key not in converted_composite_keys:
-                # 🔥 添加更詳細的刪除日誌
-                self.logger.info(f"🗑️ 標記為刪除: {composite_key}")
-                self.logger.info(f"   原因: 在 Gerrit 中存在但轉換後專案列表中不存在")
-                
+                deleted_count += 1
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
@@ -1690,7 +1677,6 @@ class FeatureThree:
                     'name': target_proj['name'],
                     'path': target_proj['path'],
                     'revision': 'N/A',
-                    'original_revision': 'N/A',
                     'upstream': 'N/A',
                     'dest-branch': 'N/A',
                     'groups': 'N/A',
@@ -1698,7 +1684,7 @@ class FeatureThree:
                     'remote': 'N/A',
                     'source_link': 'N/A',
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': target_proj['full_line'],
+                    'gerrit_content': target_proj.get('full_line', target_proj['full_line']),
                     'gerrit_name': target_proj['name'],
                     'gerrit_path': target_proj['path'],
                     'gerrit_revision': target_proj['revision'],
@@ -1713,6 +1699,15 @@ class FeatureThree:
                     'status_color': 'orange'
                 }
                 differences.append(difference)
+        
+        # 🔥 添加詳細統計日誌
+        self.logger.info(f"🔍 差異比較詳細統計:")
+        self.logger.info(f"   總比較專案數: {total_compared}")
+        self.logger.info(f"   ✔️ 相同: {same_count}")
+        self.logger.info(f"   ❌ 不同: {different_count}")
+        self.logger.info(f"   🆕 新增: {new_count}")
+        self.logger.info(f"   🗑️ 刪除: {deleted_count}")
+        self.logger.info(f"   📋 差異頁籤總項目: {len(differences)}")
         
         return differences
     
@@ -2170,11 +2165,11 @@ class FeatureThree:
     - {rddb_number}"""
         
     def _generate_excel_report(self, overwrite_type: str, source_file_path: Optional[str],
-                        output_file_path: Optional[str], target_file_path: Optional[str], 
-                        diff_analysis: Dict, output_folder: str, 
-                        excel_filename: Optional[str], source_download_success: bool,
-                        target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
-                        expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
+                    output_file_path: Optional[str], target_file_path: Optional[str], 
+                    diff_analysis: Dict, output_folder: str, 
+                    excel_filename: Optional[str], source_download_success: bool,
+                    target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
+                    expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
         """產生 Excel 報告 - 修正版本，新的頁籤順序和底色"""
         try:
             if excel_filename:
@@ -2184,7 +2179,7 @@ class FeatureThree:
                 excel_file = os.path.join(output_folder, default_name)
             
             with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
-                # 🆕 頁籤 1: 轉換摘要（淺藍色底色）
+                # 頁籤 1: 轉換摘要（淺藍色底色）
                 summary_data = [{
                     'SN': 1,
                     '轉換類型': overwrite_type,
@@ -2203,7 +2198,7 @@ class FeatureThree:
                     '⭕ 未轉換專案數': diff_analysis['summary'].get('unchanged_count', 0),
                     '🎯 目標檔案專案數': diff_analysis['summary'].get('target_count', 0),
                     '❌ 轉換後與 Gerrit Manifest 差異數': diff_analysis['summary'].get('differences_count', 0),
-                    '✅ 轉換後與 Gerrit Manifest 相同數': diff_analysis['summary'].get('identical_converted_count', 0)
+                    '✔️ 轉換後與 Gerrit Manifest 相同數': diff_analysis['summary'].get('identical_converted_count', 0)
                 }]
 
                 if push_result:
@@ -2224,11 +2219,11 @@ class FeatureThree:
                 df_summary = pd.DataFrame(summary_data)
                 df_summary.to_excel(writer, sheet_name='轉換摘要', index=False)
 
-                # 🆕 為轉換摘要頁籤添加超連結
+                # 為轉換摘要頁籤添加超連結
                 worksheet_summary = writer.sheets['轉換摘要']
                 self._add_summary_hyperlinks(worksheet_summary, overwrite_type)
                 
-                # 頁籤 2: 轉換後專案（淺藍色底色）- 修改欄位順序和內容
+                # 頁籤 2: 轉換後專案（淺藍色底色）
                 if diff_analysis['converted_projects']:
                     converted_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
@@ -2240,18 +2235,17 @@ class FeatureThree:
                             conversion_status = '⭕ 未轉換'
                             status_description = f"保持原值: {proj['original_revision']}"
                         
-                        # 🆕 根據需求修改欄位順序和名稱
                         converted_data.append({
                             'SN': i,
                             '專案名稱': proj['name'],
                             '專案路徑': proj['path'],
                             '轉換狀態': conversion_status,
-                            '來源檔案': f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}",  # 🆕 新增欄位 (紫底白字)
+                            '來源檔案': f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}",
                             '原始 Revision': proj['original_revision'],
-                            '轉換後檔案': self.output_files.get(overwrite_type, 'unknown.xml'),  # 🆕 新增欄位 (紫底白字)
+                            '轉換後檔案': self.output_files.get(overwrite_type, 'unknown.xml'),
                             '轉換後 Revision': proj['converted_revision'],
-                            'Revision 是否相等': '',  # 🔥 添加新欄位，空值將由 Excel 公式填充，不要粗體
-                            '轉換說明': status_description,  # 🆕 橘底白字
+                            'Revision 是否相等': '',
+                            '轉換說明': status_description,
                             'Upstream': proj['upstream'],
                             'Dest-Branch': proj['dest-branch'],
                             'Groups': proj['groups'],
@@ -2262,7 +2256,6 @@ class FeatureThree:
                     df_converted = pd.DataFrame(converted_data)
                     df_converted.to_excel(writer, sheet_name='轉換後專案', index=False)
                     
-                    # 🔥 添加 Excel 公式到 "轉換後專案" 頁籤的 "Revision 是否相等" 欄位
                     worksheet_converted = writer.sheets['轉換後專案']
                     self._add_revision_comparison_formula_converted_projects(worksheet_converted)
                 
@@ -2271,11 +2264,10 @@ class FeatureThree:
                     diff_sheet_name = "轉換後與 Gerrit manifest 的差異"
                     df_diff = pd.DataFrame(diff_analysis['differences'])
                     
-                    # 🔥 修正欄位順序，移除不需要的 "revision" 和 "Revision 是否相等" 欄位
                     diff_columns = [
                         'SN', 'comparison_status', 'comparison_result',
                         'source_file', 'content', 'name', 'path', 
-                        'original_revision',  # 🔥 只保留 original_revision，移除 revision 和 Revision 是否相等
+                        'revision',
                         'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                         'gerrit_source_file', 'gerrit_content', 'gerrit_name', 
                         'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 
@@ -2287,17 +2279,16 @@ class FeatureThree:
                     
                     df_diff.to_excel(writer, sheet_name=diff_sheet_name, index=False)
                 
-                # 🆕 頁籤 4: 來源的 manifest（淺綠色底色）
+                # 🔥 頁籤 4: 來源 gerrit manifest（修改名稱）
                 if diff_analysis['converted_projects']:
                     source_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
                         source_link = self._generate_source_link(proj['name'], proj['original_revision'], proj['remote'])
-                        # 🔥 修正：使用 gerrit_ 開頭的來源檔案名稱
                         gerrit_source_filename = f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}"
                         
                         source_data.append({
                             'SN': i,
-                            'source_file': gerrit_source_filename,  # 🔥 例如：gerrit_atv-google-refplus-wave.xml
+                            'source_file': gerrit_source_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['original_revision'],
@@ -2310,19 +2301,18 @@ class FeatureThree:
                         })
                     
                     df_source = pd.DataFrame(source_data)
-                    df_source.to_excel(writer, sheet_name='來源的 manifest', index=False)
+                    df_source.to_excel(writer, sheet_name='來源 gerrit manifest', index=False)  # 🔥 修改名稱
                 
-                # 🆕 頁籤 5: 轉換後的 manifest（淺綠色底色）
+                # 頁籤 5: 轉換後的 manifest（淺綠色底色）
                 if diff_analysis['converted_projects']:
                     converted_manifest_data = []
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
                         source_link = self._generate_source_link(proj['name'], proj['converted_revision'], proj['remote'])
-                        # 🔥 修正：使用轉換後的檔案名稱（即將用來比對的那份）
                         output_filename = self.output_files.get(overwrite_type, 'unknown.xml')
                         
                         converted_manifest_data.append({
                             'SN': i,
-                            'source_file': output_filename,  # 🔥 例如：atv-google-refplus-wave-backup.xml
+                            'source_file': output_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['converted_revision'],
@@ -2337,17 +2327,16 @@ class FeatureThree:
                     df_converted_manifest = pd.DataFrame(converted_manifest_data)
                     df_converted_manifest.to_excel(writer, sheet_name='轉換後的 manifest', index=False)
                 
-                # 🆕 頁籤 6: gerrit 上的 manifest（淺綠色底色）
+                # 🔥 頁籤 6: 目的 gerrit manifest（修改名稱）
                 if diff_analysis['has_target'] and diff_analysis['target_projects']:
                     gerrit_data = []
                     for i, proj in enumerate(diff_analysis['target_projects'], 1):
                         source_link = self._generate_source_link(proj['name'], proj['revision'], proj['remote'])
-                        # 🔥 修正：使用 gerrit_ 開頭的目標檔案名稱
                         gerrit_target_filename = f"gerrit_{self.target_files.get(overwrite_type, 'unknown.xml')}"
                         
                         gerrit_data.append({
                             'SN': i,
-                            'source_file': gerrit_target_filename,  # 🔥 例如：gerrit_atv-google-refplus-wave-backup.xml
+                            'source_file': gerrit_target_filename,
                             'name': proj['name'],
                             'path': proj['path'],
                             'revision': proj['revision'],
@@ -2360,28 +2349,18 @@ class FeatureThree:
                         })
                     
                     df_gerrit = pd.DataFrame(gerrit_data)
-                    df_gerrit.to_excel(writer, sheet_name='gerrit 上的 manifest', index=False)
+                    df_gerrit.to_excel(writer, sheet_name='目的 gerrit manifest', index=False)  # 🔥 修改名稱
                 
-                # 🆕 格式化所有工作表 - 新的底色方案
+                # 格式化所有工作表
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
                     self._format_worksheet_with_background_colors(worksheet, sheet_name)
                     
-                    # 🆕 為相關頁籤添加超連結
-                    if sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest', '轉換後與 Gerrit manifest 的差異']:
+                    # 為相關頁籤添加超連結
+                    if sheet_name in ['來源 gerrit manifest', '轉換後的 manifest', '目的 gerrit manifest', '轉換後與 Gerrit manifest 的差異']:
                         self._add_manifest_hyperlinks(worksheet, sheet_name)
-                        
-                        # 🆕 額外日誌說明各頁籤的連結策略
-                        if sheet_name == '來源的 manifest':
-                            self.logger.info(f"📋 {sheet_name}: source_file 欄位已添加 Gerrit 連結")
-                        elif sheet_name == '轉換後的 manifest':
-                            self.logger.info(f"📋 {sheet_name}: source_file 欄位不添加連結（本地檔案）")
-                        elif sheet_name == 'gerrit 上的 manifest':
-                            self.logger.info(f"📋 {sheet_name}: source_file 欄位已添加 Gerrit 連結")
-                        elif sheet_name == '轉換後與 Gerrit manifest 的差異':
-                            self.logger.info(f"📋 {sheet_name}: 僅 gerrit_source_file 欄位添加連結，source_file 不添加")
                     
-                    # 🆕 為轉換後專案頁籤添加特殊的 Gerrit 連結
+                    # 為轉換後專案頁籤添加特殊的 Gerrit 連結
                     if sheet_name == '轉換後專案':
                         self._add_converted_projects_hyperlinks(worksheet, overwrite_type)
             
@@ -2447,8 +2426,8 @@ class FeatureThree:
                 elif header_value == 'gerrit_source_file':
                     gerrit_source_file_col = col_num
             
-            # 🆕 只有特定頁籤的 source_file 欄位需要添加連結
-            source_file_need_link = sheet_name in ['來源的 manifest', 'gerrit 上的 manifest']
+            # 🔥 修改：只有特定頁籤的 source_file 欄位需要添加連結
+            source_file_need_link = sheet_name in ['來源 gerrit manifest', '目的 gerrit manifest']  # 🔥 修改頁籤名稱
             
             # 為 source_file 欄位添加連結（僅限指定頁籤）
             if source_file_col and source_file_need_link:
@@ -2470,7 +2449,7 @@ class FeatureThree:
                         gerrit_url = self._generate_gerrit_manifest_link(filename)
                         self._add_hyperlink_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
             
-            # 🆕 記錄處理結果
+            # 記錄處理結果
             if source_file_col and source_file_need_link:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 source_file 欄位連結")
             elif source_file_col and not source_file_need_link:
@@ -2515,9 +2494,9 @@ class FeatureThree:
             self.logger.error(f"添加轉換摘要超連結失敗: {str(e)}")
             
     def _add_revision_comparison_formula_converted_projects(self, worksheet):
-        """為轉換後專案頁籤添加真正的動態條件格式"""
+        """為轉換後專案頁籤添加真正的動態條件格式 - 修改置中對齊，不要粗體"""
         try:
-            from openpyxl.styles import Font
+            from openpyxl.styles import Font, Alignment
             from openpyxl.utils import get_column_letter
             from openpyxl.formatting.rule import Rule
             from openpyxl.styles.differential import DifferentialStyle
@@ -2550,11 +2529,12 @@ class FeatureThree:
                 formula = f'=IF({original_col_letter}{row_num}={converted_col_letter}{row_num},"Y","N")'
                 cell = worksheet[f"{comparison_col_letter}{row_num}"]
                 cell.value = formula
-                # 🔥 不設定任何手動顏色，讓條件格式處理
+                # 🔥 設定置中對齊，不要粗體
+                cell.alignment = Alignment(horizontal='center', vertical='center')
             
-            # 🔥 設定真正的動態條件格式
-            green_font = Font(color="00B050", bold=True)
-            red_font = Font(color="FF0000", bold=True)
+            # 🔥 設定真正的動態條件格式 - 不要粗體
+            green_font = Font(color="00B050", bold=False)  # 🔥 修改：不要粗體
+            red_font = Font(color="FF0000", bold=False)    # 🔥 修改：不要粗體
             
             # 條件格式範圍
             range_string = f"{comparison_col_letter}2:{comparison_col_letter}{worksheet.max_row}"
@@ -2581,7 +2561,7 @@ class FeatureThree:
             worksheet.conditional_formatting.add(range_string, green_rule)
             worksheet.conditional_formatting.add(range_string, red_rule)
             
-            self.logger.info("✅ 已添加真正的動態條件格式")
+            self.logger.info("✅ 已添加真正的動態條件格式（置中對齊，不粗體）")
             
         except Exception as e:
             self.logger.error(f"添加動態條件格式失敗: {str(e)}")
@@ -2886,7 +2866,7 @@ class FeatureThree:
             if sheet_name in ['轉換摘要', '轉換後專案']:
                 # 淺藍色頁籤
                 worksheet.sheet_properties.tabColor = "ADD8E6"  # Light Blue
-            elif sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest']:
+            elif sheet_name in ['來源 gerrit manifest', '轉換後的 manifest', '目的 gerrit manifest']:
                 # 淺綠色頁籤
                 worksheet.sheet_properties.tabColor = "90EE90"  # Light Green
             elif sheet_name in ['轉換後與 Gerrit manifest 的差異']:
@@ -2897,20 +2877,28 @@ class FeatureThree:
             blue_header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")  # 藍底
             green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")        # 綠底
             red_fill = PatternFill(start_color="C5504B", end_color="C5504B", fill_type="solid")         # 紅底
-            orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")      # 🆕 橘底
-            purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")      # 🆕 紫底
-            dark_cyan_fill = PatternFill(start_color="008B8B", end_color="008B8B", fill_type="solid")   # 🆕 藍深青色
+            orange_fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")      # 橘底
+            purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")      # 紫底
+            dark_cyan_fill = PatternFill(start_color="008B8B", end_color="008B8B", fill_type="solid")   # 藍深青色
+            teal_fill = PatternFill(start_color="20B2AA", end_color="20B2AA", fill_type="solid")        # 青藍色
+            lighter_teal_fill = PatternFill(start_color="87CEEB", end_color="87CEEB", fill_type="solid") # 更淺的藍色
+            link_blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")   # 🔥 新增：連結藍色背景
             
             white_font = Font(color="FFFFFF", bold=True)    # 白字
             blue_font = Font(color="0070C0", bold=True)     # 藍字
             gray_font = Font(color="808080", bold=True)     # 灰字
             
-            # 🆕 定義特殊顏色的欄位
-            orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL", "轉換說明"]
-            green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案"]
-            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "轉換後檔案"]
-            blue_header_fields = ["📊 總專案數", "🔄 實際轉換專案數", "⭕ 未轉換專案數"]
-            dark_cyan_header_fields = ["🎯 目標檔案專案數", "❌ 轉換後與 Gerrit Manifest 差異數", "✅ 轉換後與 Gerrit Manifest 相同數"]
+            # 🔥 修改特殊顏色的欄位定義
+            orange_header_fields = ["推送狀態", "推送結果", "Commit ID", "Review URL", "轉換說明", 
+                                "comparison_status", "comparison_result"]
+            green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案",
+                                "gerrit_content", "gerrit_name", "gerrit_path", "gerrit_upstream", 
+                                "gerrit_dest-branch", "gerrit_groups", "gerrit_clone-depth", 
+                                "gerrit_remote"]  # 🔥 移除 gerrit_source_link
+            purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "轉換後檔案",
+                                "source_file", "gerrit_source_file"]
+            dark_cyan_header_fields = ["🎯 目標檔案專案數", "❌ 轉換後與 Gerrit Manifest 差異數", "✔️ 轉換後與 Gerrit Manifest 相同數"]
+            link_blue_header_fields = ["source_link", "gerrit_source_link", "📊 總專案數", "🔄 實際轉換專案數", "⭕ 未轉換專案數"]  # 🔥 新增藍色背景欄位
             
             # 設定表頭和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
@@ -2930,14 +2918,14 @@ class FeatureThree:
                     cell.fill = purple_fill
                     cell.font = white_font
                     self.logger.debug(f"設定紫底白字表頭: {header_value}")
-                elif header_value in blue_header_fields:
-                    cell.fill = blue_header_fill
-                    cell.font = white_font
-                    self.logger.debug(f"設定藍底白字表頭: {header_value}")
                 elif header_value in dark_cyan_header_fields:
                     cell.fill = dark_cyan_fill
                     cell.font = white_font
                     self.logger.debug(f"設定藍深青色白字表頭: {header_value}")
+                elif header_value in link_blue_header_fields:  # 🔥 新增藍色背景表頭
+                    cell.fill = link_blue_fill
+                    cell.font = white_font
+                    self.logger.debug(f"設定藍色白字表頭: {header_value}")
                 else:
                     # 預設所有其他表頭都是藍底白字
                     cell.fill = blue_header_fill
@@ -2945,7 +2933,7 @@ class FeatureThree:
                 
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 
-                # 特殊處理差異頁籤
+                # 特殊處理轉換後專案頁籤
                 if sheet_name == "轉換後專案":
                     if header_value == '原始 Revision':
                         cell.fill = red_fill
@@ -2964,18 +2952,8 @@ class FeatureThree:
 
                 # 特殊處理差異頁籤
                 elif sheet_name == "轉換後與 Gerrit manifest 的差異":
-                    # gerrit_ 開頭的欄位用綠底白字（但前面已經被特殊顏色覆蓋了）
-                    if header_value.startswith('gerrit_') and header_value not in green_header_fields:
-                        cell.fill = green_fill
-                        cell.font = white_font
-                    
-                    # gerrit_revision 用紅底白字
-                    elif header_value in ['gerrit_revision']:
-                        cell.fill = red_fill
-                        cell.font = white_font
-                    
-                    # comparison_status 和 comparison_result 用紅底白字
-                    elif header_value in ['comparison_status', 'comparison_result']:
+                    # revision 和 gerrit_revision 都用紅底白字
+                    if header_value in ['revision', 'gerrit_revision']:
                         cell.fill = red_fill
                         cell.font = white_font
                     
@@ -2993,7 +2971,7 @@ class FeatureThree:
                     self._set_comparison_row_colors(worksheet, col_num, header_value)
                 
                 # manifest 相關頁籤的處理
-                elif sheet_name in ['來源的 manifest', '轉換後的 manifest', 'gerrit 上的 manifest']:
+                elif sheet_name in ['來源 gerrit manifest', '轉換後的 manifest', '目的 gerrit manifest']:
                     if 'revision' in header_value.lower():
                         worksheet.column_dimensions[col_letter].width = 35
                     elif header_value in ['name']:
@@ -3016,15 +2994,493 @@ class FeatureThree:
                     elif '路徑' in header_value or 'path' in header_value:
                         worksheet.column_dimensions[col_letter].width = 30
             
+            # 🔥 使用增強版的自動調整欄寬功能
+            self._auto_adjust_column_widths_enhanced(worksheet, sheet_name)
+            
+            # 🔥 添加 SN 欄位置中功能
+            self._center_sn_columns(worksheet)
+            
+            # 🔥 添加轉換摘要內容底色功能
+            if sheet_name == "轉換摘要":
+                self._format_summary_content_backgrounds(worksheet)
+            
             # 設定轉換後專案頁籤的轉換狀態顏色
             if sheet_name == "轉換後專案":
-                self._set_conversion_status_colors_v2(worksheet)
+                self._set_conversion_status_colors_v3(worksheet)  # 使用新版本，不要粗體
             
             self.logger.debug(f"已格式化工作表: {sheet_name}")
             
         except Exception as e:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
+
+    def _add_hyperlink_to_cell(self, worksheet, row: int, col: int, url: str, display_text: str):
+        """
+        為 Excel 單元格添加超連結 - 改進版本，確保藍色樣式
+        
+        Args:
+            worksheet: Excel 工作表
+            row: 行號
+            col: 列號  
+            url: 連結 URL
+            display_text: 顯示文字
+        """
+        try:
+            from openpyxl.worksheet.hyperlink import Hyperlink
+            from openpyxl.styles import Font
             
+            cell = worksheet.cell(row=row, column=col)
+            
+            # 🆕 方案1: 使用完整的 HYPERLINK 函數格式
+            try:
+                # 使用 Excel 的 HYPERLINK 函數，這樣 Excel 會更友善地處理
+                cell.value = f'=HYPERLINK("{url}","{display_text}")'
+                # 🔥 設定藍色超連結樣式
+                cell.font = Font(color="0000FF", underline="single")
+                self.logger.debug(f"添加 HYPERLINK 函數: {display_text} → {url}")
+                return
+            except Exception as e:
+                self.logger.warning(f"HYPERLINK 函數失敗，嘗試標準超連結: {str(e)}")
+            
+            # 🆕 方案2: 標準超連結（備用）
+            cell.value = display_text
+            cell.hyperlink = Hyperlink(ref=f"{cell.coordinate}", target=url)
+            # 🔥 設定藍色超連結樣式
+            cell.font = Font(color="0000FF", underline="single")
+            
+            self.logger.debug(f"添加標準超連結: {display_text} → {url}")
+            
+        except Exception as e:
+            self.logger.error(f"添加超連結失敗: {str(e)}")
+            # 備用方案：顯示文字 + URL 備註
+            cell = worksheet.cell(row=row, column=col)
+            cell.value = f"{display_text}"
+            # 🔥 即使是備用方案，也設定藍色字體
+            cell.font = Font(color="0000FF")
+            
+            # 在註解中添加 URL
+            try:
+                from openpyxl.comments import Comment
+                cell.comment = Comment(f"Gerrit 連結:\n{url}", "System")
+            except:
+                pass
+            
+    def _format_summary_content_backgrounds(self, worksheet):
+        """為轉換摘要頁籤的統計欄位內容設定底色"""
+        try:
+            from openpyxl.styles import PatternFill
+            from openpyxl.utils import get_column_letter
+            
+            # 🔥 定義內容底色
+            light_blue_fill = PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid")    # 淺藍底
+            light_red_fill = PatternFill(start_color="FFE6E6", end_color="FFE6E6", fill_type="solid")     # 淺紅底
+            light_green_fill = PatternFill(start_color="E6FFE6", end_color="E6FFE6", fill_type="solid")   # 淺綠底
+            lighter_blue_fill = PatternFill(start_color="F0F8FF", end_color="F0F8FF", fill_type="solid")  # 更淺藍底
+            
+            # 🔥 定義需要設定內容底色的欄位
+            content_background_fields = {
+                '📊 總專案數': lighter_blue_fill,
+                '🔄 實際轉換專案數': lighter_blue_fill,
+                '⭕ 未轉換專案數': lighter_blue_fill,
+                '🎯 目標檔案專案數': light_blue_fill,
+                '❌ 轉換後與 Gerrit Manifest 差異數': light_red_fill,
+                '✔️ 轉換後與 Gerrit Manifest 相同數': light_green_fill
+            }
+            
+            # 找到需要設定底色的欄位並應用
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value in content_background_fields:
+                    fill_color = content_background_fields[header_value]
+                    
+                    # 為內容行（第2行開始）設定底色
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet.cell(row=row_num, column=col_num)
+                        content_cell.fill = fill_color
+                    
+                    self.logger.debug(f"已為 {header_value} 的內容設定底色")
+            
+            self.logger.info("✅ 已設定轉換摘要統計欄位的內容底色")
+            
+        except Exception as e:
+            self.logger.error(f"設定轉換摘要內容底色失敗: {str(e)}")
+            
+    def _center_sn_columns(self, worksheet):
+        """將所有 SN 欄位的內容置中"""
+        try:
+            from openpyxl.styles import Alignment
+            
+            # 找到 SN 欄位
+            sn_columns = []
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == 'SN':
+                    sn_columns.append(col_num)
+            
+            # 為所有 SN 欄位的內容設定置中對齊
+            for col_num in sn_columns:
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            if sn_columns:
+                self.logger.debug(f"已將 {len(sn_columns)} 個 SN 欄位設定為置中對齊")
+            
+        except Exception as e:
+            self.logger.error(f"設定 SN 欄位置中失敗: {str(e)}")
+            
+    def _auto_adjust_column_widths(self, worksheet, sheet_name: str):
+        """自動調整欄寬以適應內容 - 修正版本，確保表頭完整顯示"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 🔥 特別處理轉換摘要頁籤
+            if sheet_name == "轉換摘要":
+                self._adjust_summary_column_widths(worksheet)
+                return
+            
+            # 遍歷所有欄位
+            for col in worksheet.columns:
+                max_content_length = 0
+                header_length = 0
+                column = col[0].column_letter  # 取得欄位字母
+                
+                # 🔥 首先計算表頭的長度
+                header_cell = worksheet[f"{column}1"]
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    header_length = len(header_value)
+                    self.logger.debug(f"欄位 {column} 表頭 '{header_value}' 長度: {header_length}")
+                
+                # 🔥 然後計算內容的最大長度（從第2行開始）
+                for cell in col[1:]:  # 跳過表頭行
+                    try:
+                        if cell.value:
+                            cell_length = len(str(cell.value))
+                            if cell_length > max_content_length:
+                                max_content_length = cell_length
+                    except:
+                        pass
+                
+                # 🔥 取表頭長度和內容長度的較大值
+                required_width = max(header_length, max_content_length)
+                
+                # 🔥 加上適當的邊距（中文字符需要更多空間）
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    # 檢查是否包含中文字符
+                    chinese_char_count = sum(1 for char in header_value if ord(char) > 127)
+                    if chinese_char_count > 0:
+                        # 中文字符需要更多空間
+                        adjusted_width = required_width + 4
+                    else:
+                        # 英文字符
+                        adjusted_width = required_width + 2
+                else:
+                    adjusted_width = required_width + 2
+                
+                # 🔥 設定特殊欄位的最小寬度
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    
+                    # 根據欄位類型設定最小寬度
+                    if 'revision' in header_value.lower():
+                        min_width = 35
+                    elif 'content' in header_value:
+                        min_width = 60
+                    elif header_value in ['name', 'gerrit_name', '專案名稱']:
+                        min_width = 25
+                    elif header_value in ['path', '專案路徑']:
+                        min_width = 30
+                    elif 'source_link' in header_value:
+                        min_width = 50
+                    elif header_value in ['groups']:
+                        min_width = 40
+                    elif header_value == 'SN':
+                        min_width = 8
+                    elif header_value in ['comparison_status', 'comparison_result']:
+                        min_width = 20
+                    elif 'Gerrit' in header_value and ('源檔案' in header_value or '目標檔案' in header_value):
+                        min_width = 25
+                    elif '下載狀態' in header_value:
+                        min_width = 15
+                    elif '轉換' in header_value:
+                        min_width = 15
+                    else:
+                        # 🔥 一般欄位的最小寬度 = max(表頭長度 + 邊距, 12)
+                        min_width = max(header_length + 4, 12)
+                    
+                    # 應用最小寬度
+                    adjusted_width = max(adjusted_width, min_width)
+                else:
+                    adjusted_width = max(adjusted_width, 12)
+                
+                # 🔥 設定最大寬度限制
+                adjusted_width = min(adjusted_width, 100)
+                
+                # 應用欄寬
+                worksheet.column_dimensions[column].width = adjusted_width
+                
+                self.logger.debug(f"欄位 {column} 最終寬度: {adjusted_width} (表頭:{header_length}, 內容:{max_content_length})")
+            
+            self.logger.debug(f"已自動調整 {sheet_name} 的欄寬")
+            
+        except Exception as e:
+            self.logger.error(f"自動調整欄寬失敗 {sheet_name}: {str(e)}")
+
+    def _adjust_summary_column_widths(self, worksheet):
+        """專門調整轉換摘要頁籤的欄寬 - 確保表頭完整顯示"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 🔥 轉換摘要的欄位寬度設定 - 根據表頭長度調整
+            summary_column_widths = {
+                'SN': 8,
+                '轉換類型': 15,
+                'Gerrit 源檔案': 20,
+                '源檔案下載狀態': 18,
+                '源檔案': 20,
+                '包含 include 標籤': 18,
+                'Gerrit 展開檔案': 20,
+                '使用展開檔案轉換': 20,
+                '輸出檔案': 20,  # 🔥 適中的寬度
+                'Gerrit 目標檔案': 20,
+                '目標檔案下載狀態': 20,
+                '目標檔案': 20,
+                '📊 總專案數': 15,
+                '🔄 實際轉換專案數': 20,
+                '⭕ 未轉換專案數': 18,
+                '🎯 目標檔案專案數': 20,
+                '❌ 轉換後與 Gerrit Manifest 差異數': 35,
+                '✔️ 轉換後與 Gerrit Manifest 相同數': 35,
+                '推送狀態': 12,
+                '推送結果': 30,
+                'Commit ID': 15,
+                'Review URL': 50
+            }
+            
+            # 🔥 動態計算欄寬，確保表頭能完整顯示
+            for col_num, cell in enumerate(worksheet[1], 1):
+                col_letter = get_column_letter(col_num)
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value in summary_column_widths:
+                    preset_width = summary_column_widths[header_value]
+                else:
+                    preset_width = 20  # 預設寬度
+                
+                # 🔥 計算表頭實際需要的寬度
+                if header_value:
+                    # 中文字符需要更多空間
+                    chinese_char_count = sum(1 for char in header_value if ord(char) > 127)
+                    if chinese_char_count > 0:
+                        header_required_width = len(header_value) + 6  # 中文字符加更多邊距
+                    else:
+                        header_required_width = len(header_value) + 4  # 英文字符
+                    
+                    # 取預設寬度和表頭需要寬度的較大值
+                    final_width = max(preset_width, header_required_width)
+                else:
+                    final_width = preset_width
+                
+                # 設定欄寬
+                worksheet.column_dimensions[col_letter].width = final_width
+                
+                self.logger.debug(f"轉換摘要欄位 '{header_value}' 設定寬度: {final_width}")
+            
+            self.logger.info("✅ 已調整轉換摘要頁籤的欄寬（確保表頭完整顯示）")
+            
+        except Exception as e:
+            self.logger.error(f"調整轉換摘要欄寬失敗: {str(e)}")
+
+    def _auto_adjust_column_widths_enhanced(self, worksheet, sheet_name: str):
+        """自動調整欄寬以適應內容 - 增強版本，精確計算中英文寬度"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 特別處理轉換摘要頁籤
+            if sheet_name == "轉換摘要":
+                self._adjust_summary_column_widths_enhanced(worksheet)
+                return
+            
+            # 遍歷所有欄位
+            for col in worksheet.columns:
+                max_content_width = 0
+                header_width = 0
+                column = col[0].column_letter
+                
+                # 🔥 計算表頭的顯示寬度
+                header_cell = worksheet[f"{column}1"]
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    header_width = self._calculate_display_width(header_value)
+                    self.logger.debug(f"欄位 {column} 表頭 '{header_value}' 顯示寬度: {header_width}")
+                
+                # 🔥 計算內容的最大顯示寬度
+                for cell in col[1:]:  # 跳過表頭行
+                    try:
+                        if cell.value:
+                            cell_width = self._calculate_display_width(str(cell.value))
+                            if cell_width > max_content_width:
+                                max_content_width = cell_width
+                    except:
+                        pass
+                
+                # 🔥 取表頭寬度和內容寬度的較大值，加上邊距
+                required_width = max(header_width, max_content_width) + 3
+                
+                # 🔥 設定特殊欄位的最小寬度
+                if header_cell.value:
+                    header_value = str(header_cell.value)
+                    
+                    if 'revision' in header_value.lower():
+                        min_width = 35
+                    elif 'content' in header_value:
+                        min_width = 60
+                    elif header_value in ['name', 'gerrit_name', '專案名稱']:
+                        min_width = 25
+                    elif header_value in ['path', '專案路徑']:
+                        min_width = 30
+                    elif 'source_link' in header_value:
+                        min_width = 50
+                    elif header_value in ['groups']:
+                        min_width = 40
+                    elif header_value == 'SN':
+                        min_width = 8
+                    else:
+                        # 🔥 一般欄位最小寬度 = max(表頭寬度 + 邊距, 12)
+                        min_width = max(header_width + 3, 12)
+                    
+                    final_width = max(required_width, min_width)
+                else:
+                    final_width = max(required_width, 12)
+                
+                # 設定最大寬度限制
+                final_width = min(final_width, 100)
+                
+                # 應用欄寬
+                worksheet.column_dimensions[column].width = final_width
+                
+                self.logger.debug(f"欄位 {column} 最終寬度: {final_width} (表頭:{header_width}, 內容:{max_content_width})")
+            
+            self.logger.debug(f"已自動調整 {sheet_name} 的欄寬（增強版）")
+            
+        except Exception as e:
+            self.logger.error(f"自動調整欄寬失敗 {sheet_name}: {str(e)}")
+
+    def _adjust_summary_column_widths_enhanced(self, worksheet):
+        """專門調整轉換摘要頁籤的欄寬 - 增強版本"""
+        try:
+            from openpyxl.utils import get_column_letter
+            
+            # 🔥 動態計算每個欄位的適當寬度
+            for col_num, cell in enumerate(worksheet[1], 1):
+                col_letter = get_column_letter(col_num)
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value:
+                    # 🔥 使用精確的寬度計算
+                    header_display_width = self._calculate_display_width(header_value)
+                    
+                    # 🔥 根據欄位類型設定基礎寬度
+                    if header_value == 'SN':
+                        base_width = 8
+                    elif 'revision' in header_value.lower():
+                        base_width = 35
+                    elif 'content' in header_value:
+                        base_width = 60
+                    elif 'URL' in header_value:
+                        base_width = 50
+                    elif '❌' in header_value or '✅' in header_value or '✔️' in header_value:
+                        base_width = 35  # 長的統計欄位
+                    elif '📊' in header_value or '🔄' in header_value or '⭕' in header_value or '🎯' in header_value:
+                        base_width = max(header_display_width + 3, 15)  # 根據實際內容調整
+                    elif '狀態' in header_value:
+                        base_width = max(header_display_width + 3, 15)
+                    elif 'ID' in header_value:
+                        base_width = 15
+                    else:
+                        base_width = max(header_display_width + 3, 12)  # 確保表頭能完整顯示
+                    
+                    # 🔥 確保寬度足夠顯示表頭
+                    final_width = max(base_width, header_display_width + 3)
+                    
+                else:
+                    final_width = 15  # 空表頭的預設寬度
+                
+                # 設定欄寬
+                worksheet.column_dimensions[col_letter].width = final_width
+                
+                self.logger.debug(f"轉換摘要欄位 '{header_value}' 計算寬度: {final_width}")
+            
+            self.logger.info("✅ 已調整轉換摘要頁籤的欄寬（增強版，確保表頭完整顯示）")
+            
+        except Exception as e:
+            self.logger.error(f"調整轉換摘要欄寬失敗: {str(e)}")
+            
+    def _calculate_display_width(self, text: str) -> float:
+        """
+        計算文字的顯示寬度
+        中文字符通常需要2個單位寬度，英文字符需要1個單位寬度
+        
+        Args:
+            text: 要計算的文字
+            
+        Returns:
+            顯示寬度
+        """
+        if not text:
+            return 0
+        
+        width = 0
+        for char in str(text):
+            # 判斷是否為中文字符、全形字符或特殊符號
+            if ord(char) > 127:  # 非 ASCII 字符
+                if ord(char) >= 0x4e00 and ord(char) <= 0x9fff:  # 中文字符
+                    width += 2
+                elif ord(char) >= 0xff00 and ord(char) <= 0xffef:  # 全形字符
+                    width += 2
+                elif char in '📊🔄⭕🎯❌✅✔️':  # emoji 符號
+                    width += 2.5
+                else:
+                    width += 1.5  # 其他特殊字符
+            else:
+                width += 1  # ASCII 字符
+        
+        return width
+
+
+    def _set_conversion_status_colors_v3(self, worksheet):
+        """設定轉換狀態的文字顏色 - 修正版本，不要粗體"""
+        try:
+            from openpyxl.styles import Font
+            
+            blue_font = Font(color="0070C0", bold=False)   # 🔥 修改：藍字，不要粗體
+            gray_font = Font(color="808080", bold=False)   # 🔥 修改：灰字，不要粗體
+            
+            # 只找轉換狀態欄位
+            status_column = None
+            
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                if '轉換狀態' in header_value:
+                    status_column = col_num
+                    break
+            
+            # 設定轉換狀態顏色
+            if status_column:
+                for row_num in range(2, worksheet.max_row + 1):
+                    status_cell = worksheet.cell(row=row_num, column=status_column)
+                    status_value = str(status_cell.value) if status_cell.value else ''
+                    
+                    if '🔄 已轉換' in status_value:
+                        status_cell.font = blue_font  # 🔥 不要粗體
+                    elif '⭕ 未轉換' in status_value:
+                        status_cell.font = gray_font  # 🔥 不要粗體
+            
+        except Exception as e:
+            self.logger.error(f"設定轉換狀態顏色失敗: {str(e)}")
+
     def _format_worksheet_unified(self, worksheet, sheet_name: str):
         """統一格式化工作表 - 修正版本"""
         try:
