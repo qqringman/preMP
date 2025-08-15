@@ -572,19 +572,15 @@ class FeatureThree:
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
         """
         根據轉換類型進行 revision 轉換 - 修正正則表達式錯誤版本
-        🔥 只轉換原本就有 revision 的專案，不自動插入 default revision
-        🔥 確保所有專案都被記錄到 conversion_info 中，避免誤判刪除
+        確保儲存 default revision 供 source_link 生成使用
         """
         try:
             self.logger.info(f"開始進行 revision 轉換: {overwrite_type}")
-            self.logger.info("使用字串替換方式，保留所有原始格式（包含註解、空格等）")
-            self.logger.info("🎯 轉換策略: 只轉換原本就有 revision 的專案")
-            self.logger.info("🎯 記錄策略: 所有專案都記錄到 conversion_info 中")
             
             # 先解析 XML 取得 default 資訊
             temp_root = ET.fromstring(xml_content)
             
-            # 讀取 default 標籤的 remote 和 revision 屬性
+            # 🆕 讀取 default 標籤的 remote 和 revision 屬性
             default_remote = ''
             default_revision = ''
             default_element = temp_root.find('default')
@@ -593,7 +589,7 @@ class FeatureThree:
                 default_revision = default_element.get('revision', '')
                 self.logger.info(f"找到預設 remote: {default_remote}, revision: {default_revision}")
             
-            # 儲存為實例變數供其他方法使用
+            # 🆕 儲存為實例變數供 source_link 生成使用
             self.default_remote = default_remote
             self.default_revision = default_revision
             
@@ -1763,37 +1759,68 @@ class FeatureThree:
 
     def _generate_source_link(self, project_name: str, revision: str, remote: str = '') -> str:
         """
-        根據專案名稱、revision 和 remote 生成 gerrit source link
+        根據專案名稱、revision 和 remote 生成 gerrit source link - 新版本
+        
+        Args:
+            project_name: 專案名稱
+            revision: revision 字串
+            remote: remote 名稱
+            
+        Returns:
+            完整的 gerrit 連結 URL
         """
         try:
-            if not project_name or not revision:
+            if not project_name:
                 return 'N/A'
             
-            # 根據 remote 決定 base URL
+            # 🆕 如果 revision 為空，使用 default revision
+            if not revision or revision.strip() == '':
+                revision = getattr(self, 'default_revision', '')
+                if not revision:
+                    self.logger.warning(f"專案 {project_name} 沒有 revision 且無法取得 default revision")
+                    return 'N/A'
+                self.logger.debug(f"專案 {project_name} 使用 default revision: {revision}")
+            
+            revision = revision.strip()
+            
+            # 🆕 根據 remote 決定 base URL
             if remote == 'rtk-prebuilt':
                 base_url = "https://mm2sd-git2.rtkbf.com/gerrit/plugins/gitiles"
-            else:  # rtk 或空值
+            else:  # rtk 或空值或其他
                 base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles"
             
-            # 檢查 revision 是否為 hash (40 字符的十六進制)
-            if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
-                # Hash 格式
-                return f"{base_url}/{project_name}/+/{revision}"
-            
-            # 檢查是否為 tag 格式
-            elif revision.startswith('refs/tags/'):
-                return f"{base_url}/{project_name}/+/{revision}"
-            
-            # 檢查是否為完整的 branch 路徑
-            elif revision.startswith('refs/heads/'):
-                return f"{base_url}/{project_name}/+/{revision}"
-            
-            # 其他情況假設為 branch name，加上 refs/heads/ 前綴
-            else:
-                return f"{base_url}/{project_name}/+/refs/heads/{revision}"
+            # 🆕 判斷 revision 類型並生成相應的連結
+            if self._is_revision_hash(revision):
+                # Hash 格式：直接使用 hash
+                link = f"{base_url}/{project_name}/+/{revision}"
+                self.logger.debug(f"生成 hash 連結: {project_name} → {link}")
                 
+            elif revision.startswith('refs/tags/'):
+                # Tag 格式：直接使用完整的 refs/tags/xxx
+                link = f"{base_url}/{project_name}/+/{revision}"
+                self.logger.debug(f"生成 tag 連結: {project_name} → {link}")
+                
+            elif revision.startswith('refs/heads/'):
+                # Branch 格式：直接使用完整的 refs/heads/xxx
+                link = f"{base_url}/{project_name}/+/{revision}"
+                self.logger.debug(f"生成 branch 連結（完整路徑）: {project_name} → {link}")
+                
+            else:
+                # 🆕 其他情況：判斷是否為 branch name，加上 refs/heads/ 前綴
+                if '/' in revision and not revision.startswith('refs/'):
+                    # 看起來像是 branch path，加上 refs/heads/
+                    full_branch_path = f"refs/heads/{revision}"
+                    link = f"{base_url}/{project_name}/+/{full_branch_path}"
+                    self.logger.debug(f"生成 branch 連結（補充前綴）: {project_name} → {link}")
+                else:
+                    # 無法確定類型，嘗試當作 branch 處理
+                    link = f"{base_url}/{project_name}/+/refs/heads/{revision}"
+                    self.logger.warning(f"無法確定 revision 類型，當作 branch 處理: {project_name} - {revision}")
+            
+            return link
+            
         except Exception as e:
-            self.logger.error(f"生成 source link 失敗: {str(e)}")
+            self.logger.error(f"生成 source link 失敗: {project_name} - {revision} - {str(e)}")
             return 'N/A'
                     
     def _push_to_gerrit(self, overwrite_type: str, converted_content: str, 
@@ -2407,7 +2434,7 @@ class FeatureThree:
 
     def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
         """
-        為 manifest 相關頁籤添加 source_link 欄位的 HYPERLINK 格式超連結
+        為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結
         
         Args:
             worksheet: Excel 工作表
@@ -2432,7 +2459,7 @@ class FeatureThree:
                 elif header_value == 'gerrit_source_link':
                     gerrit_source_link_col = col_num
             
-            # 🔥 修改：只有特定頁籤的 source_file 欄位需要添加連結
+            # 🔥 只有特定頁籤的 source_file 欄位需要添加連結
             source_file_need_link = sheet_name in ['來源 gerrit manifest', '目的 gerrit manifest']
             
             # 為 source_file 欄位添加連結（僅限指定頁籤）
@@ -2455,7 +2482,7 @@ class FeatureThree:
                         gerrit_url = self._generate_gerrit_manifest_link(filename)
                         self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
             
-            # 🆕 為 source_link 欄位添加 HYPERLINK 格式（重點修改）
+            # 🆕 為 source_link 欄位添加正確的專案連結（重點修改）
             if source_link_col:
                 for row_num in range(2, worksheet.max_row + 1):
                     # 取得該行的專案資訊
@@ -2463,19 +2490,19 @@ class FeatureThree:
                     revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['revision'])
                     remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['remote'])
                     
-                    if name_cell and revision_cell:
+                    if name_cell:
                         project_name = str(name_cell)
-                        revision = str(revision_cell)
+                        revision = str(revision_cell) if revision_cell else ''
                         remote = str(remote_cell) if remote_cell else ''
                         
-                        # 生成真正的 Gerrit 專案連結
+                        # 🆕 使用新的生成邏輯
                         gerrit_project_url = self._generate_source_link(project_name, revision, remote)
                         
                         if gerrit_project_url and gerrit_project_url != 'N/A':
-                            # 🔥 使用 HYPERLINK 格式，顯示文字為空（讓Excel自動顯示URL）
+                            # 🔥 使用 HYPERLINK 格式，顯示連結本身
                             self._add_hyperlink_formula_to_cell(worksheet, row_num, source_link_col, gerrit_project_url, gerrit_project_url)
             
-            # 🆕 為 gerrit_source_link 欄位添加 HYPERLINK 格式（重點修改）
+            # 🆕 為 gerrit_source_link 欄位添加正確的專案連結（重點修改）
             if gerrit_source_link_col:
                 for row_num in range(2, worksheet.max_row + 1):
                     # 取得該行的 Gerrit 專案資訊
@@ -2483,12 +2510,12 @@ class FeatureThree:
                     gerrit_revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_revision'])
                     gerrit_remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_remote'])
                     
-                    if gerrit_name_cell and gerrit_revision_cell:
+                    if gerrit_name_cell:
                         project_name = str(gerrit_name_cell)
-                        revision = str(gerrit_revision_cell)
+                        revision = str(gerrit_revision_cell) if gerrit_revision_cell else ''
                         remote = str(gerrit_remote_cell) if gerrit_remote_cell else ''
                         
-                        # 生成真正的 Gerrit 專案連結
+                        # 🆕 使用新的生成邏輯
                         gerrit_project_url = self._generate_source_link(project_name, revision, remote)
                         
                         if gerrit_project_url and gerrit_project_url != 'N/A':
@@ -2498,24 +2525,22 @@ class FeatureThree:
             # 記錄處理結果
             if source_file_col and source_file_need_link:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 source_file 欄位連結")
-            elif source_file_col and not source_file_need_link:
-                self.logger.info(f"⭐ 跳過 {sheet_name} 的 source_file 欄位連結（按需求不添加）")
             
             if gerrit_source_file_col:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_file 欄位連結")
             
             if source_link_col:
-                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_link 欄位 HYPERLINK 格式")
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_link 欄位正確的專案連結")
             
             if gerrit_source_link_col:
-                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_link 欄位 HYPERLINK 格式")
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_link 欄位正確的專案連結")
             
         except Exception as e:
             self.logger.error(f"添加 {sheet_name} 超連結失敗: {str(e)}")
 
     def _add_hyperlink_formula_to_cell(self, worksheet, row: int, col: int, url: str, display_text: str = None):
         """
-        為 Excel 單元格添加 HYPERLINK 函數格式的超連結
+        為 Excel 單元格添加 HYPERLINK 函數格式的超連結 - 改進版本
         
         Args:
             worksheet: Excel 工作表
@@ -2529,13 +2554,17 @@ class FeatureThree:
             
             cell = worksheet.cell(row=row, column=col)
             
+            # 🆕 清理 URL 中的特殊字符，避免 Excel 公式錯誤
+            clean_url = url.replace('"', '""')  # 轉義雙引號
+            
             # 🔥 使用 HYPERLINK 函數格式
             if display_text and display_text != url:
                 # 如果有不同的顯示文字
-                cell.value = f'=HYPERLINK("{url}","{display_text}")'
+                clean_display_text = str(display_text).replace('"', '""')  # 轉義顯示文字中的雙引號
+                cell.value = f'=HYPERLINK("{clean_url}","{clean_display_text}")'
             else:
                 # 如果沒有特別的顯示文字，就顯示 URL 本身
-                cell.value = f'=HYPERLINK("{url}")'
+                cell.value = f'=HYPERLINK("{clean_url}")'
             
             # 🔥 設定藍色超連結樣式
             cell.font = Font(color="0000FF", underline="single")
@@ -4339,34 +4368,38 @@ class FeatureThree:
 
     def _is_revision_hash(self, revision: str) -> bool:
         """
-        判斷 revision 是否為 commit hash
+        判斷 revision 是否為 commit hash - 改進版本
         
         Args:
             revision: revision 字串
             
         Returns:
-            True 如果是 hash，False 如果是 branch name
+            True 如果是 hash，False 如果是 branch/tag name
         """
         if not revision:
             return False
         
         revision = revision.strip()
         
-        # Hash 特徵：40 字符的十六進制字串
+        # 🆕 明確排除 refs/ 開頭的（這些是 branch 或 tag）
+        if revision.startswith('refs/'):
+            return False
+        
+        # 🆕 Hash 特徵：純十六進制字串
+        # 40 字符的完整 hash
         if len(revision) == 40 and all(c in '0123456789abcdefABCDEF' for c in revision):
             return True
         
-        # Hash 特徵：較短的 hash (7-12 字符的十六進制)
+        # 7-12 字符的短 hash
         if 7 <= len(revision) <= 12 and all(c in '0123456789abcdefABCDEF' for c in revision):
             return True
         
-        # Branch name 特徵：包含斜線和可讀名稱
-        if '/' in revision and any(c.isalpha() for c in revision):
+        # 🆕 包含非十六進制字符的一定不是 hash
+        if any(c not in '0123456789abcdefABCDEF' for c in revision):
             return False
         
         # 其他情況當作 branch name 處理
         return False
-
 
     def _get_effective_revision_for_conversion(self, project_element) -> str:
         """
