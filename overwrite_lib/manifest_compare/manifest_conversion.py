@@ -706,7 +706,7 @@ class ManifestComparator:
 
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                     target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異（修正版：正確處理 [1]-[4] 的比較邏輯）"""
+        """使用轉換資訊比較專案差異（完整版：包含所有邏輯和原始行內容）"""
         differences = []
         
         # 🔥 判斷比較模式
@@ -745,12 +745,12 @@ class ManifestComparator:
             if conv_composite_key not in target_index:
                 # 專案在來源檔案存在，但在目標檔案中不存在
                 different_count += 1
-                comparison_result = '專案僅存在於來源檔案，目標檔案中無此專案'
+                comparison_result = '專案僅存在於來源檔案，目標檔案無此專案'
                     
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': self._build_project_line_content_for_source(conv_proj) if is_local_comparison else self._build_project_line_content(conv_proj, use_converted_revision=False),
+                    'content': conv_proj.get('source_full_line', ''),  # 🔥 使用來源檔案原始行內容
                     'name': conv_proj['name'],
                     'path': conv_proj['path'],
                     'revision': conv_proj['converted_revision'],
@@ -834,7 +834,7 @@ class ManifestComparator:
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'content': self._build_project_line_content_for_source(conv_proj) if is_local_comparison else self._build_project_line_content(conv_proj, use_converted_revision=False),
+                'content': conv_proj.get('source_full_line', ''),  # 🔥 使用來源檔案原始行內容
                 'name': conv_proj['name'],
                 'path': conv_proj['path'],
                 'revision': conv_proj['converted_revision'],
@@ -1087,7 +1087,7 @@ class ManifestComparator:
             return False
 
     def _build_project_line_content(self, project: Dict, use_converted_revision: bool = False) -> str:
-        """根據專案資訊建立完整的 project 行內容（從 feature_three.py 複製）"""
+        """根據專案資訊建立完整的 project 行內容（修正版：正確處理來源 revision）"""
         try:
             # 建立基本的 project 標籤
             project_line = "<project"
@@ -1098,9 +1098,13 @@ class ManifestComparator:
             for attr in attrs_order:
                 value = project.get(attr, '')
                 
-                # 特殊處理 revision
-                if attr == 'revision' and use_converted_revision:
-                    value = project.get('converted_revision', project.get('revision', ''))
+                # 🔥 修正：特殊處理 revision
+                if attr == 'revision':
+                    if use_converted_revision:
+                        value = project.get('converted_revision', project.get('revision', ''))
+                    else:
+                        # 🔥 修正：應該使用 original_revision 作為來源檔案的 revision
+                        value = project.get('original_revision', project.get('revision', ''))
                 
                 # 處理 remote 屬性
                 if attr == 'remote':
@@ -1446,11 +1450,18 @@ class ManifestComparator:
             return []
 
     def _create_conversion_info_for_local_comparison(self, source_content: str, target_content: str) -> List[Dict]:
-        """為本地檔案比較創建正確的 conversion_info - 修正版：確保所有欄位都使用正確的檔案資料"""
+        """為本地檔案比較創建正確的 conversion_info - 修正版：保存來源檔案原始行內容"""
         try:
             # 解析源檔案和目標檔案 XML
             source_root = ET.fromstring(source_content)
             target_root = ET.fromstring(target_content)
+            
+            # 🔥 新增：解析來源檔案的原始行內容
+            source_projects_with_lines = self._extract_projects_with_line_numbers(source_content)
+            source_full_lines = {}
+            for proj in source_projects_with_lines:
+                key = f"{proj['name']}|||{proj['path']}"
+                source_full_lines[key] = proj['full_line']
             
             # 讀取源檔案 default 資訊
             source_default_remote = ''
@@ -1496,8 +1507,11 @@ class ManifestComparator:
                 original_revision = project.get('revision', '') or source_default_revision
                 upstream = project.get('upstream', '')
                 
-                # 🔥 修正：查找目標檔案中的對應專案，取得正確的 target 資料
+                # 🔥 取得來源檔案的原始行內容
                 key = f"{project_name}|||{project_path}"
+                source_full_line = source_full_lines.get(key, '')
+                
+                # 🔥 修正：查找目標檔案中的對應專案，取得正確的 target 資料
                 target_project = target_projects.get(key)
                 
                 if target_project:
@@ -1524,7 +1538,7 @@ class ManifestComparator:
                     'path': project_path,
                     'original_revision': original_revision,        # 🔥 來源檔案的 revision
                     'effective_revision': original_revision,
-                    'converted_revision': target_revision,         # 🔥 目標檔案的 revision
+                    'converted_revision': target_revision,         # 🔥 修正：目標檔案的 revision
                     'upstream': target_upstream,                   # 🔥 修正：目標檔案的 upstream
                     'dest-branch': target_dest_branch,             # 🔥 修正：目標檔案的 dest-branch
                     'groups': target_groups,                       # 🔥 修正：目標檔案的 groups
@@ -1542,12 +1556,14 @@ class ManifestComparator:
                     '_source_dest_branch': project.get('dest-branch', ''),
                     '_source_groups': project.get('groups', ''),
                     '_source_clone_depth': project.get('clone-depth', ''),
-                    '_source_remote': project_remote
+                    '_source_remote': project_remote,
+                    # 🔥 新增：保存來源檔案的原始行內容
+                    'source_full_line': source_full_line
                 }
                 
                 projects.append(project_info)
             
-            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（修正版本地比較模式 - 完整屬性）")
+            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（修正版本地比較模式 - 完整屬性+原始行內容）")
             self.logger.info(f"目標檔案包含 {len(target_projects)} 個專案")
             
             # 🔥 修正版除錯輸出：檢查前幾個專案的所有屬性
@@ -1560,6 +1576,7 @@ class ManifestComparator:
                 self.logger.info(f"  來源 groups: {proj['_source_groups']}")
                 self.logger.info(f"  目標 groups: {proj['groups']}")
                 self.logger.info(f"  是否找到目標: {proj['_target_found']}")
+                self.logger.info(f"  原始行內容: {proj['source_full_line'][:100]}...")
             
             return projects
             
