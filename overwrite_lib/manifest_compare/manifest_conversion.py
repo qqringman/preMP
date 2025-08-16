@@ -569,14 +569,14 @@ class ManifestComparator:
             return analysis
 
     def _extract_projects_with_line_numbers(self, xml_content: str) -> List[Dict[str, Any]]:
-        """提取專案資訊並記錄行號（修正版：正確處理 default 值）"""
+        """提取專案資訊並記錄行號（修正版：所有空值都用空字串）"""
         projects = []
         lines = xml_content.split('\n')
         
         try:
             root = ET.fromstring(xml_content)
             
-            # 🔥 修正：讀取 default 資訊
+            # 讀取 default 資訊
             default_remote = ''
             default_revision = ''
             default_element = root.find('default')
@@ -584,23 +584,28 @@ class ManifestComparator:
                 default_remote = default_element.get('remote', '')
                 default_revision = default_element.get('revision', '')
             
-            # 為每個 project 找到對應的完整行內容
             for project in root.findall('project'):
                 project_name = project.get('name', '')
                 
-                # 在原始內容中尋找對應的行號和完整內容
                 line_number, full_line = self._find_project_line_and_content(lines, project_name)
+                
+                # 🔥 修正：確保所有欄位都用空字串，不用 N/A
+                project_revision = project.get('revision', '')
+                project_remote = project.get('remote', '')
+                
+                final_revision = project_revision if project_revision else (default_revision if default_revision else '')
+                final_remote = project_remote if project_remote else (default_remote if default_remote else '')
                 
                 project_info = {
                     'line_number': line_number,
                     'name': project.get('name', ''),
                     'path': project.get('path', ''),
-                    'revision': project.get('revision', '') or default_revision,  # 🔥 修正：正確處理 default revision
-                    'upstream': project.get('upstream', ''),
-                    'dest-branch': project.get('dest-branch', ''),
-                    'groups': project.get('groups', ''),
-                    'clone-depth': project.get('clone-depth', ''),
-                    'remote': project.get('remote', '') or default_remote,  # 🔥 修正：正確處理 default remote
+                    'revision': final_revision,
+                    'upstream': project.get('upstream', ''),           # 🔥 確保空值是空字串
+                    'dest-branch': project.get('dest-branch', ''),     # 🔥 確保空值是空字串
+                    'groups': project.get('groups', ''),               # 🔥 確保空值是空字串
+                    'clone-depth': project.get('clone-depth', ''),     # 🔥 確保空值是空字串
+                    'remote': final_remote,
                     'full_line': full_line
                 }
                 projects.append(project_info)
@@ -711,8 +716,8 @@ class ManifestComparator:
             return 0, f"<project name=\"{project_name}\" ... />"
 
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
-                                    target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異（完整版：確保所有content欄位使用原始資料）"""
+                                target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
+        """使用轉換資訊比較專案差異（修正版：差異明細頁籤的 N/A 處理）"""
         differences = []
         
         # 🔥 判斷比較模式
@@ -749,14 +754,14 @@ class ManifestComparator:
             
             # 使用 composite key 查找對應專案
             if conv_composite_key not in target_index:
-                # 專案在來源檔案存在，但在目標檔案中不存在
+                # 🔥 修正：專案在來源檔案存在，但在目標檔案中不存在
                 different_count += 1
                 comparison_result = '專案僅存在於來源檔案，目標檔案無此專案'
                     
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': conv_proj.get('source_full_line', ''),  # 🔥 使用來源檔案原始行內容
+                    'content': conv_proj.get('source_full_line', ''),
                     'name': conv_proj['name'],
                     'path': conv_proj['path'],
                     'revision': conv_proj['converted_revision'],
@@ -769,16 +774,19 @@ class ManifestComparator:
                     'remote': conv_proj.get('_source_remote', conv_proj['remote']) if is_local_comparison else conv_proj['remote'],
                     'source_link': self._generate_source_link(conv_proj['name'], conv_proj['original_revision'], conv_proj.get('_source_remote', conv_proj['remote']) if is_local_comparison else conv_proj['remote']),
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': 'N/A (專案不存在)',
-                    'gerrit_name': 'N/A',
-                    'gerrit_path': 'N/A',
-                    'gerrit_revision': 'N/A',
-                    'gerrit_upstream': 'N/A',
-                    'gerrit_dest-branch': 'N/A',
-                    'gerrit_groups': 'N/A',
-                    'gerrit_clone-depth': 'N/A',
-                    'gerrit_remote': 'N/A',
-                    'gerrit_source_link': 'N/A',
+                    
+                    # 🔥 修正：只有 content 保留說明文字，其他欄位用空字串
+                    'gerrit_content': 'N/A (專案不存在)',  # 保留說明
+                    'gerrit_name': '',  # 🔥 改為空字串
+                    'gerrit_path': '',  # 🔥 改為空字串
+                    'gerrit_revision': '',  # 🔥 改為空字串
+                    'gerrit_upstream': '',  # 🔥 改為空字串
+                    'gerrit_dest-branch': '',  # 🔥 改為空字串
+                    'gerrit_groups': '',  # 🔥 改為空字串
+                    'gerrit_clone-depth': '',  # 🔥 改為空字串
+                    'gerrit_remote': '',  # 🔥 改為空字串
+                    'gerrit_source_link': '',  # 🔥 改為空字串
+                    
                     'comparison_status': '➕ 新增',
                     'comparison_result': comparison_result,
                     'status_color': 'yellow'
@@ -877,7 +885,7 @@ class ManifestComparator:
             }
             differences.append(difference)
         
-        # 檢查目標檔案中存在但來源檔案不存在的專案（無此專案）
+        # 🔥 修正：檢查目標檔案中存在但來源檔案不存在的專案
         converted_composite_keys = set()
         for proj in converted_projects:
             composite_key = f"{proj['name']}|{proj['path']}"
@@ -886,22 +894,25 @@ class ManifestComparator:
         for composite_key, target_proj in target_index.items():
             if composite_key not in converted_composite_keys:
                 different_count += 1
-                comparison_result = '專案僅存在於目標檔案，來源檔案無此專案'  # 🔥 修改文字
+                comparison_result = '專案僅存在於目標檔案，來源檔案無此專案'
                     
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': 'N/A (專案無此專案)',  # 🔥 修改文字
-                    'name': target_proj['name'],
-                    'path': target_proj['path'],
-                    'revision': 'N/A',
-                    'original_revision': 'N/A',
-                    'upstream': 'N/A',
-                    'dest-branch': 'N/A',
-                    'groups': 'N/A',
-                    'clone-depth': 'N/A',
-                    'remote': 'N/A',
-                    'source_link': 'N/A',
+                    
+                    # 🔥 修正：只有 content 保留說明文字，其他欄位用空字串
+                    'content': 'N/A (專案不存在)',  # 保留說明
+                    'name': '',  # 🔥 改為空字串（因為來源檔案沒有）
+                    'path': '',  # 🔥 改為空字串
+                    'revision': '',  # 🔥 改為空字串
+                    'original_revision': '',  # 🔥 改為空字串
+                    'upstream': '',  # 🔥 改為空字串
+                    'dest-branch': '',  # 🔥 改為空字串
+                    'groups': '',  # 🔥 改為空字串
+                    'clone-depth': '',  # 🔥 改為空字串
+                    'remote': '',  # 🔥 改為空字串
+                    'source_link': '',  # 🔥 改為空字串
+                    
                     'gerrit_source_file': gerrit_source_file,
                     'gerrit_content': target_proj.get('full_line', ''),  # 🔥 使用目標檔案原始行內容
                     'gerrit_name': target_proj['name'],
@@ -913,7 +924,7 @@ class ManifestComparator:
                     'gerrit_clone-depth': target_proj['clone-depth'],
                     'gerrit_remote': target_proj['remote'],
                     'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
-                    'comparison_status': '❓ 無此專案',  # 🔥 修改狀態圖示和文字
+                    'comparison_status': '❓ 無此專案',
                     'comparison_result': comparison_result,
                     'status_color': 'orange'
                 }
@@ -1141,10 +1152,10 @@ class ManifestComparator:
             return f"<project name=\"{project.get('name', 'unknown')}\" ... >"
 
     def _generate_source_link(self, project_name: str, revision: str, remote: str = '') -> str:
-        """根據專案名稱、revision 和 remote 生成 gerrit source link（從 feature_three.py 複製）"""
+        """根據專案名稱、revision 和 remote 生成 gerrit source link（修正版：失敗時返回空字串）"""
         try:
             if not project_name or not revision:
-                return 'N/A'
+                return ''  # 🔥 修正：改為空字串而不是 'N/A'
             
             # 根據 remote 決定 base URL
             if remote == 'rtk-prebuilt':
@@ -1171,7 +1182,7 @@ class ManifestComparator:
                 
         except Exception as e:
             self.logger.error(f"生成 source link 失敗: {str(e)}")
-            return 'N/A'
+            return ''  # 🔥 修正：改為空字串而不是 'N/A'
 
     def _get_source_and_target_filenames(self, overwrite_type: str) -> tuple:
         """取得來源和目標檔案名稱（修正版：正確處理 local_vs_* 格式）"""
@@ -1465,7 +1476,7 @@ class ManifestComparator:
             return []
 
     def _create_conversion_info_for_local_comparison(self, source_content: str, target_content: str) -> List[Dict]:
-        """為本地檔案比較創建正確的 conversion_info - 修正版：完整保存原始行內容"""
+        """為本地檔案比較創建正確的 conversion_info - 完整修正版：確保所有空值都是空字串，不出現 N/A"""
         try:
             # 解析源檔案和目標檔案 XML
             source_root = ET.fromstring(source_content)
@@ -1507,16 +1518,27 @@ class ManifestComparator:
                 project_path = project.get('path', '')
                 key = f"{project_name}|||{project_path}"
                 
+                # 🔥 修正：不強制使用 default，維持原始空值，但確保都是空字串
+                project_revision = project.get('revision', '')
+                project_remote = project.get('remote', '')
+                project_upstream = project.get('upstream', '')
+                project_dest_branch = project.get('dest-branch', '')
+                project_groups = project.get('groups', '')
+                project_clone_depth = project.get('clone-depth', '')
+                
+                # 只有當專案本身沒有值且有 default 值時才使用 default
+                final_revision = project_revision if project_revision else (target_default_revision if target_default_revision else '')
+                final_remote = project_remote if project_remote else (target_default_remote if target_default_remote else '')
+                
                 target_projects[key] = {
                     'name': project_name,
                     'path': project_path,
-                    'revision': project.get('revision', '') or target_default_revision,
-                    'upstream': project.get('upstream', ''),
-                    'dest-branch': project.get('dest-branch', ''),
-                    'groups': project.get('groups', ''),
-                    'clone-depth': project.get('clone-depth', ''),
-                    'remote': project.get('remote', '') or target_default_remote,
-                    # 🔥 關鍵改進：保存目標檔案的原始行內容
+                    'revision': final_revision,
+                    'upstream': project_upstream,        # 🔥 確保空值是空字串
+                    'dest-branch': project_dest_branch,  # 🔥 確保空值是空字串
+                    'groups': project_groups,            # 🔥 確保空值是空字串
+                    'clone-depth': project_clone_depth,  # 🔥 確保空值是空字串
+                    'remote': final_remote,
                     'full_line': target_full_lines.get(key, '')
                 }
             
@@ -1526,9 +1548,18 @@ class ManifestComparator:
             for project in source_root.findall('project'):
                 project_name = project.get('name', '')
                 project_path = project.get('path', '')
-                project_remote = project.get('remote', '') or source_default_remote
-                original_revision = project.get('revision', '') or source_default_revision
-                upstream = project.get('upstream', '')
+                
+                # 🔥 修正：確保所有 get 都使用空字串作為預設值，不強制使用 default
+                project_revision = project.get('revision', '')
+                project_remote = project.get('remote', '')
+                project_upstream = project.get('upstream', '')
+                project_dest_branch = project.get('dest-branch', '')
+                project_groups = project.get('groups', '')
+                project_clone_depth = project.get('clone-depth', '')
+                
+                # 只有當專案本身沒有值且有 default 值時才使用 default
+                final_revision = project_revision if project_revision else (source_default_revision if source_default_revision else '')
+                final_remote = project_remote if project_remote else (source_default_remote if source_default_remote else '')
                 
                 # 🔥 獲得來源檔案的原始行內容
                 key = f"{project_name}|||{project_path}"
@@ -1545,43 +1576,43 @@ class ManifestComparator:
                     target_groups = target_project['groups']
                     target_clone_depth = target_project['clone-depth']
                     target_remote = target_project['remote']
-                    target_full_line = target_project['full_line']  # 🔥 新增：目標檔案原始行內容
+                    target_full_line = target_project['full_line']
                     target_found = True
                 else:
-                    # 專案在目標檔案中不存在
-                    target_revision = 'N/A (專案不存在)'
-                    target_upstream = 'N/A'
-                    target_dest_branch = 'N/A'
-                    target_groups = 'N/A'
-                    target_clone_depth = 'N/A'
-                    target_remote = 'N/A'
-                    target_full_line = 'N/A (專案不存在)'  # 🔥 新增
+                    # 專案在目標檔案中不存在 - 🔥 修正：全部用空字串，不用 N/A
+                    target_revision = ''
+                    target_upstream = ''
+                    target_dest_branch = ''
+                    target_groups = ''
+                    target_clone_depth = ''
+                    target_remote = ''
+                    target_full_line = ''
                     target_found = False
                 
                 project_info = {
                     'name': project_name,
                     'path': project_path,
-                    'original_revision': original_revision,        # 🔥 來源檔案的 revision
-                    'effective_revision': original_revision,
+                    'original_revision': final_revision,        # 🔥 來源檔案的 revision
+                    'effective_revision': final_revision,
                     'converted_revision': target_revision,         # 🔥 修正：目標檔案的 revision
                     'upstream': target_upstream,                   # 🔥 修正：目標檔案的 upstream
                     'dest-branch': target_dest_branch,             # 🔥 修正：目標檔案的 dest-branch
                     'groups': target_groups,                       # 🔥 修正：目標檔案的 groups
                     'clone-depth': target_clone_depth,             # 🔥 修正：目標檔案的 clone-depth
                     'remote': target_remote,                       # 🔥 修正：目標檔案的 remote
-                    'original_remote': project.get('remote', ''), # 🔥 保留：來源檔案的 remote
+                    'original_remote': final_remote,               # 🔥 保留：來源檔案的 remote
                     'changed': True,  # 標記為參與比較
                     'used_default_revision': not project.get('revision'),
                     'used_upstream_for_conversion': False,
                     # 🔥 額外記錄：方便後續除錯
                     '_actual_target_revision': target_revision,
                     '_target_found': target_found,
-                    # 🔥 新增：保留來源檔案的所有原始屬性，方便對比
-                    '_source_upstream': upstream,
-                    '_source_dest_branch': project.get('dest-branch', ''),
-                    '_source_groups': project.get('groups', ''),
-                    '_source_clone_depth': project.get('clone-depth', ''),
-                    '_source_remote': project_remote,
+                    # 🔥 新增：保留來源檔案的所有原始屬性，方便對比 - 確保都是空字串
+                    '_source_upstream': project_upstream,           # 🔥 確保空值是空字串
+                    '_source_dest_branch': project_dest_branch,     # 🔥 確保空值是空字串
+                    '_source_groups': project_groups,               # 🔥 確保空值是空字串
+                    '_source_clone_depth': project_clone_depth,     # 🔥 確保空值是空字串
+                    '_source_remote': final_remote,                 # 🔥 修正：使用正確的來源 remote
                     # 🔥 關鍵改進：保存兩個檔案的原始行內容
                     'source_full_line': source_full_line,      # 來源檔案原始行
                     'target_full_line': target_full_line       # 目標檔案原始行
@@ -1589,21 +1620,30 @@ class ManifestComparator:
                 
                 projects.append(project_info)
             
-            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（修正版本地比較模式 - 完整屬性+雙重原始行內容）")
+            self.logger.info(f"成功分析源檔案 {len(projects)} 個專案（完整修正版本地比較模式 - 所有空值都是空字串）")
             self.logger.info(f"目標檔案包含 {len(target_projects)} 個專案")
             
-            # 🔥 修正版除錯輸出：檢查前幾個專案的所有屬性
+            # 🔥 新增：除錯輸出檢查前幾個專案的所有屬性（確保沒有 N/A）
             for i, proj in enumerate(projects[:3]):
                 self.logger.info(f"專案 {i+1}: {proj['name']}")
-                self.logger.info(f"  來源 revision: {proj['original_revision']}")
-                self.logger.info(f"  目標 revision: {proj['converted_revision']}")
-                self.logger.info(f"  來源 upstream: {proj['_source_upstream']}")
-                self.logger.info(f"  目標 upstream: {proj['upstream']}")
-                self.logger.info(f"  來源 groups: {proj['_source_groups']}")
-                self.logger.info(f"  目標 groups: {proj['groups']}")
+                self.logger.info(f"  來源 revision: '{proj['original_revision']}'")
+                self.logger.info(f"  目標 revision: '{proj['converted_revision']}'")
+                self.logger.info(f"  來源 upstream: '{proj['_source_upstream']}'")
+                self.logger.info(f"  目標 upstream: '{proj['upstream']}'")
+                self.logger.info(f"  來源 groups: '{proj['_source_groups']}'")
+                self.logger.info(f"  目標 groups: '{proj['groups']}'")
+                self.logger.info(f"  來源 dest-branch: '{proj['_source_dest_branch']}'")
+                self.logger.info(f"  目標 dest-branch: '{proj['dest-branch']}'")
+                self.logger.info(f"  來源 clone-depth: '{proj['_source_clone_depth']}'")
+                self.logger.info(f"  目標 clone-depth: '{proj['clone-depth']}'")
+                self.logger.info(f"  來源 remote: '{proj['_source_remote']}'")
+                self.logger.info(f"  目標 remote: '{proj['remote']}'")
                 self.logger.info(f"  是否找到目標: {proj['_target_found']}")
-                self.logger.info(f"  來源原始行內容: {proj['source_full_line'][:100]}...")
-                self.logger.info(f"  目標原始行內容: {proj['target_full_line'][:100]}...")
+                
+                # 🔥 檢查是否有任何 N/A 值
+                for key, value in proj.items():
+                    if isinstance(value, str) and 'N/A' in value:
+                        self.logger.warning(f"⚠️ 發現 N/A 值: {key} = '{value}'")
             
             return projects
             
@@ -1711,7 +1751,7 @@ class ManifestComparator:
                         excel_filename: Optional[str], source_download_success: bool,
                         target_download_success: bool, push_result: Optional[Dict[str, Any]] = None,
                         expanded_file_path: Optional[str] = None, use_expanded: bool = False) -> str:
-        """產生 Excel 報告（完整修正版：處理所有比較模式和欄位命名）"""
+        """產生 Excel 報告（修正版：原始資料頁籤使用純原始資料）"""
         try:
             # 🔥 判斷比較模式
             is_local_comparison = (overwrite_type == "local_vs_local")
@@ -1915,102 +1955,47 @@ class ManifestComparator:
                     worksheet_unchanged = writer.sheets['未轉換專案']
                     self._format_unchanged_projects_reason_column(worksheet_unchanged)
                 
-                # 頁籤 5: 來源的 manifest（🔥 修正檔案名稱）
-                if diff_analysis['converted_projects']:
-                    source_data = []
-                    for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['original_revision'], proj['remote'])
-                        
-                        # 🔥 修正：使用正確的來源檔案名稱
-                        if source_file_path:
-                            source_filename = os.path.basename(source_file_path)
-                        else:
-                            # 備用方案：從映射表取得
-                            source_filename, _ = self._get_source_and_target_filenames(overwrite_type)
-                        
-                        source_data.append({
-                            'SN': i,
-                            'source_file': source_filename,
-                            'name': proj['name'],
-                            'path': proj['path'],
-                            'revision': proj['original_revision'],
-                            'upstream': proj['upstream'],
-                            'dest-branch': proj['dest-branch'],
-                            'groups': proj['groups'],
-                            'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
-                            'source_link': source_link
-                        })
-                    
-                    df_source = pd.DataFrame(source_data)
-                    df_source.to_excel(writer, sheet_name='來源的 manifest', index=False)
+                # 🔥 頁籤 5: 來源的 manifest（修正版：使用純原始資料）
+                if source_file_path:
+                    source_raw_data = self._generate_raw_manifest_data(source_file_path, "來源的 manifest")
+                    if source_raw_data:
+                        df_source = pd.DataFrame(source_raw_data)
+                        df_source.to_excel(writer, sheet_name='來源的 manifest', index=False)
+                        self.logger.info("✅ 來源的 manifest 頁籤已使用純原始資料")
+                    else:
+                        self.logger.warning("⚠️ 來源的 manifest 原始資料為空，跳過此頁籤")
                 
-                # 頁籤 6: 轉換後的 manifest（🔥 修正檔案名稱）
-                if diff_analysis['converted_projects']:
-                    converted_manifest_data = []
-                    for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['converted_revision'], proj['remote'])
-                        
-                        # 🔥 修正：對於比較模式，轉換後檔案就是目標檔案
-                        if target_file_path and overwrite_type.startswith('local_vs_'):
-                            # 比較模式：使用目標檔案名稱
-                            output_filename = os.path.basename(target_file_path)
-                        elif output_file_path:
-                            # 傳統模式：使用輸出檔案名稱
-                            output_filename = os.path.basename(output_file_path)
-                        else:
-                            # 備用方案：從映射表取得
-                            output_filename = self.output_files.get(overwrite_type, 'unknown.xml')
-                        
-                        converted_manifest_data.append({
-                            'SN': i,
-                            'source_file': output_filename,
-                            'name': proj['name'],
-                            'path': proj['path'],
-                            'revision': proj['converted_revision'],
-                            'upstream': proj['upstream'],
-                            'dest-branch': proj['dest-branch'],
-                            'groups': proj['groups'],
-                            'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
-                            'source_link': source_link
-                        })
-                    
-                    df_converted_manifest = pd.DataFrame(converted_manifest_data)
-                    df_converted_manifest.to_excel(writer, sheet_name='轉換後的 manifest', index=False)
+                # 🔥 頁籤 6: 轉換後的 manifest（修正版：使用純原始資料）
+                if target_file_path and diff_analysis['converted_projects']:
+                    # 對於比較模式，"轉換後的 manifest" 實際上就是目標檔案的原始資料
+                    converted_raw_data = self._generate_raw_manifest_data(target_file_path, "轉換後的 manifest")
+                    if converted_raw_data:
+                        df_converted_manifest = pd.DataFrame(converted_raw_data)
+                        df_converted_manifest.to_excel(writer, sheet_name='轉換後的 manifest', index=False)
+                        self.logger.info("✅ 轉換後的 manifest 頁籤已使用純原始資料")
+                    else:
+                        self.logger.warning("⚠️ 轉換後的 manifest 原始資料為空，跳過此頁籤")
                 
-                # 🔥 頁籤 7: gerrit 上的 manifest（直接在原邏輯中修正檔案名稱）
-                if diff_analysis['has_target'] and diff_analysis['target_projects']:
-                    gerrit_data = []
-                    for i, proj in enumerate(diff_analysis['target_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['revision'], proj['remote'])
-                        
-                        # 🔥 修正：獲取正確的檔案名稱，移除展開後綴
-                        if target_file_path:
-                            gerrit_target_filename = os.path.basename(target_file_path)
-                            # 🔥 關鍵修正：直接移除 _expand 後綴
-                            if '_expand' in gerrit_target_filename:
-                                gerrit_target_filename = gerrit_target_filename.replace('_expand', '')
-                        else:
-                            # 備用方案：從映射表取得
-                            _, gerrit_target_filename = self._get_source_and_target_filenames(overwrite_type)
-                        
-                        gerrit_data.append({
-                            'SN': i,
-                            'source_file': gerrit_target_filename,  # 現在會是正確的原始檔案名稱
-                            'name': proj['name'],
-                            'path': proj['path'],
-                            'revision': proj['revision'],
-                            'upstream': proj['upstream'],
-                            'dest-branch': proj['dest-branch'],
-                            'groups': proj['groups'],
-                            'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
-                            'source_link': source_link
-                        })
+                # 🔥 頁籤 7: gerrit 上的 manifest（修正版：使用純原始資料）
+                if diff_analysis['has_target'] and target_file_path:
+                    # 使用實際的目標檔案路徑
+                    actual_target_file = expanded_file_path if use_expanded and expanded_file_path else target_file_path
                     
-                    df_gerrit = pd.DataFrame(gerrit_data)
-                    df_gerrit.to_excel(writer, sheet_name='gerrit 上的 manifest', index=False)
+                    gerrit_raw_data = self._generate_raw_manifest_data(actual_target_file, "gerrit 上的 manifest")
+                    if gerrit_raw_data:
+                        # 🔥 修正檔案名稱顯示（移除展開後綴）
+                        for data in gerrit_raw_data:
+                            original_filename = data['source_file']
+                            if '_expand' in original_filename:
+                                clean_filename = original_filename.replace('_expand', '')
+                                data['source_file'] = clean_filename
+                                self.logger.debug(f"檔案名稱清理: {original_filename} → {clean_filename}")
+                        
+                        df_gerrit = pd.DataFrame(gerrit_raw_data)
+                        df_gerrit.to_excel(writer, sheet_name='gerrit 上的 manifest', index=False)
+                        self.logger.info("✅ gerrit 上的 manifest 頁籤已使用純原始資料")
+                    else:
+                        self.logger.warning("⚠️ gerrit 上的 manifest 原始資料為空，跳過此頁籤")
                 
                 # 格式化所有工作表
                 for sheet_name in writer.sheets:
@@ -3999,6 +3984,63 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"更新統計數據失敗: {str(e)}")
 
+    def _generate_raw_manifest_data(self, file_path: str, sheet_name: str) -> List[Dict]:
+            """
+            生成純原始 manifest 資料（不含比較邏輯）
+            用於 "來源的 manifest", "目標的 manifest", "gerrit 上的 manifest" 頁籤
+            
+            Args:
+                file_path: manifest 檔案路徑
+                sheet_name: 頁籤名稱（用於日誌）
+                
+            Returns:
+                包含原始專案資料的列表
+            """
+            try:
+                if not file_path or not os.path.exists(file_path):
+                    self.logger.warning(f"檔案不存在，無法生成 {sheet_name} 原始資料: {file_path}")
+                    return []
+                
+                self.logger.info(f"📄 生成 {sheet_name} 純原始資料: {os.path.basename(file_path)}")
+                
+                # 直接從檔案重新解析
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 使用現有的解析方法
+                projects = self._extract_projects_with_line_numbers(content)
+                
+                raw_data = []
+                for i, proj in enumerate(projects, 1):
+                    # 生成 source_link
+                    source_link = self._generate_source_link(
+                        proj['name'], 
+                        proj['revision'], 
+                        proj['remote']
+                    )
+                    
+                    # 建立純原始資料（空值用空字串，不用 N/A）
+                    raw_data.append({
+                        'SN': i,
+                        'source_file': os.path.basename(file_path),
+                        'name': proj['name'],
+                        'path': proj['path'],
+                        'revision': proj['revision'] or '',       # 🔥 空值用空字串
+                        'upstream': proj['upstream'] or '',       # 🔥 空值用空字串
+                        'dest-branch': proj['dest-branch'] or '', # 🔥 空值用空字串
+                        'groups': proj['groups'] or '',           # 🔥 空值用空字串
+                        'clone-depth': proj['clone-depth'] or '', # 🔥 空值用空字串
+                        'remote': proj['remote'] or '',           # 🔥 空值用空字串
+                        'source_link': source_link if source_link != 'N/A' else ''  # 🔥 N/A 改為空字串
+                    })
+                
+                self.logger.info(f"✅ {sheet_name} 原始資料生成完成: {len(raw_data)} 個專案")
+                return raw_data
+                
+            except Exception as e:
+                self.logger.error(f"生成 {sheet_name} 原始資料失敗: {str(e)}")
+                return []
+            
     def _show_comparison_results(self, comparison_type: str, diff_analysis: Dict):
         """顯示比較結果統計"""
         self.logger.info(f"\n📈 {comparison_type} 比較結果統計:")
@@ -4046,8 +4088,7 @@ class ManifestConversionTester(ManifestComparator):
                        comparison_type: str = 'master_vs_premp') -> bool:
         """兼容原始 API - 用於本地檔案比較"""
         return self.compare_local_files(source_file, target_file, output_file)
-
-
+        
 def main():
     """主函數"""
     parser = argparse.ArgumentParser(description='Manifest 比較工具 - 完全獨立版本')

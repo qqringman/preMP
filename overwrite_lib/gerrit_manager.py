@@ -1047,7 +1047,7 @@ class GerritManager:
                         if revision:
                             return {
                                 'success': True,
-                                'revision': revision[:8]
+                                'revision': revision
                             }
                             
                 except Exception:
@@ -1078,7 +1078,7 @@ class GerritManager:
                 for pattern in hash_patterns:
                     matches = re.findall(pattern, response.text)
                     if matches:
-                        return matches[0][:8]
+                        return matches[0]
             
             return ''
             
@@ -1106,7 +1106,7 @@ class GerritManager:
                 for pattern in patterns:
                     matches = re.findall(pattern, response.text)
                     if matches:
-                        return matches[0][:8]
+                        return matches[0]
             
             return ''
             
@@ -1194,7 +1194,7 @@ class GerritManager:
 
     def update_branch(self, project_name: str, branch_name: str, new_revision: str, force: bool = False) -> Dict[str, Any]:
         """
-        更新/取代分支指向新的 revision
+        更新分支指向新的 revision
         
         Args:
             project_name: 專案名稱
@@ -1205,6 +1205,8 @@ class GerritManager:
         Returns:
             包含 success 和 message 的字典
         """
+        import time  # 添加 import
+        
         result = {
             'success': False,
             'message': '',
@@ -1223,7 +1225,7 @@ class GerritManager:
             self.logger.info(f"  新 Revision: {new_revision[:8]}")
             self.logger.info(f"  強制更新: {force}")
             
-            # 先檢查分支是否存在並取得當前 revision
+            # 檢查分支是否存在並取得當前 revision
             branch_info = self.check_branch_exists_and_get_revision(project_name, simple_branch_name)
             
             if not branch_info['exists']:
@@ -1241,92 +1243,322 @@ class GerritManager:
                 self.logger.info(result['message'])
                 return result
             
-            if force:
-                # 強制更新：先刪除再建立
-                self.logger.info("執行強制更新（刪除並重建分支）")
-                
-                # 刪除舊分支
-                delete_result = self.delete_branch(project_name, simple_branch_name)
-                if not delete_result['success']:
-                    result['message'] = f"無法刪除舊分支: {delete_result['message']}"
-                    self.logger.error(result['message'])
-                    return result
-                
-                # 建立新分支
-                create_result = self.create_branch(project_name, simple_branch_name, new_revision)
-                if create_result['success']:
-                    result['success'] = True
-                    result['new_revision'] = new_revision[:8]
-                    result['message'] = f"成功強制更新分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
-                    self.logger.info(f"✅ {result['message']}")
-                else:
-                    result['message'] = f"重新建立分支失敗: {create_result['message']}"
-                    self.logger.error(result['message'])
-                    # 嘗試恢復原分支
-                    self.logger.warning(f"嘗試恢復原分支到 {result['old_revision']}")
-                    restore_result = self.create_branch(project_name, simple_branch_name, result['old_revision'])
-                    if restore_result['success']:
-                        self.logger.info("成功恢復原分支")
-                    else:
-                        self.logger.error("無法恢復原分支！")
+            # 統一使用 PUT API 更新分支（改善重點）
+            update_success = self._update_branch_via_api(
+                project_name, simple_branch_name, new_revision, force
+            )
+            
+            if update_success:
+                result['success'] = True
+                result['new_revision'] = new_revision[:8]
+                update_type = "強制更新" if force else "快進式更新"
+                result['message'] = f"成功{update_type}分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
+                self.logger.info(f"✅ {result['message']}")
             else:
-                # 嘗試直接更新（只允許快進式更新）
-                self.logger.info("嘗試快進式更新")
-                
-                import urllib.parse
-                import json
-                
-                encoded_project = urllib.parse.quote(project_name, safe='')
-                encoded_branch = urllib.parse.quote(simple_branch_name, safe='')
-                
-                # 準備請求資料
-                data = json.dumps({'revision': new_revision})
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-                
-                # 嘗試不同的 API 路徑
-                api_urls = [
-                    f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
-                    f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
-                    f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}"
-                ]
-                
-                for url in api_urls:
-                    try:
-                        self.logger.debug(f"嘗試更新: {url}")
-                        
-                        # 使用 PUT 方法更新分支
-                        response = self.session.put(url, data=data, headers=headers, timeout=30)
-                        
-                        if response.status_code in [200, 201]:
-                            result['success'] = True
-                            result['new_revision'] = new_revision[:8]
-                            result['message'] = f"成功更新分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
-                            self.logger.info(f"✅ {result['message']}")
-                            return result
-                        elif response.status_code == 409:
-                            self.logger.warning(f"  409 衝突 - 可能需要強制更新 (force=True)")
-                            result['message'] = f"更新失敗 - 非快進式更新需要 force=True"
-                            continue
-                        else:
-                            self.logger.debug(f"  狀態碼: {response.status_code}")
-                            continue
-                            
-                    except Exception as e:
-                        self.logger.debug(f"  異常: {str(e)}")
-                        continue
-                
-                # 如果所有方法都失敗
-                if not result['success']:
-                    result['message'] = f"更新分支失敗 - 可能需要強制更新 (force=True)"
+                if not force:
+                    result['message'] = f"快進式更新失敗 - 可能需要強制更新 (force=True)"
                     self.logger.warning(result['message'])
+                else:
+                    # 強制更新失敗，嘗試帶備份的 fallback 方法
+                    self.logger.warning("API 強制更新失敗，嘗試帶備份的 fallback 方法")
+                    fallback_result = self._safe_fallback_force_update(project_name, simple_branch_name, new_revision)
+                    
+                    if fallback_result['success']:
+                        result['success'] = True
+                        result['new_revision'] = fallback_result['new_revision']
+                        result['message'] = f"透過備份 fallback 成功更新分支 {simple_branch_name} 從 {result['old_revision']} 到 {result['new_revision']}"
+                        self.logger.info(f"✅ {result['message']}")
+                    else:
+                        result['message'] = f"所有更新方法都失敗: {fallback_result['message']}"
+                        self.logger.error(result['message'])
                     
             return result
             
         except Exception as e:
             result['message'] = f"更新分支發生錯誤: {str(e)}"
+            self.logger.error(result['message'])
+            return result
+
+    def _safe_fallback_force_update(self, project_name: str, branch_name: str, new_revision: str) -> Dict[str, Any]:
+        """
+        安全的備用強制更新方法（帶備份機制）
+        
+        流程：
+        1. 建立備份分支
+        2. 刪除原分支
+        3. 建立新分支
+        4. 清理備份分支
+        """
+        import time  # 添加 import
+        
+        result = {
+            'success': False,
+            'message': '',
+            'old_revision': '',
+            'new_revision': ''
+        }
+        
+        backup_branch_name = f"{branch_name}_backup_{int(time.time())}"
+        backup_created = False
+        
+        self.logger.warning(f"使用安全 fallback 更新: {project_name}/{branch_name}")
+        
+        try:
+            # 1. 取得目前 revision
+            branch_info = self.check_branch_exists_and_get_revision(project_name, branch_name)
+            if not branch_info['exists']:
+                result['message'] = f"原分支 {branch_name} 不存在"
+                return result
+                
+            result['old_revision'] = branch_info['revision']
+            self.logger.info(f"目前分支指向: {result['old_revision']}")
+            
+            # 2. 建立備份分支
+            self.logger.info(f"建立備份分支: {backup_branch_name}")
+            backup_result = self.create_branch(project_name, backup_branch_name, result['old_revision'])
+            
+            if not backup_result['success']:
+                result['message'] = f"無法建立備份分支: {backup_result['message']}"
+                self.logger.error(result['message'])
+                return result
+            
+            backup_created = True
+            self.logger.info(f"✅ 備份分支建立成功: {backup_branch_name}")
+            
+            # 3. 刪除原分支（現在有備份了，安全一些）
+            self.logger.info(f"刪除原分支: {branch_name}")
+            delete_result = self.delete_branch(project_name, branch_name)
+            
+            if not delete_result['success']:
+                result['message'] = f"無法刪除原分支: {delete_result['message']}"
+                self.logger.error(result['message'])
+                # 清理備份分支
+                self._cleanup_backup_branch(project_name, backup_branch_name)
+                return result
+            
+            self.logger.info(f"✅ 原分支刪除成功")
+            
+            # 4. 建立新分支
+            self.logger.info(f"建立新分支指向: {new_revision[:8]}")
+            create_result = self.create_branch(project_name, branch_name, new_revision)
+            
+            if create_result['success']:
+                # 成功！清理備份分支
+                result['success'] = True
+                result['new_revision'] = new_revision[:8]
+                result['message'] = f"安全 fallback 成功更新分支 {branch_name}"
+                self.logger.info(f"✅ 新分支建立成功")
+                
+                # 清理備份分支
+                self._cleanup_backup_branch(project_name, backup_branch_name)
+                
+            else:
+                # 失敗！從備份恢復
+                result['message'] = f"建立新分支失敗，從備份恢復: {create_result['message']}"
+                self.logger.error(result['message'])
+                
+                restore_success = self._restore_from_backup(
+                    project_name, branch_name, backup_branch_name, result['old_revision']
+                )
+                
+                if restore_success:
+                    self.logger.info("✅ 成功從備份恢復原分支")
+                    result['message'] += " (已恢復原分支)"
+                else:
+                    self.logger.error("❌ 無法從備份恢復！分支可能丟失")
+                    result['message'] += f" (恢復失敗，備份分支: {backup_branch_name})"
+                    
+            return result
+            
+        except Exception as e:
+            result['message'] = f"安全 fallback 發生錯誤: {str(e)}"
+            self.logger.error(result['message'])
+            
+            # 如果出現異常且有備份，嘗試恢復
+            if backup_created:
+                try:
+                    self.logger.warning("嘗試從備份恢復...")
+                    restore_success = self._restore_from_backup(
+                        project_name, branch_name, backup_branch_name, result['old_revision']
+                    )
+                    if restore_success:
+                        result['message'] += " (已從備份恢復)"
+                    else:
+                        result['message'] += f" (恢復失敗，備份分支: {backup_branch_name})"
+                except:
+                    result['message'] += f" (恢復時發生異常，備份分支: {backup_branch_name})"
+                    
+            return result
+
+    def _restore_from_backup(self, project_name: str, original_branch: str, backup_branch: str, original_revision: str) -> bool:
+        """
+        從備份分支恢復原分支
+        
+        Returns:
+            bool: 恢復是否成功
+        """
+        try:
+            self.logger.info(f"從備份恢復: {backup_branch} → {original_branch}")
+            
+            # 重建原分支
+            restore_result = self.create_branch(project_name, original_branch, original_revision)
+            
+            if restore_result['success']:
+                # 恢復成功，清理備份分支
+                self._cleanup_backup_branch(project_name, backup_branch)
+                return True
+            else:
+                self.logger.error(f"恢復失敗: {restore_result['message']}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"恢復過程發生異常: {str(e)}")
+            return False
+
+    def _cleanup_backup_branch(self, project_name: str, backup_branch: str) -> None:
+        """
+        清理備份分支
+        """
+        try:
+            self.logger.info(f"清理備份分支: {backup_branch}")
+            cleanup_result = self.delete_branch(project_name, backup_branch)
+            
+            if cleanup_result['success']:
+                self.logger.info(f"✅ 備份分支已清理: {backup_branch}")
+            else:
+                self.logger.warning(f"⚠️  備份分支清理失敗: {cleanup_result['message']}")
+                self.logger.warning(f"請手動清理備份分支: {backup_branch}")
+                
+        except Exception as e:
+            self.logger.warning(f"清理備份分支時發生異常: {str(e)}")
+            self.logger.warning(f"請手動清理備份分支: {backup_branch}")
+
+    def _update_branch_via_api(self, project_name: str, branch_name: str, new_revision: str, force: bool = False) -> bool:
+        """
+        透過 API 更新分支（新增的輔助方法）
+        
+        Args:
+            project_name: 專案名稱
+            branch_name: 分支名稱 
+            new_revision: 新的 revision
+            force: 是否強制更新
+            
+        Returns:
+            bool: 更新是否成功
+        """
+        import urllib.parse
+        import json
+        
+        try:
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_branch = urllib.parse.quote(branch_name, safe='')
+            
+            # 準備請求資料
+            update_data = {'revision': new_revision}
+            if force:
+                # 根據 Gerrit API 文檔，可能需要添加 force 參數
+                update_data['force'] = True
+                
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            
+            # API 端點優先順序
+            api_endpoints = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.api_url}/projects/{encoded_project}/branches/{encoded_branch}",
+                f"{self.base_url}/a/projects/{encoded_project}/branches/{encoded_branch}"
+            ]
+            
+            for endpoint in api_endpoints:
+                try:
+                    self.logger.debug(f"嘗試更新端點: {endpoint}")
+                    
+                    # 使用 PUT 更新分支引用
+                    response = self.session.put(
+                        endpoint, 
+                        data=json.dumps(update_data), 
+                        headers=headers, 
+                        timeout=30
+                    )
+                    
+                    if response.status_code in [200, 201]:
+                        self.logger.debug(f"✅ 更新成功: {endpoint}")
+                        return True
+                        
+                    elif response.status_code == 409 and not force:
+                        # 非快進式更新衝突
+                        self.logger.debug(f"⚠️  409 衝突 - 需要強制更新")
+                        return False
+                        
+                    elif response.status_code == 409 and force:
+                        # 即使是強制更新也失敗，嘗試下個端點
+                        self.logger.debug(f"⚠️  強制更新仍衝突，嘗試下個端點")
+                        continue
+                        
+                    else:
+                        self.logger.debug(f"❌ 狀態碼 {response.status_code}: {response.text[:200]}")
+                        continue
+                        
+                except Exception as e:
+                    self.logger.debug(f"❌ 端點異常 {endpoint}: {str(e)}")
+                    continue
+            
+            # 所有端點都失敗
+            self.logger.warning("所有 API 端點都無法更新分支")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"API 更新過程發生錯誤: {str(e)}")
+            return False
+
+    def _fallback_force_update(self, project_name: str, branch_name: str, new_revision: str) -> Dict[str, Any]:
+        """
+        備用的強制更新方法（在 API 方式失敗時使用）
+        
+        這個方法作為最後手段，只有在標準 API 完全無法工作時才使用
+        """
+        result = {
+            'success': False,
+            'message': '',
+            'old_revision': '',
+            'new_revision': ''
+        }
+        
+        self.logger.warning(f"使用備用強制更新方法: {project_name}/{branch_name}")
+        
+        try:
+            # 取得目前 revision
+            branch_info = self.check_branch_exists_and_get_revision(project_name, branch_name)
+            if branch_info['exists']:
+                result['old_revision'] = branch_info['revision']
+            
+            # 刪除並重建分支（保留原邏輯作為 fallback）
+            delete_result = self.delete_branch(project_name, branch_name)
+            if not delete_result['success']:
+                result['message'] = f"備用方法 - 無法刪除舊分支: {delete_result['message']}"
+                return result
+            
+            create_result = self.create_branch(project_name, branch_name, new_revision)
+            if create_result['success']:
+                result['success'] = True
+                result['new_revision'] = new_revision[:8]
+                result['message'] = f"備用方法成功更新分支 {branch_name}"
+                self.logger.info(f"✅ {result['message']}")
+            else:
+                result['message'] = f"備用方法 - 重建分支失敗: {create_result['message']}"
+                # 嘗試恢復
+                if result['old_revision']:
+                    self.logger.warning(f"嘗試恢復分支到 {result['old_revision']}")
+                    restore_result = self.create_branch(project_name, branch_name, result['old_revision'])
+                    if not restore_result['success']:
+                        self.logger.error("❌ 無法恢復原分支！")
+                        
+            return result
+            
+        except Exception as e:
+            result['message'] = f"備用方法發生錯誤: {str(e)}"
             self.logger.error(result['message'])
             return result
             
