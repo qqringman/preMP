@@ -215,12 +215,15 @@ class ManifestComparator:
             differences = self._compare_projects(source_projects, target_projects, comparison_type)
             
             # 統計摘要
+            actual_differences_count = sum(1 for diff in differences if diff['comparison_status'] != '✔️ 相同')
+            identical_count = len(differences) - actual_differences_count
+            
             summary = {
                 'source_count': len(source_projects),
                 'target_count': len(target_projects),
                 'total_compared': len(project_info_list),
-                'differences_count': len(differences),
-                'identical_count': len(project_info_list) - len(differences)
+                'differences_count': actual_differences_count,
+                'identical_count': identical_count
             }
             
             analysis = {
@@ -331,8 +334,48 @@ class ManifestComparator:
             self.logger.error(f"創建專案資訊列表失敗: {str(e)}")
             return []
 
+    def _format_summary_sheet_in_context(self, worksheet, comparison_type: str, target_file_path: str):
+        """在 ExcelWriter context 內格式化比較摘要頁籤"""
+        try:
+            from openpyxl.styles import PatternFill, Font, Alignment
+            
+            # 定義背景色
+            light_blue_fill = PatternFill(start_color="E8F0FF", end_color="E8F0FF", fill_type="solid")
+            light_red_fill = PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid")
+            light_green_fill = PatternFill(start_color="E8F5E8", end_color="E8F5E8", fill_type="solid")
+            black_font = Font(color="000000", bold=False)
+            
+            # 為數據行設定背景色
+            for col in range(1, worksheet.max_column + 1):
+                header_value = str(worksheet.cell(row=1, column=col).value) if worksheet.cell(row=1, column=col).value else ''
+                data_cell = worksheet.cell(row=2, column=col)
+                
+                # 根據欄位類型設定背景色
+                if header_value in ['📊 來源檔案專案數', '🎯 目標檔案專案數', '📋 總比較專案數']:
+                    data_cell.fill = light_blue_fill
+                    data_cell.font = black_font
+                elif header_value in ['❌ 差異專案數']:
+                    data_cell.fill = light_red_fill
+                    data_cell.font = black_font
+                elif header_value in ['✔️ 相同專案數', '📈 相同率']:
+                    data_cell.fill = light_green_fill
+                    data_cell.font = black_font
+                
+                # 🔥 為目標檔案添加超連結
+                if header_value == '目標檔案' and comparison_type != "local_vs_local":
+                    filename = str(data_cell.value) if data_cell.value else ''
+                    if filename and filename not in ['', 'N/A']:
+                        # 移除 gerrit_ 前綴來生成正確的連結
+                        clean_filename = filename.replace('gerrit_', '') if filename.startswith('gerrit_') else filename
+                        gerrit_url = self._generate_gerrit_manifest_link(clean_filename)
+                        self._add_hyperlink_formula_to_cell_in_context(worksheet, 2, col, gerrit_url, filename)
+                        self.logger.info(f"✅ 已為比較摘要的目標檔案添加超連結: {filename}")
+            
+        except Exception as e:
+            self.logger.error(f"格式化比較摘要頁籤失敗: {str(e)}")
+
     def _compare_projects(self, source_projects: List[Dict], target_projects: List[Dict], comparison_type: str) -> List[Dict]:
-        """比較專案並生成差異列表"""
+        """比較專案並生成差異列表（包含相同和差異的專案）"""
         try:
             differences = []
             
@@ -403,9 +446,8 @@ class ManifestComparator:
                         'status_color': status_color
                     }
                     
-                    # 只有差異的才加入差異列表
-                    if diff_details:
-                        differences.append(difference)
+                    # 🔥 修正：所有專案都加入列表（包含相同的）
+                    differences.append(difference)
                 else:
                     # 專案只在來源檔案中存在
                     difference = {
@@ -752,9 +794,11 @@ class ManifestComparator:
                 # 頁籤 2: 比較後專案
                 self._create_comparison_projects_sheet(writer, diff_analysis, is_local_comparison)
                 
-                # 頁籤 3: 差異明細（只有有差異時才創建）
+                # 頁籤 3: 差異明細（包含所有專案的比較結果）
                 if diff_analysis['differences']:
                     self._create_differences_sheet(writer, diff_analysis, is_local_comparison)
+                else:
+                    self.logger.info("沒有專案比較結果，跳過差異明細頁籤")
                 
                 # 頁籤 4: 來源檔案 manifest
                 self._create_raw_manifest_sheet(writer, source_file_path, "來源檔案 manifest")
@@ -825,6 +869,9 @@ class ManifestComparator:
             df_summary = pd.DataFrame(summary_data)
             df_summary.to_excel(writer, sheet_name='比較摘要', index=False)
             
+            # 🔥 新增：為比較摘要頁籤添加背景色和超連結
+            self._format_summary_sheet_in_context(writer.sheets['比較摘要'], comparison_type, target_file_path)
+            
         except Exception as e:
             self.logger.error(f"創建比較摘要頁籤失敗: {str(e)}")
 
@@ -865,7 +912,7 @@ class ManifestComparator:
             self.logger.error(f"創建比較後專案頁籤失敗: {str(e)}")
 
     def _create_differences_sheet(self, writer, diff_analysis: Dict, is_local_comparison: bool):
-        """創建差異明細頁籤"""
+        """創建差異明細頁籤（顯示所有專案的比較結果）"""
         try:
             if not diff_analysis['differences']:
                 return
@@ -1044,10 +1091,39 @@ class ManifestComparator:
                     else:
                         worksheet.column_dimensions[col_letter].width = 20
             
+            # 🔥 新增：為所有 SN 欄位的內容設定置中對齊
+            self._set_sn_column_center_alignment(worksheet)
+            
             self.logger.info(f"✅ {sheet_name} 格式化完成")
             
         except Exception as e:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
+
+    def _set_sn_column_center_alignment(self, worksheet):
+        """為 SN 欄位的所有內容設定置中對齊"""
+        try:
+            from openpyxl.styles import Alignment
+            
+            # 找到 SN 欄位
+            sn_col = None
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                if header_value == 'SN':
+                    sn_col = col_num
+                    break
+            
+            if sn_col:
+                center_alignment = Alignment(horizontal='center', vertical='center')
+                
+                # 為 SN 欄位的所有內容設定置中對齊
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row_num, column=sn_col)
+                    cell.alignment = center_alignment
+                
+                self.logger.debug(f"✅ SN 欄位內容已設定置中對齊 ({worksheet.max_row - 1} 行)")
+            
+        except Exception as e:
+            self.logger.error(f"設定 SN 欄位置中對齊失敗: {str(e)}")
 
     def _apply_comparison_mode_fixes_in_context(self, writer, is_local_comparison: bool, 
                                               source_file_path: str, target_file_path: str, 
@@ -1077,7 +1153,7 @@ class ManifestComparator:
         """在 ExcelWriter context 內為比較後專案頁籤添加 Revision 比較公式"""
         try:
             from openpyxl.utils import get_column_letter
-            from openpyxl.styles import Font
+            from openpyxl.styles import Font, Alignment
             from openpyxl.formatting.rule import FormulaRule
             
             # 找到相關欄位的位置
@@ -1103,11 +1179,16 @@ class ManifestComparator:
             target_col_letter = get_column_letter(target_revision_col)
             comparison_col_letter = get_column_letter(comparison_col)
             
-            # 添加 Excel 公式
+            # 🔥 新增：定義置中對齊
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 添加 Excel 公式並設定置中對齊
             for row_num in range(2, worksheet.max_row + 1):
                 formula = f'=IF({source_col_letter}{row_num}={target_col_letter}{row_num},"Y","N")'
                 cell = worksheet[f"{comparison_col_letter}{row_num}"]
                 cell.value = formula
+                # 🔥 重要：設定置中對齊
+                cell.alignment = center_alignment
             
             # 設定條件格式
             green_font = Font(color="00B050", bold=True)
@@ -1132,7 +1213,7 @@ class ManifestComparator:
             worksheet.conditional_formatting.add(range_string, green_rule)
             worksheet.conditional_formatting.add(range_string, red_rule)
             
-            self.logger.info("✅ 已在 context 內添加 Revision 比較公式和條件格式")
+            self.logger.info("✅ 已在 context 內添加 Revision 比較公式和條件格式（含置中對齊）")
             
         except Exception as e:
             self.logger.error(f"在 context 內添加 Revision 比較公式失敗: {str(e)}")
