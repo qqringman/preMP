@@ -1469,7 +1469,7 @@ class FeatureTwo:
             return ""
     
     def _build_gerrit_link(self, project_name: str, revision: str, target_type: str, remote: str = '') -> str:
-        """建立 Gerrit branch/tag 連結 - 🔥 使用 HYPERLINK 函數格式"""
+        """建立 Gerrit branch/tag 連結 - 🔥 修復：顯示文字使用完整 URL"""
         try:
             if not project_name or not revision:
                 return ""
@@ -1489,15 +1489,13 @@ class FeatureTwo:
             
             if target_type.lower() == 'tag':
                 link_url = f"{base_url}/{project_name}/+/refs/tags/{clean_revision}"
-                display_text = f"gerrit_tag_{clean_revision}"
             else:
                 link_url = f"{base_url}/{project_name}/+/refs/heads/{clean_revision}"
-                display_text = f"gerrit_branch_{clean_revision}"
             
-            # 🔥 使用 HYPERLINK 函數格式
-            hyperlink = f'=HYPERLINK("{link_url}","{display_text}")'
+            # 🔥 修復：顯示文字直接使用完整 URL，不再使用簡化的顯示名稱
+            hyperlink = f'=HYPERLINK("{link_url}","{link_url}")'
             
-            self.logger.debug(f"建立 {target_type} HYPERLINK: {project_name} -> {display_text} (remote: {remote})")
+            self.logger.debug(f"建立 {target_type} HYPERLINK: {project_name} -> 顯示完整URL (remote: {remote})")
             return hyperlink
             
         except Exception as e:
@@ -1652,8 +1650,7 @@ class FeatureTwo:
 
     def _build_target_manifest_link(self, target_branch: str, remote: str = '') -> str:
         """
-        🔥 新方法：建立 target_manifest 連結
-        根據 target_branch 建立對應的 manifest 檔案連結
+        🔥 建立 target_manifest 連結 - 顯示文字使用完整 URL
         """
         try:
             if not target_branch:
@@ -1663,7 +1660,6 @@ class FeatureTwo:
             gerrit_base = self._get_gerrit_base_url(remote)
             
             # 🔥 根據 target_branch 決定 manifest 檔案名稱
-            # 這裡需要根據實際的命名規則來調整
             if 'premp.google-refplus' in target_branch:
                 if 'wave' in target_branch:
                     if 'backup' in target_branch:
@@ -1681,10 +1677,10 @@ class FeatureTwo:
             # 建立完整的 manifest 連結
             manifest_url = f"{gerrit_base}/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{target_branch}/{manifest_name}"
             
-            # 🔥 使用 HYPERLINK 函數格式
-            hyperlink = f'=HYPERLINK("{manifest_url}","gerrit_{manifest_name}")'
+            # 🔥 修復：顯示文字使用完整 URL
+            hyperlink = f'=HYPERLINK("{manifest_url}","{manifest_url}")'
             
-            self.logger.debug(f"建立 target_manifest 連結: {target_branch} -> {manifest_name}")
+            self.logger.debug(f"建立 target_manifest 連結: {target_branch} -> 顯示完整URL")
             return hyperlink
             
         except Exception as e:
