@@ -2192,29 +2192,194 @@ class FeatureTwo:
                                         target_branch: str, revision: str, remote: str,
                                         gerrit_server: str, force_update: bool, sn: int) -> tuple:
         """
-        🔥 建立或更新分支，失敗時嘗試刪除後重建（使用現有 API）
+        🔥 改進版：建立或更新分支，優先使用安全的更新方法
+        
+        流程：
+        1. 檢查分支是否存在
+        2. 如果不存在 → 建立新分支
+        3. 如果存在 → 使用 update_branch（更安全，有備份機制）
+        4. 只有在 update 失敗時才回退到刪除重建
         
         Returns:
             (success: bool, branch_result: dict)
         """
         try:
-            # 第一次嘗試：直接建立分支
-            result = gerrit_manager.create_branch(project_name, target_branch, revision)
+            self.logger.debug(f"處理分支: {project_name}/{target_branch}")
             
-            success = result.get('success', False)
-            message = result.get('message', '')
-            already_exists = result.get('exists', False)
+            # 🔥 步驟 1: 先檢查分支是否存在
+            branch_info = gerrit_manager.check_branch_exists_and_get_revision(project_name, target_branch)
+            branch_exists = branch_info.get('exists', False)
+            current_revision = branch_info.get('revision', '')
             
-            # 如果成功，直接返回
-            if success:
-                if already_exists:
-                    status = '成功'
-                    final_message = f"分支已更新：{message}"
+            if not branch_exists:
+                # 🔥 情況 1: 分支不存在 → 直接建立新分支
+                self.logger.info(f"分支不存在，建立新分支: {project_name}/{target_branch}")
+                result = gerrit_manager.create_branch(project_name, target_branch, revision)
+                
+                if result.get('success', False):
+                    return True, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '成功',
+                        'Message': f"成功建立新分支：{result.get('message', '')}",
+                        'Already_Exists': '否',
+                        'Force_Update': '否',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
                 else:
-                    status = '成功'
-                    final_message = f"成功建立分支：{message}"
+                    return False, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '失敗',
+                        'Message': f"建立新分支失敗：{result.get('message', '')}",
+                        'Already_Exists': '否',
+                        'Force_Update': '否',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
+            
+            else:
+                # 🔥 情況 2: 分支已存在 → 使用更安全的 update_branch
+                self.logger.info(f"分支已存在，使用 update_branch: {project_name}/{target_branch}")
+                self.logger.info(f"  當前版本: {current_revision}")
+                self.logger.info(f"  目標版本: {revision[:8]}")
+                
+                # 🔥 使用 update_branch（有備份機制，更安全）
+                update_result = gerrit_manager.update_branch(
+                    project_name, target_branch, revision, force=force_update
+                )
+                
+                if update_result.get('success', False):
+                    return True, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '成功',
+                        'Message': f"成功更新分支：{update_result.get('message', '')}",
+                        'Already_Exists': '是',
+                        'Force_Update': '是' if force_update else '否',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
+                
+                elif not force_update:
+                    # 🔥 如果快進式更新失敗且不是強制模式，直接返回失敗
+                    return False, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '失敗',
+                        'Message': f"更新失敗（需要強制更新）：{update_result.get('message', '')}",
+                        'Already_Exists': '是',
+                        'Force_Update': '否',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
+                
+                else:
+                    # 🔥 強制模式下 update_branch 也失敗，最後手段：刪除重建
+                    self.logger.warning(f"update_branch 失敗，使用最後手段刪除重建: {update_result.get('message', '')}")
                     
-                branch_result = {
+                    fallback_result = self._fallback_delete_and_recreate(
+                        gerrit_manager, project_name, target_branch, revision, 
+                        remote, gerrit_server, sn
+                    )
+                    
+                    # 標記這是使用了刪除重建的方法
+                    if fallback_result[0]:  # success
+                        fallback_result[1]['Message'] = f"透過刪除重建成功：{fallback_result[1]['Message']}"
+                    
+                    return fallback_result
+        
+        except Exception as e:
+            return False, {
+                'SN': sn,
+                'Project': project_name,
+                'revision': revision,
+                'target_branch': target_branch,
+                'target_type': 'Branch',
+                'target_branch_link': '',
+                'target_branch_revision': revision,
+                'Status': '失敗',
+                'Message': f"建立/更新分支異常：{str(e)}",
+                'Already_Exists': '-',
+                'Force_Update': '是' if force_update else '否',
+                'Remote': remote,
+                'Gerrit_Server': gerrit_server
+            }
+
+    def _fallback_delete_and_recreate(self, gerrit_manager, project_name: str, 
+                                    target_branch: str, revision: str, 
+                                    remote: str, gerrit_server: str, sn: int) -> tuple:
+        """
+        🔥 最後手段：刪除後重建（保留原邏輯作為 fallback）
+        只有在 update_branch 完全失敗時才使用
+        """
+        try:
+            self.logger.warning(f"⚠️  使用最後手段：刪除後重建 {project_name}/{target_branch}")
+            
+            # 刪除分支
+            delete_result = gerrit_manager.delete_branch(project_name, target_branch)
+            
+            if delete_result.get('success', False):
+                self.logger.info(f"✅ 成功刪除分支: {project_name}/{target_branch}")
+                
+                # 重新建立分支
+                recreate_result = gerrit_manager.create_branch(project_name, target_branch, revision)
+                
+                if recreate_result.get('success', False):
+                    return True, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '成功',
+                        'Message': f"刪除後重建成功：{recreate_result.get('message', '')}",
+                        'Already_Exists': '否',
+                        'Force_Update': '是',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
+                else:
+                    return False, {
+                        'SN': sn,
+                        'Project': project_name,
+                        'revision': revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': '',
+                        'target_branch_revision': revision,
+                        'Status': '失敗',
+                        'Message': f"刪除成功但重建失敗：{recreate_result.get('message', '')}",
+                        'Already_Exists': '否',
+                        'Force_Update': '是',
+                        'Remote': remote,
+                        'Gerrit_Server': gerrit_server
+                    }
+            else:
+                return False, {
                     'SN': sn,
                     'Project': project_name,
                     'revision': revision,
@@ -2222,74 +2387,16 @@ class FeatureTwo:
                     'target_type': 'Branch',
                     'target_branch_link': '',
                     'target_branch_revision': revision,
-                    'Status': status,
-                    'Message': final_message,
-                    'Already_Exists': '是' if already_exists else '否',
-                    'Force_Update': '是' if force_update else '否',
+                    'Status': '失敗',
+                    'Message': f"刪除分支失敗：{delete_result.get('message', '')}",
+                    'Already_Exists': '是',
+                    'Force_Update': '是',
                     'Remote': remote,
                     'Gerrit_Server': gerrit_server
                 }
-                return True, branch_result
-            
-            # 🔥 如果失敗且是因為分支已存在，且在強制更新模式下
-            if (not success and force_update and 
-                ("已存在" in message or "already exists" in message.lower())):
                 
-                self.logger.info(f"🔄 分支建立失敗，嘗試刪除後重建: {project_name}/{target_branch}")
-                
-                # 🔥 使用現有的 delete_branch API
-                delete_result = gerrit_manager.delete_branch(project_name, target_branch)
-                
-                if delete_result.get('success', False):
-                    self.logger.info(f"✅ 成功刪除分支: {project_name}/{target_branch}")
-                    
-                    # 🔥 重新建立分支（使用現有的 create_branch API）
-                    recreate_result = gerrit_manager.create_branch(project_name, target_branch, revision)
-                    
-                    if recreate_result.get('success', False):
-                        branch_result = {
-                            'SN': sn,
-                            'Project': project_name,
-                            'revision': revision,
-                            'target_branch': target_branch,
-                            'target_type': 'Branch',
-                            'target_branch_link': '',
-                            'target_branch_revision': revision,
-                            'Status': '成功',
-                            'Message': f"刪除後重建成功：{recreate_result.get('message', '')}",
-                            'Already_Exists': '否',
-                            'Force_Update': '是',
-                            'Remote': remote,
-                            'Gerrit_Server': gerrit_server
-                        }
-                        return True, branch_result
-                    else:
-                        final_message = f"刪除成功但重建失敗：{recreate_result.get('message', '')}"
-                else:
-                    final_message = f"刪除分支失敗：{delete_result.get('message', '')}"
-            else:
-                final_message = f"建立失敗：{message}"
-            
-            # 失敗情況
-            branch_result = {
-                'SN': sn,
-                'Project': project_name,
-                'revision': revision,
-                'target_branch': target_branch,
-                'target_type': 'Branch',
-                'target_branch_link': '',
-                'target_branch_revision': revision,
-                'Status': '失敗',
-                'Message': final_message,
-                'Already_Exists': '-',
-                'Force_Update': '是' if force_update else '否',
-                'Remote': remote,
-                'Gerrit_Server': gerrit_server
-            }
-            return False, branch_result
-            
         except Exception as e:
-            branch_result = {
+            return False, {
                 'SN': sn,
                 'Project': project_name,
                 'revision': revision,
@@ -2298,10 +2405,9 @@ class FeatureTwo:
                 'target_branch_link': '',
                 'target_branch_revision': revision,
                 'Status': '失敗',
-                'Message': f"建立分支異常：{str(e)}",
+                'Message': f"刪除重建異常：{str(e)}",
                 'Already_Exists': '-',
-                'Force_Update': '是' if force_update else '否',
+                'Force_Update': '是',
                 'Remote': remote,
                 'Gerrit_Server': gerrit_server
-            }
-            return False, branch_result
+            }        
