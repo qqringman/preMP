@@ -41,6 +41,7 @@ zip_output/
 uploads/
 logs/
 output/
+DB-source/
 
 # 系統產生的檔案
 *.xlsx
