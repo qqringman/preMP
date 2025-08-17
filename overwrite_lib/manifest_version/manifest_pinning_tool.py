@@ -1731,30 +1731,66 @@ class ManifestPinningTool:
             self.logger.error(f"處理過程發生錯誤: {e}")
 
     def _wait_for_all_syncs_safe(self, db_results: List[DBInfo]):
-        """安全等待所有 sync 完成 - 純進程監控，不涉及任何 SFTP 操作"""
+        """增強版進度監控 - 顯示各 DB 詳細狀態和版本信息"""
         max_wait_time = config_manager.repo_config['sync_timeout']
         start_wait = time.time()
         
         active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
         self.logger.info(f"監控 {len(active_syncs)} 個活躍的 repo sync 進程")
         
+        # 初始化進度追蹤
+        progress_tracker = {}
+        for db_info in active_syncs:
+            progress_tracker[db_info.db_info] = {
+                'start_time': db_info.start_time or datetime.now(),
+                'last_log_size': 0,
+                'estimated_progress': 0,
+                'current_activity': '初始化中...',
+                'log_file': self._get_sync_log_file(db_info)
+            }
+        
         while True:
             all_complete = True
+            elapsed = int(time.time() - start_wait)
+            
+            print("\n" + "="*100)
+            print(f"📊 Repo Sync 進度監控 - 已等待 {elapsed}s")
+            print("="*100)
             
             for db_info in active_syncs:
                 if db_info.status == DBStatus.FAILED:
                     continue
                 
+                db_name = db_info.db_info
+                tracker = progress_tracker[db_name]
+                
+                # 🎯 構建包含版本信息的顯示名稱
+                manifest_info = ""
+                if db_info.manifest_file:
+                    manifest_info = f" ({db_info.manifest_file})"
+                elif db_info.version:
+                    manifest_info = f" (v{db_info.version})"
+                
+                display_name = f"{db_name}{manifest_info}"
+                
                 if db_info.sync_process:
-                    # 純進程狀態檢查，不涉及任何網路操作
                     try:
                         poll = db_info.sync_process.poll()
-                        if poll is None:
+                        
+                        if poll is None:  # 仍在運行
                             all_complete = False
+                            
+                            # 更新進度信息
+                            self._update_progress_info(db_info, tracker)
+                            
+                            # 顯示詳細狀態 - 調整格式寬度
+                            runtime = datetime.now() - tracker['start_time']
+                            print(f"🔄 {display_name:30s} | 運行中 | {tracker['estimated_progress']:3d}% | "
+                                f"用時 {str(runtime).split('.')[0]:8s} | {tracker['current_activity']}")
                             
                             # 檢查超時
                             if time.time() - start_wait > max_wait_time:
-                                self.logger.warning(f"{db_info.db_info}: repo sync 超時，強制終止")
+                                self.logger.warning(f"{db_name}: repo sync 超時，強制終止")
                                 try:
                                     db_info.sync_process.terminate()
                                     db_info.sync_process.wait(timeout=5)
@@ -1765,31 +1801,122 @@ class ManifestPinningTool:
                                         pass
                                 db_info.status = DBStatus.FAILED
                                 db_info.error_message = "Sync 超時"
-                        elif poll != 0:
-                            self.logger.error(f"{db_info.db_info}: repo sync 失敗 (返回碼: {poll})")
+                                print(f"⏰ {display_name:30s} | 超時終止")
+                                
+                        elif poll == 0:  # 成功完成
+                            runtime = datetime.now() - tracker['start_time']
+                            print(f"✅ {display_name:30s} | 完成     | 100% | "
+                                f"用時 {str(runtime).split('.')[0]:8s} | Sync 成功完成")
+                            
+                        else:  # 失敗
+                            runtime = datetime.now() - tracker['start_time']
                             db_info.status = DBStatus.FAILED
                             db_info.error_message = f"Sync 失敗 (返回碼: {poll})"
-                        else:
-                            self.logger.info(f"{db_info.db_info}: repo sync 完成")
+                            print(f"❌ {display_name:30s} | 失敗     |   0% | "
+                                f"用時 {str(runtime).split('.')[0]:8s} | 返回碼: {poll}")
                             
                     except Exception as e:
-                        self.logger.error(f"{db_info.db_info}: 檢查進程狀態失敗: {e}")
+                        self.logger.error(f"{db_name}: 檢查進程狀態失敗: {e}")
                         db_info.status = DBStatus.FAILED
                         db_info.error_message = f"進程監控失敗: {e}"
+                        print(f"⚠️  {display_name:30s} | 監控錯誤 |   0% | {str(e)[:30]}")
+            
+            # 顯示總體統計
+            running_count = sum(1 for db in active_syncs 
+                            if db.sync_process and db.sync_process.poll() is None 
+                            and db.status != DBStatus.FAILED)
+            completed_count = sum(1 for db in active_syncs 
+                                if db.sync_process and db.sync_process.poll() == 0)
+            failed_count = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+            
+            print("-"*100)
+            print(f"📈 總計: 運行中 {running_count} | 完成 {completed_count} | 失敗 {failed_count}")
+            
+            # 🎯 增加版本統計信息
+            if running_count > 0 or completed_count > 0:
+                print("📋 版本信息:")
+                for db_info in active_syncs:
+                    if db_info.manifest_file or db_info.version:
+                        status_icon = "🔄" if (db_info.sync_process and db_info.sync_process.poll() is None) else \
+                                    "✅" if (db_info.sync_process and db_info.sync_process.poll() == 0) else "❌"
+                        version_info = db_info.manifest_file or f"v{db_info.version}"
+                        print(f"   {status_icon} {db_info.db_info}: {version_info}")
+            
+            print("="*100)
             
             if all_complete or (time.time() - start_wait) > max_wait_time:
                 break
             
-            # 每10秒檢查一次，顯示進度
-            time.sleep(10)
-            elapsed = int(time.time() - start_wait)
-            running_count = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() is None and db.status != DBStatus.FAILED)
-            self.logger.info(f"等待中... 已等待 {elapsed}s，還有 {running_count} 個進程運行中")
+            # 每30秒檢查一次
+            time.sleep(30)
         
-        # 統計結果
+        # 最終統計
         completed = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() == 0)
         failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
-        self.logger.info(f"Repo sync 完成統計: 成功 {completed}, 失敗 {failed}")
+        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}")
+
+    def _get_sync_log_file(self, db_info: DBInfo) -> str:
+        """獲取 sync 日誌文件路徑"""
+        try:
+            log_dir = os.path.join(db_info.local_path, 'logs')
+            if os.path.exists(log_dir):
+                log_files = [f for f in os.listdir(log_dir) if f.startswith('repo_sync_')]
+                if log_files:
+                    latest_log = sorted(log_files)[-1]
+                    return os.path.join(log_dir, latest_log)
+        except:
+            pass
+        return ""
+
+    def _update_progress_info(self, db_info: DBInfo, tracker: dict):
+        """更新進度信息"""
+        try:
+            log_file = tracker['log_file']
+            
+            if log_file and os.path.exists(log_file):
+                # 檢查日誌文件大小變化來估算進度
+                current_size = os.path.getsize(log_file)
+                size_diff = current_size - tracker['last_log_size']
+                tracker['last_log_size'] = current_size
+                
+                # 簡單的進度估算（基於運行時間）
+                runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+                
+                if runtime_minutes < 5:
+                    tracker['estimated_progress'] = min(int(runtime_minutes * 10), 50)
+                    tracker['current_activity'] = "初始化和下載項目列表..."
+                elif runtime_minutes < 15:
+                    tracker['estimated_progress'] = min(50 + int((runtime_minutes - 5) * 3), 80)
+                    tracker['current_activity'] = "下載源代碼文件..."
+                else:
+                    tracker['estimated_progress'] = min(80 + int((runtime_minutes - 15) * 1), 95)
+                    tracker['current_activity'] = "更新本地倉庫..."
+                
+                # 嘗試從日誌中提取更詳細的活動信息
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        f.seek(max(0, current_size - 1000))  # 讀取最後1KB
+                        recent_lines = f.read().split('\n')[-5:]  # 最後5行
+                        
+                        for line in recent_lines:
+                            if 'Fetching project' in line:
+                                tracker['current_activity'] = "正在獲取項目..."
+                            elif 'Syncing project' in line:
+                                tracker['current_activity'] = "正在同步項目..."
+                            elif 'Checking out' in line:
+                                tracker['current_activity'] = "正在檢出分支..."
+                            elif 'error:' in line.lower():
+                                tracker['current_activity'] = "遇到錯誤，重試中..."
+                except:
+                    pass
+            else:
+                # 沒有日誌文件時，只基於時間估算
+                runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+                tracker['estimated_progress'] = min(int(runtime_minutes * 2), 90)
+                tracker['current_activity'] = f"Repo sync 運行中... ({runtime_minutes:.1f}分鐘)"
+                
+        except Exception as e:
+            tracker['current_activity'] = f"監控中... (無法獲取詳細進度)"
         
     def process_selected_dbs(self, db_list: List[str], db_versions: Dict[str, str] = None):
         """處理選定的 DB"""
