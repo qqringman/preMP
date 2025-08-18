@@ -274,11 +274,13 @@ class JiraAPIClient:
             return None
 
     def _extract_repo_command(self, text: str) -> Optional[str]:
-        """提取 repo init 命令"""
+        """提取 repo init 命令 - 優先選擇有 -m 參數的指令"""
         if not text or 'repo init' not in text:
             return None
         
         lines = text.split('\n')
+        found_commands = []
+        
         for line in lines:
             line = line.strip()
             
@@ -289,9 +291,19 @@ class JiraAPIClient:
                     cmd = line[repo_start:].strip()
                     cmd = self._clean_command(cmd)
                     if self._is_valid_repo_command(cmd):
-                        return cmd
+                        found_commands.append(cmd)
         
-        return None
+        if not found_commands:
+            return None
+        
+        # 🔥 優先選擇有 "-m" 參數的指令
+        commands_with_m = [cmd for cmd in found_commands if '-m ' in cmd]
+        if commands_with_m:
+            # 如果有多個，取第一個
+            return commands_with_m[0]
+        
+        # 如果沒有 -m 參數的，返回第一個有效的
+        return found_commands[0]
 
     def _clean_command(self, cmd: str) -> str:
         """清理命令字符串"""
@@ -1345,31 +1357,79 @@ class RepoManager:
             return False, str(e)
     
     def repo_init(self, work_dir: str, init_cmd: str) -> bool:
-        """執行 repo init"""
-        # 清理可能存在的舊 .repo 目錄
+        """執行 repo init - 增強清理和錯誤恢復"""
+        # 🔥 徹底清理可能存在的舊 .repo 目錄和相關檔案
         repo_dir = os.path.join(work_dir, '.repo')
         if os.path.exists(repo_dir):
-            self.logger.info(f"清理舊的 .repo 目錄: {repo_dir}")
+            self.logger.info(f"發現舊的 .repo 目錄，執行徹底清理: {repo_dir}")
             import shutil
             try:
+                # 先嘗試正常刪除
                 shutil.rmtree(repo_dir)
-                self.logger.debug("舊 .repo 目錄清理成功")
+                self.logger.info("✅ 舊 .repo 目錄清理成功")
             except Exception as e:
-                self.logger.warning(f"清理 .repo 失敗: {e}")
+                self.logger.warning(f"正常清理失敗，嘗試強制清理: {e}")
+                # 強制清理
+                try:
+                    import subprocess
+                    if os.name == 'posix':  # Linux/Unix
+                        subprocess.run(['rm', '-rf', repo_dir], check=True)
+                        self.logger.info("✅ 強制清理成功")
+                    else:
+                        raise Exception("無法強制清理")
+                except Exception as e2:
+                    self.logger.error(f"❌ 強制清理也失敗: {e2}")
+                    return False
         
-        self.logger.info(f"執行 repo init: {init_cmd}")
-        success, output = self.run_command(
-            init_cmd,
-            cwd=work_dir,
-            timeout=config_manager.repo_config['init_timeout']
-        )
+        # 🔥 清理可能存在的其他相關檔案
+        cleanup_patterns = [
+            '.repo_*',
+            'repo_*',
+            '.repopickle_*'
+        ]
         
-        if success:
-            self.logger.info("Repo init 執行成功")
-        else:
-            self.logger.error(f"Repo init 失敗: {output}")
+        for pattern in cleanup_patterns:
+            try:
+                import glob
+                for item in glob.glob(os.path.join(work_dir, pattern)):
+                    if os.path.isfile(item):
+                        os.remove(item)
+                    elif os.path.isdir(item):
+                        shutil.rmtree(item)
+                    self.logger.debug(f"清理: {item}")
+            except Exception as e:
+                self.logger.debug(f"清理 {pattern} 時發生錯誤: {e}")
         
-        return success
+        # 🔥 增加重試機制的 repo init
+        max_retries = 3
+        for attempt in range(max_retries):
+            self.logger.info(f"執行 repo init (嘗試 {attempt + 1}/{max_retries}): {init_cmd}")
+            
+            success, output = self.run_command(
+                init_cmd,
+                cwd=work_dir,
+                timeout=config_manager.repo_config['init_timeout']
+            )
+            
+            if success:
+                self.logger.info("✅ Repo init 執行成功")
+                return True
+            else:
+                self.logger.warning(f"❌ Repo init 嘗試 {attempt + 1} 失敗: {output}")
+                
+                # 如果不是最後一次嘗試，清理並重試
+                if attempt < max_retries - 1:
+                    self.logger.info(f"準備重試，先清理環境...")
+                    repo_dir = os.path.join(work_dir, '.repo')
+                    if os.path.exists(repo_dir):
+                        try:
+                            shutil.rmtree(repo_dir)
+                        except:
+                            pass
+                    time.sleep(5)  # 等待 5 秒後重試
+        
+        self.logger.error("❌ Repo init 所有重試都失敗")
+        return False
     
     def apply_manifest(self, work_dir: str, manifest_file: str) -> bool:
         """應用 manifest 檔案"""
@@ -1706,6 +1766,7 @@ class ManifestPinningTool:
     def process_db_phase1(self, db_info: DBInfo) -> DBInfo:
         """改進版 Phase 1 處理 - 線程安全"""
         db_info.start_time = datetime.now()
+        local_sftp_manager = None  # 🔥 使用本地 SFTP 管理器
         
         try:
             self.logger.info(f"開始處理 {db_info.db_info} (Phase 1)")
@@ -1714,17 +1775,32 @@ class ManifestPinningTool:
             local_path = os.path.join(self.output_dir, db_info.module, db_info.db_info)
             os.makedirs(local_path, exist_ok=True)
             db_info.local_path = local_path
+
+            # 🔥 檢查磁碟空間（至少需要 10GB）
+            import shutil
+            free_space = shutil.disk_usage(local_path).free
+            required_space = 10 * 1024 * 1024 * 1024  # 10GB
             
+            if free_space < required_space:
+                raise Exception(f"磁碟空間不足: 可用 {free_space/1024/1024/1024:.1f}GB，需要至少 10GB")
+            
+            # 🔥 檢查權限
+            if not os.access(local_path, os.W_OK):
+                raise Exception(f"目錄沒有寫入權限: {local_path}")
+                            
             # Step 1: 使用鎖保護所有 SFTP 操作
             with self._sftp_lock:
                 self.logger.info(f"{db_info.db_info}: 快速搜尋 manifest (線程安全)")
                 
+                # 🔥 修復：為每個線程創建獨立的 SFTP 管理器
+                local_sftp_manager = SFTPManager()
+                
                 # 確保 SFTP 連線有效
-                if not self.sftp_manager._ensure_connected():
+                if not local_sftp_manager.connect():
                     raise Exception("無法建立 SFTP 連線")
                 
                 target_version = db_info.version
-                result = self.sftp_manager.find_latest_manifest(
+                result = local_sftp_manager.find_latest_manifest(
                     db_info.sftp_path, 
                     db_info.db_info,
                     target_version
@@ -1746,12 +1822,15 @@ class ManifestPinningTool:
                 
                 # 下載到本地
                 local_manifest = os.path.join(local_path, manifest_name)
-                if not self.sftp_manager.download_file(manifest_full_path, local_manifest):
+                if not local_sftp_manager.download_file(manifest_full_path, local_manifest):
                     raise Exception("下載 manifest 失敗")
                 
                 self.logger.info(f"{db_info.db_info}: manifest 下載完成: {manifest_name}")
-            
-            # SFTP 操作完成，鎖已釋放，其他操作可以並行
+                
+                # 🔥 立即斷開這個線程的 SFTP 連線
+                local_sftp_manager.disconnect()
+                self.logger.info(f"{db_info.db_info}: ✅ SFTP 連線已立即斷開")
+                local_sftp_manager = None
             
             # Step 2: 檢查 repo 狀態
             db_info.has_existing_repo = self.repo_manager.check_repo_exists(local_path)
@@ -1788,6 +1867,7 @@ class ManifestPinningTool:
                 self.logger.info(f"{db_info.db_info}: repo sync 已啟動 (PID: {process.pid})")
             else:
                 db_info.status = DBStatus.SKIPPED
+                db_info.end_time = datetime.now()  # 🔥 測試模式立即設定結束時間
                 self.logger.info(f"{db_info.db_info}: 測試模式 - 跳過 repo sync")
             
             self.logger.info(f"{db_info.db_info}: Phase 1 完成")
@@ -1795,14 +1875,14 @@ class ManifestPinningTool:
         except Exception as e:
             db_info.status = DBStatus.FAILED
             db_info.error_message = str(e)
+            db_info.end_time = datetime.now()  # 🔥 失敗時也設定結束時間
             self.logger.error(f"{db_info.db_info}: Phase 1 失敗 - {str(e)}")
-        # 🔥 新增：確保當前線程的 SFTP 操作完全結束
         finally:
-            # 強制釋放 SFTP 鎖（如果當前線程持有的話）
-            if hasattr(self, '_sftp_lock'):
+            # 🔥 確保 SFTP 連線一定會被斷開
+            if local_sftp_manager:
                 try:
-                    # 鎖會在 with 語句結束時自動釋放，這裡只是確保
-                    pass
+                    local_sftp_manager.disconnect()
+                    self.logger.debug(f"{db_info.db_info}: 確保 SFTP 連線已斷開")
                 except:
                     pass
         
@@ -1831,13 +1911,17 @@ class ManifestPinningTool:
                     return db_info  # 還在執行中
                 elif poll != 0:
                     raise Exception(f"Repo sync 失敗 (返回碼: {poll})")
+                
+                # 🔥 記錄 sync log 路徑
+                if hasattr(db_info.sync_process, '_log_file_path'):
+                    db_info.sync_log_path = db_info.sync_process._log_file_path
             
             # 導出 manifest
             self.logger.info(f"{db_info.db_info}: 導出版本資訊")
             if not self.repo_manager.export_manifest(db_info.local_path):
                 raise Exception("導出 manifest 失敗")
             
-            # 完成
+            # 🔥 修復：正確設定完成狀態
             db_info.status = DBStatus.SUCCESS
             db_info.end_time = datetime.now()
             
@@ -1895,21 +1979,14 @@ class ManifestPinningTool:
                         self.logger.error(f"{db_info.db_info}: Phase 1 異常 - {e}")
                         db_info.status = DBStatus.FAILED
                         db_info.error_message = str(e)
+                        db_info.end_time = datetime.now()
                         phase1_results.append(db_info)
             
-            # 🔥 關鍵修復：Phase 1 完成後立即斷開所有 SFTP 連線
-            self.logger.info("Phase 1 完成，斷開所有 SFTP 連線以避免衝突")
-            try:
-                if hasattr(self, 'sftp_manager') and self.sftp_manager:
-                    self.sftp_manager.disconnect()
-                    self.logger.debug("主 SFTP 連線已斷開")
-            except Exception as e:
-                self.logger.debug(f"斷開主 SFTP 連線時發生錯誤: {e}")
-
             # 等待所有 sync 完成（增強版監控）
             if not self.dry_run:
                 self.logger.info("等待所有 repo sync 完成...（增強版進度監控）")
-                self._wait_for_all_syncs_enhanced(phase1_results)  # 👈 使用新的函數
+                self._wait_for_all_syncs_enhanced(phase1_results)
+                # 🔥 狀態已在 _wait_for_all_syncs_enhanced 中更新，不需要重複更新
             
             with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
                 futures = {executor.submit(self.process_db_phase2, db_info): db_info for db_info in phase1_results}
@@ -1923,6 +2000,7 @@ class ManifestPinningTool:
                         self.logger.error(f"{db_info.db_info}: Phase 2 異常 - {e}")
                         db_info.status = DBStatus.FAILED
                         db_info.error_message = str(e)
+                        db_info.end_time = datetime.now()
                         self.report.add_db(db_info)
             
             self.logger.info("所有 DB 處理完成")
@@ -2104,38 +2182,50 @@ class ManifestPinningTool:
         self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}, 總重試 {total_retries}")
 
     def _handle_sync_failure(self, db_info: DBInfo, error_msg: str) -> bool:
-        """處理 sync 失敗並嘗試重試"""
+        """處理 sync 失敗並嘗試重試 - 特別針對 .repo/projects 損壞"""
         self.logger.warning(f"{db_info.db_info}: Sync 錯誤 - {error_msg}")
         
         # 初始化重試計數
         if not hasattr(db_info, 'retry_count'):
             db_info.retry_count = 0
         
-        # 檢查是否是可重試的錯誤
-        retryable_errors = [
-            'broken pipe', 'connection', 'timeout', 'network', 'temporary failure',
-            'unable to connect', 'connection refused', 'connection timed out',
-            'socket timeout', 'ssl error', 'certificate', 'dns'
+        # 🔥 檢查是否是 git repository 錯誤
+        git_repo_errors = [
+            'fatal: not a git repository',
+            'gitcommanderror',
+            'git fetch 失敗',
+            'git repository 損壞',
+            'unable to fully sync the tree',
+            'downloading network changes failed',
+            'checking out local projects failed'
         ]
         
-        is_retryable = any(err in error_msg.lower() for err in retryable_errors)
-        max_retries = 3  # 最多重試3次
+        is_git_repo_error = any(err in error_msg.lower() for err in git_repo_errors)
         
-        if is_retryable and db_info.retry_count < max_retries:
+        # 網路相關錯誤
+        network_errors = [
+            'broken pipe', 'connection', 'timeout', 'network', 'temporary failure',
+            'unable to connect', 'connection refused', 'ssl error', 'certificate'
+        ]
+        
+        is_network_error = any(err in error_msg.lower() for err in network_errors)
+        
+        max_retries = 2
+        
+        if (is_git_repo_error or is_network_error) and db_info.retry_count < max_retries:
             db_info.retry_count += 1
-            
-            # 計算重試延遲（指數退避）
-            retry_delay = min(30 * (2 ** (db_info.retry_count - 1)), 300)  # 最多等5分鐘
+            retry_delay = 30  # 固定30秒延遲
             
             self.logger.info(f"{db_info.db_info}: 準備重試 (第 {db_info.retry_count}/{max_retries} 次)，{retry_delay}秒後開始")
             
             try:
-                # 清理舊進程
+                # 🔥 停止當前進程
                 if db_info.sync_process:
                     try:
                         if db_info.sync_process.poll() is None:
+                            self.logger.info(f"{db_info.db_info}: 終止當前 sync 進程...")
                             db_info.sync_process.terminate()
-                            db_info.sync_process.wait(timeout=10)
+                            db_info.sync_process.wait(timeout=15)
                     except:
                         try:
                             db_info.sync_process.kill()
@@ -2144,11 +2234,78 @@ class ManifestPinningTool:
                     finally:
                         resource_manager.unregister_process(db_info.db_info)
                 
+                # 🔥 如果是 git repository 錯誤，執行深度清理
+                if is_git_repo_error:
+                    self.logger.info(f"{db_info.db_info}: 檢測到 git repository 錯誤，執行深度清理")
+                    
+                    if db_info.local_path and os.path.exists(db_info.local_path):
+                        import shutil
+                        
+                        # 🔥 重點：完全刪除 .repo 目錄
+                        repo_dir = os.path.join(db_info.local_path, '.repo')
+                        if os.path.exists(repo_dir):
+                            self.logger.info(f"{db_info.db_info}: 完全刪除 .repo 目錄...")
+                            try:
+                                # 先嘗試chmod 確保可以刪除
+                                os.system(f'chmod -R 755 "{repo_dir}" 2>/dev/null || true')
+                                shutil.rmtree(repo_dir)
+                                self.logger.info(f"{db_info.db_info}: ✅ .repo 目錄已完全清理")
+                            except Exception as e:
+                                self.logger.warning(f"{db_info.db_info}: 正常刪除失敗，嘗試強制刪除: {e}")
+                                try:
+                                    os.system(f'rm -rf "{repo_dir}"')
+                                    self.logger.info(f"{db_info.db_info}: ✅ 強制刪除成功")
+                                except Exception as e2:
+                                    self.logger.error(f"{db_info.db_info}: ❌ 強制刪除也失敗: {e2}")
+                                    return False
+                        
+                        # 🔥 清理所有項目目錄（除了 logs 和 manifest 檔案）
+                        self.logger.info(f"{db_info.db_info}: 清理損壞的項目目錄...")
+                        try:
+                            for item in os.listdir(db_info.local_path):
+                                if item in ['logs', 'manifest.xml'] or item.endswith('.xml'):
+                                    continue  # 保留 logs 目錄和 manifest 檔案
+                                
+                                item_path = os.path.join(db_info.local_path, item)
+                                if os.path.isdir(item_path):
+                                    shutil.rmtree(item_path)
+                                    self.logger.debug(f"{db_info.db_info}: 清理目錄 {item}")
+                                elif os.path.isfile(item_path):
+                                    os.remove(item_path)
+                                    self.logger.debug(f"{db_info.db_info}: 清理檔案 {item}")
+                        except Exception as e:
+                            self.logger.warning(f"{db_info.db_info}: 清理項目目錄時發生錯誤: {e}")
+                    
+                    # 🔥 重新執行完整的 repo init 流程
+                    self.logger.info(f"{db_info.db_info}: 重新執行 repo init...")
+                    if db_info.actual_source_cmd:
+                        if not self.repo_manager.repo_init(db_info.local_path, db_info.actual_source_cmd):
+                            self.logger.error(f"{db_info.db_info}: 重新 repo init 失敗")
+                            return False
+                        
+                        # 重新應用 manifest
+                        if db_info.manifest_file:
+                            manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
+                            if os.path.exists(manifest_path):
+                                if not self.repo_manager.apply_manifest(db_info.local_path, manifest_path):
+                                    self.logger.error(f"{db_info.db_info}: 重新應用 manifest 失敗")
+                                    return False
+                            else:
+                                self.logger.error(f"{db_info.db_info}: Manifest 檔案不存在: {manifest_path}")
+                                return False
+                        else:
+                            self.logger.error(f"{db_info.db_info}: 沒有 manifest 檔案資訊")
+                            return False
+                    else:
+                        self.logger.error(f"{db_info.db_info}: 沒有 source command 資訊")
+                        return False
+                
                 # 等待重試延遲
+                self.logger.info(f"{db_info.db_info}: 等待 {retry_delay} 秒後重試...")
                 import time
                 time.sleep(retry_delay)
                 
-                # 重新啟動 repo sync
+                # 🔥 重新啟動 repo sync
                 self.logger.info(f"{db_info.db_info}: 開始第 {db_info.retry_count} 次重試")
                 process = self.repo_manager.start_repo_sync_async(
                     db_info.local_path, 
@@ -2157,13 +2314,17 @@ class ManifestPinningTool:
                 
                 if process:
                     db_info.sync_process = process
-                    self.logger.info(f"{db_info.db_info}: 重試成功啟動 (PID: {process.pid})")
+                    self.logger.info(f"{db_info.db_info}: ✅ 重試成功啟動 (PID: {process.pid})")
                     return True
                 else:
-                    self.logger.error(f"{db_info.db_info}: 重試啟動失敗")
+                    self.logger.error(f"{db_info.db_info}: ❌ 重試啟動失敗")
+                    return False
                     
             except Exception as e:
                 self.logger.error(f"{db_info.db_info}: 重試過程中發生異常: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
         
         # 重試失敗或不可重試
         if db_info.retry_count >= max_retries:
@@ -2174,7 +2335,7 @@ class ManifestPinningTool:
         return False
 
     def _check_for_sync_errors(self, db_info: DBInfo, tracker: dict) -> str:
-        """檢查 sync 過程中的錯誤"""
+        """檢查 sync 過程中的錯誤 - 優化檢測"""
         try:
             log_file = tracker.get('log_file', '')
             
@@ -2184,8 +2345,8 @@ class ManifestPinningTool:
             current_size = os.path.getsize(log_file)
             last_size = tracker.get('last_log_size', 0)
             
+            # 檢查日誌停止更新
             if current_size <= last_size:
-                # 日誌沒有增長，檢查是否卡住
                 last_check = tracker.get('last_check_time', datetime.now())
                 if (datetime.now() - last_check).total_seconds() > 300:  # 5分鐘沒有日誌更新
                     return "日誌停止更新，可能進程卡住"
@@ -2193,14 +2354,32 @@ class ManifestPinningTool:
             tracker['last_log_size'] = current_size
             tracker['last_check_time'] = datetime.now()
             
-            # 讀取新增的日誌內容
+            # 🔥 讀取最後1KB的內容來檢查最新錯誤
             try:
                 with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    f.seek(last_size)
-                    new_content = f.read()
+                    # 讀取最後1KB
+                    f.seek(max(0, current_size - 1024))
+                    recent_content = f.read()
                     
-                    # 檢查各種錯誤模式
-                    error_patterns = [
+                    # 🔥 按照錯誤嚴重程度排序檢查
+                    critical_errors = [
+                        (r'fatal:.*not a git repository', 'Git repository 損壞'),
+                        (r'GitCommandError.*fetch.*failed', 'Git fetch 失敗'),
+                        (r'error:.*Unable to fully sync the tree', '無法完全同步'),
+                        (r'error:.*Downloading network changes failed', '網路下載失敗'),
+                        (r'error:.*Checking out local projects failed', '檢出項目失敗'),
+                        (r'Repo command failed.*SyncError', 'Repo 同步錯誤'),
+                    ]
+                    
+                    # 先檢查嚴重錯誤
+                    for pattern, error_type in critical_errors:
+                        if re.search(pattern, recent_content, re.IGNORECASE):
+                            return error_type
+                    
+                    # 再檢查一般錯誤
+                    general_errors = [
+                        (r'fatal:.*corrupt', 'Repository 檔案損壞'),
+                        (r'fatal:.*index file.*corrupt', 'Git index 損壞'),
                         (r'brokenpipeerror|broken pipe', 'Broken pipe error'),
                         (r'connection.*refused', 'Connection refused'),
                         (r'connection.*timeout|timeout.*connection', 'Connection timeout'),
@@ -2208,12 +2387,10 @@ class ManifestPinningTool:
                         (r'unable to connect', 'Unable to connect'),
                         (r'network.*unreachable', 'Network unreachable'),
                         (r'temporary failure', 'Temporary failure'),
-                        (r'fatal:.*clone', 'Clone failed'),
-                        (r'error:.*fetch', 'Fetch failed'),
                     ]
                     
-                    for pattern, error_type in error_patterns:
-                        if re.search(pattern, new_content, re.IGNORECASE):
+                    for pattern, error_type in general_errors:
+                        if re.search(pattern, recent_content, re.IGNORECASE):
                             return error_type
                             
             except Exception as e:
@@ -2520,12 +2697,16 @@ class ManifestPinningTool:
         return False
 
     def _wait_for_all_syncs_enhanced(self, db_results: List[DBInfo]):
-        """增強版進度監控 - 更精美的顯示格式"""
+        """增強版進度監控 - 加強錯誤處理"""
         max_wait_time = config_manager.repo_config['sync_timeout']
         start_wait = time.time()
         
         active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
         self.logger.info(f"🔍 監控 {len(active_syncs)} 個活躍的 repo sync 進程")
+        
+        if not active_syncs:
+            self.logger.info("沒有需要監控的 sync 進程")
+            return
         
         # 初始化進度追踪
         progress_tracker = {}
@@ -2537,10 +2718,11 @@ class ManifestPinningTool:
                 'estimated_progress': 0,
                 'current_activity': '初始化中...',
                 'current_project': '',
-                'last_update': datetime.now()
+                'last_update': datetime.now(),
+                'consecutive_errors': 0  # 🔥 追踪連續錯誤次數
             }
         
-        check_interval = 15  # 15秒檢查一次
+        check_interval = 10  # 🔥 縮短檢查間隔到10秒，更快檢測錯誤
         
         while True:
             all_complete = True
@@ -2562,37 +2744,70 @@ class ManifestPinningTool:
                 db_name = db_info.db_info
                 tracker = progress_tracker[db_name]
                 
-                # 簡化的顯示名稱
-                if db_info.version:
-                    display_name = f"{db_name} v{db_info.version}"
-                else:
-                    display_name = db_name
+                display_name = f"{db_name} v{db_info.version}" if db_info.version else db_name
                 
                 if db_info.sync_process:
                     poll = db_info.sync_process.poll()
                     
                     if poll is None:  # 仍在運行
                         all_complete = False
+                        
+                        # 🔥 檢查錯誤並嘗試處理
+                        error_detected = self._check_for_sync_errors(db_info, tracker)
+                        
+                        if error_detected:
+                            tracker['consecutive_errors'] += 1
+                            self.logger.warning(f"{db_name}: 檢測到錯誤 ({tracker['consecutive_errors']} 次): {error_detected}")
+                            
+                            # 🔥 如果連續3次檢測到同樣錯誤，立即觸發重試
+                            if tracker['consecutive_errors'] >= 3:
+                                self.logger.info(f"{db_name}: 連續錯誤達到閾值，觸發重試")
+                                
+                                if self._handle_sync_failure(db_info, error_detected):
+                                    tracker['consecutive_errors'] = 0  # 重設錯誤計數
+                                    tracker['current_activity'] = "正在重試..."
+                                    # 更新 log 檔案路徑
+                                    tracker['log_file'] = self._get_sync_log_file(db_info)
+                                else:
+                                    # 重試失敗，標記為失敗
+                                    db_info.status = DBStatus.FAILED
+                                    db_info.end_time = datetime.now()
+                                    db_info.error_message = error_detected
+                                    failed_count += 1
+                                    print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ {error_detected}")
+                                    continue
+                        else:
+                            tracker['consecutive_errors'] = 0  # 重設錯誤計數
+                        
+                        # 更新進度
                         self._update_progress_info(db_info, tracker)
                         
                         runtime = datetime.now() - tracker['start_time']
                         runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
                         
-                        # 簡化的進度條
                         progress = tracker['estimated_progress']
                         bar_length = 20
                         filled = int(bar_length * progress / 100)
                         bar = "█" * filled + "░" * (bar_length - filled)
                         
-                        # 簡化的活動信息
-                        activity = tracker.get('current_project', '').split('/')[-1] or '同步中'
+                        activity = tracker.get('current_project', '').split('/')[-1] or tracker.get('current_activity', '同步中')
                         if len(activity) > 15:
                             activity = activity[:12] + "..."
                         
-                        print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}")
+                        # 🔥 顯示重試信息
+                        retry_info = ""
+                        if hasattr(db_info, 'retry_count') and db_info.retry_count > 0:
+                            retry_info = f" (重試:{db_info.retry_count})"
+                        
+                        print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}{retry_info}")
                         
                     elif poll == 0:  # 成功完成
                         completed_count += 1
+                        db_info.status = DBStatus.SUCCESS
+                        db_info.end_time = datetime.now()
+                        if hasattr(db_info.sync_process, '_log_file_path'):
+                            db_info.sync_log_path = db_info.sync_process._log_file_path
+                        
                         runtime = datetime.now() - tracker['start_time']
                         runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
                         
@@ -2602,23 +2817,22 @@ class ManifestPinningTool:
                     else:  # 失敗
                         failed_count += 1
                         db_info.status = DBStatus.FAILED
-                        print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗")
+                        db_info.end_time = datetime.now()
+                        db_info.error_message = f"Repo sync 失敗 (返回碼: {poll})"
+                        print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗 (碼:{poll})")
             
-            # 簡化的統計信息
+            # 統計信息
             running_count = len(active_syncs) - completed_count - failed_count
-            total_progress = sum(progress_tracker[db.db_info]['estimated_progress'] 
-                            for db in active_syncs if db.status != DBStatus.FAILED)
-            avg_progress = total_progress / max(len(active_syncs) - failed_count, 1)
             
             print("-" * 80)
-            print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count} │ 總進度:{avg_progress:.1f}%")
+            print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count}")
             
             if all_complete or elapsed > max_wait_time:
                 break
             
-            time.sleep(check_interval)  # 15秒更新一次
+            time.sleep(check_interval)
         
-        # 🏁 最終統計
+        # 最終統計
         self._display_final_summary(active_syncs, elapsed, progress_tracker)
 
     def _create_progress_bar(self, percentage: int, width: int = 20) -> str:
@@ -3187,22 +3401,42 @@ class ManifestPinningTool:
             self.logger.info("開始產生 Excel 報告")
             
             report_data = []
-            for db in self.report.db_details:
-                db_dict = db.to_dict()
-                # 新增欄位
+            for i, db in enumerate(self.report.db_details, 1):
+                # 🔥 修復：手動構建字典，確保所有欄位正確
+                db_dict = {
+                    'sn': i,  # 🔥 修復：添加流水號
+                    'module': db.module,
+                    'db_type': db.db_type,
+                    'db_info': db.db_info,
+                    'status': db.status.value if hasattr(db.status, 'value') else str(db.status),
+                    'version': db.version or '未指定',
+                    'start_time': db.start_time.strftime('%Y-%m-%d %H:%M:%S') if db.start_time else '',
+                    'end_time': db.end_time.strftime('%Y-%m-%d %H:%M:%S') if db.end_time else '',
+                    'error_message': db.error_message or '',
+                    'sync_log_path': db.sync_log_path or '',  # 🔥 修復：記錄 sync log 路徑
+                    'sftp_path': db.sftp_path,
+                    'local_path': db.local_path or '',
+                    'has_existing_repo': '是' if db.has_existing_repo else '否',
+                    'jira_link': db.jira_link or '未找到',
+                    # 🔥 移除不需要的欄位
+                    # 'manifest_file': db.manifest_file or '未下載',
+                    # 'actual_source_cmd': db.actual_source_cmd or '未記錄',
+                }
+                
+                # 🔥 修復：重新命名欄位
                 db_dict['完整_JIRA_連結'] = db.jira_link or '未找到'
                 db_dict['完整_repo_init_指令'] = db.actual_source_cmd or '未記錄'
                 db_dict['manifest_版本'] = db.version or '未指定'
-                db_dict['manifest_檔案'] = db.manifest_file or '未下載'
+                
                 report_data.append(db_dict)
             
             df = pd.DataFrame(report_data)
             
-            # 重新排列欄位順序，把重要欄位放前面
+            # 重新排列欄位順序
             important_columns = [
                 'sn', 'module', 'db_type', 'db_info', 'status',
-                'manifest_版本', 'manifest_檔案', '完整_JIRA_連結', '完整_repo_init_指令',
-                'start_time', 'end_time', 'error_message'
+                'manifest_版本', '完整_JIRA_連結', '完整_repo_init_指令',
+                'start_time', 'end_time', 'sync_log_path', 'error_message'
             ]
             
             # 確保所有欄位都存在，並重新排序
@@ -3210,14 +3444,19 @@ class ManifestPinningTool:
             other_columns = [col for col in df.columns if col not in important_columns]
             df = df[existing_columns + other_columns]
             
+            # 🔥 修復：正確計算摘要統計
+            successful_count = len([db for db in self.report.db_details if db.status == DBStatus.SUCCESS])
+            failed_count = len([db for db in self.report.db_details if db.status == DBStatus.FAILED])
+            skipped_count = len([db for db in self.report.db_details if db.status == DBStatus.SKIPPED])
+            
             # 建立摘要
             summary = {
                 '項目': ['總 DB 數', '成功', '失敗', '跳過', '執行時間'],
                 '數值': [
-                    self.report.total_dbs,
-                    self.report.successful_dbs,
-                    self.report.failed_dbs,
-                    self.report.skipped_dbs,
+                    len(self.report.db_details),
+                    successful_count,
+                    failed_count,
+                    skipped_count,
                     str(self.report.end_time - self.report.start_time) if self.report.end_time else 'N/A'
                 ]
             }
@@ -3231,6 +3470,8 @@ class ManifestPinningTool:
             
         except Exception as e:
             self.logger.error(f"產生報告失敗: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def _write_enhanced_excel(self, main_df: pd.DataFrame, summary_df: pd.DataFrame, output_file: str):
         """寫入改進版 Excel（自動適寬、表頭藍底白字）"""
