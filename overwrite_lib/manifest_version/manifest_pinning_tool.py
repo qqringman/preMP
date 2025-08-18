@@ -451,8 +451,21 @@ class ResourceManager:
     
     def _signal_handler(self, signum, frame):
         """處理中斷信號"""
+        print(f"\n🛑 收到中斷信號，清理所有進程...")
+        
+        # 原有的清理
         self.cleanup_all()
-        sys.exit(1)
+        
+        # 🔥 新增：系統級強制清理
+        print("🚨 執行系統級清理...")
+        os.system("pkill -TERM -f 'repo sync' 2>/dev/null || true")
+        os.system("pkill -TERM -f 'unbuffer.*repo' 2>/dev/null || true")
+        time.sleep(2)
+        os.system("pkill -KILL -f 'repo sync' 2>/dev/null || true")
+        os.system("pkill -KILL -f 'unbuffer.*repo' 2>/dev/null || true")
+        
+        print("✅ 清理完成")
+        sys.exit(0)
     
     def register_process(self, name: str, process: subprocess.Popen):
         """註冊新的子進程"""
@@ -1399,62 +1412,252 @@ class RepoManager:
             return False
     
     def start_repo_sync_async(self, work_dir: str, db_name: str) -> subprocess.Popen:
-        """啟動異步 repo sync"""
+        """🎯 修復版本 - 使用 unbuffer 確保實時輸出"""
         try:
-            sync_cmd_parts = [
-                config_manager.repo_config['repo_command'],
-                'sync',
-                '-j', str(config_manager.repo_config['sync_jobs'])
-            ]
+            self.logger.info(f"{db_name}: 啟動 unbuffer 版本 repo sync")
             
-            cmd = ' '.join(sync_cmd_parts)
-            self.logger.info(f"{db_name} 啟動 repo sync: {cmd}")
+            # 檢查工作目錄
+            if not os.path.exists(os.path.join(work_dir, '.repo')):
+                raise Exception(f"工作目錄沒有 .repo: {work_dir}")
             
-            # 建立日誌檔案
+            # 檢查 unbuffer 是否可用
+            try:
+                subprocess.run(['which', 'unbuffer'], check=True, capture_output=True, timeout=5)
+                use_unbuffer = True
+            except:
+                use_unbuffer = False
+                self.logger.warning(f"{db_name}: unbuffer 不可用，使用 script 方法")
+            
+            # 建立日誌
             log_dir = os.path.join(work_dir, 'logs')
             os.makedirs(log_dir, exist_ok=True)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = os.path.join(log_dir, f'repo_sync_{timestamp}.log')
+            method_name = "unbuffer" if use_unbuffer else "script"
+            log_file = os.path.join(log_dir, f'repo_sync_{method_name}_{timestamp}.log')
             
-            with open(log_file, 'w') as f:
+            # 寫入初始信息
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write(f"=== Fixed Repo Sync Log for {db_name} ===\n")
                 f.write(f"開始時間: {datetime.now()}\n")
-                f.write(f"DB: {db_name}\n")
-                f.write(f"命令: {cmd}\n")
                 f.write(f"工作目錄: {work_dir}\n")
-                f.write("="*50 + "\n")
-                f.flush()
+                f.write(f"使用方法: {method_name}\n\n")
+            
+            # 準備命令
+            repo_cmd = config_manager.repo_config['repo_command']
+            jobs = min(config_manager.repo_config['sync_jobs'], 4)
+            
+            if use_unbuffer:
+                # 🎯 使用 unbuffer 方法（已驗證有效）
+                cmd_parts = [
+                    'unbuffer',
+                    repo_cmd, 'sync', 
+                    f'-j{jobs}', 
+                    '--verbose', 
+                    '--force-sync'
+                ]
                 
                 process = subprocess.Popen(
-                    cmd,
-                    shell=True,
+                    cmd_parts,
                     cwd=work_dir,
-                    stdout=f,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=0,
+                    preexec_fn=os.setsid
+                )
+            else:
+                # 備用：使用 script 方法
+                shell_cmd = f"""
+    cd "{work_dir}"
+    echo "[SCRIPT] 進程啟動，PID: $$" >> "{log_file}"
+    script -fq /dev/null -c "{repo_cmd} sync -j{jobs} --verbose --force-sync" | tee -a "{log_file}"
+    echo "[SCRIPT] 進程結束，時間: $(date)" >> "{log_file}"
+    """
+                
+                process = subprocess.Popen(
+                    ['bash', '-c', shell_cmd],
+                    cwd=work_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True
                 )
             
+            # 🎯 創建實時日誌寫入線程（關鍵改進）
+            def log_writer():
+                try:
+                    with open(log_file, 'a', encoding='utf-8', buffering=1) as f:
+                        f.write(f"[UNBUFFER] 進程啟動，PID: {process.pid}\n")
+                        f.write(f"[UNBUFFER] 開始時間: {datetime.now()}\n\n")
+                        f.flush()
+                        
+                        # 🔥 進度追蹤變數
+                        last_reported_progress = -1
+                        last_report_time = datetime.now()
+                        message_count = 0
+                        
+                        if use_unbuffer:
+                            while True:
+                                line = process.stdout.readline()
+                                if line:
+                                    # 📝 所有內容都寫入文件（不變）
+                                    f.write(line)
+                                    f.flush()
+                                    
+                                    # 🔥 智能過濾 console 輸出
+                                    line_clean = line.strip()
+                                    message_count += 1
+                                    
+                                    # ✅ 只報告重要的進度變化
+                                    if "Syncing:" in line_clean and "%" in line_clean:
+                                        import re
+                                        progress_match = re.search(r'Syncing:\s*(\d+)%\s*\((\d+)/(\d+)\)', line_clean)
+                                        if progress_match:
+                                            current_progress = int(progress_match.group(1))
+                                            current_count = int(progress_match.group(2))
+                                            total_count = int(progress_match.group(3))
+                                            
+                                            # 🎯 只在以下情況報告進度：
+                                            should_report = (
+                                                last_reported_progress == -1 or  # 第一次
+                                                current_progress - last_reported_progress >= 5 or  # 進度增加5%以上
+                                                current_progress % 10 == 0 or  # 每10%里程碑
+                                                current_progress >= 95  # 接近完成時
+                                            )
+                                            
+                                            if should_report:
+                                                # 計算速度
+                                                current_time = datetime.now()
+                                                elapsed = (current_time - last_report_time).total_seconds()
+                                                
+                                                speed_info = ""
+                                                if last_reported_progress > 0 and elapsed > 0:
+                                                    progress_diff = current_progress - last_reported_progress
+                                                    speed = progress_diff / (elapsed / 60)  # %/分鐘
+                                                    if speed > 0:
+                                                        remaining_time = (100 - current_progress) / speed
+                                                        speed_info = f" (預計剩餘: {remaining_time:.0f}分鐘)"
+                                                
+                                                # 📊 簡潔的進度報告
+                                                # self.logger.info(
+                                                #    f"{db_name}: {current_progress}% "
+                                                #    f"({current_count}/{total_count}){speed_info}"
+                                                #)
+                                                
+                                                last_reported_progress = current_progress
+                                                last_report_time = current_time
+                                    
+                                    # ⚠️ 報告錯誤和警告
+                                    elif any(keyword in line_clean.lower() for keyword in 
+                                        ['error:', 'fatal:', 'failed', 'timeout', 'exception', 'abort']):
+                                        self.logger.warning(f"{db_name}: {line_clean}")
+                                    
+                                    # 🎉 報告重要里程碑
+                                    elif any(phrase in line_clean.lower() for phrase in
+                                        ['sync has finished', 'completed successfully', 'repo sync complete']):
+                                        self.logger.info(f"{db_name}: 同步完成！")
+                                    
+                                    # 🚫 不報告的內容：
+                                    # - "Skipped fetching project"
+                                    # - "fetching project" 
+                                    # - "..working.."
+                                    # - 重複的進度信息
+                                    
+                                elif process.poll() is not None:
+                                    break
+                        
+                        return_code = process.poll()
+                        f.write(f"\n[UNBUFFER] 進程結束，返回碼: {return_code}\n")
+                        f.write(f"[UNBUFFER] 結束時間: {datetime.now()}\n")
+                        f.write(f"[UNBUFFER] 總處理消息數: {message_count}\n")
+                        f.flush()
+                        
+                        # 📈 最終報告
+                        if return_code == 0:
+                            self.logger.info(f"{db_name}: ✅ 同步成功完成")
+                        else:
+                            self.logger.error(f"{db_name}: ❌ 同步失敗 (返回碼: {return_code})")
+                        
+                except Exception as e:
+                    self.logger.error(f"{db_name}: 日誌寫入錯誤: {e}")
+            
+            # 啟動日誌線程
+            if use_unbuffer:  # 只有 unbuffer 需要日誌線程
+                log_thread = threading.Thread(target=log_writer, daemon=True)
+                log_thread.start()
+                process._log_thread = log_thread
+            
+            # 驗證啟動
+            time.sleep(2)
+            if process.poll() is not None:
+                raise Exception(f"進程立即失敗，返回碼: {process.poll()}")
+            
+            # 保存進程信息
+            process._log_file_path = log_file
+            process._db_name = db_name
+            process._start_time = datetime.now()
+            
             resource_manager.register_process(db_name, process)
-            self.logger.info(f"{db_name} repo sync 進程已啟動 (PID: {process.pid})")
+            self.logger.info(f"{db_name}: repo sync 啟動成功 (PID: {process.pid})")
+            
             return process
             
         except Exception as e:
-            self.logger.error(f"{db_name} 啟動 repo sync 失敗: {str(e)}")
+            self.logger.error(f"{db_name}: 啟動失敗: {e}")
             return None
     
     def check_process_status(self, db_name: str, process: subprocess.Popen) -> Optional[int]:
-        """檢查進程狀態"""
+        """改進的進程狀態檢查"""
         with self.lock:
             if process:
-                poll = process.poll()
-                if poll is not None:
-                    resource_manager.unregister_process(db_name)
-                    if poll == 0:
-                        self.logger.info(f"{db_name} repo sync 完成")
+                try:
+                    poll = process.poll()
+                    
+                    # 🔥 加強日誌
+                    self.logger.debug(f"{db_name}: 檢查進程狀態 PID={process.pid}, poll={poll}")
+                    
+                    if poll is not None:
+                        # 🔥 進程已結束，記錄詳細信息
+                        self.logger.info(f"{db_name}: 進程已結束，返回碼={poll}")
+                        
+                        # 正確關閉文件句柄
+                        if hasattr(process, '_log_file_handle') and process._log_file_handle:
+                            try:
+                                process._log_file_handle.flush()
+                                process._log_file_handle.close()
+                                self.logger.debug(f"{db_name}: 日誌文件句柄已關閉")
+                            except Exception as e:
+                                self.logger.warning(f"{db_name}: 關閉日誌句柄失敗: {e}")
+                        
+                        resource_manager.unregister_process(db_name)
+                        
+                        # 🔥 寫入完成標記到日誌
+                        if hasattr(process, '_log_file_path'):
+                            try:
+                                with open(process._log_file_path, 'a') as f:
+                                    f.write(f"\n=== 進程結束 ===\n")
+                                    f.write(f"返回碼: {poll}\n")
+                                    f.write(f"結束時間: {datetime.now()}\n")
+                            except:
+                                pass
+                        
+                        return poll
                     else:
-                        self.logger.error(f"{db_name} repo sync 失敗 (返回碼: {poll})")
-                return poll
-        return None
+                        # 🔥 進程仍在運行，但驗證 PID 是否真的存在
+                        try:
+                            os.kill(process.pid, 0)  # 檢查進程是否存在
+                            self.logger.debug(f"{db_name}: 進程 {process.pid} 確實在運行")
+                        except OSError:
+                            self.logger.warning(f"{db_name}: 進程 {process.pid} 不存在但 poll() 返回 None")
+                            return -1  # 進程異常消失
+                    
+                    return None
+                    
+                except Exception as e:
+                    self.logger.error(f"{db_name}: 檢查進程狀態時出錯: {e}")
+                    return -1
+            
+            return None
     
     def export_manifest(self, work_dir: str, output_file: str = "vp_manifest.xml") -> bool:
         """導出 manifest"""
@@ -1702,14 +1905,11 @@ class ManifestPinningTool:
                     self.logger.debug("主 SFTP 連線已斷開")
             except Exception as e:
                 self.logger.debug(f"斷開主 SFTP 連線時發生錯誤: {e}")
-            
-            # 等待所有 sync 完成（不涉及 SFTP 操作）
+
+            # 等待所有 sync 完成（增強版監控）
             if not self.dry_run:
-                self.logger.info("等待所有 repo sync 完成...（純進程監控，無 SFTP 操作）")
-                self._wait_for_all_syncs_safe(phase1_results)
-            
-            # Phase 2: 完成處理（不需要 SFTP）
-            self.logger.info("執行 Phase 2: 完成處理（不涉及 SFTP）")
+                self.logger.info("等待所有 repo sync 完成...（增強版進度監控）")
+                self._wait_for_all_syncs_enhanced(phase1_results)  # 👈 使用新的函數
             
             with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
                 futures = {executor.submit(self.process_db_phase2, db_info): db_info for db_info in phase1_results}
@@ -1731,7 +1931,7 @@ class ManifestPinningTool:
             self.logger.error(f"處理過程發生錯誤: {e}")
 
     def _wait_for_all_syncs_safe(self, db_results: List[DBInfo]):
-        """增強版進度監控 - 顯示各 DB 詳細狀態和版本信息"""
+        """完整版進度監控 - 包含錯誤處理和重試機制"""
         max_wait_time = config_manager.repo_config['sync_timeout']
         start_wait = time.time()
         
@@ -1746,8 +1946,12 @@ class ManifestPinningTool:
                 'last_log_size': 0,
                 'estimated_progress': 0,
                 'current_activity': '初始化中...',
-                'log_file': self._get_sync_log_file(db_info)
+                'log_file': self._get_sync_log_file(db_info),
+                'last_check_time': datetime.now(),
+                'error_count': 0
             }
+        
+        check_interval = 30  # 30秒檢查一次
         
         while True:
             all_complete = True
@@ -1764,7 +1968,7 @@ class ManifestPinningTool:
                 db_name = db_info.db_info
                 tracker = progress_tracker[db_name]
                 
-                # 🎯 構建包含版本信息的顯示名稱
+                # 構建包含版本信息的顯示名稱
                 manifest_info = ""
                 if db_info.manifest_file:
                     manifest_info = f" ({db_info.manifest_file})"
@@ -1780,13 +1984,46 @@ class ManifestPinningTool:
                         if poll is None:  # 仍在運行
                             all_complete = False
                             
+                            # 🔧 檢查是否有錯誤需要處理
+                            error_detected = self._check_for_sync_errors(db_info, tracker)
+                            
+                            if error_detected:
+                                # 嘗試處理錯誤
+                                if self._handle_sync_failure(db_info, error_detected):
+                                    tracker['current_activity'] = f"檢測到錯誤: {error_detected}，正在重試..."
+                                    tracker['error_count'] += 1
+                                else:
+                                    # 重試失敗，標記為失敗
+                                    db_info.status = DBStatus.FAILED
+                                    db_info.error_message = error_detected
+                                    runtime = datetime.now() - tracker['start_time']
+                                    print(f"❌ {display_name:30s} | 失敗     |   0% | "
+                                        f"用時 {str(runtime).split('.')[0]:8s} | {error_detected}")
+                                    continue
+                            
                             # 更新進度信息
                             self._update_progress_info(db_info, tracker)
                             
-                            # 顯示詳細狀態 - 調整格式寬度
+                            # 構建詳細的活動信息
+                            activity_text = tracker['current_activity']
+                            
+                            # 添加當前項目信息
+                            if tracker.get('current_project'):
+                                project_short = tracker['current_project'].split('/')[-1]
+                                activity_text = f"{activity_text} [{project_short}]"
+                            
+                            # 添加下載速度
+                            if tracker.get('download_speed'):
+                                activity_text = f"{activity_text} {tracker['download_speed']}"
+                            
+                            # 添加錯誤計數（如果有的話）
+                            if tracker['error_count'] > 0:
+                                activity_text = f"{activity_text} (重試:{tracker['error_count']})"
+                            
+                            # 顯示詳細狀態
                             runtime = datetime.now() - tracker['start_time']
                             print(f"🔄 {display_name:30s} | 運行中 | {tracker['estimated_progress']:3d}% | "
-                                f"用時 {str(runtime).split('.')[0]:8s} | {tracker['current_activity']}")
+                                f"用時 {str(runtime).split('.')[0]:8s} | {activity_text}")
                             
                             # 檢查超時
                             if time.time() - start_wait > max_wait_time:
@@ -1805,15 +2042,29 @@ class ManifestPinningTool:
                                 
                         elif poll == 0:  # 成功完成
                             runtime = datetime.now() - tracker['start_time']
+                            self.logger.info(f"{db_name}: repo sync 成功完成")
                             print(f"✅ {display_name:30s} | 完成     | 100% | "
                                 f"用時 {str(runtime).split('.')[0]:8s} | Sync 成功完成")
                             
                         else:  # 失敗
                             runtime = datetime.now() - tracker['start_time']
-                            db_info.status = DBStatus.FAILED
-                            db_info.error_message = f"Sync 失敗 (返回碼: {poll})"
-                            print(f"❌ {display_name:30s} | 失敗     |   0% | "
-                                f"用時 {str(runtime).split('.')[0]:8s} | 返回碼: {poll}")
+                            error_msg = f"Sync 失敗 (返回碼: {poll})"
+                            
+                            # 嘗試從日誌中獲取更詳細的錯誤信息
+                            detailed_error = self._extract_error_from_log(tracker.get('log_file', ''))
+                            if detailed_error:
+                                error_msg = f"{error_msg} - {detailed_error}"
+                            
+                            # 嘗試處理失敗
+                            if self._handle_sync_failure(db_info, error_msg):
+                                tracker['current_activity'] = "進程失敗，正在重試..."
+                                tracker['error_count'] += 1
+                                all_complete = False  # 還在重試中
+                            else:
+                                db_info.status = DBStatus.FAILED
+                                db_info.error_message = error_msg
+                                print(f"❌ {display_name:30s} | 失敗     |   0% | "
+                                    f"用時 {str(runtime).split('.')[0]:8s} | {error_msg}")
                             
                     except Exception as e:
                         self.logger.error(f"{db_name}: 檢查進程狀態失敗: {e}")
@@ -1828,95 +2079,1073 @@ class ManifestPinningTool:
             completed_count = sum(1 for db in active_syncs 
                                 if db.sync_process and db.sync_process.poll() == 0)
             failed_count = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+            retry_count = sum(1 for db in active_syncs 
+                            if progress_tracker.get(db.db_info, {}).get('error_count', 0) > 0)
             
             print("-"*100)
-            print(f"📈 總計: 運行中 {running_count} | 完成 {completed_count} | 失敗 {failed_count}")
-            
-            # 🎯 增加版本統計信息
-            if running_count > 0 or completed_count > 0:
-                print("📋 版本信息:")
-                for db_info in active_syncs:
-                    if db_info.manifest_file or db_info.version:
-                        status_icon = "🔄" if (db_info.sync_process and db_info.sync_process.poll() is None) else \
-                                    "✅" if (db_info.sync_process and db_info.sync_process.poll() == 0) else "❌"
-                        version_info = db_info.manifest_file or f"v{db_info.version}"
-                        print(f"   {status_icon} {db_info.db_info}: {version_info}")
-            
-            print("="*100)
-            
+            print(f"📈 總計: 運行中 {running_count} | 完成 {completed_count} | 失敗 {failed_count} | 重試中 {retry_count}")
+                        
             if all_complete or (time.time() - start_wait) > max_wait_time:
                 break
             
-            # 每30秒檢查一次
-            time.sleep(30)
+            # 等待下次檢查
+            time.sleep(check_interval)
         
         # 最終統計
         completed = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() == 0)
         failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
-        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}")
+        total_retries = sum(progress_tracker.get(db.db_info, {}).get('error_count', 0) for db in active_syncs)
+        
+        print(f"\n🏁 Repo sync 最終統計:")
+        print(f"   ✅ 成功: {completed}")
+        print(f"   ❌ 失敗: {failed}")
+        print(f"   🔄 總重試次數: {total_retries}")
+        
+        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}, 總重試 {total_retries}")
+
+    def _handle_sync_failure(self, db_info: DBInfo, error_msg: str) -> bool:
+        """處理 sync 失敗並嘗試重試"""
+        self.logger.warning(f"{db_info.db_info}: Sync 錯誤 - {error_msg}")
+        
+        # 初始化重試計數
+        if not hasattr(db_info, 'retry_count'):
+            db_info.retry_count = 0
+        
+        # 檢查是否是可重試的錯誤
+        retryable_errors = [
+            'broken pipe', 'connection', 'timeout', 'network', 'temporary failure',
+            'unable to connect', 'connection refused', 'connection timed out',
+            'socket timeout', 'ssl error', 'certificate', 'dns'
+        ]
+        
+        is_retryable = any(err in error_msg.lower() for err in retryable_errors)
+        max_retries = 3  # 最多重試3次
+        
+        if is_retryable and db_info.retry_count < max_retries:
+            db_info.retry_count += 1
+            
+            # 計算重試延遲（指數退避）
+            retry_delay = min(30 * (2 ** (db_info.retry_count - 1)), 300)  # 最多等5分鐘
+            
+            self.logger.info(f"{db_info.db_info}: 準備重試 (第 {db_info.retry_count}/{max_retries} 次)，{retry_delay}秒後開始")
+            
+            try:
+                # 清理舊進程
+                if db_info.sync_process:
+                    try:
+                        if db_info.sync_process.poll() is None:
+                            db_info.sync_process.terminate()
+                            db_info.sync_process.wait(timeout=10)
+                    except:
+                        try:
+                            db_info.sync_process.kill()
+                        except:
+                            pass
+                    finally:
+                        resource_manager.unregister_process(db_info.db_info)
+                
+                # 等待重試延遲
+                import time
+                time.sleep(retry_delay)
+                
+                # 重新啟動 repo sync
+                self.logger.info(f"{db_info.db_info}: 開始第 {db_info.retry_count} 次重試")
+                process = self.repo_manager.start_repo_sync_async(
+                    db_info.local_path, 
+                    db_info.db_info
+                )
+                
+                if process:
+                    db_info.sync_process = process
+                    self.logger.info(f"{db_info.db_info}: 重試成功啟動 (PID: {process.pid})")
+                    return True
+                else:
+                    self.logger.error(f"{db_info.db_info}: 重試啟動失敗")
+                    
+            except Exception as e:
+                self.logger.error(f"{db_info.db_info}: 重試過程中發生異常: {e}")
+        
+        # 重試失敗或不可重試
+        if db_info.retry_count >= max_retries:
+            self.logger.error(f"{db_info.db_info}: 已達最大重試次數 ({max_retries})，標記為失敗")
+        else:
+            self.logger.error(f"{db_info.db_info}: 錯誤不可重試，標記為失敗")
+        
+        return False
+
+    def _check_for_sync_errors(self, db_info: DBInfo, tracker: dict) -> str:
+        """檢查 sync 過程中的錯誤"""
+        try:
+            log_file = tracker.get('log_file', '')
+            
+            if not log_file or not os.path.exists(log_file):
+                return ""
+            
+            current_size = os.path.getsize(log_file)
+            last_size = tracker.get('last_log_size', 0)
+            
+            if current_size <= last_size:
+                # 日誌沒有增長，檢查是否卡住
+                last_check = tracker.get('last_check_time', datetime.now())
+                if (datetime.now() - last_check).total_seconds() > 300:  # 5分鐘沒有日誌更新
+                    return "日誌停止更新，可能進程卡住"
+            
+            tracker['last_log_size'] = current_size
+            tracker['last_check_time'] = datetime.now()
+            
+            # 讀取新增的日誌內容
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    f.seek(last_size)
+                    new_content = f.read()
+                    
+                    # 檢查各種錯誤模式
+                    error_patterns = [
+                        (r'brokenpipeerror|broken pipe', 'Broken pipe error'),
+                        (r'connection.*refused', 'Connection refused'),
+                        (r'connection.*timeout|timeout.*connection', 'Connection timeout'),
+                        (r'ssl.*error|certificate.*error', 'SSL/Certificate error'),
+                        (r'unable to connect', 'Unable to connect'),
+                        (r'network.*unreachable', 'Network unreachable'),
+                        (r'temporary failure', 'Temporary failure'),
+                        (r'fatal:.*clone', 'Clone failed'),
+                        (r'error:.*fetch', 'Fetch failed'),
+                    ]
+                    
+                    for pattern, error_type in error_patterns:
+                        if re.search(pattern, new_content, re.IGNORECASE):
+                            return error_type
+                            
+            except Exception as e:
+                self.logger.debug(f"檢查錯誤時讀取日誌失敗: {e}")
+            
+            return ""
+            
+        except Exception as e:
+            self.logger.debug(f"錯誤檢查異常: {e}")
+            return ""
+
+    def _extract_error_from_log(self, log_file: str) -> str:
+        """從日誌文件中提取詳細錯誤信息"""
+        try:
+            if not log_file or not os.path.exists(log_file):
+                return ""
+            
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                lines = content.split('\n')
+                
+                # 查找錯誤行
+                error_lines = []
+                for line in lines[-50:]:  # 檢查最後50行
+                    if any(keyword in line.lower() for keyword in ['error:', 'fatal:', 'exception:', 'failed:']):
+                        error_lines.append(line.strip())
+                
+                if error_lines:
+                    return error_lines[-1]  # 返回最後一個錯誤
+                    
+        except Exception as e:
+            self.logger.debug(f"提取錯誤信息失敗: {e}")
+        
+        return ""
 
     def _get_sync_log_file(self, db_info: DBInfo) -> str:
-        """獲取 sync 日誌文件路徑"""
+        """獲取 sync 日誌文件路径 - 優先使用 unbuffer 版本"""
         try:
             log_dir = os.path.join(db_info.local_path, 'logs')
             if os.path.exists(log_dir):
-                log_files = [f for f in os.listdir(log_dir) if f.startswith('repo_sync_')]
+                # 尋找最新的日誌文件，優先選擇 unbuffer 版本
+                log_files = []
+                for f in os.listdir(log_dir):
+                    if f.startswith('repo_sync_') and f.endswith('.log'):
+                        file_path = os.path.join(log_dir, f)
+                        mtime = os.path.getmtime(file_path)
+                        
+                        # 🔥 給不同類型的日誌不同優先級
+                        priority = 0
+                        if 'unbuffer' in f:
+                            priority = 100  # 最高優先級
+                        elif 'script' in f:
+                            priority = 50
+                        elif 'hotfix' in f or 'fixed' in f:
+                            priority = 25
+                        # 舊版本的日誌優先級為 0
+                        
+                        log_files.append((priority, mtime, file_path))
+                
                 if log_files:
-                    latest_log = sorted(log_files)[-1]
-                    return os.path.join(log_dir, latest_log)
-        except:
-            pass
+                    # 按優先級和修改時間排序
+                    log_files.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                    latest_log = log_files[0][2]
+                    self.logger.debug(f"{db_info.db_info}: 使用日誌文件: {os.path.basename(latest_log)}")
+                    return latest_log
+            
+            self.logger.debug(f"{db_info.db_info}: 日誌目錄不存在: {log_dir}")
+        except Exception as e:
+            self.logger.debug(f"{db_info.db_info}: 獲取日誌文件失敗: {e}")
+        
         return ""
 
     def _update_progress_info(self, db_info: DBInfo, tracker: dict):
-        """更新進度信息"""
+        """更新進度信息 - 專門優化 unbuffer 輸出解析"""
         try:
-            log_file = tracker['log_file']
+            log_file = tracker.get('log_file')
             
-            if log_file and os.path.exists(log_file):
-                # 檢查日誌文件大小變化來估算進度
-                current_size = os.path.getsize(log_file)
-                size_diff = current_size - tracker['last_log_size']
-                tracker['last_log_size'] = current_size
+            # 🔥 每次都重新獲取日誌文件，確保使用最新的 unbuffer 日誌
+            current_log_file = self._get_sync_log_file(db_info)
+            if current_log_file and current_log_file != log_file:
+                tracker['log_file'] = current_log_file
+                log_file = current_log_file
+                self.logger.debug(f"{db_info.db_info}: 切換到新日誌文件: {os.path.basename(log_file)}")
+            
+            if not log_file or not os.path.exists(log_file):
+                tracker['current_activity'] = '等待日誌...'
+                tracker['estimated_progress'] = self._get_time_based_progress(tracker)
+                return
+            
+            # 🔥 優化的日誌解析 - 專門處理 unbuffer 格式
+            try:
+                file_size = os.path.getsize(log_file)
                 
-                # 簡單的進度估算（基於運行時間）
-                runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+                # 只讀取最後 2KB 避免處理大文件
+                read_size = min(file_size, 2048)
                 
-                if runtime_minutes < 5:
-                    tracker['estimated_progress'] = min(int(runtime_minutes * 10), 50)
-                    tracker['current_activity'] = "初始化和下載項目列表..."
-                elif runtime_minutes < 15:
-                    tracker['estimated_progress'] = min(50 + int((runtime_minutes - 5) * 3), 80)
-                    tracker['current_activity'] = "下載源代碼文件..."
-                else:
-                    tracker['estimated_progress'] = min(80 + int((runtime_minutes - 15) * 1), 95)
-                    tracker['current_activity'] = "更新本地倉庫..."
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    f.seek(max(0, file_size - read_size))
+                    content = f.read()
+                    lines = content.split('\n')[-15:]  # 最後15行
                 
-                # 嘗試從日誌中提取更詳細的活動信息
-                try:
-                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                        f.seek(max(0, current_size - 1000))  # 讀取最後1KB
-                        recent_lines = f.read().split('\n')[-5:]  # 最後5行
+                # 解析最新的同步狀態
+                latest_progress = 0
+                latest_activity = "同步中..."
+                current_project = ""
+                total_projects = 0
+                current_count = 0
+                
+                # 🔥 重點：解析 unbuffer 輸出的特定格式
+                for line in reversed(lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # 解析 "Syncing: X% (current/total) time | jobs | project" 格式
+                    if "Syncing:" in line and "%" in line:
+                        import re
                         
-                        for line in recent_lines:
-                            if 'Fetching project' in line:
-                                tracker['current_activity'] = "正在獲取項目..."
-                            elif 'Syncing project' in line:
-                                tracker['current_activity'] = "正在同步項目..."
-                            elif 'Checking out' in line:
-                                tracker['current_activity'] = "正在檢出分支..."
-                            elif 'error:' in line.lower():
-                                tracker['current_activity'] = "遇到錯誤，重試中..."
-                except:
-                    pass
-            else:
-                # 沒有日誌文件時，只基於時間估算
-                runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
-                tracker['estimated_progress'] = min(int(runtime_minutes * 2), 90)
-                tracker['current_activity'] = f"Repo sync 運行中... ({runtime_minutes:.1f}分鐘)"
+                        # 匹配進度百分比和計數
+                        progress_match = re.search(r'Syncing:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+                        if progress_match:
+                            latest_progress = int(progress_match.group(1))
+                            current_count = int(progress_match.group(2))
+                            total_projects = int(progress_match.group(3))
+                            
+                            # 提取當前處理的項目
+                            # 格式通常是: "... | X jobs | time project_path @ ..."
+                            if '|' in line:
+                                parts = line.split('|')
+                                for part in parts:
+                                    part = part.strip()
+                                    # 尋找包含項目路径的部分
+                                    if '@' in part:
+                                        project_info = part.split('@')[-1].strip()
+                                    elif '/' in part and 'job' not in part and ':' not in part:
+                                        project_info = part
+                                    else:
+                                        continue
+                                    
+                                    # 提取項目名稱
+                                    if '/' in project_info:
+                                        current_project = project_info.split('/')[-1]
+                                    else:
+                                        current_project = project_info
+                                    break
+                            
+                            # 構建活動描述
+                            latest_activity = f"同步: {current_count}/{total_projects}"
+                            if current_project:
+                                # 限制項目名稱長度
+                                project_name = current_project[:20] + "..." if len(current_project) > 20 else current_project
+                                latest_activity += f" - {project_name}"
+                            
+                            break
+                    
+                    # 🔥 解析其他狀態信息
+                    elif "Fetching project" in line:
+                        project_match = re.search(r'Fetching project\s+([^\s]+)', line)
+                        if project_match:
+                            project_path = project_match.group(1)
+                            current_project = project_path.split('/')[-1]
+                            latest_activity = f"獲取: {current_project}"
+                    
+                    elif "Skipped fetching project" in line:
+                        project_match = re.search(r'Skipped fetching project\s+([^\s]+)', line)
+                        if project_match:
+                            project_path = project_match.group(1)
+                            current_project = project_path.split('/')[-1]
+                            latest_activity = f"跳過: {current_project}"
+                
+                # 🔥 更新追蹤信息
+                if latest_progress > 0:
+                    tracker['estimated_progress'] = latest_progress
+                else:
+                    # 如果沒有解析到進度，使用時間估算
+                    tracker['estimated_progress'] = self._get_time_based_progress(tracker)
+                
+                tracker['current_activity'] = latest_activity
+                tracker['current_project'] = current_project
+                tracker['total_projects'] = total_projects
+                tracker['current_count'] = current_count
+                tracker['last_update'] = datetime.now()
+                
+                # 🔥 調試信息（可選）
+                if latest_progress > 0:
+                    self.logger.debug(f"{db_info.db_info}: 解析成功 - {latest_progress}% ({current_count}/{total_projects}) {current_project}")
+                    
+            except Exception as e:
+                self.logger.debug(f"{db_info.db_info}: 解析日誌失敗: {e}")
+                tracker['current_activity'] = '解析失敗'
+                tracker['estimated_progress'] = self._get_time_based_progress(tracker)
                 
         except Exception as e:
-            tracker['current_activity'] = f"監控中... (無法獲取詳細進度)"
+            self.logger.debug(f"{db_info.db_info}: 進度更新失敗: {e}")
+            tracker['current_activity'] = '更新失敗'
+            tracker['estimated_progress'] = self._get_time_based_progress(tracker)
+
+    def _get_time_based_progress(self, tracker: dict) -> int:
+        """基於時間的進度估算"""
+        runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+        # 每分鐘約1.5%的進度，最多95%
+        return min(int(runtime_minutes * 1.5), 95)
+
+    def _extract_progress_from_lines(self, lines: list) -> int:
+        """從日誌行中提取進度百分比"""
+        for line in reversed(lines):
+            # 尋找百分比
+            match = re.search(r'(\d+)%', line)
+            if match:
+                percent = int(match.group(1))
+                if 0 <= percent <= 100:
+                    return percent
+        return None
+
+    def _extract_project_from_lines(self, lines: list) -> str:
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # 🔥 改進的模式，包含更多 repo sync 的實際輸出
+            project_patterns = [
+                # 標準模式
+                r'Fetching project\s+([^\s]+)',
+                r'Skipped fetching project\s+([^\s]+)',
+                r'Checking out project\s+([^\s]+)',
+                
+                # Git 相關輸出
+                r'remote:\s+.*?([a-zA-Z0-9_/\-\.]+/[a-zA-Z0-9_/\-\.]+)',
+                r'From\s+.*?:([a-zA-Z0-9_/\-\.]+)',
+                
+                # 🔥 新增：處理 heads, refs 等
+                r'refs/heads/\S*\s+([a-zA-Z0-9_/\-\.]+)',
+                r'Updating\s+references:\s*([a-zA-Z0-9_/\-\.]+)',
+                
+                # 🔥 通用項目路徑（更寬鬆）
+                r'([a-zA-Z][a-zA-Z0-9_]*(?:/[a-zA-Z0-9_\-\.]+){2,})',
+            ]
+            
+            for pattern in project_patterns:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    project = match.group(1).strip()
+                    if len(project) > 5 and '/' in project:  # 基本驗證
+                        return self._simplify_project_name(project)
+        
+        return ""
+
+    def _simplify_project_name(self, project: str) -> str:
+        """簡化項目名稱顯示"""
+        # 移除常見的前綴
+        prefixes_to_remove = [
+            'platform/',
+            'device/',
+            'vendor/',
+            'external/',
+            'hardware/',
+            'frameworks/',
+            'system/',
+        ]
+        
+        simplified = project
+        for prefix in prefixes_to_remove:
+            if simplified.startswith(prefix):
+                simplified = simplified[len(prefix):]
+                break
+        
+        # 如果還是太長，只取最後兩個部分
+        parts = simplified.split('/')
+        if len(parts) > 2:
+            simplified = '/'.join(parts[-2:])
+        
+        # 限制長度
+        if len(simplified) > 20:
+            simplified = simplified[:17] + "..."
+        
+        return simplified
+
+    def _is_valid_project_name(self, project: str) -> bool:
+        """檢查是否為有效的項目名稱"""
+        # 過濾條件
+        invalid_patterns = [
+            r'^\d+$',  # 純數字
+            r'^[^a-zA-Z]',  # 不以字母開頭
+            r'\.(log|txt|xml)$',  # 文件擴展名
+            r'^(http|https|ftp)://',  # URL
+        ]
+        
+        for pattern in invalid_patterns:
+            if re.match(pattern, project, re.IGNORECASE):
+                return False
+        
+        # 長度檢查
+        if len(project) < 3 or len(project) > 50:
+            return False
+        
+        # 必須包含路徑分隔符或特定關鍵字
+        valid_keywords = ['platform', 'vendor', 'device', 'hardware', 'external', 
+                        'frameworks', 'system', 'kernel', 'bootable']
+        
+        if '/' in project or any(keyword in project.lower() for keyword in valid_keywords):
+            return True
+        
+        return False
+
+    def _wait_for_all_syncs_enhanced(self, db_results: List[DBInfo]):
+        """增強版進度監控 - 更精美的顯示格式"""
+        max_wait_time = config_manager.repo_config['sync_timeout']
+        start_wait = time.time()
+        
+        active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
+        self.logger.info(f"🔍 監控 {len(active_syncs)} 個活躍的 repo sync 進程")
+        
+        # 初始化進度追踪
+        progress_tracker = {}
+        for db_info in active_syncs:
+            progress_tracker[db_info.db_info] = {
+                'start_time': db_info.start_time or datetime.now(),
+                'log_file': self._get_sync_log_file(db_info),
+                'error_count': 0,
+                'estimated_progress': 0,
+                'current_activity': '初始化中...',
+                'current_project': '',
+                'last_update': datetime.now()
+            }
+        
+        check_interval = 15  # 15秒檢查一次
+        
+        while True:
+            all_complete = True
+            elapsed = int(time.time() - start_wait)
+            
+            # 清屏並顯示標題
+            print("\033[2J\033[H")  # 清屏
+            print(f"🔄 Repo Sync 監控 - {elapsed//60:02d}:{elapsed%60:02d}")
+            print("="*80)
+            
+            completed_count = 0
+            failed_count = 0
+            
+            for db_info in active_syncs:
+                if db_info.status == DBStatus.FAILED:
+                    failed_count += 1
+                    continue
+                
+                db_name = db_info.db_info
+                tracker = progress_tracker[db_name]
+                
+                # 簡化的顯示名稱
+                if db_info.version:
+                    display_name = f"{db_name} v{db_info.version}"
+                else:
+                    display_name = db_name
+                
+                if db_info.sync_process:
+                    poll = db_info.sync_process.poll()
+                    
+                    if poll is None:  # 仍在運行
+                        all_complete = False
+                        self._update_progress_info(db_info, tracker)
+                        
+                        runtime = datetime.now() - tracker['start_time']
+                        runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                        
+                        # 簡化的進度條
+                        progress = tracker['estimated_progress']
+                        bar_length = 20
+                        filled = int(bar_length * progress / 100)
+                        bar = "█" * filled + "░" * (bar_length - filled)
+                        
+                        # 簡化的活動信息
+                        activity = tracker.get('current_project', '').split('/')[-1] or '同步中'
+                        if len(activity) > 15:
+                            activity = activity[:12] + "..."
+                        
+                        print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}")
+                        
+                    elif poll == 0:  # 成功完成
+                        completed_count += 1
+                        runtime = datetime.now() - tracker['start_time']
+                        runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                        
+                        bar = "█" * 20
+                        print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 完成")
+                        
+                    else:  # 失敗
+                        failed_count += 1
+                        db_info.status = DBStatus.FAILED
+                        print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗")
+            
+            # 簡化的統計信息
+            running_count = len(active_syncs) - completed_count - failed_count
+            total_progress = sum(progress_tracker[db.db_info]['estimated_progress'] 
+                            for db in active_syncs if db.status != DBStatus.FAILED)
+            avg_progress = total_progress / max(len(active_syncs) - failed_count, 1)
+            
+            print("-" * 80)
+            print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count} │ 總進度:{avg_progress:.1f}%")
+            
+            if all_complete or elapsed > max_wait_time:
+                break
+            
+            time.sleep(check_interval)  # 15秒更新一次
+        
+        # 🏁 最終統計
+        self._display_final_summary(active_syncs, elapsed, progress_tracker)
+
+    def _create_progress_bar(self, percentage: int, width: int = 20) -> str:
+        """創建可視化進度條"""
+        filled = int(width * percentage / 100)
+        bar = "█" * filled + "░" * (width - filled)
+        return f"{bar} {percentage:3d}%"
+
+    def _build_display_name(self, db_info: DBInfo) -> str:
+        """構建更詳細的顯示名稱"""
+        name = db_info.db_info
+        if db_info.version:
+            name += f" v{db_info.version}"
+        elif db_info.manifest_file:
+            # 從 manifest 文件名提取版本
+            match = re.search(r'manifest_(\d+)\.xml', db_info.manifest_file)
+            if match:
+                name += f" v{match.group(1)}"
+        return name
+
+    def enhanced_monitor_display(self, active_syncs: list, elapsed: int, progress_tracker: dict):
+        """增強版進度顯示"""
+        print("\033[2J\033[H")  # 清屏
+        print(f"🔄 Repo Sync 實時監控 - {elapsed//60:02d}:{elapsed%60:02d}")
+        print("="*80)
+        
+        completed_count = 0
+        failed_count = 0
+        total_progress = 0
+        
+        for db_info in active_syncs:
+            if db_info.status == DBStatus.FAILED:
+                failed_count += 1
+                continue
+            
+            db_name = db_info.db_info
+            tracker = progress_tracker.get(db_name, {})
+            
+            # 構建顯示名稱
+            display_name = self._build_display_name(db_info)
+            
+            if db_info.sync_process:
+                poll = db_info.sync_process.poll()
+                
+                if poll is None:  # 仍在運行
+                    self._update_progress_info(db_info, tracker)
+                    
+                    progress = tracker.get('estimated_progress', 0)
+                    activity = tracker.get('current_activity', '同步中')
+                    current_count = tracker.get('current_count', 0)
+                    total_projects = tracker.get('total_projects', 0)
+                    
+                    total_progress += progress
+                    
+                    # 進度條
+                    bar_length = 20
+                    filled = int(bar_length * progress / 100)
+                    bar = "█" * filled + "░" * (bar_length - filled)
+                    
+                    # 項目信息
+                    project_info = ""
+                    if total_projects > 0:
+                        project_info = f" ({current_count}/{total_projects})"
+                    
+                    # 運行時間
+                    runtime = datetime.now() - tracker.get('start_time', datetime.now())
+                    runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                    
+                    print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity[:30]}{project_info}")
+                    
+                elif poll == 0:  # 成功完成
+                    completed_count += 1
+                    runtime = datetime.now() - tracker.get('start_time', datetime.now())
+                    runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                    
+                    bar = "█" * 20
+                    print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 完成")
+                    
+                else:  # 失敗
+                    failed_count += 1
+                    print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗")
+        
+        # 總體統計
+        running_count = len(active_syncs) - completed_count - failed_count
+        avg_progress = total_progress / max(len(active_syncs) - failed_count, 1)
+        
+        print("-" * 80)
+        print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count} │ 平均進度:{avg_progress:.1f}%")
+        
+    def _display_final_summary(self, active_syncs: list, elapsed: int, progress_tracker: dict):
+        """顯示最終摘要"""
+        completed = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() == 0)
+        failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+        total_retries = sum(progress_tracker.get(db.db_info, {}).get('error_count', 0) for db in active_syncs)
+        
+        print(f"\n🏁 Repo Sync 最終報告")
+        print("=" * 60)
+        print(f"⏱️  總用時: {elapsed//60:02d}:{elapsed%60:02d}")
+        print(f"✅ 成功: {completed}")
+        print(f"❌ 失敗: {failed}")
+        print(f"🔄 總重試次數: {total_retries}")
+        print(f"📊 成功率: {(completed/(completed+failed)*100):.1f}%" if (completed+failed) > 0 else "0.0%")
+        print("=" * 60)
+        
+        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}, 總重試 {total_retries}")
+                
+    def _combine_progress_info(self, log_progress: dict, fs_progress: dict, tracker: dict) -> dict:
+        """智能結合多種進度信息源"""
+        runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+        
+        # 確定最可靠的進度百分比
+        if log_progress.get('log_valid') and log_progress['percentage'] > 0:
+            # 日誌解析有效，優先使用
+            percentage = log_progress['percentage']
+            primary_source = 'log'
+        elif fs_progress.get('fs_valid') and fs_progress['percentage'] > 0:
+            # 文件系統檢查有效
+            percentage = fs_progress['percentage']
+            primary_source = 'filesystem'
+        else:
+            # 使用時間估算
+            percentage = min(int(runtime_minutes * 2), 95)  # 每分鐘約2%，最多95%
+            primary_source = 'time_based'
+        
+        # 構建活動描述
+        activity_parts = []
+        
+        # 項目信息
+        if log_progress.get('current_project'):
+            project_short = log_progress['current_project'].split('/')[-1]
+            activity_parts.append(f"📁 {project_short}")
+        elif fs_progress.get('project_count', 0) > 0:
+            activity_parts.append(f"📁 {fs_progress['project_count']} 個項目")
+        
+        # 階段信息
+        if log_progress.get('sync_phase') and log_progress['sync_phase'] != 'unknown':
+            phase_emoji = {
+                'initializing': '🔄',
+                'downloading': '⬇️',
+                'resolving': '🔧',
+                'syncing': '⚡',
+                'updating': '📝',
+                'finalizing': '✅'
+            }
+            emoji = phase_emoji.get(log_progress['sync_phase'], '⚙️')
+            activity_parts.append(f"{emoji} {log_progress.get('current_activity', '處理中')}")
+        
+        # 速度信息
+        if log_progress.get('download_speed'):
+            activity_parts.append(f"🚀 {log_progress['download_speed']}")
+        
+        # 文件進度
+        if log_progress.get('files_progress'):
+            activity_parts.append(f"📊 {log_progress['files_progress']}")
+        
+        # 如果沒有詳細信息，使用基本描述
+        if not activity_parts:
+            phase_desc = log_progress.get('current_activity') or fs_progress.get('activity') or '同步中...'
+            activity_parts.append(phase_desc)
+        
+        # 添加數據源標記（調試用）
+        source_emoji = {'log': '📝', 'filesystem': '💾', 'time_based': '⏱️'}
+        activity_parts.append(f"{source_emoji.get(primary_source, '❓')}")
+        
+        # 時間估算
+        estimated_remaining = ''
+        if percentage > 5 and runtime_minutes > 1:
+            estimated_total_time = runtime_minutes * (100 / percentage)
+            remaining_time = max(0, estimated_total_time - runtime_minutes)
+            if remaining_time > 1:
+                estimated_remaining = f" (預計剩餘: {remaining_time:.0f}分)"
+        
+        return {
+            'estimated_progress': percentage,
+            'current_activity': ' | '.join(activity_parts) + estimated_remaining,
+            'current_project': log_progress.get('current_project', ''),
+            'download_speed': log_progress.get('download_speed', ''),
+            'files_progress': log_progress.get('files_progress', ''),
+            'sync_phase': log_progress.get('sync_phase', 'processing'),
+            'data_source': primary_source,
+            'runtime_minutes': runtime_minutes
+        }
+
+    def _check_filesystem_progress(self, db_info: DBInfo, tracker: dict) -> dict:
+        """檢查文件系統實際進度 - 修正計算邏輯"""
+        fs_progress = {
+            'percentage': 0,
+            'activity': '檢查中...',
+            'project_count': 0,
+            'fs_valid': False
+        }
+        
+        try:
+            # 簡化的進度計算 - 避免異常值
+            runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+            
+            # 檢查實際的項目目錄
+            git_count = 0
+            for root, dirs, files in os.walk(db_info.local_path):
+                if '.git' in dirs and '/.repo/' not in root:
+                    git_count += 1
+            
+            # 基於時間的保守估算（每分鐘約1-2%）
+            time_based_progress = min(runtime_minutes * 1.5, 95)
+            
+            # 如果有實際項目，使用混合估算
+            if git_count > 0:
+                # 假設總共需要50-100個項目（根據實際情況調整）
+                estimated_total = max(50, git_count * 2)
+                project_progress = min((git_count / estimated_total) * 100, 95)
+                # 取時間估算和項目估算的平均值
+                final_progress = min((time_based_progress + project_progress) / 2, 95)
+            else:
+                final_progress = time_based_progress
+            
+            fs_progress.update({
+                'percentage': max(1, int(final_progress)),  # 確保至少1%
+                'activity': f'{git_count}項目' if git_count > 0 else '初始化',
+                'project_count': git_count,
+                'fs_valid': True
+            })
+            
+        except Exception as e:
+            # 備用估算
+            runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+            fs_progress.update({
+                'percentage': max(1, min(int(runtime_minutes * 1.5), 95)),
+                'activity': '同步中',
+                'fs_valid': False
+            })
+        
+        return fs_progress
+
+    def _parse_repo_sync_progress_enhanced(self, log_file: str) -> dict:
+        """增強版日誌解析 - 更智能的模式匹配"""
+        progress_info = {
+            'percentage': 0,
+            'current_activity': '',
+            'current_project': '',
+            'download_speed': '',
+            'files_progress': '',
+            'sync_phase': 'unknown',
+            'log_valid': False
+        }
+        
+        if not log_file or not os.path.exists(log_file):
+            return progress_info
+        
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                # 讀取最後 10KB 的內容以獲取最新狀態
+                f.seek(max(0, os.path.getsize(log_file) - 10240))
+                recent_content = f.read()
+                recent_lines = recent_content.split('\n')[-30:]  # 最後30行
+            
+            # 🎯 智能解析各種 repo sync 階段
+            current_phase = self._detect_sync_phase(recent_lines)
+            progress_info['sync_phase'] = current_phase
+            
+            for line in reversed(recent_lines):  # 從最新的行開始解析
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # 📊 Project 信息解析 (優先級最高)
+                project_info = self._extract_project_info(line)
+                if project_info:
+                    progress_info['current_project'] = project_info
+                    progress_info['current_activity'] = f"處理項目: {project_info}"
+                    progress_info['log_valid'] = True
+                
+                # 📈 百分比進度解析
+                percentage = self._extract_percentage(line)
+                if percentage is not None:
+                    progress_info['percentage'] = percentage
+                    progress_info['log_valid'] = True
+                
+                # 🚀 下載速度解析
+                speed = self._extract_download_speed(line)
+                if speed:
+                    progress_info['download_speed'] = speed
+                    progress_info['log_valid'] = True
+                
+                # 📁 文件進度解析
+                file_progress = self._extract_file_progress(line)
+                if file_progress:
+                    progress_info['files_progress'] = file_progress
+                    progress_info['log_valid'] = True
+                
+                # 如果已經獲得足夠信息，停止解析
+                if (progress_info['current_project'] and 
+                    progress_info['percentage'] > 0):
+                    break
+            
+            # 根據階段調整活動描述
+            if not progress_info['current_activity']:
+                progress_info['current_activity'] = self._get_phase_description(current_phase)
+                
+        except Exception as e:
+            self.logger.debug(f"日誌解析失敗: {e}")
+        
+        return progress_info
+
+    def _get_phase_description(self, phase: str) -> str:
+        """根據階段獲取描述"""
+        phase_descriptions = {
+            'initializing': '初始化連接...',
+            'downloading': '下載源代碼...',
+            'resolving': '解析和解壓...',
+            'syncing': '同步工作樹...',
+            'updating': '更新文件...',
+            'finalizing': '完成同步...',
+            'processing': '處理中...'
+        }
+        
+        return phase_descriptions.get(phase, '同步中...')
+
+    def _extract_file_progress(self, line: str) -> str:
+        """提取文件進度信息"""
+        file_patterns = [
+            r'\((\d+/\d+)\)',
+            r'(\d+)\s+of\s+(\d+)',
+            r'files:\s*(\d+/\d+)',
+        ]
+        
+        for pattern in file_patterns:
+            match = re.search(pattern, line)
+            if match:
+                if len(match.groups()) == 1:
+                    return match.group(1)
+                else:
+                    return f"{match.group(1)}/{match.group(2)}"
+        
+        return ''
+
+    def _extract_download_speed(self, line: str) -> str:
+        """提取下載速度"""
+        speed_patterns = [
+            r'([\d.]+\s*[KMG]?B/s)',
+            r'@\s*([\d.]+\s*[KMG]?B/s)',
+            r'speed:\s*([\d.]+\s*[KMG]?B/s)',
+        ]
+        
+        for pattern in speed_patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return ''
+
+    def _extract_percentage(self, line: str) -> int:
+        """提取百分比進度"""
+        # 匹配各種百分比格式
+        percentage_patterns = [
+            r'(\d+)%',
+            r'(\d+)\s*percent',
+            r'progress:\s*(\d+)',
+        ]
+        
+        for pattern in percentage_patterns:
+            match = re.search(pattern, line)
+            if match:
+                percentage = int(match.group(1))
+                if 0 <= percentage <= 100:
+                    return percentage
+        
+        return None
+
+    def _extract_project_info(self, line: str) -> str:
+        """提取當前處理的項目信息"""
+        # 🎯 更精確的項目名稱匹配
+        project_patterns = [
+            r'Fetching project\s+(.+?)(?:\s|$)',
+            r'project\s+([^\s]+(?:/[^\s]+)*)',
+            r'Syncing\s+(.+?)(?:\s|$)',
+            r'Updating\s+(.+?)(?:\s|$)',
+            r'Checking out\s+(.+?)(?:\s|$)',
+        ]
+        
+        for pattern in project_patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                project = match.group(1).strip()
+                # 清理項目名稱
+                project = re.sub(r'[^\w/\-_.]', '', project)
+                if len(project) > 3:  # 過濾太短的匹配
+                    return project
+        
+        return ''
+
+    def _detect_sync_phase(self, lines: list) -> str:
+        """檢測當前 sync 階段"""
+        recent_text = ' '.join(lines[-10:]).lower()
+        
+        phase_patterns = [
+            ('initializing', ['remote: counting', 'remote: enumerating']),
+            ('downloading', ['receiving objects', 'downloading', 'fetching']),
+            ('resolving', ['resolving deltas', 'unpacking objects']),
+            ('syncing', ['syncing work tree', 'checking out']),
+            ('updating', ['updating files', 'updating references']),
+            ('finalizing', ['done', 'completed'])
+        ]
+        
+        for phase, patterns in phase_patterns:
+            if any(pattern in recent_text for pattern in patterns):
+                return phase
+        
+        return 'processing'
+
+    def _fallback_progress_estimation(self, db_info: DBInfo, tracker: dict):
+        """備用進度估算方法"""
+        runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
+        
+        if runtime_minutes < 2:
+            tracker['estimated_progress'] = min(int(runtime_minutes * 15), 30)
+            tracker['current_activity'] = "初始化 repo 同步..."
+        elif runtime_minutes < 10:
+            tracker['estimated_progress'] = min(30 + int((runtime_minutes - 2) * 5), 70)
+            tracker['current_activity'] = "下載項目和源代碼..."
+        else:
+            tracker['estimated_progress'] = min(70 + int((runtime_minutes - 10) * 2), 95)
+            tracker['current_activity'] = "完成同步和檢出..."
+            
+    def _parse_repo_sync_progress(self, log_lines: list) -> dict:
+        """解析 repo sync 日誌中的詳細進度信息"""
+        progress_info = {
+            'percentage': 0,
+            'current_activity': '',
+            'current_project': '',
+            'download_speed': '',
+            'files_progress': ''
+        }
+        
+        for line in log_lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # 🔍 解析各種進度模式
+            
+            # 1. 項目獲取進度: "Fetching project platform/build"
+            if 'Fetching project' in line:
+                project_match = re.search(r'Fetching project\s+(.+)', line)
+                if project_match:
+                    project_name = project_match.group(1)
+                    progress_info['current_project'] = project_name
+                    progress_info['current_activity'] = f"正在獲取項目: {project_name}"
+            
+            # 2. 同步進度: "Syncing work tree: 45% (123/456)"
+            elif 'Syncing work tree:' in line:
+                sync_match = re.search(r'Syncing work tree:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+                if sync_match:
+                    percentage = int(sync_match.group(1))
+                    current = sync_match.group(2)
+                    total = sync_match.group(3)
+                    progress_info['percentage'] = percentage
+                    progress_info['files_progress'] = f"{current}/{total}"
+                    progress_info['current_activity'] = f"同步工作樹: {percentage}% ({current}/{total})"
+            
+            # 3. 檢出進度: "Checking out files: 67% (234/567)"
+            elif 'Checking out files:' in line:
+                checkout_match = re.search(r'Checking out files:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+                if checkout_match:
+                    percentage = int(checkout_match.group(1))
+                    current = checkout_match.group(2)
+                    total = checkout_match.group(3)
+                    progress_info['percentage'] = percentage
+                    progress_info['files_progress'] = f"{current}/{total}"
+                    progress_info['current_activity'] = f"檢出文件: {percentage}% ({current}/{total})"
+            
+            # 4. Git 操作: "remote: Counting objects: 12345"
+            elif 'remote: Counting objects:' in line:
+                objects_match = re.search(r'remote: Counting objects:\s*(\d+)', line)
+                if objects_match:
+                    count = objects_match.group(1)
+                    progress_info['current_activity'] = f"計算對象: {count} 個"
+            
+            # 5. Git 接收: "remote: Compressing objects: 100% (456/456)"
+            elif 'remote: Compressing objects:' in line:
+                compress_match = re.search(r'remote: Compressing objects:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+                if compress_match:
+                    percentage = int(compress_match.group(1))
+                    current = compress_match.group(2)
+                    total = compress_match.group(3)
+                    progress_info['current_activity'] = f"壓縮對象: {percentage}% ({current}/{total})"
+            
+            # 6. 接收對象: "Receiving objects: 78% (1234/5678), 12.34 MiB | 1.23 MiB/s"
+            elif 'Receiving objects:' in line:
+                receive_match = re.search(r'Receiving objects:\s*(\d+)%\s*\((\d+)/(\d+)\)(?:,\s*[\d.]+\s*\w+\s*\|\s*([\d.]+\s*\w+/s))?', line)
+                if receive_match:
+                    percentage = int(receive_match.group(1))
+                    current = receive_match.group(2)
+                    total = receive_match.group(3)
+                    speed = receive_match.group(4) if receive_match.group(4) else ""
+                    
+                    progress_info['percentage'] = percentage
+                    progress_info['files_progress'] = f"{current}/{total}"
+                    progress_info['download_speed'] = speed
+                    
+                    speed_text = f" @ {speed}" if speed else ""
+                    progress_info['current_activity'] = f"接收對象: {percentage}% ({current}/{total}){speed_text}"
+            
+            # 7. 解析對象: "Resolving deltas: 89% (456/789)"
+            elif 'Resolving deltas:' in line:
+                delta_match = re.search(r'Resolving deltas:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+                if delta_match:
+                    percentage = int(delta_match.group(1))
+                    current = delta_match.group(2)
+                    total = delta_match.group(3)
+                    progress_info['current_activity'] = f"解析增量: {percentage}% ({current}/{total})"
+            
+            # 8. 項目同步完成: "project platform/build/"
+            elif 'project ' in line and '/' in line and not 'Fetching' in line:
+                project_match = re.search(r'project\s+([^\s]+)', line)
+                if project_match:
+                    project_name = project_match.group(1)
+                    progress_info['current_project'] = project_name
+                    progress_info['current_activity'] = f"處理項目: {project_name}"
+            
+            # 9. 錯誤信息
+            elif 'error:' in line.lower() or 'warning:' in line.lower():
+                if 'error:' in line.lower():
+                    progress_info['current_activity'] = "⚠️ 遇到錯誤，正在重試..."
+                else:
+                    progress_info['current_activity'] = "⚠️ 警告信息，繼續處理..."
+        
+        return progress_info
         
     def process_selected_dbs(self, db_list: List[str], db_versions: Dict[str, str] = None):
         """處理選定的 DB"""
@@ -2874,8 +4103,9 @@ def main():
                 resource_manager.cleanup_all()
                 
         except KeyboardInterrupt:
-            print("\n\n⚠️ 使用者中斷執行")
-            sys.exit(130)
+            print("\n🛑 收到 Ctrl+C，清理所有進程...")
+            resource_manager.cleanup_all()
+            sys.exit(0)
             
         except Exception as e:
             print(f"\n❌ 發生錯誤: {str(e)}")
