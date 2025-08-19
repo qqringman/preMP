@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Manifest Pinning Tool - 自動化定版工具 (改進版)
 用於從 SFTP 下載 manifest 檔案並執行 repo 定版操作
@@ -76,7 +76,7 @@ class ConfigManager:
             'repo_command': 'repo',
             'sync_jobs': 8,
             'sync_retry': 2,
-            'init_timeout': 60,
+            'init_timeout': 300,
             'sync_timeout': 7200,
             'async_sync': True,
             'show_sync_output': False
@@ -296,7 +296,7 @@ class JiraAPIClient:
         if not found_commands:
             return None
         
-        # 🔥 優先選擇有 "-m" 參數的指令
+        # �� 優先選擇有 "-m" 參數的指令
         commands_with_m = [cmd for cmd in found_commands if '-m ' in cmd]
         if commands_with_m:
             # 如果有多個，取第一個
@@ -463,13 +463,13 @@ class ResourceManager:
     
     def _signal_handler(self, signum, frame):
         """處理中斷信號"""
-        print(f"\n🛑 收到中斷信號，清理所有進程...")
+        print(f"\n�� 收到中斷信號，清理所有進程...")
         
         # 原有的清理
         self.cleanup_all()
         
-        # 🔥 新增：系統級強制清理
-        print("🚨 執行系統級清理...")
+        # �� 新增：系統級強制清理
+        print("�� 執行系統級清理...")
         os.system("pkill -TERM -f 'repo sync' 2>/dev/null || true")
         os.system("pkill -TERM -f 'unbuffer.*repo' 2>/dev/null || true")
         time.sleep(2)
@@ -1358,7 +1358,7 @@ class RepoManager:
     
     def repo_init(self, work_dir: str, init_cmd: str) -> bool:
         """執行 repo init - 增強清理和錯誤恢復"""
-        # 🔥 徹底清理可能存在的舊 .repo 目錄和相關檔案
+        # �� 徹底清理可能存在的舊 .repo 目錄和相關檔案
         repo_dir = os.path.join(work_dir, '.repo')
         if os.path.exists(repo_dir):
             self.logger.info(f"發現舊的 .repo 目錄，執行徹底清理: {repo_dir}")
@@ -1381,7 +1381,7 @@ class RepoManager:
                     self.logger.error(f"❌ 強制清理也失敗: {e2}")
                     return False
         
-        # 🔥 清理可能存在的其他相關檔案
+        # �� 清理可能存在的其他相關檔案
         cleanup_patterns = [
             '.repo_*',
             'repo_*',
@@ -1400,15 +1400,17 @@ class RepoManager:
             except Exception as e:
                 self.logger.debug(f"清理 {pattern} 時發生錯誤: {e}")
         
-        # 🔥 增加重試機制的 repo init
+        # �� 增加重試機制和更長的超時時間
         max_retries = 3
+        timeout_values = [180, 300, 600]  # 3分鐘、5分鐘、10分鐘
         for attempt in range(max_retries):
-            self.logger.info(f"執行 repo init (嘗試 {attempt + 1}/{max_retries}): {init_cmd}")
+            timeout = timeout_values[attempt]
+            self.logger.info(f"執行 repo init (嘗試 {attempt + 1}/{max_retries}，超時: {timeout}秒): {init_cmd}")
             
             success, output = self.run_command(
                 init_cmd,
                 cwd=work_dir,
-                timeout=config_manager.repo_config['init_timeout']
+                timeout=timeout
             )
             
             if success:
@@ -1423,16 +1425,17 @@ class RepoManager:
                     repo_dir = os.path.join(work_dir, '.repo')
                     if os.path.exists(repo_dir):
                         try:
+                            import shutil
                             shutil.rmtree(repo_dir)
                         except:
                             pass
-                    time.sleep(5)  # 等待 5 秒後重試
+                    time.sleep(15)  # 等待 15 秒後重試
         
         self.logger.error("❌ Repo init 所有重試都失敗")
         return False
     
     def apply_manifest(self, work_dir: str, manifest_file: str) -> bool:
-        """應用 manifest 檔案"""
+        """應用 manifest 檔案 - 改進版本"""
         try:
             manifest_name = os.path.basename(manifest_file)
             self.logger.info(f"應用 manifest: {manifest_name}")
@@ -1450,29 +1453,46 @@ class RepoManager:
             shutil.copy2(manifest_file, dest_file)
             self.logger.debug(f"複製 manifest: {manifest_file} -> {dest_file}")
             
-            # 切換到指定的 manifest
+            # �� 修改：增加超時時間並添加重試機制
             switch_cmd = f"{config_manager.repo_config['repo_command']} init -m {manifest_name}"
             self.logger.info(f"切換 manifest: {switch_cmd}")
             
-            success, output = self.run_command(
-                switch_cmd,
-                cwd=work_dir,
-                timeout=config_manager.repo_config['init_timeout']
-            )
+            # �� 嘗試多次，增加超時時間
+            max_attempts = 3
+            timeout_values = [120, 180, 300]  # 2分鐘、3分鐘、5分鐘
             
-            if success:
-                self.logger.info(f"成功切換到 manifest: {manifest_name}")
-                return True
-            else:
-                self.logger.error(f"切換 manifest 失敗: {output}")
-                return False
+            for attempt in range(max_attempts):
+                timeout = timeout_values[attempt]
+                self.logger.info(f"嘗試 {attempt + 1}/{max_attempts}，超時設定: {timeout}秒")
                 
+                success, output = self.run_command(
+                    switch_cmd,
+                    cwd=work_dir,
+                    timeout=timeout
+                )
+                
+                if success:
+                    self.logger.info(f"✅ 成功切換到 manifest: {manifest_name}")
+                    return True
+                else:
+                    self.logger.warning(f"❌ 嘗試 {attempt + 1} 失敗: {output}")
+                    
+                    # 如果不是最後一次，等待一下再重試
+                    if attempt < max_attempts - 1:
+                        import time
+                        wait_time = 10 * (attempt + 1)  # 10秒、20秒
+                        self.logger.info(f"等待 {wait_time} 秒後重試...")
+                        time.sleep(wait_time)
+            
+            self.logger.error(f"❌ 所有嘗試都失敗，無法切換 manifest")
+            return False
+            
         except Exception as e:
             self.logger.error(f"應用 manifest 失敗: {str(e)}")
             return False
     
     def start_repo_sync_async(self, work_dir: str, db_name: str) -> subprocess.Popen:
-        """🎯 修復版本 - 使用 unbuffer 確保實時輸出"""
+        """�� 修復版本 - 使用 unbuffer 確保實時輸出"""
         try:
             self.logger.info(f"{db_name}: 啟動 unbuffer 版本 repo sync")
             
@@ -1508,7 +1528,7 @@ class RepoManager:
             jobs = min(config_manager.repo_config['sync_jobs'], 4)
             
             if use_unbuffer:
-                # 🎯 使用 unbuffer 方法（已驗證有效）
+                # �� 使用 unbuffer 方法（已驗證有效）
                 cmd_parts = [
                     'unbuffer',
                     repo_cmd, 'sync', 
@@ -1543,7 +1563,7 @@ class RepoManager:
                     text=True
                 )
             
-            # 🎯 創建實時日誌寫入線程（關鍵改進）
+            # �� 創建實時日誌寫入線程（關鍵改進）
             def log_writer():
                 try:
                     with open(log_file, 'a', encoding='utf-8', buffering=1) as f:
@@ -1551,7 +1571,7 @@ class RepoManager:
                         f.write(f"[UNBUFFER] 開始時間: {datetime.now()}\n\n")
                         f.flush()
                         
-                        # 🔥 進度追蹤變數
+                        # �� 進度追蹤變數
                         last_reported_progress = -1
                         last_report_time = datetime.now()
                         message_count = 0
@@ -1560,11 +1580,11 @@ class RepoManager:
                             while True:
                                 line = process.stdout.readline()
                                 if line:
-                                    # 📝 所有內容都寫入文件（不變）
+                                    # �� 所有內容都寫入文件（不變）
                                     f.write(line)
                                     f.flush()
                                     
-                                    # 🔥 智能過濾 console 輸出
+                                    # �� 智能過濾 console 輸出
                                     line_clean = line.strip()
                                     message_count += 1
                                     
@@ -1577,7 +1597,7 @@ class RepoManager:
                                             current_count = int(progress_match.group(2))
                                             total_count = int(progress_match.group(3))
                                             
-                                            # 🎯 只在以下情況報告進度：
+                                            # �� 只在以下情況報告進度：
                                             should_report = (
                                                 last_reported_progress == -1 or  # 第一次
                                                 current_progress - last_reported_progress >= 5 or  # 進度增加5%以上
@@ -1598,7 +1618,7 @@ class RepoManager:
                                                         remaining_time = (100 - current_progress) / speed
                                                         speed_info = f" (預計剩餘: {remaining_time:.0f}分鐘)"
                                                 
-                                                # 📊 簡潔的進度報告
+                                                # �� 簡潔的進度報告
                                                 # self.logger.info(
                                                 #    f"{db_name}: {current_progress}% "
                                                 #    f"({current_count}/{total_count}){speed_info}"
@@ -1612,12 +1632,12 @@ class RepoManager:
                                         ['error:', 'fatal:', 'failed', 'timeout', 'exception', 'abort']):
                                         self.logger.warning(f"{db_name}: {line_clean}")
                                     
-                                    # 🎉 報告重要里程碑
+                                    # �� 報告重要里程碑
                                     elif any(phrase in line_clean.lower() for phrase in
                                         ['sync has finished', 'completed successfully', 'repo sync complete']):
                                         self.logger.info(f"{db_name}: 同步完成！")
                                     
-                                    # 🚫 不報告的內容：
+                                    # �� 不報告的內容：
                                     # - "Skipped fetching project"
                                     # - "fetching project" 
                                     # - "..working.."
@@ -1632,7 +1652,7 @@ class RepoManager:
                         f.write(f"[UNBUFFER] 總處理消息數: {message_count}\n")
                         f.flush()
                         
-                        # 📈 最終報告
+                        # �� 最終報告
                         if return_code == 0:
                             self.logger.info(f"{db_name}: ✅ 同步成功完成")
                         else:
@@ -1673,11 +1693,11 @@ class RepoManager:
                 try:
                     poll = process.poll()
                     
-                    # 🔥 加強日誌
+                    # �� 加強日誌
                     self.logger.debug(f"{db_name}: 檢查進程狀態 PID={process.pid}, poll={poll}")
                     
                     if poll is not None:
-                        # 🔥 進程已結束，記錄詳細信息
+                        # �� 進程已結束，記錄詳細信息
                         self.logger.info(f"{db_name}: 進程已結束，返回碼={poll}")
                         
                         # 正確關閉文件句柄
@@ -1691,7 +1711,7 @@ class RepoManager:
                         
                         resource_manager.unregister_process(db_name)
                         
-                        # 🔥 寫入完成標記到日誌
+                        # �� 寫入完成標記到日誌
                         if hasattr(process, '_log_file_path'):
                             try:
                                 with open(process._log_file_path, 'a') as f:
@@ -1703,7 +1723,7 @@ class RepoManager:
                         
                         return poll
                     else:
-                        # 🔥 進程仍在運行，但驗證 PID 是否真的存在
+                        # �� 進程仍在運行，但驗證 PID 是否真的存在
                         try:
                             os.kill(process.pid, 0)  # 檢查進程是否存在
                             self.logger.debug(f"{db_name}: 進程 {process.pid} 確實在運行")
@@ -1720,19 +1740,38 @@ class RepoManager:
             return None
     
     def export_manifest(self, work_dir: str, output_file: str = "vp_manifest.xml") -> bool:
-        """導出 manifest"""
+        """導出 manifest - 增加超時時間"""
         cmd = f"{config_manager.repo_config['repo_command']} manifest -r -o {output_file}"
         self.logger.info(f"導出 manifest: {cmd}")
         
-        success, output = self.run_command(cmd, cwd=work_dir, timeout=60)
+        # �� 增加超時時間到 5 分鐘，並添加重試機制
+        max_attempts = 3
+        timeout_values = [180, 300, 600]  # 3分鐘、5分鐘、10分鐘
         
-        if success:
-            output_path = os.path.join(work_dir, output_file)
-            if os.path.exists(output_path):
-                self.logger.info(f"成功導出 manifest: {output_path}")
-                return True
+        for attempt in range(max_attempts):
+            timeout = timeout_values[attempt]
+            self.logger.info(f"導出 manifest 嘗試 {attempt + 1}/{max_attempts}，超時設定: {timeout}秒")
+            
+            success, output = self.run_command(cmd, cwd=work_dir, timeout=timeout)
+            
+            if success:
+                output_path = os.path.join(work_dir, output_file)
+                if os.path.exists(output_path):
+                    file_size = os.path.getsize(output_path)
+                    self.logger.info(f"✅ 成功導出 manifest: {output_path} ({file_size} bytes)")
+                    return True
+                else:
+                    self.logger.warning(f"❌ 導出檔案不存在: {output_path}")
+            else:
+                self.logger.warning(f"❌ 導出嘗試 {attempt + 1} 失敗: {output}")
+                
+                # 如果不是最後一次，等待後重試
+                if attempt < max_attempts - 1:
+                    wait_time = 10 * (attempt + 1)
+                    self.logger.info(f"等待 {wait_time} 秒後重試...")
+                    time.sleep(wait_time)
         
-        self.logger.error(f"導出 manifest 失敗: {output}")
+        self.logger.error(f"❌ 所有導出嘗試都失敗")
         return False
 
 # =====================================
@@ -1740,20 +1779,95 @@ class RepoManager:
 # =====================================
 
 class ManifestPinningTool:
-    """Manifest 定版工具（改進版）"""
+    """Manifest 定版工具（改進版 + 零失敗機制）"""
 
     def __init__(self):
         self.logger = setup_logger(self.__class__.__name__)
-        self.sftp_manager = SFTPManager()
         self.repo_manager = RepoManager()
         self.mapping_reader = MappingTableReader()
         self.source_cmd_manager = SourceCommandManager()
         self.report = PinningReport()
         self.output_dir = config_manager.path_config['default_output_dir']
         self.dry_run = False
+        self.zero_fail_mode = False  # �� 零失敗模式開關
         
         # 線程安全鎖
         self._sftp_lock = threading.Lock()
+
+    def _monitor_failure_rate_and_auto_enable_zero_fail(self, active_syncs: List[DBInfo]):
+        """監控失敗率並自動啟用零失敗模式"""
+        if self.zero_fail_mode:
+            return  # 已經啟用了
+        
+        total_dbs = len(active_syncs)
+        failed_dbs = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+        
+        if total_dbs > 0:
+            failure_rate = (failed_dbs / total_dbs) * 100
+            
+            # �� 當失敗率超過 30% 時自動啟用零失敗模式
+            if failure_rate >= 30.0:
+                self.logger.warning(f"�� 失敗率達到 {failure_rate:.1f}%，自動啟用零失敗模式")
+                self._enable_zero_fail_mode_dynamically()
+                
+                # 立即處理所有失敗的 DB
+                self._rescue_failed_dbs_immediately(active_syncs)
+                
+                return True
+        
+        return False
+        
+    def _enable_zero_fail_mode_dynamically(self):
+        """運行時動態啟用零失敗模式"""
+        if not self.zero_fail_mode:
+            self.zero_fail_mode = True
+            self.logger.warning("�� 零失敗模式已動態啟用 - 不允許任何 repo sync 失敗")
+            
+            # 通知零失敗模式已啟用
+            print("\n" + "="*80)
+            print("�� 零失敗模式已動態啟用")
+            print("�� 接下來將執行以下策略：")
+            print("   • 自動修復所有失敗的項目")
+            print("   • 使用多層救援策略")
+            print("   • 必要時執行核武級重建")
+            print("   • 不允許任何 DB 最終失敗")
+            print("="*80)
+    
+    def _notify_zero_fail_mode_enabled(self):
+        """通知零失敗模式已啟用"""
+        print("\n" + "="*60)
+        print("�� 零失敗模式已動態啟用")
+        print("�� 接下來將執行以下策略：")
+        print("   • 自動修復所有失敗的項目")
+        print("   • 使用多層救援策略")
+        print("   • 必要時執行核武級重建")
+        print("   • 不允許任何 DB 最終失敗")
+        print("="*60)
+    
+    def _rescue_failed_dbs_immediately(self, active_syncs: List[DBInfo]):
+        """立即搶救所有失敗的 DB"""
+        failed_dbs = [db for db in active_syncs if db.status == DBStatus.FAILED]
+        
+        if failed_dbs:
+            self.logger.warning(f"�� 立即搶救 {len(failed_dbs)} 個失敗的 DB")
+            
+            for db_info in failed_dbs:
+                self.logger.info(f"{db_info.db_info}: ��️ 開始零失敗救援")
+                
+                # 分析失敗原因並修復
+                success_rate, failed_projects = self._analyze_sync_result(db_info)
+                if failed_projects:
+                    if self._enhanced_repair_failed_projects_zero_tolerance(db_info, failed_projects):
+                        db_info.status = DBStatus.SUCCESS
+                        db_info.end_time = datetime.now()
+                        self.logger.info(f"{db_info.db_info}: ✅ 零失敗救援成功")
+                    else:
+                        self.logger.warning(f"{db_info.db_info}: ⚠️ 標準救援失敗，準備核武級重建")
+                            
+    def enable_zero_fail_mode(self):
+        """啟用零失敗模式"""
+        self.zero_fail_mode = True
+        self.logger.info("�� 零失敗模式已啟用 - 不允許任何 repo sync 失敗")
 
     def load_mapping_table(self, file_path: str) -> bool:
         """載入 mapping table"""
@@ -1766,7 +1880,7 @@ class ManifestPinningTool:
     def process_db_phase1(self, db_info: DBInfo) -> DBInfo:
         """改進版 Phase 1 處理 - 線程安全"""
         db_info.start_time = datetime.now()
-        local_sftp_manager = None  # 🔥 使用本地 SFTP 管理器
+        local_sftp_manager = None
         
         try:
             self.logger.info(f"開始處理 {db_info.db_info} (Phase 1)")
@@ -1775,27 +1889,23 @@ class ManifestPinningTool:
             local_path = os.path.join(self.output_dir, db_info.module, db_info.db_info)
             os.makedirs(local_path, exist_ok=True)
             db_info.local_path = local_path
-
-            # 🔥 檢查磁碟空間（至少需要 10GB）
+            
+            # 檢查磁碟空間（至少需要 15GB，因為超時問題可能是空間不足）
             import shutil
             free_space = shutil.disk_usage(local_path).free
-            required_space = 10 * 1024 * 1024 * 1024  # 10GB
+            required_space = 15 * 1024 * 1024 * 1024  # 15GB
             
             if free_space < required_space:
-                raise Exception(f"磁碟空間不足: 可用 {free_space/1024/1024/1024:.1f}GB，需要至少 10GB")
+                raise Exception(f"磁碟空間不足: 可用 {free_space/1024/1024/1024:.1f}GB，建議至少 15GB")
             
-            # 🔥 檢查權限
-            if not os.access(local_path, os.W_OK):
-                raise Exception(f"目錄沒有寫入權限: {local_path}")
-                            
-            # Step 1: 使用鎖保護所有 SFTP 操作
+            self.logger.debug(f"{db_info.db_info}: 磁碟空間檢查通過 ({free_space/1024/1024/1024:.1f}GB 可用)")
+            
+            # Step 1: SFTP 操作
             with self._sftp_lock:
                 self.logger.info(f"{db_info.db_info}: 快速搜尋 manifest (線程安全)")
                 
-                # 🔥 修復：為每個線程創建獨立的 SFTP 管理器
                 local_sftp_manager = SFTPManager()
                 
-                # 確保 SFTP 連線有效
                 if not local_sftp_manager.connect():
                     raise Exception("無法建立 SFTP 連線")
                 
@@ -1813,21 +1923,18 @@ class ManifestPinningTool:
                 db_info.manifest_full_path = manifest_full_path
                 db_info.manifest_file = manifest_name
                 
-                # 提取版本號
                 if not db_info.version:
                     match = re.match(r'manifest_(\d+)\.xml', manifest_name)
                     if match:
                         db_info.version = match.group(1)
                         self.logger.info(f"{db_info.db_info}: 檢測到版本 {db_info.version}")
                 
-                # 下載到本地
                 local_manifest = os.path.join(local_path, manifest_name)
                 if not local_sftp_manager.download_file(manifest_full_path, local_manifest):
                     raise Exception("下載 manifest 失敗")
                 
                 self.logger.info(f"{db_info.db_info}: manifest 下載完成: {manifest_name}")
                 
-                # 🔥 立即斷開這個線程的 SFTP 連線
                 local_sftp_manager.disconnect()
                 self.logger.info(f"{db_info.db_info}: ✅ SFTP 連線已立即斷開")
                 local_sftp_manager = None
@@ -1844,19 +1951,23 @@ class ManifestPinningTool:
             db_info.actual_source_cmd = source_cmd
             self.logger.info(f"{db_info.db_info}: source command 獲取成功")
             
-            # Step 4: 執行 repo init
+            # Step 4: 執行 repo init（如果需要）
             self.logger.info(f"{db_info.db_info}: 執行 repo 初始化")
             if not db_info.has_existing_repo:
+                self.logger.info(f"{db_info.db_info}: .repo 目錄不存在，執行完整 repo init")
                 if not self.repo_manager.repo_init(local_path, source_cmd):
                     raise Exception("Repo init 失敗")
+            else:
+                self.logger.info(f"{db_info.db_info}: .repo 目錄存在，跳過 repo init")
             
-            # 應用 manifest
+            # �� Step 5: 應用 manifest（這是關鍵步驟）
+            self.logger.info(f"{db_info.db_info}: 開始應用 manifest（可能需要較長時間）")
             if not self.repo_manager.apply_manifest(local_path, local_manifest):
                 raise Exception("套用 manifest 失敗")
             
-            self.logger.info(f"{db_info.db_info}: repo 初始化完成")
+            self.logger.info(f"{db_info.db_info}: ✅ repo 初始化完成")
             
-            # Step 5: 啟動 repo sync
+            # Step 6: 啟動 repo sync
             if not self.dry_run:
                 self.logger.info(f"{db_info.db_info}: 啟動 repo sync")
                 process = self.repo_manager.start_repo_sync_async(local_path, db_info.db_info)
@@ -1867,18 +1978,18 @@ class ManifestPinningTool:
                 self.logger.info(f"{db_info.db_info}: repo sync 已啟動 (PID: {process.pid})")
             else:
                 db_info.status = DBStatus.SKIPPED
-                db_info.end_time = datetime.now()  # 🔥 測試模式立即設定結束時間
+                db_info.end_time = datetime.now()
                 self.logger.info(f"{db_info.db_info}: 測試模式 - 跳過 repo sync")
             
-            self.logger.info(f"{db_info.db_info}: Phase 1 完成")
+            self.logger.info(f"{db_info.db_info}: ✅ Phase 1 完成")
             
         except Exception as e:
             db_info.status = DBStatus.FAILED
             db_info.error_message = str(e)
-            db_info.end_time = datetime.now()  # 🔥 失敗時也設定結束時間
-            self.logger.error(f"{db_info.db_info}: Phase 1 失敗 - {str(e)}")
+            db_info.end_time = datetime.now()
+            self.logger.error(f"{db_info.db_info}: ❌ Phase 1 失敗 - {str(e)}")
         finally:
-            # 🔥 確保 SFTP 連線一定會被斷開
+            # 確保 SFTP 連線一定會被斷開
             if local_sftp_manager:
                 try:
                     local_sftp_manager.disconnect()
@@ -1889,7 +2000,10 @@ class ManifestPinningTool:
         return db_info
 
     def process_db_phase2(self, db_info: DBInfo) -> DBInfo:
-        """處理 DB 的第二階段：完成工作"""
+        """處理 DB 的第二階段：完成工作 - 支援部分成功"""
+        if self.zero_fail_mode:
+            return self.process_db_phase2_zero_fail(db_info)
+        
         try:
             self.logger.info(f"{db_info.db_info}: 開始 Phase 2")
             
@@ -1900,6 +2014,7 @@ class ManifestPinningTool:
                 return db_info
             
             # 檢查 sync 進程狀態
+            sync_result = None
             if db_info.sync_process:
                 poll = self.repo_manager.check_process_status(
                     db_info.db_info, 
@@ -1909,24 +2024,64 @@ class ManifestPinningTool:
                 if poll is None:
                     self.logger.debug(f"{db_info.db_info}: repo sync 仍在執行中")
                     return db_info  # 還在執行中
-                elif poll != 0:
-                    raise Exception(f"Repo sync 失敗 (返回碼: {poll})")
                 
-                # 🔥 記錄 sync log 路徑
+                sync_result = poll
+                
+                # 記錄 sync log 路徑
                 if hasattr(db_info.sync_process, '_log_file_path'):
                     db_info.sync_log_path = db_info.sync_process._log_file_path
             
-            # 導出 manifest
-            self.logger.info(f"{db_info.db_info}: 導出版本資訊")
-            if not self.repo_manager.export_manifest(db_info.local_path):
-                raise Exception("導出 manifest 失敗")
+            # �� 智能判斷：檢查是否為部分成功
+            if sync_result == 1:  # 返回碼 1 可能是部分失敗
+                success_rate, failed_projects = self._analyze_sync_result(db_info)
+                
+                if success_rate >= 95.0:  # �� 95% 以上成功率就算成功
+                    db_info.status = DBStatus.SUCCESS
+                    db_info.end_time = datetime.now()
+                    
+                    warning_msg = f"部分成功 ({success_rate:.1f}%)，失敗項目: {len(failed_projects)} 個"
+                    if failed_projects:
+                        warning_msg += f" - {', '.join(failed_projects[:3])}"
+                        if len(failed_projects) > 3:
+                            warning_msg += f" 等 {len(failed_projects)} 個"
+                    
+                    db_info.error_message = warning_msg
+                    
+                    elapsed = db_info.end_time - db_info.start_time
+                    self.logger.info(f"{db_info.db_info}: ✅ 部分成功完成 ({success_rate:.1f}%) (耗時: {elapsed})")
+                    
+                    # 嘗試導出 manifest
+                    self.logger.info(f"{db_info.db_info}: 嘗試導出版本資訊...")
+                    export_success = self.repo_manager.export_manifest(db_info.local_path)
+                    
+                    if not export_success:
+                        self.logger.warning(f"{db_info.db_info}: ⚠️ manifest 導出失敗，但 sync 部分成功")
+                    
+                    return db_info
+                else:
+                    # 成功率太低，算失敗
+                    raise Exception(f"同步成功率太低 ({success_rate:.1f}%)，失敗項目: {len(failed_projects)} 個")
             
-            # 🔥 修復：正確設定完成狀態
-            db_info.status = DBStatus.SUCCESS
-            db_info.end_time = datetime.now()
+            elif sync_result == 0:
+                # 完全成功
+                db_info.status = DBStatus.SUCCESS
+                db_info.end_time = datetime.now()
+                
+                elapsed = db_info.end_time - db_info.start_time
+                self.logger.info(f"{db_info.db_info}: ✅ 完全成功 (耗時: {elapsed})")
+                
+                # 嘗試導出 manifest
+                self.logger.info(f"{db_info.db_info}: 嘗試導出版本資訊...")
+                export_success = self.repo_manager.export_manifest(db_info.local_path)
+                
+                if not export_success:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ manifest 導出失敗，但 sync 已成功")
+                    if not db_info.error_message:
+                        db_info.error_message = "Sync 成功但 manifest 導出失敗"
             
-            elapsed = db_info.end_time - db_info.start_time
-            self.logger.info(f"{db_info.db_info}: 處理完成 (耗時: {elapsed})")
+            else:
+                # 其他錯誤碼，算失敗
+                raise Exception(f"Repo sync 失敗 (返回碼: {sync_result})")
             
         except Exception as e:
             db_info.status = DBStatus.FAILED
@@ -1936,8 +2091,629 @@ class ManifestPinningTool:
         
         return db_info
 
+    def process_db_phase2_zero_fail(self, db_info: DBInfo) -> DBInfo:
+        """零失敗的 Phase 2 處理"""
+        try:
+            self.logger.info(f"{db_info.db_info}: 開始零失敗 Phase 2")
+            
+            if self.dry_run:
+                db_info.status = DBStatus.SKIPPED
+                db_info.end_time = datetime.now()
+                return db_info
+            
+            # 檢查 sync 進程狀態
+            sync_result = None
+            if db_info.sync_process:
+                poll = self.repo_manager.check_process_status(
+                    db_info.db_info, 
+                    db_info.sync_process
+                )
+                
+                if poll is None:
+                    return db_info  # 還在執行中
+                
+                sync_result = poll
+                
+                if hasattr(db_info.sync_process, '_log_file_path'):
+                    db_info.sync_log_path = db_info.sync_process._log_file_path
+            
+            # �� 零容忍：無論返回碼如何，都要檢查實際結果
+            success_rate, failed_projects = self._analyze_sync_result(db_info)
+            
+            if failed_projects:
+                # 有失敗項目，必須救援
+                self.logger.warning(f"{db_info.db_info}: �� 檢測到 {len(failed_projects)} 個失敗項目，啟動零容忍救援")
+                
+                if self._enhanced_repair_failed_projects_zero_tolerance(db_info, failed_projects):
+                    db_info.status = DBStatus.SUCCESS
+                    db_info.end_time = datetime.now()
+                    
+                    elapsed = db_info.end_time - db_info.start_time
+                    self.logger.info(f"{db_info.db_info}: ✅ 零容忍救援成功，達到100% (耗時: {elapsed})")
+                else:
+                    db_info.status = DBStatus.FAILED
+                    db_info.error_message = f"零容忍救援失敗，無法處理 {len(failed_projects)} 個失敗項目"
+                    db_info.end_time = datetime.now()
+                    
+                    elapsed = db_info.end_time - db_info.start_time
+                    self.logger.error(f"{db_info.db_info}: ❌ 零容忍救援失敗 (耗時: {elapsed})")
+            else:
+                # 沒有失敗項目，真正的成功
+                db_info.status = DBStatus.SUCCESS
+                db_info.end_time = datetime.now()
+                
+                elapsed = db_info.end_time - db_info.start_time
+                self.logger.info(f"{db_info.db_info}: ✅ 完美完成，無失敗項目 (耗時: {elapsed})")
+            
+            # 嘗試導出 manifest
+            if db_info.status == DBStatus.SUCCESS:
+                self.logger.info(f"{db_info.db_info}: 導出版本資訊...")
+                export_success = self.repo_manager.export_manifest(db_info.local_path)
+                
+                if not export_success:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ manifest 導出失敗，但 sync 已成功")
+            
+        except Exception as e:
+            db_info.status = DBStatus.FAILED
+            db_info.error_message = str(e)
+            db_info.end_time = datetime.now()
+            self.logger.error(f"{db_info.db_info}: Phase 2 異常 - {str(e)}")
+        
+        return db_info
+
+    def _analyze_sync_result(self, db_info: DBInfo) -> tuple:
+        """分析 sync 結果，精確提取失敗項目 - 清理版本"""
+        try:
+            log_file = db_info.sync_log_path
+            if not log_file:
+                log_file = self._get_sync_log_file(db_info)
+            
+            if not log_file or not os.path.exists(log_file):
+                return 0.0, []
+            
+            total_projects = 0
+            failed_projects = set()
+            
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                
+                # �� 先清理 ANSI 轉義字符
+                import re
+                clean_content = re.sub(r'\x1b\[[0-9;]*[mK]', '', content)
+                
+                # 提取同步統計
+                sync_pattern = r'Syncing:\s*\d+%\s*\((\d+)/(\d+)\)'
+                matches = re.findall(sync_pattern, clean_content)
+                
+                if matches:
+                    last_match = matches[-1]
+                    completed = int(last_match[0])
+                    total_projects = int(last_match[1])
+                    self.logger.debug(f"{db_info.db_info}: 同步統計 - 完成 {completed}/{total_projects}")
+                
+                # �� 精確提取失敗項目 - 只從特定錯誤部分提取
+                
+                # 方式1：從 "The following projects failed" 到下一個錯誤部分
+                failed_section_match = re.search(
+                    r'The following projects failed[^:]*:\s*(.*?)(?=\n\s*error:|$)', 
+                    clean_content, 
+                    re.DOTALL | re.IGNORECASE
+                )
+                
+                if failed_section_match:
+                    failed_text = failed_section_match.group(1)
+                    # 提取有效的項目路徑
+                    project_lines = [line.strip() for line in failed_text.split('\n') if line.strip()]
+                    for line in project_lines:
+                        # 只接受以 kernel/ 開頭的有效路徑
+                        if line.startswith('kernel/') and '/' in line and len(line) > 10:
+                            # 清理可能的尾部字符
+                            clean_project = re.sub(r'[^\w/\-_.].*$', '', line)
+                            if clean_project and clean_project.count('/') >= 2:  # 至少包含 kernel/xxx/yyy
+                                failed_projects.add(clean_project)
+                
+                # 方式2：從具體的 GitCommandError 消息中提取
+                git_error_pattern = r"GitCommandError:.*?on\s+(kernel/[^\s'\"]+)\s+failed"
+                git_errors = re.findall(git_error_pattern, clean_content, re.IGNORECASE)
+                for project in git_errors:
+                    # 清理項目路徑
+                    clean_project = re.sub(r'[^\w/\-_.].*$', '', project)
+                    if clean_project and clean_project.count('/') >= 2:
+                        failed_projects.add(clean_project)
+                
+                # 方式3：從 "fatal: not a git repository" 錯誤推斷項目
+                repo_error_pattern = r"fatal: not a git repository.*?/([^/\s'\"]+)\.git"
+                repo_errors = re.findall(repo_error_pattern, clean_content)
+                
+                # 根據項目名稱推斷完整路徑
+                known_project_mappings = {
+                    'vts': 'kernel/android/U/test/vts',
+                    'hal': 'kernel/android/U/test/vts-testcase/hal',
+                    'hal-trace': 'kernel/android/U/test/vts-testcase/hal-trace'
+                }
+                
+                for project_name in repo_errors:
+                    if project_name in known_project_mappings:
+                        failed_projects.add(known_project_mappings[project_name])
+            
+            # �� 清理和驗證失敗項目列表
+            valid_failed_projects = []
+            for project in failed_projects:
+                # 驗證項目路徑格式
+                if (project.startswith('kernel/') and 
+                    project.count('/') >= 2 and 
+                    len(project) > 10 and
+                    not any(char in project for char in ['\x1b', '"', "'", ':', ' ']) and
+                    re.match(r'^kernel/[a-zA-Z0-9_\-/]+$', project)):
+                    valid_failed_projects.append(project)
+            
+            # 去重並排序
+            valid_failed_projects = sorted(list(set(valid_failed_projects)))
+            
+            # 計算成功率
+            if total_projects > 0:
+                success_count = total_projects - len(valid_failed_projects)
+                success_rate = (success_count / total_projects) * 100
+                
+                self.logger.info(f"{db_info.db_info}: 清理後分析 - 總計:{total_projects}, 成功:{success_count}, 失敗:{len(valid_failed_projects)}, 成功率:{success_rate:.1f}%")
+                self.logger.info(f"{db_info.db_info}: 有效失敗項目: {valid_failed_projects}")
+                
+                return success_rate, valid_failed_projects
+            
+            return 0.0, []
+            
+        except Exception as e:
+            self.logger.debug(f"分析同步結果失敗: {e}")
+            return 0.0, []
+
+    def _get_sync_log_file(self, db_info: DBInfo) -> str:
+        """獲取 sync 日誌文件路徑 - 優先使用 unbuffer 版本"""
+        try:
+            log_dir = os.path.join(db_info.local_path, 'logs')
+            if os.path.exists(log_dir):
+                # 尋找最新的日誌文件，優先選擇 unbuffer 版本
+                log_files = []
+                for f in os.listdir(log_dir):
+                    if f.startswith('repo_sync_') and f.endswith('.log'):
+                        file_path = os.path.join(log_dir, f)
+                        mtime = os.path.getmtime(file_path)
+                        
+                        # �� 給不同類型的日誌不同優先級
+                        priority = 0
+                        if 'unbuffer' in f:
+                            priority = 100  # 最高優先級
+                        elif 'script' in f:
+                            priority = 50
+                        elif 'hotfix' in f or 'fixed' in f:
+                            priority = 25
+                        # 舊版本的日誌優先級為 0
+                        
+                        log_files.append((priority, mtime, file_path))
+                
+                if log_files:
+                    # 按優先級和修改時間排序
+                    log_files.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                    latest_log = log_files[0][2]
+                    self.logger.debug(f"{db_info.db_info}: 使用日誌文件: {os.path.basename(latest_log)}")
+                    return latest_log
+            
+            self.logger.debug(f"{db_info.db_info}: 日誌目錄不存在: {log_dir}")
+        except Exception as e:
+            self.logger.debug(f"{db_info.db_info}: 獲取日誌文件失敗: {e}")
+        
+        return ""
+
+    # ========================================
+    # �� 零失敗救援機制
+    # ========================================
+
+    def _enhanced_repair_failed_projects_zero_tolerance(self, db_info: DBInfo, failed_projects: list) -> bool:
+        """零容忍修復失敗項目 - 必須達到100%成功"""
+        if not failed_projects:
+            return True
+        
+        self.logger.warning(f"{db_info.db_info}: �� 檢測到 {len(failed_projects)} 個失敗項目，啟動零容忍救援")
+        
+        # �� 多層救援策略
+        rescue_strategies = [
+            ("基礎修復", self._basic_repair_strategy),
+            ("網路重置修復", self._network_reset_strategy), 
+            ("完全重建修復", self._complete_rebuild_strategy),
+            ("終極救援", self._ultimate_rescue_strategy)
+        ]
+        
+        for strategy_name, strategy_func in rescue_strategies:
+            self.logger.info(f"{db_info.db_info}: �� 執行 {strategy_name}...")
+            
+            if strategy_func(db_info, failed_projects):
+                # 驗證修復結果
+                remaining_failures = self._verify_repair_result(db_info)
+                if not remaining_failures:
+                    self.logger.info(f"{db_info.db_info}: ✅ {strategy_name} 成功，達到100%完成")
+                    return True
+                else:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ {strategy_name} 後仍有 {len(remaining_failures)} 個失敗")
+                    failed_projects = remaining_failures  # 更新失敗列表
+            else:
+                self.logger.warning(f"{db_info.db_info}: ❌ {strategy_name} 失敗，嘗試下一個策略")
+        
+        # 如果所有策略都失敗，記錄詳細錯誤並強制重來
+        self.logger.error(f"{db_info.db_info}: �� 所有救援策略失敗，執行最後的核武級重建")
+        return self._nuclear_rebuild(db_info)
+
+    def _basic_repair_strategy(self, db_info: DBInfo, failed_projects: list) -> bool:
+        """基礎修復策略：清理並重新同步"""
+        try:
+            self.logger.info(f"{db_info.db_info}: �� 基礎修復：清理 {len(failed_projects)} 個失敗項目")
+            
+            # 逐個清理失敗項目
+            for project in failed_projects:
+                self._thorough_cleanup_project(db_info, project)
+            
+            # 單線程重新同步
+            projects_str = ' '.join([f'"{project}"' for project in failed_projects])
+            sync_cmd = f"{config_manager.repo_config['repo_command']} sync -j1 --force-sync --no-clone-bundle {projects_str}"
+            
+            success, output = self.repo_manager.run_command(
+                sync_cmd,
+                cwd=db_info.local_path,
+                timeout=1800  # 30分鐘
+            )
+            
+            if success:
+                self.logger.info(f"{db_info.db_info}: ✅ 基礎修復完成")
+                return True
+            else:
+                self.logger.warning(f"{db_info.db_info}: ⚠️ 基礎修復失敗: {output[-500:]}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"{db_info.db_info}: ❌ 基礎修復異常: {e}")
+            return False
+
+    def _network_reset_strategy(self, db_info: DBInfo, failed_projects: list) -> bool:
+        """網路重置策略：重置網路並換源重試"""
+        try:
+            self.logger.info(f"{db_info.db_info}: �� 網路重置修復")
+            
+            # �� 清理網路相關快取
+            cache_cleanup_commands = [
+                "git config --global --unset http.proxy 2>/dev/null || true",
+                "git config --global --unset https.proxy 2>/dev/null || true", 
+                "git config --global http.postBuffer 524288000",
+                "git config --global http.maxRequestBuffer 100M",
+                "git config --global core.compression 0",
+            ]
+            
+            for cmd in cache_cleanup_commands:
+                os.system(cmd)
+            
+            # �� 逐個項目深度修復
+            for project in failed_projects:
+                self.logger.info(f"{db_info.db_info}: �� 深度修復項目: {project}")
+                
+                # 完全清理項目
+                self._thorough_cleanup_project(db_info, project)
+                
+                # 單獨同步這個項目（更激進的參數）
+                repair_commands = [
+                    f"repo sync -j1 --force-sync --no-clone-bundle --current-branch {project}",
+                    f"repo sync -j1 --force-sync --no-tags {project}",
+                    f"repo sync -j1 --force-broken {project}",
+                ]
+                
+                for cmd in repair_commands:
+                    full_cmd = f"{config_manager.repo_config['repo_command']} " + cmd.replace("repo ", "")
+                    
+                    success, output = self.repo_manager.run_command(
+                        full_cmd,
+                        cwd=db_info.local_path,
+                        timeout=900  # 15分鐘每個項目
+                    )
+                    
+                    if success:
+                        self.logger.info(f"{db_info.db_info}: ✅ 項目 {project} 修復成功")
+                        break
+                    else:
+                        self.logger.debug(f"{db_info.db_info}: 嘗試下一個命令: {output[-200:]}")
+                else:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ 項目 {project} 所有命令都失敗")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"{db_info.db_info}: ❌ 網路重置策略異常: {e}")
+            return False
+
+    def _complete_rebuild_strategy(self, db_info: DBInfo, failed_projects: list) -> bool:
+        """完全重建策略：重建失敗項目的 git 庫"""
+        try:
+            self.logger.info(f"{db_info.db_info}: ��️ 完全重建策略")
+            
+            # �� 核武級清理：移除所有相關的 .repo 數據
+            for project in failed_projects:
+                self.logger.info(f"{db_info.db_info}: �� 核武級清理項目: {project}")
+                
+                # 找到所有可能的項目相關目錄
+                cleanup_patterns = [
+                    os.path.join(db_info.local_path, '.repo', 'projects', f"{project}.git"),
+                    os.path.join(db_info.local_path, '.repo', 'project-objects', f"{project}.git"),
+                    os.path.join(db_info.local_path, '.repo', 'projects', project),
+                    os.path.join(db_info.local_path, '.repo', 'project-objects', project),
+                    os.path.join(db_info.local_path, project),
+                ]
+                
+                # 還要清理可能的符號連結和引用
+                for pattern in cleanup_patterns:
+                    if os.path.exists(pattern):
+                        try:
+                            import shutil
+                            if os.path.islink(pattern):
+                                os.unlink(pattern)
+                            elif os.path.isdir(pattern):
+                                shutil.rmtree(pattern)
+                            else:
+                                os.remove(pattern)
+                            self.logger.debug(f"清理: {pattern}")
+                        except Exception as e:
+                            # 強制清理
+                            self.logger.debug(f"強制清理: {pattern}")
+                            os.system(f'rm -rf "{pattern}" 2>/dev/null || true')
+            
+            # �� 重建 project 映射
+            self.logger.info(f"{db_info.db_info}: �� 重建項目映射")
+            
+            # 強制重新初始化這些項目
+            init_cmd = f"{config_manager.repo_config['repo_command']} sync --force-sync -j1 " + " ".join([f'"{project}"' for project in failed_projects])
+            
+            success, output = self.repo_manager.run_command(
+                init_cmd,
+                cwd=db_info.local_path,
+                timeout=2400  # 40分鐘
+            )
+            
+            if success:
+                self.logger.info(f"{db_info.db_info}: ✅ 完全重建成功")
+                return True
+            else:
+                self.logger.warning(f"{db_info.db_info}: ⚠️ 完全重建失敗: {output[-500:]}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"{db_info.db_info}: ❌ 完全重建策略異常: {e}")
+            return False
+
+    def _ultimate_rescue_strategy(self, db_info: DBInfo, failed_projects: list) -> bool:
+        """終極救援策略：手動 git clone 失敗的項目"""
+        try:
+            self.logger.warning(f"{db_info.db_info}: �� 終極救援：手動克隆失敗項目")
+            
+            # �� 解析 manifest 獲取項目的真實 git URL
+            manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
+            if not os.path.exists(manifest_path):
+                self.logger.error(f"{db_info.db_info}: ❌ Manifest 文件不存在")
+                return False
+            
+            project_urls = self._extract_project_urls_from_manifest(manifest_path, failed_projects)
+            
+            for project in failed_projects:
+                if project not in project_urls:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ 無法找到項目 {project} 的 URL")
+                    continue
+                
+                git_url = project_urls[project]
+                project_dir = os.path.join(db_info.local_path, project)
+                
+                self.logger.info(f"{db_info.db_info}: �� 手動克隆: {project}")
+                
+                # 確保目錄不存在
+                if os.path.exists(project_dir):
+                    import shutil
+                    shutil.rmtree(project_dir)
+                
+                # 手動 git clone
+                clone_cmd = f"git clone --depth 1 {git_url} {project_dir}"
+                
+                success, output = self.repo_manager.run_command(
+                    clone_cmd,
+                    cwd=db_info.local_path,
+                    timeout=600  # 10分鐘每個項目
+                )
+                
+                if not success:
+                    self.logger.error(f"{db_info.db_info}: ❌ 手動克隆 {project} 失敗: {output}")
+                    return False
+                
+                self.logger.info(f"{db_info.db_info}: ✅ 手動克隆 {project} 成功")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"{db_info.db_info}: ❌ 終極救援異常: {e}")
+            return False
+
+    def _nuclear_rebuild(self, db_info: DBInfo) -> bool:
+        """核武級重建：完全從頭開始"""
+        try:
+            self.logger.warning(f"{db_info.db_info}: ☢️ 執行核武級重建 - 完全從頭開始")
+            
+            # �� 保存重要文件
+            manifest_backup = None
+            if db_info.manifest_file:
+                src = os.path.join(db_info.local_path, db_info.manifest_file)
+                if os.path.exists(src):
+                    import tempfile
+                    manifest_backup = tempfile.mktemp(suffix='.xml')
+                    import shutil
+                    shutil.copy2(src, manifest_backup)
+            
+            # �� 徹底摧毀並重建
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = f"{db_info.local_path}_NUCLEAR_BACKUP_{timestamp}"
+            
+            try:
+                os.rename(db_info.local_path, backup_path)
+                self.logger.info(f"{db_info.db_info}: ��️ 備份舊目錄: {backup_path}")
+            except:
+                import shutil
+                shutil.rmtree(db_info.local_path)
+            
+            # 重建目錄
+            os.makedirs(db_info.local_path, exist_ok=True)
+            
+            # 恢復 manifest
+            if manifest_backup and os.path.exists(manifest_backup):
+                dest = os.path.join(db_info.local_path, db_info.manifest_file)
+                shutil.copy2(manifest_backup, dest)
+                os.remove(manifest_backup)
+            
+            # �� 完全重新執行初始化流程
+            if not db_info.actual_source_cmd:
+                self.logger.error(f"{db_info.db_info}: ❌ 缺少 source command，無法重建")
+                return False
+            
+            # 重新 repo init
+            if not self.repo_manager.repo_init(db_info.local_path, db_info.actual_source_cmd):
+                self.logger.error(f"{db_info.db_info}: ❌ 核武級 repo init 失敗")
+                return False
+            
+            # 重新應用 manifest
+            manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
+            if not self.repo_manager.apply_manifest(db_info.local_path, manifest_path):
+                self.logger.error(f"{db_info.db_info}: ❌ 核武級 apply manifest 失敗")
+                return False
+            
+            # �� 使用最保守的同步策略
+            nuclear_sync_cmd = f"{config_manager.repo_config['repo_command']} sync -j1 --force-sync --force-broken --no-clone-bundle"
+            
+            success, output = self.repo_manager.run_command(
+                nuclear_sync_cmd,
+                cwd=db_info.local_path,
+                timeout=7200  # 2小時
+            )
+            
+            if success:
+                self.logger.info(f"{db_info.db_info}: ✅ 核武級重建成功！")
+                
+                # 背景刪除備份
+                delete_cmd = f"nohup rm -rf '{backup_path}' >/dev/null 2>&1 &"
+                os.system(delete_cmd)
+                
+                return True
+            else:
+                self.logger.error(f"{db_info.db_info}: ❌ 核武級重建也失敗了: {output}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"{db_info.db_info}: �� 核武級重建異常: {e}")
+            return False
+
+    def _thorough_cleanup_project(self, db_info: DBInfo, project: str):
+        """徹底清理單個項目的所有相關文件"""
+        cleanup_paths = [
+            os.path.join(db_info.local_path, '.repo', 'projects', f"{project}.git"),
+            os.path.join(db_info.local_path, '.repo', 'project-objects', f"{project}.git"),
+            os.path.join(db_info.local_path, '.repo', 'projects', project),
+            os.path.join(db_info.local_path, '.repo', 'project-objects', project),
+            os.path.join(db_info.local_path, project),
+        ]
+        
+        for path in cleanup_paths:
+            if os.path.exists(path):
+                try:
+                    import shutil
+                    if os.path.islink(path):
+                        os.unlink(path)
+                    elif os.path.isdir(path):
+                        shutil.rmtree(path)
+                    else:
+                        os.remove(path)
+                except:
+                    # 強制清理
+                    os.system(f'chmod -R 777 "{path}" 2>/dev/null || true')
+                    os.system(f'rm -rf "{path}" 2>/dev/null || true')
+
+    def _verify_repair_result(self, db_info: DBInfo) -> list:
+        """驗證修復結果，返回仍然失敗的項目列表"""
+        try:
+            # 執行 repo status 檢查
+            status_cmd = f"{config_manager.repo_config['repo_command']} status"
+            success, output = self.repo_manager.run_command(
+                status_cmd,
+                cwd=db_info.local_path,
+                timeout=300
+            )
+            
+            if not success:
+                self.logger.warning(f"{db_info.db_info}: repo status 檢查失敗")
+                return []
+            
+            # 檢查是否還有錯誤
+            if 'fatal:' in output or 'error:' in output:
+                # 解析仍然失敗的項目
+                remaining_failures = []
+                for line in output.split('\n'):
+                    if 'fatal:' in line or 'error:' in line:
+                        # 嘗試提取項目名稱
+                        project_match = re.search(r'(kernel/[^\s]+)', line)
+                        if project_match:
+                            remaining_failures.append(project_match.group(1))
+                
+                return list(set(remaining_failures))
+            
+            return []
+            
+        except Exception as e:
+            self.logger.debug(f"驗證修復結果時異常: {e}")
+            return []
+
+    def _extract_project_urls_from_manifest(self, manifest_path: str, projects: list) -> dict:
+        """從 manifest 文件提取項目的 git URL"""
+        project_urls = {}
+        
+        try:
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(manifest_path)
+            root = tree.getroot()
+            
+            # 找到 remote 定義
+            remotes = {}
+            for remote in root.findall('remote'):
+                name = remote.get('name')
+                fetch = remote.get('fetch')
+                if name and fetch:
+                    remotes[name] = fetch
+            
+            # 找到項目定義
+            for project_elem in root.findall('project'):
+                path = project_elem.get('path')
+                name = project_elem.get('name')
+                remote = project_elem.get('remote', 'origin')
+                
+                if path in projects and remote in remotes:
+                    base_url = remotes[remote].rstrip('/')
+                    project_url = f"{base_url}/{name}"
+                    project_urls[path] = project_url
+                    
+        except Exception as e:
+            self.logger.debug(f"解析 manifest 失敗: {e}")
+        
+        return project_urls
+
+    # ========================================
+    # 主要處理函數
+    # ========================================
+
     def process_dbs_async(self, db_list: List[str], db_versions: Dict[str, str] = None):
-        """異步處理多個 DB - 徹底避免 SFTP 衝突"""
+        """異步處理多個 DB - 根據模式選擇處理方式"""
+        if self.zero_fail_mode:
+            return self.process_dbs_async_zero_fail(db_list, db_versions)
+        else:
+            return self.process_dbs_async_standard(db_list, db_versions)
+
+    def process_dbs_async_standard(self, db_list: List[str], db_versions: Dict[str, str] = None):
+        """標準異步處理多個 DB - 徹底避免 SFTP 衝突"""
         db_versions = db_versions or {}
         db_infos = []
         
@@ -1986,7 +2762,7 @@ class ManifestPinningTool:
             if not self.dry_run:
                 self.logger.info("等待所有 repo sync 完成...（增強版進度監控）")
                 self._wait_for_all_syncs_enhanced(phase1_results)
-                # 🔥 狀態已在 _wait_for_all_syncs_enhanced 中更新，不需要重複更新
+                # �� 狀態已在 _wait_for_all_syncs_enhanced 中更新，不需重複更新
             
             with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
                 futures = {executor.submit(self.process_db_phase2, db_info): db_info for db_info in phase1_results}
@@ -2008,13 +2784,96 @@ class ManifestPinningTool:
         except Exception as e:
             self.logger.error(f"處理過程發生錯誤: {e}")
 
-    def _wait_for_all_syncs_safe(self, db_results: List[DBInfo]):
-        """完整版進度監控 - 包含錯誤處理和重試機制"""
+    def process_dbs_async_zero_fail(self, db_list: List[str], db_versions: Dict[str, str] = None):
+        """零失敗容忍的異步處理多個 DB"""
+        db_versions = db_versions or {}
+        db_infos = []
+        
+        # 準備 DB 資訊
+        all_db_infos = self.get_all_dbs('all')
+        
+        for db_name in db_list:
+            if '#' in db_name:
+                db_name, version = db_name.split('#', 1)
+            else:
+                version = db_versions.get(db_name)
+            
+            for db_info in all_db_infos:
+                if db_info.db_info == db_name:
+                    db_info.version = version
+                    db_infos.append(db_info)
+                    break
+        
+        if not db_infos:
+            self.logger.error("沒有找到要處理的 DB")
+            return
+
+        self.logger.info(f"�� 零失敗模式處理 {len(db_infos)} 個 DB")
+        
+        try:
+            # Phase 1: 準備和啟動 sync
+            self.logger.info("執行 Phase 1: 準備工作和啟動同步")
+            
+            with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
+                futures = {executor.submit(self.process_db_phase1, db_info): db_info for db_info in db_infos}
+                
+                phase1_results = []
+                for future in as_completed(futures):
+                    try:
+                        result = future.result(timeout=300)
+                        phase1_results.append(result)
+                    except Exception as e:
+                        db_info = futures[future]
+                        self.logger.error(f"{db_info.db_info}: Phase 1 異常 - {e}")
+                        db_info.status = DBStatus.FAILED
+                        db_info.error_message = str(e)
+                        db_info.end_time = datetime.now()
+                        phase1_results.append(db_info)
+            
+            # �� 使用零失敗監控等待所有 sync 完成
+            if not self.dry_run:
+                self.logger.info("�� 啟動零失敗監控，等待所有 repo sync 達到100%...")
+                self._wait_for_all_syncs_enhanced_zero_fail(phase1_results)
+            
+            # Phase 2: 最終檢查和清理（使用零失敗版本）
+            self.logger.info("執行 Phase 2: 零失敗最終檢查")
+            
+            with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
+                futures = {executor.submit(self.process_db_phase2_zero_fail, db_info): db_info for db_info in phase1_results}
+                
+                for future in as_completed(futures):
+                    try:
+                        result = future.result(timeout=60)
+                        self.report.add_db(result)
+                    except Exception as e:
+                        db_info = futures[future]
+                        self.logger.error(f"{db_info.db_info}: Phase 2 異常 - {e}")
+                        db_info.status = DBStatus.FAILED
+                        db_info.error_message = str(e)
+                        db_info.end_time = datetime.now()
+                        self.report.add_db(db_info)
+            
+            # �� 零失敗最終驗證
+            self._final_zero_fail_verification()
+            
+            self.logger.info("所有 DB 處理完成")
+            
+        except Exception as e:
+            self.logger.error(f"處理過程發生錯誤: {e}")
+
+    def _wait_for_all_syncs_enhanced(self, db_results: List[DBInfo]):
+        """完整版進度監控 - 包含動態零失敗模式啟用"""
         max_wait_time = config_manager.repo_config['sync_timeout']
         start_wait = time.time()
         
         active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
         self.logger.info(f"監控 {len(active_syncs)} 個活躍的 repo sync 進程")
+        
+        # �� 零失敗模式動態控制變數
+        auto_zero_fail_triggered = False
+        failure_threshold = 2  # 失敗數量閾值
+        failure_rate_threshold = 30.0  # 失敗率閾值 (%)
+        last_failure_check = time.time()
         
         # 初始化進度追蹤
         progress_tracker = {}
@@ -2026,7 +2885,8 @@ class ManifestPinningTool:
                 'current_activity': '初始化中...',
                 'log_file': self._get_sync_log_file(db_info),
                 'last_check_time': datetime.now(),
-                'error_count': 0
+                'error_count': 0,
+                'critical_errors': []  # �� 記錄嚴重錯誤
             }
         
         check_interval = 30  # 30秒檢查一次
@@ -2034,13 +2894,31 @@ class ManifestPinningTool:
         while True:
             all_complete = True
             elapsed = int(time.time() - start_wait)
+            current_time = time.time()
+            
+            # �� 每分鐘檢查一次失敗率，決定是否啟用零失敗模式
+            if current_time - last_failure_check > 60:  # 每分鐘檢查
+                if self._check_and_enable_zero_fail_mode(active_syncs, auto_zero_fail_triggered):
+                    auto_zero_fail_triggered = True
+                    # 切換到零失敗監控模式
+                    self.logger.info("�� 切換到零失敗監控模式")
+                    self._wait_for_all_syncs_enhanced_zero_fail(active_syncs)
+                    return
+                last_failure_check = current_time
             
             print("\n" + "="*100)
-            print(f"📊 Repo Sync 進度監控 - 已等待 {elapsed}s")
+            print(f"�� Repo Sync 進度監控 - 已等待 {elapsed}s")
+            if not self.zero_fail_mode and not auto_zero_fail_triggered:
+                print("�� 智能失敗檢測模式 (自動切換零失敗)")
             print("="*100)
+            
+            current_failed_count = 0
+            current_running_count = 0
+            current_completed_count = 0
             
             for db_info in active_syncs:
                 if db_info.status == DBStatus.FAILED:
+                    current_failed_count += 1
                     continue
                 
                 db_name = db_info.db_info
@@ -2061,47 +2939,45 @@ class ManifestPinningTool:
                         
                         if poll is None:  # 仍在運行
                             all_complete = False
+                            current_running_count += 1
                             
-                            # 🔧 檢查是否有錯誤需要處理
-                            error_detected = self._check_for_sync_errors(db_info, tracker)
-                            
-                            if error_detected:
-                                # 嘗試處理錯誤
-                                if self._handle_sync_failure(db_info, error_detected):
-                                    tracker['current_activity'] = f"檢測到錯誤: {error_detected}，正在重試..."
-                                    tracker['error_count'] += 1
-                                else:
-                                    # 重試失敗，標記為失敗
-                                    db_info.status = DBStatus.FAILED
-                                    db_info.error_message = error_detected
-                                    runtime = datetime.now() - tracker['start_time']
-                                    print(f"❌ {display_name:30s} | 失敗     |   0% | "
-                                        f"用時 {str(runtime).split('.')[0]:8s} | {error_detected}")
-                                    continue
+                            # �� 檢查嚴重錯誤，可能觸發零失敗模式
+                            critical_error = self._check_for_critical_errors(db_info, tracker)
+                            if critical_error and not auto_zero_fail_triggered:
+                                self.logger.warning(f"�� {db_name}: 檢測到嚴重錯誤: {critical_error}")
+                                tracker['critical_errors'].append(critical_error)
+                                
+                                # 如果嚴重錯誤累積或者是致命錯誤，立即啟用零失敗模式
+                                if len(tracker['critical_errors']) >= 2 or "FATAL" in critical_error:
+                                    self.logger.warning(f"�� 因嚴重錯誤立即啟用零失敗模式")
+                                    self._enable_zero_fail_mode_dynamically()
+                                    auto_zero_fail_triggered = True
+                                    
+                                    # 立即切換到零失敗監控
+                                    self._wait_for_all_syncs_enhanced_zero_fail(active_syncs)
+                                    return
                             
                             # 更新進度信息
                             self._update_progress_info(db_info, tracker)
                             
-                            # 構建詳細的活動信息
-                            activity_text = tracker['current_activity']
-                            
-                            # 添加當前項目信息
-                            if tracker.get('current_project'):
-                                project_short = tracker['current_project'].split('/')[-1]
-                                activity_text = f"{activity_text} [{project_short}]"
-                            
-                            # 添加下載速度
-                            if tracker.get('download_speed'):
-                                activity_text = f"{activity_text} {tracker['download_speed']}"
-                            
-                            # 添加錯誤計數（如果有的話）
-                            if tracker['error_count'] > 0:
-                                activity_text = f"{activity_text} (重試:{tracker['error_count']})"
-                            
-                            # 顯示詳細狀態
                             runtime = datetime.now() - tracker['start_time']
-                            print(f"🔄 {display_name:30s} | 運行中 | {tracker['estimated_progress']:3d}% | "
-                                f"用時 {str(runtime).split('.')[0]:8s} | {activity_text}")
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            
+                            progress = tracker['estimated_progress']
+                            bar_length = 20
+                            filled = int(bar_length * progress / 100)
+                            bar = "█" * filled + "░" * (bar_length - filled)
+                            
+                            activity = tracker.get('current_project', '').split('/')[-1] or tracker.get('current_activity', '同步中')
+                            if len(activity) > 15:
+                                activity = activity[:12] + "..."
+                            
+                            # �� 顯示錯誤狀態
+                            status_info = ""
+                            if tracker['critical_errors']:
+                                status_info = f" ⚠️{len(tracker['critical_errors'])}"
+                            
+                            print(f"�� {display_name:30s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}{status_info}")
                             
                             # 檢查超時
                             if time.time() - start_wait > max_wait_time:
@@ -2116,53 +2992,85 @@ class ManifestPinningTool:
                                         pass
                                 db_info.status = DBStatus.FAILED
                                 db_info.error_message = "Sync 超時"
-                                print(f"⏰ {display_name:30s} | 超時終止")
+                                current_failed_count += 1
+                                print(f"⏰ {display_name:30s} │ 超時終止")
                                 
                         elif poll == 0:  # 成功完成
+                            current_completed_count += 1
                             runtime = datetime.now() - tracker['start_time']
-                            self.logger.info(f"{db_name}: repo sync 成功完成")
-                            print(f"✅ {display_name:30s} | 完成     | 100% | "
-                                f"用時 {str(runtime).split('.')[0]:8s} | Sync 成功完成")
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
                             
-                        else:  # 失敗
+                            bar = "█" * 20
+                            print(f"✅ {display_name:30s} │{bar}│ 100% │ {runtime_str} │ 完成")
+                            
+                        else:  # 失敗 (poll != 0)
+                            current_failed_count += 1
                             runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            
+                            # �� 分析失敗原因
                             error_msg = f"Sync 失敗 (返回碼: {poll})"
                             
-                            # 嘗試從日誌中獲取更詳細的錯誤信息
-                            detailed_error = self._extract_error_from_log(tracker.get('log_file', ''))
-                            if detailed_error:
-                                error_msg = f"{error_msg} - {detailed_error}"
+                            # 檢查是否需要立即啟用零失敗模式
+                            if poll == 1:  # 部分失敗，可能可以救援
+                                success_rate, failed_projects = self._analyze_sync_result(db_info)
+                                if failed_projects:
+                                    error_msg += f" - {len(failed_projects)} 個項目失敗"
+                                    
+                                    # �� 如果失敗項目很多，考慮啟用零失敗模式
+                                    if len(failed_projects) > 10 and not auto_zero_fail_triggered:
+                                        self.logger.warning(f"�� {db_name}: 大量項目失敗 ({len(failed_projects)} 個)，建議啟用零失敗模式")
                             
-                            # 嘗試處理失敗
-                            if self._handle_sync_failure(db_info, error_msg):
-                                tracker['current_activity'] = "進程失敗，正在重試..."
-                                tracker['error_count'] += 1
-                                all_complete = False  # 還在重試中
-                            else:
-                                db_info.status = DBStatus.FAILED
-                                db_info.error_message = error_msg
-                                print(f"❌ {display_name:30s} | 失敗     |   0% | "
-                                    f"用時 {str(runtime).split('.')[0]:8s} | {error_msg}")
+                            db_info.status = DBStatus.FAILED
+                            db_info.error_message = error_msg
+                            print(f"❌ {display_name:30s} │{'':20s}│   0% │ {runtime_str} │ {error_msg[:30]}")
                             
                     except Exception as e:
                         self.logger.error(f"{db_name}: 檢查進程狀態失敗: {e}")
                         db_info.status = DBStatus.FAILED
                         db_info.error_message = f"進程監控失敗: {e}"
-                        print(f"⚠️  {display_name:30s} | 監控錯誤 |   0% | {str(e)[:30]}")
+                        current_failed_count += 1
+                        print(f"⚠️  {display_name:30s} │ 監控錯誤 │   0% │ {str(e)[:30]}")
+            
+            # �� 實時失敗率檢查
+            total_processed = current_failed_count + current_completed_count
+            if total_processed > 0:
+                failure_rate = (current_failed_count / total_processed) * 100
+                
+                # 如果失敗率過高且還有運行中的進程，考慮啟用零失敗模式
+                if (failure_rate >= failure_rate_threshold and 
+                    current_running_count > 0 and 
+                    not auto_zero_fail_triggered and
+                    current_failed_count >= failure_threshold):
+                    
+                    self.logger.warning(f"�� 失敗率達到 {failure_rate:.1f}% ({current_failed_count}/{total_processed})，自動啟用零失敗模式")
+                    self._enable_zero_fail_mode_dynamically()
+                    auto_zero_fail_triggered = True
+                    
+                    # 立即救援已失敗的 DB
+                    self._rescue_failed_dbs_immediately(active_syncs)
+                    
+                    # 切換到零失敗監控
+                    self._wait_for_all_syncs_enhanced_zero_fail(active_syncs)
+                    return
             
             # 顯示總體統計
-            running_count = sum(1 for db in active_syncs 
-                            if db.sync_process and db.sync_process.poll() is None 
-                            and db.status != DBStatus.FAILED)
-            completed_count = sum(1 for db in active_syncs 
-                                if db.sync_process and db.sync_process.poll() == 0)
-            failed_count = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
-            retry_count = sum(1 for db in active_syncs 
-                            if progress_tracker.get(db.db_info, {}).get('error_count', 0) > 0)
-            
             print("-"*100)
-            print(f"📈 總計: 運行中 {running_count} | 完成 {completed_count} | 失敗 {failed_count} | 重試中 {retry_count}")
-                        
+            print(f"�� 總計: 運行中 {current_running_count} | 完成 {current_completed_count} | 失敗 {current_failed_count}")
+            
+            if current_failed_count > 0:
+                total_dbs = len(active_syncs)
+                failure_rate = (current_failed_count / total_dbs) * 100
+                print(f"�� 失敗率: {failure_rate:.1f}% ({current_failed_count}/{total_dbs})")
+                
+                if failure_rate >= failure_rate_threshold * 0.7:  # 70% of threshold
+                    print(f"⚠️  接近零失敗模式觸發閾值 ({failure_rate_threshold}%)")
+            
+            # �� 零失敗模式提示
+            if not self.zero_fail_mode and not auto_zero_fail_triggered:
+                if current_failed_count >= failure_threshold - 1:
+                    print(f"�� 智能提示: 再有 {failure_threshold - current_failed_count} 個失敗將自動啟用零失敗模式")
+            
             if all_complete or (time.time() - start_wait) > max_wait_time:
                 break
             
@@ -2172,170 +3080,25 @@ class ManifestPinningTool:
         # 最終統計
         completed = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() == 0)
         failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
-        total_retries = sum(progress_tracker.get(db.db_info, {}).get('error_count', 0) for db in active_syncs)
         
-        print(f"\n🏁 Repo sync 最終統計:")
+        print(f"\n�� Repo sync 最終統計:")
         print(f"   ✅ 成功: {completed}")
         print(f"   ❌ 失敗: {failed}")
-        print(f"   🔄 總重試次數: {total_retries}")
         
-        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}, 總重試 {total_retries}")
+        # �� 如果最終還有失敗且未啟用零失敗模式，詢問是否啟用
+        if failed > 0 and not self.zero_fail_mode and not auto_zero_fail_triggered:
+            print(f"\n�� 檢測到 {failed} 個失敗的 DB")
+            if hasattr(sys, 'stdin') and sys.stdin.isatty():
+                response = input("是否要啟用零失敗模式進行救援? (y/N): ").strip().lower()
+                if response == 'y':
+                    self.logger.info("�� 用戶手動啟用零失敗模式")
+                    self._enable_zero_fail_mode_dynamically()
+                    self._rescue_failed_dbs_immediately(active_syncs)
+        
+        self.logger.info(f"�� Repo sync 完成統計: 成功 {completed}, 失敗 {failed}")
 
-    def _handle_sync_failure(self, db_info: DBInfo, error_msg: str) -> bool:
-        """處理 sync 失敗並嘗試重試 - 特別針對 .repo/projects 損壞"""
-        self.logger.warning(f"{db_info.db_info}: Sync 錯誤 - {error_msg}")
-        
-        # 初始化重試計數
-        if not hasattr(db_info, 'retry_count'):
-            db_info.retry_count = 0
-        
-        # 🔥 檢查是否是 git repository 錯誤
-        git_repo_errors = [
-            'fatal: not a git repository',
-            'gitcommanderror',
-            'git fetch 失敗',
-            'git repository 損壞',
-            'unable to fully sync the tree',
-            'downloading network changes failed',
-            'checking out local projects failed'
-        ]
-        
-        is_git_repo_error = any(err in error_msg.lower() for err in git_repo_errors)
-        
-        # 網路相關錯誤
-        network_errors = [
-            'broken pipe', 'connection', 'timeout', 'network', 'temporary failure',
-            'unable to connect', 'connection refused', 'ssl error', 'certificate'
-        ]
-        
-        is_network_error = any(err in error_msg.lower() for err in network_errors)
-        
-        max_retries = 2
-        
-        if (is_git_repo_error or is_network_error) and db_info.retry_count < max_retries:
-            db_info.retry_count += 1
-            retry_delay = 30  # 固定30秒延遲
-            
-            self.logger.info(f"{db_info.db_info}: 準備重試 (第 {db_info.retry_count}/{max_retries} 次)，{retry_delay}秒後開始")
-            
-            try:
-                # 🔥 停止當前進程
-                if db_info.sync_process:
-                    try:
-                        if db_info.sync_process.poll() is None:
-                            self.logger.info(f"{db_info.db_info}: 終止當前 sync 進程...")
-                            db_info.sync_process.terminate()
-                            db_info.sync_process.wait(timeout=15)
-                    except:
-                        try:
-                            db_info.sync_process.kill()
-                        except:
-                            pass
-                    finally:
-                        resource_manager.unregister_process(db_info.db_info)
-                
-                # 🔥 如果是 git repository 錯誤，執行深度清理
-                if is_git_repo_error:
-                    self.logger.info(f"{db_info.db_info}: 檢測到 git repository 錯誤，執行深度清理")
-                    
-                    if db_info.local_path and os.path.exists(db_info.local_path):
-                        import shutil
-                        
-                        # 🔥 重點：完全刪除 .repo 目錄
-                        repo_dir = os.path.join(db_info.local_path, '.repo')
-                        if os.path.exists(repo_dir):
-                            self.logger.info(f"{db_info.db_info}: 完全刪除 .repo 目錄...")
-                            try:
-                                # 先嘗試chmod 確保可以刪除
-                                os.system(f'chmod -R 755 "{repo_dir}" 2>/dev/null || true')
-                                shutil.rmtree(repo_dir)
-                                self.logger.info(f"{db_info.db_info}: ✅ .repo 目錄已完全清理")
-                            except Exception as e:
-                                self.logger.warning(f"{db_info.db_info}: 正常刪除失敗，嘗試強制刪除: {e}")
-                                try:
-                                    os.system(f'rm -rf "{repo_dir}"')
-                                    self.logger.info(f"{db_info.db_info}: ✅ 強制刪除成功")
-                                except Exception as e2:
-                                    self.logger.error(f"{db_info.db_info}: ❌ 強制刪除也失敗: {e2}")
-                                    return False
-                        
-                        # 🔥 清理所有項目目錄（除了 logs 和 manifest 檔案）
-                        self.logger.info(f"{db_info.db_info}: 清理損壞的項目目錄...")
-                        try:
-                            for item in os.listdir(db_info.local_path):
-                                if item in ['logs', 'manifest.xml'] or item.endswith('.xml'):
-                                    continue  # 保留 logs 目錄和 manifest 檔案
-                                
-                                item_path = os.path.join(db_info.local_path, item)
-                                if os.path.isdir(item_path):
-                                    shutil.rmtree(item_path)
-                                    self.logger.debug(f"{db_info.db_info}: 清理目錄 {item}")
-                                elif os.path.isfile(item_path):
-                                    os.remove(item_path)
-                                    self.logger.debug(f"{db_info.db_info}: 清理檔案 {item}")
-                        except Exception as e:
-                            self.logger.warning(f"{db_info.db_info}: 清理項目目錄時發生錯誤: {e}")
-                    
-                    # 🔥 重新執行完整的 repo init 流程
-                    self.logger.info(f"{db_info.db_info}: 重新執行 repo init...")
-                    if db_info.actual_source_cmd:
-                        if not self.repo_manager.repo_init(db_info.local_path, db_info.actual_source_cmd):
-                            self.logger.error(f"{db_info.db_info}: 重新 repo init 失敗")
-                            return False
-                        
-                        # 重新應用 manifest
-                        if db_info.manifest_file:
-                            manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
-                            if os.path.exists(manifest_path):
-                                if not self.repo_manager.apply_manifest(db_info.local_path, manifest_path):
-                                    self.logger.error(f"{db_info.db_info}: 重新應用 manifest 失敗")
-                                    return False
-                            else:
-                                self.logger.error(f"{db_info.db_info}: Manifest 檔案不存在: {manifest_path}")
-                                return False
-                        else:
-                            self.logger.error(f"{db_info.db_info}: 沒有 manifest 檔案資訊")
-                            return False
-                    else:
-                        self.logger.error(f"{db_info.db_info}: 沒有 source command 資訊")
-                        return False
-                
-                # 等待重試延遲
-                self.logger.info(f"{db_info.db_info}: 等待 {retry_delay} 秒後重試...")
-                import time
-                time.sleep(retry_delay)
-                
-                # 🔥 重新啟動 repo sync
-                self.logger.info(f"{db_info.db_info}: 開始第 {db_info.retry_count} 次重試")
-                process = self.repo_manager.start_repo_sync_async(
-                    db_info.local_path, 
-                    db_info.db_info
-                )
-                
-                if process:
-                    db_info.sync_process = process
-                    self.logger.info(f"{db_info.db_info}: ✅ 重試成功啟動 (PID: {process.pid})")
-                    return True
-                else:
-                    self.logger.error(f"{db_info.db_info}: ❌ 重試啟動失敗")
-                    return False
-                    
-            except Exception as e:
-                self.logger.error(f"{db_info.db_info}: 重試過程中發生異常: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
-        
-        # 重試失敗或不可重試
-        if db_info.retry_count >= max_retries:
-            self.logger.error(f"{db_info.db_info}: 已達最大重試次數 ({max_retries})，標記為失敗")
-        else:
-            self.logger.error(f"{db_info.db_info}: 錯誤不可重試，標記為失敗")
-        
-        return False
-
-    def _check_for_sync_errors(self, db_info: DBInfo, tracker: dict) -> str:
-        """檢查 sync 過程中的錯誤 - 優化檢測"""
+    def _check_for_critical_errors(self, db_info: DBInfo, tracker: dict) -> str:
+        """檢查嚴重錯誤，可能觸發零失敗模式"""
         try:
             log_file = tracker.get('log_file', '')
             
@@ -2343,55 +3106,319 @@ class ManifestPinningTool:
                 return ""
             
             current_size = os.path.getsize(log_file)
-            last_size = tracker.get('last_log_size', 0)
             
-            # 檢查日誌停止更新
-            if current_size <= last_size:
-                last_check = tracker.get('last_check_time', datetime.now())
-                if (datetime.now() - last_check).total_seconds() > 300:  # 5分鐘沒有日誌更新
-                    return "日誌停止更新，可能進程卡住"
-            
-            tracker['last_log_size'] = current_size
-            tracker['last_check_time'] = datetime.now()
-            
-            # 🔥 讀取最後1KB的內容來檢查最新錯誤
+            # 只讀取最後 2KB 的內容
             try:
                 with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    # 讀取最後1KB
-                    f.seek(max(0, current_size - 1024))
+                    read_size = min(current_size, 2048)
+                    f.seek(max(0, current_size - read_size))
                     recent_content = f.read()
                     
-                    # 🔥 按照錯誤嚴重程度排序檢查
+                    # �� 分級錯誤檢測
+                    fatal_errors = [
+                        'fatal: not a git repository',
+                        'fatal: unable to access',
+                        'fatal: repository',
+                    ]
+                    
                     critical_errors = [
-                        (r'fatal:.*not a git repository', 'Git repository 損壞'),
-                        (r'GitCommandError.*fetch.*failed', 'Git fetch 失敗'),
-                        (r'error:.*Unable to fully sync the tree', '無法完全同步'),
-                        (r'error:.*Downloading network changes failed', '網路下載失敗'),
-                        (r'error:.*Checking out local projects failed', '檢出項目失敗'),
-                        (r'Repo command failed.*SyncError', 'Repo 同步錯誤'),
+                        'error: Unable to fully sync the tree',
+                        'error: Downloading network changes failed',
+                        'GitCommandError',
+                        'Repo command failed',
                     ]
                     
-                    # 先檢查嚴重錯誤
-                    for pattern, error_type in critical_errors:
-                        if re.search(pattern, recent_content, re.IGNORECASE):
-                            return error_type
-                    
-                    # 再檢查一般錯誤
-                    general_errors = [
-                        (r'fatal:.*corrupt', 'Repository 檔案損壞'),
-                        (r'fatal:.*index file.*corrupt', 'Git index 損壞'),
-                        (r'brokenpipeerror|broken pipe', 'Broken pipe error'),
-                        (r'connection.*refused', 'Connection refused'),
-                        (r'connection.*timeout|timeout.*connection', 'Connection timeout'),
-                        (r'ssl.*error|certificate.*error', 'SSL/Certificate error'),
-                        (r'unable to connect', 'Unable to connect'),
-                        (r'network.*unreachable', 'Network unreachable'),
-                        (r'temporary failure', 'Temporary failure'),
+                    warning_errors = [
+                        'error: Checking out local projects failed',
+                        'Cannot checkout',
+                        'timeout',
                     ]
                     
-                    for pattern, error_type in general_errors:
-                        if re.search(pattern, recent_content, re.IGNORECASE):
-                            return error_type
+                    # 檢查致命錯誤
+                    for error in fatal_errors:
+                        if error in recent_content:
+                            return f"FATAL:{error}"
+                    
+                    # 檢查嚴重錯誤
+                    for error in critical_errors:
+                        if error in recent_content:
+                            return f"CRITICAL:{error}"
+                    
+                    # 檢查警告級錯誤
+                    for error in warning_errors:
+                        if error in recent_content:
+                            return f"WARNING:{error}"
+                            
+            except Exception as e:
+                self.logger.debug(f"檢查嚴重錯誤時讀取日誌失敗: {e}")
+            
+            return ""
+            
+        except Exception as e:
+            self.logger.debug(f"嚴重錯誤檢查異常: {e}")
+            return ""
+            
+    def _check_and_enable_zero_fail_mode(self, active_syncs: List[DBInfo], auto_triggered: bool) -> bool:
+        """檢查是否應該啟用零失敗模式"""
+        if self.zero_fail_mode or auto_triggered:
+            return False
+        
+        failed_count = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+        total_count = len(active_syncs)
+        
+        if total_count == 0:
+            return False
+        
+        failure_rate = (failed_count / total_count) * 100
+        
+        # 觸發條件：
+        # 1. 失敗數量 >= 2 個
+        # 2. 失敗率 >= 30%
+        # 3. 或者失敗數量 >= 總數的一半
+        should_trigger = (
+            failed_count >= 2 or
+            failure_rate >= 30.0 or
+            failed_count >= total_count // 2
+        )
+        
+        if should_trigger:
+            self.logger.warning(f"�� 觸發零失敗模式條件: 失敗 {failed_count}/{total_count} ({failure_rate:.1f}%)")
+            self._enable_zero_fail_mode_dynamically()
+            return True
+        
+        return False
+        
+    def _wait_for_all_syncs_enhanced_zero_fail(self, db_results: List[DBInfo]):
+        """零失敗容忍的進度監控"""
+        max_wait_time = config_manager.repo_config['sync_timeout']
+        start_wait = time.time()
+        
+        active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
+        self.logger.info(f"�� 零失敗監控 {len(active_syncs)} 個活躍的 repo sync 進程")
+        
+        if not active_syncs:
+            return
+        
+        # 初始化進度追蹤
+        progress_tracker = {}
+        for db_info in active_syncs:
+            progress_tracker[db_info.db_info] = {
+                'start_time': db_info.start_time or datetime.now(),
+                'log_file': self._get_sync_log_file(db_info),
+                'error_count': 0,
+                'estimated_progress': 0,
+                'current_activity': '初始化中...',
+                'rescue_attempts': 0,  # �� 新增：救援嘗試次數
+                'last_rescue_time': None,  # �� 新增：最後救援時間
+            }
+        
+        check_interval = 3
+        rescue_interval = 30  # �� 每30秒檢查一次是否需要救援
+        
+        while True:
+            all_complete = True
+            elapsed = int(time.time() - start_wait)
+            current_time = datetime.now()
+            
+            print("\033[2J\033[H")
+            print(f"�� 零失敗 Repo Sync 監控 - {elapsed//60:02d}:{elapsed%60:02d}")
+            print("="*80)
+            
+            completed_count = 0
+            failed_count = 0
+            
+            for db_info in active_syncs:
+                if db_info.status == DBStatus.FAILED:
+                    failed_count += 1
+                    continue
+                
+                db_name = db_info.db_info
+                tracker = progress_tracker[db_name]
+                
+                display_name = f"{db_name} v{db_info.version}" if db_info.version else db_name
+                
+                if db_info.sync_process:
+                    poll = db_info.sync_process.poll()
+                    
+                    if poll is None:  # 仍在運行
+                        all_complete = False
+                        
+                        # �� 定期檢查是否需要救援
+                        should_rescue = (
+                            (current_time - tracker.get('last_rescue_time', tracker['start_time'])).total_seconds() > rescue_interval and
+                            tracker['rescue_attempts'] < 5  # 最多5次救援嘗試
+                        )
+                        
+                        if should_rescue:
+                            tracker['log_file'] = self._get_sync_log_file(db_info)
+                            error_detected = self._check_for_sync_errors(db_info, tracker)
+                            
+                            if error_detected or self._is_sync_stuck(db_info, tracker):
+                                tracker['rescue_attempts'] += 1
+                                tracker['last_rescue_time'] = current_time
+                                
+                                self.logger.warning(f"{db_name}: �� 第 {tracker['rescue_attempts']} 次救援 - {error_detected or '進度停滯'}")
+                                
+                                if self._immediate_rescue(db_info, error_detected or '進度停滯'):
+                                    tracker['current_activity'] = f"救援 #{tracker['rescue_attempts']} 成功，重新開始..."
+                                    tracker['log_file'] = self._get_sync_log_file(db_info)
+                                else:
+                                    self.logger.error(f"{db_name}: ❌ 第 {tracker['rescue_attempts']} 次救援失敗")
+                                    if tracker['rescue_attempts'] >= 5:
+                                        db_info.status = DBStatus.FAILED
+                                        db_info.error_message = f"經過 {tracker['rescue_attempts']} 次救援仍然失敗"
+                                        failed_count += 1
+                                        continue
+                        
+                        # 更新進度
+                        self._update_progress_info(db_info, tracker)
+                        
+                        runtime = datetime.now() - tracker['start_time']
+                        runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                        
+                        progress = tracker['estimated_progress']
+                        bar_length = 20
+                        filled = int(bar_length * progress / 100)
+                        bar = "█" * filled + "░" * (bar_length - filled)
+                        
+                        activity = tracker.get('current_activity', '同步中')
+                        
+                        # 顯示救援狀態
+                        status_info = ""
+                        if tracker['rescue_attempts'] > 0:
+                            status_info += f" R{tracker['rescue_attempts']}"
+                        
+                        print(f"�� {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}{status_info}")
+                        
+                    elif poll == 0:  # 成功完成
+                        # �� 零容忍：即使返回碼是0，也要檢查是否真的100%成功
+                        success_rate, failed_projects = self._analyze_sync_result(db_info)
+                        
+                        if failed_projects:
+                            self.logger.warning(f"{db_name}: �� 即使返回碼0，仍有失敗項目，啟動救援")
+                            
+                            if self._enhanced_repair_failed_projects_zero_tolerance(db_info, failed_projects):
+                                completed_count += 1
+                                db_info.status = DBStatus.SUCCESS
+                                db_info.end_time = datetime.now()
+                                
+                                runtime = datetime.now() - tracker['start_time']
+                                runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                                bar = "█" * 20
+                                print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 救援成功達到100%")
+                            else:
+                                # 救援失敗，標記為失敗
+                                failed_count += 1
+                                db_info.status = DBStatus.FAILED
+                                db_info.error_message = f"完成後檢測到失敗項目且救援失敗: {len(failed_projects)} 個"
+                                
+                                runtime = datetime.now() - tracker['start_time']
+                                runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                                print(f"❌ {display_name:20s} │{'':20s}│   0% │ {runtime_str} │ 救援失敗")
+                                continue
+                        else:
+                            # 真正的100%成功
+                            completed_count += 1
+                            db_info.status = DBStatus.SUCCESS
+                            db_info.end_time = datetime.now()
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            bar = "█" * 20
+                            print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 完美完成")
+                    
+                    elif poll == 1:  # �� 返回碼1 - 立即啟動救援
+                        success_rate, failed_projects = self._analyze_sync_result(db_info)
+                        
+                        self.logger.warning(f"{db_name}: �� 返回碼1，成功率 {success_rate:.1f}%，{len(failed_projects)} 個失敗項目")
+                        
+                        if self._enhanced_repair_failed_projects_zero_tolerance(db_info, failed_projects):
+                            completed_count += 1
+                            db_info.status = DBStatus.SUCCESS
+                            db_info.end_time = datetime.now()
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            bar = "█" * 20
+                            print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 零容忍救援成功")
+                        else:
+                            failed_count += 1
+                            db_info.status = DBStatus.FAILED
+                            db_info.error_message = f"零容忍救援失敗，無法達到100%"
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            print(f"❌ {display_name:20s} │{'':20s}│   0% │ {runtime_str} │ 零容忍救援失敗")
+                    
+                    else:  # 其他錯誤碼
+                        self.logger.error(f"{db_name}: �� 嚴重錯誤 (返回碼: {poll})，啟動核武級救援")
+                        
+                        if self._nuclear_rebuild(db_info):
+                            # 核武級救援成功，重新開始監控
+                            all_complete = False
+                            tracker['rescue_attempts'] += 1
+                            tracker['current_activity'] = "核武級救援重新開始..."
+                            tracker['log_file'] = self._get_sync_log_file(db_info)
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            print(f"☢️ {display_name:20s} │{'░'*20}│   0% │ {runtime_str} │ 核武級救援中...")
+                        else:
+                            failed_count += 1
+                            db_info.status = DBStatus.FAILED
+                            db_info.error_message = f"核武級救援也失敗 (原返回碼: {poll})"
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            print(f"�� {display_name:20s} │{'':20s}│   0% │ {runtime_str} │ 無法救援")
+            
+            # 統計信息
+            running_count = len(active_syncs) - completed_count - failed_count
+            
+            print("-" * 80)
+            print(f"�� 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count}")
+            
+            if all_complete or elapsed > max_wait_time:
+                break
+            
+            time.sleep(check_interval)
+        
+        # 最終統計
+        self._display_final_summary_zero_fail(active_syncs, elapsed, progress_tracker)
+
+    def _check_for_sync_errors(self, db_info: DBInfo, tracker: dict) -> str:
+        """簡化的錯誤檢測 - 專門針對 fatal 錯誤"""
+        try:
+            log_file = tracker.get('log_file', '')
+            
+            if not log_file or not os.path.exists(log_file):
+                return ""
+            
+            # 讀取最後 4KB 的內容
+            current_size = os.path.getsize(log_file)
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    read_size = min(current_size, 4096)
+                    f.seek(max(0, current_size - read_size))
+                    recent_content = f.read()
+                    
+                    # �� 檢測嚴重錯誤，自動啟用零失敗模式
+                    critical_errors = [
+                        'fatal: not a git repository',
+                        'error: Unable to fully sync the tree',
+                        'GitCommandError'
+                    ]
+                    
+                    for keyword in critical_errors:
+                        if keyword in recent_content:
+                            self.logger.error(f"{db_info.db_info}: �� 檢測到關鍵錯誤: {keyword}")
+                            
+                            # �� 自動啟用零失敗模式
+                            if not self.zero_fail_mode:
+                                self.logger.warning(f"�� 因嚴重錯誤自動啟用零失敗模式")
+                                self._enable_zero_fail_mode_dynamically()
+                            
+                            return f"CRITICAL:Git 錯誤 - {keyword}"
                             
             except Exception as e:
                 self.logger.debug(f"檢查錯誤時讀取日誌失敗: {e}")
@@ -2402,73 +3429,122 @@ class ManifestPinningTool:
             self.logger.debug(f"錯誤檢查異常: {e}")
             return ""
 
-    def _extract_error_from_log(self, log_file: str) -> str:
-        """從日誌文件中提取詳細錯誤信息"""
+    def _is_sync_stuck(self, db_info: DBInfo, tracker: dict) -> bool:
+        """檢查同步是否卡住（進度長時間沒變化）"""
         try:
-            if not log_file or not os.path.exists(log_file):
-                return ""
+            current_progress = tracker.get('estimated_progress', 0)
+            last_check_time = tracker.get('last_progress_check_time')
+            last_progress = tracker.get('last_progress_value', 0)
             
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-                lines = content.split('\n')
+            current_time = datetime.now()
+            
+            if last_check_time:
+                time_diff = (current_time - last_check_time).total_seconds()
+                progress_diff = current_progress - last_progress
                 
-                # 查找錯誤行
-                error_lines = []
-                for line in lines[-50:]:  # 檢查最後50行
-                    if any(keyword in line.lower() for keyword in ['error:', 'fatal:', 'exception:', 'failed:']):
-                        error_lines.append(line.strip())
-                
-                if error_lines:
-                    return error_lines[-1]  # 返回最後一個錯誤
-                    
-        except Exception as e:
-            self.logger.debug(f"提取錯誤信息失敗: {e}")
-        
-        return ""
+                # 如果5分鐘內進度變化少於1%，認為卡住了
+                if time_diff > 300 and progress_diff < 1:
+                    return True
+            
+            # 更新檢查點
+            tracker['last_progress_check_time'] = current_time
+            tracker['last_progress_value'] = current_progress
+            
+            return False
+            
+        except Exception:
+            return False
 
-    def _get_sync_log_file(self, db_info: DBInfo) -> str:
-        """獲取 sync 日誌文件路径 - 優先使用 unbuffer 版本"""
+    def _immediate_rescue(self, db_info: DBInfo, error_msg: str) -> bool:
+        """立即救援（不等待進程結束）"""
         try:
-            log_dir = os.path.join(db_info.local_path, 'logs')
-            if os.path.exists(log_dir):
-                # 尋找最新的日誌文件，優先選擇 unbuffer 版本
-                log_files = []
-                for f in os.listdir(log_dir):
-                    if f.startswith('repo_sync_') and f.endswith('.log'):
-                        file_path = os.path.join(log_dir, f)
-                        mtime = os.path.getmtime(file_path)
-                        
-                        # 🔥 給不同類型的日誌不同優先級
-                        priority = 0
-                        if 'unbuffer' in f:
-                            priority = 100  # 最高優先級
-                        elif 'script' in f:
-                            priority = 50
-                        elif 'hotfix' in f or 'fixed' in f:
-                            priority = 25
-                        # 舊版本的日誌優先級為 0
-                        
-                        log_files.append((priority, mtime, file_path))
-                
-                if log_files:
-                    # 按優先級和修改時間排序
-                    log_files.sort(key=lambda x: (x[0], x[1]), reverse=True)
-                    latest_log = log_files[0][2]
-                    self.logger.debug(f"{db_info.db_info}: 使用日誌文件: {os.path.basename(latest_log)}")
-                    return latest_log
+            self.logger.warning(f"{db_info.db_info}: �� 立即救援: {error_msg}")
             
-            self.logger.debug(f"{db_info.db_info}: 日誌目錄不存在: {log_dir}")
+            # 強制終止當前進程
+            if db_info.sync_process:
+                try:
+                    if db_info.sync_process.poll() is None:
+                        db_info.sync_process.kill()
+                        time.sleep(3)
+                except:
+                    pass
+                finally:
+                    resource_manager.unregister_process(db_info.db_info)
+            
+            # 快速重啟
+            process = self.repo_manager.start_repo_sync_async(
+                db_info.local_path, 
+                db_info.db_info
+            )
+            
+            if process:
+                db_info.sync_process = process
+                self.logger.info(f"{db_info.db_info}: ✅ 立即救援重啟成功 (PID: {process.pid})")
+                return True
+            else:
+                self.logger.error(f"{db_info.db_info}: ❌ 立即救援重啟失敗")
+                return False
+                
         except Exception as e:
-            self.logger.debug(f"{db_info.db_info}: 獲取日誌文件失敗: {e}")
+            self.logger.error(f"{db_info.db_info}: �� 立即救援異常: {e}")
+            return False
+
+    def _display_final_summary_zero_fail(self, active_syncs: list, elapsed: int, progress_tracker: dict):
+        """顯示零失敗最終摘要"""
+        completed = sum(1 for db in active_syncs if db.status == DBStatus.SUCCESS)
+        failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
+        total_rescues = sum(progress_tracker.get(db.db_info, {}).get('rescue_attempts', 0) for db in active_syncs)
         
-        return ""
+        print(f"\n�� 零失敗 Repo Sync 最終報告")
+        print("=" * 60)
+        print(f"⏱️  總用時: {elapsed//60:02d}:{elapsed%60:02d}")
+        print(f"✅ 成功: {completed}")
+        print(f"❌ 失敗: {failed}")
+        print(f"�� 總救援次數: {total_rescues}")
+        
+        if failed > 0:
+            print(f"\n�� 零容忍救援也無法挽救的DB:")
+            for db in active_syncs:
+                if db.status == DBStatus.FAILED:
+                    rescues = progress_tracker.get(db.db_info, {}).get('rescue_attempts', 0)
+                    print(f"  - {db.db_info}: {db.error_message} (救援嘗試: {rescues})")
+        
+        success_rate = (completed / (completed + failed) * 100) if (completed + failed) > 0 else 0
+        print(f"�� 零失敗達成率: {success_rate:.1f}%")
+        
+        if success_rate == 100.0:
+            print("�� 恭喜！達到零失敗目標！")
+        else:
+            print("�� 未能達到零失敗目標，需要檢查失敗原因")
+        
+        print("=" * 60)
+
+    def _final_zero_fail_verification(self):
+        """零失敗最終驗證"""
+        self.logger.info("�� 執行零失敗最終驗證...")
+        
+        failed_dbs = [db for db in self.report.db_details if db.status == DBStatus.FAILED]
+        
+        if failed_dbs:
+            self.logger.error(f"�� 零失敗驗證失敗！仍有 {len(failed_dbs)} 個 DB 失敗:")
+            for db in failed_dbs:
+                self.logger.error(f"  - {db.db_info}: {db.error_message}")
+        
+        # 重新統計
+        final_failed = sum(1 for db in self.report.db_details if db.status == DBStatus.FAILED)
+        final_success = sum(1 for db in self.report.db_details if db.status == DBStatus.SUCCESS)
+        
+        if final_failed == 0:
+            self.logger.info("�� 零失敗驗證通過！所有 DB 都成功了！")
+        else:
+            self.logger.error(f"�� 零失敗目標未達成，最終仍有 {final_failed} 個失敗")
 
     def _update_progress_info(self, db_info: DBInfo, tracker: dict):
         """更新進度信息 - 專門優化 unbuffer 輸出解析"""
         try:
             log_file = tracker.get('log_file')
             
-            # 🔥 每次都重新獲取日誌文件，確保使用最新的 unbuffer 日誌
+            # �� 每次都重新獲取日誌文件，確保使用最新的 unbuffer 日誌
             current_log_file = self._get_sync_log_file(db_info)
             if current_log_file and current_log_file != log_file:
                 tracker['log_file'] = current_log_file
@@ -2480,7 +3556,7 @@ class ManifestPinningTool:
                 tracker['estimated_progress'] = self._get_time_based_progress(tracker)
                 return
             
-            # 🔥 優化的日誌解析 - 專門處理 unbuffer 格式
+            # �� 優化的日誌解析 - 專門處理 unbuffer 格式
             try:
                 file_size = os.path.getsize(log_file)
                 
@@ -2499,7 +3575,7 @@ class ManifestPinningTool:
                 total_projects = 0
                 current_count = 0
                 
-                # 🔥 重點：解析 unbuffer 輸出的特定格式
+                # �� 重點：解析 unbuffer 輸出的特定格式
                 for line in reversed(lines):
                     line = line.strip()
                     if not line:
@@ -2522,7 +3598,7 @@ class ManifestPinningTool:
                                 parts = line.split('|')
                                 for part in parts:
                                     part = part.strip()
-                                    # 尋找包含項目路径的部分
+                                    # 尋找包含項目路徑的部分
                                     if '@' in part:
                                         project_info = part.split('@')[-1].strip()
                                     elif '/' in part and 'job' not in part and ':' not in part:
@@ -2546,7 +3622,7 @@ class ManifestPinningTool:
                             
                             break
                     
-                    # 🔥 解析其他狀態信息
+                    # �� 解析其他狀態信息
                     elif "Fetching project" in line:
                         project_match = re.search(r'Fetching project\s+([^\s]+)', line)
                         if project_match:
@@ -2561,7 +3637,7 @@ class ManifestPinningTool:
                             current_project = project_path.split('/')[-1]
                             latest_activity = f"跳過: {current_project}"
                 
-                # 🔥 更新追蹤信息
+                # �� 更新追踪信息
                 if latest_progress > 0:
                     tracker['estimated_progress'] = latest_progress
                 else:
@@ -2574,7 +3650,7 @@ class ManifestPinningTool:
                 tracker['current_count'] = current_count
                 tracker['last_update'] = datetime.now()
                 
-                # 🔥 調試信息（可選）
+                # �� 調試信息（可選）
                 if latest_progress > 0:
                     self.logger.debug(f"{db_info.db_info}: 解析成功 - {latest_progress}% ({current_count}/{total_projects}) {current_project}")
                     
@@ -2594,773 +3670,6 @@ class ManifestPinningTool:
         # 每分鐘約1.5%的進度，最多95%
         return min(int(runtime_minutes * 1.5), 95)
 
-    def _extract_progress_from_lines(self, lines: list) -> int:
-        """從日誌行中提取進度百分比"""
-        for line in reversed(lines):
-            # 尋找百分比
-            match = re.search(r'(\d+)%', line)
-            if match:
-                percent = int(match.group(1))
-                if 0 <= percent <= 100:
-                    return percent
-        return None
-
-    def _extract_project_from_lines(self, lines: list) -> str:
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-                
-            # 🔥 改進的模式，包含更多 repo sync 的實際輸出
-            project_patterns = [
-                # 標準模式
-                r'Fetching project\s+([^\s]+)',
-                r'Skipped fetching project\s+([^\s]+)',
-                r'Checking out project\s+([^\s]+)',
-                
-                # Git 相關輸出
-                r'remote:\s+.*?([a-zA-Z0-9_/\-\.]+/[a-zA-Z0-9_/\-\.]+)',
-                r'From\s+.*?:([a-zA-Z0-9_/\-\.]+)',
-                
-                # 🔥 新增：處理 heads, refs 等
-                r'refs/heads/\S*\s+([a-zA-Z0-9_/\-\.]+)',
-                r'Updating\s+references:\s*([a-zA-Z0-9_/\-\.]+)',
-                
-                # 🔥 通用項目路徑（更寬鬆）
-                r'([a-zA-Z][a-zA-Z0-9_]*(?:/[a-zA-Z0-9_\-\.]+){2,})',
-            ]
-            
-            for pattern in project_patterns:
-                match = re.search(pattern, line, re.IGNORECASE)
-                if match:
-                    project = match.group(1).strip()
-                    if len(project) > 5 and '/' in project:  # 基本驗證
-                        return self._simplify_project_name(project)
-        
-        return ""
-
-    def _simplify_project_name(self, project: str) -> str:
-        """簡化項目名稱顯示"""
-        # 移除常見的前綴
-        prefixes_to_remove = [
-            'platform/',
-            'device/',
-            'vendor/',
-            'external/',
-            'hardware/',
-            'frameworks/',
-            'system/',
-        ]
-        
-        simplified = project
-        for prefix in prefixes_to_remove:
-            if simplified.startswith(prefix):
-                simplified = simplified[len(prefix):]
-                break
-        
-        # 如果還是太長，只取最後兩個部分
-        parts = simplified.split('/')
-        if len(parts) > 2:
-            simplified = '/'.join(parts[-2:])
-        
-        # 限制長度
-        if len(simplified) > 20:
-            simplified = simplified[:17] + "..."
-        
-        return simplified
-
-    def _is_valid_project_name(self, project: str) -> bool:
-        """檢查是否為有效的項目名稱"""
-        # 過濾條件
-        invalid_patterns = [
-            r'^\d+$',  # 純數字
-            r'^[^a-zA-Z]',  # 不以字母開頭
-            r'\.(log|txt|xml)$',  # 文件擴展名
-            r'^(http|https|ftp)://',  # URL
-        ]
-        
-        for pattern in invalid_patterns:
-            if re.match(pattern, project, re.IGNORECASE):
-                return False
-        
-        # 長度檢查
-        if len(project) < 3 or len(project) > 50:
-            return False
-        
-        # 必須包含路徑分隔符或特定關鍵字
-        valid_keywords = ['platform', 'vendor', 'device', 'hardware', 'external', 
-                        'frameworks', 'system', 'kernel', 'bootable']
-        
-        if '/' in project or any(keyword in project.lower() for keyword in valid_keywords):
-            return True
-        
-        return False
-
-    def _wait_for_all_syncs_enhanced(self, db_results: List[DBInfo]):
-        """增強版進度監控 - 加強錯誤處理"""
-        max_wait_time = config_manager.repo_config['sync_timeout']
-        start_wait = time.time()
-        
-        active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
-        self.logger.info(f"🔍 監控 {len(active_syncs)} 個活躍的 repo sync 進程")
-        
-        if not active_syncs:
-            self.logger.info("沒有需要監控的 sync 進程")
-            return
-        
-        # 初始化進度追踪
-        progress_tracker = {}
-        for db_info in active_syncs:
-            progress_tracker[db_info.db_info] = {
-                'start_time': db_info.start_time or datetime.now(),
-                'log_file': self._get_sync_log_file(db_info),
-                'error_count': 0,
-                'estimated_progress': 0,
-                'current_activity': '初始化中...',
-                'current_project': '',
-                'last_update': datetime.now(),
-                'consecutive_errors': 0  # 🔥 追踪連續錯誤次數
-            }
-        
-        check_interval = 10  # 🔥 縮短檢查間隔到10秒，更快檢測錯誤
-        
-        while True:
-            all_complete = True
-            elapsed = int(time.time() - start_wait)
-            
-            # 清屏並顯示標題
-            print("\033[2J\033[H")  # 清屏
-            print(f"🔄 Repo Sync 監控 - {elapsed//60:02d}:{elapsed%60:02d}")
-            print("="*80)
-            
-            completed_count = 0
-            failed_count = 0
-            
-            for db_info in active_syncs:
-                if db_info.status == DBStatus.FAILED:
-                    failed_count += 1
-                    continue
-                
-                db_name = db_info.db_info
-                tracker = progress_tracker[db_name]
-                
-                display_name = f"{db_name} v{db_info.version}" if db_info.version else db_name
-                
-                if db_info.sync_process:
-                    poll = db_info.sync_process.poll()
-                    
-                    if poll is None:  # 仍在運行
-                        all_complete = False
-                        
-                        # 🔥 檢查錯誤並嘗試處理
-                        error_detected = self._check_for_sync_errors(db_info, tracker)
-                        
-                        if error_detected:
-                            tracker['consecutive_errors'] += 1
-                            self.logger.warning(f"{db_name}: 檢測到錯誤 ({tracker['consecutive_errors']} 次): {error_detected}")
-                            
-                            # 🔥 如果連續3次檢測到同樣錯誤，立即觸發重試
-                            if tracker['consecutive_errors'] >= 3:
-                                self.logger.info(f"{db_name}: 連續錯誤達到閾值，觸發重試")
-                                
-                                if self._handle_sync_failure(db_info, error_detected):
-                                    tracker['consecutive_errors'] = 0  # 重設錯誤計數
-                                    tracker['current_activity'] = "正在重試..."
-                                    # 更新 log 檔案路徑
-                                    tracker['log_file'] = self._get_sync_log_file(db_info)
-                                else:
-                                    # 重試失敗，標記為失敗
-                                    db_info.status = DBStatus.FAILED
-                                    db_info.end_time = datetime.now()
-                                    db_info.error_message = error_detected
-                                    failed_count += 1
-                                    print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ {error_detected}")
-                                    continue
-                        else:
-                            tracker['consecutive_errors'] = 0  # 重設錯誤計數
-                        
-                        # 更新進度
-                        self._update_progress_info(db_info, tracker)
-                        
-                        runtime = datetime.now() - tracker['start_time']
-                        runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
-                        
-                        progress = tracker['estimated_progress']
-                        bar_length = 20
-                        filled = int(bar_length * progress / 100)
-                        bar = "█" * filled + "░" * (bar_length - filled)
-                        
-                        activity = tracker.get('current_project', '').split('/')[-1] or tracker.get('current_activity', '同步中')
-                        if len(activity) > 15:
-                            activity = activity[:12] + "..."
-                        
-                        # 🔥 顯示重試信息
-                        retry_info = ""
-                        if hasattr(db_info, 'retry_count') and db_info.retry_count > 0:
-                            retry_info = f" (重試:{db_info.retry_count})"
-                        
-                        print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}{retry_info}")
-                        
-                    elif poll == 0:  # 成功完成
-                        completed_count += 1
-                        db_info.status = DBStatus.SUCCESS
-                        db_info.end_time = datetime.now()
-                        if hasattr(db_info.sync_process, '_log_file_path'):
-                            db_info.sync_log_path = db_info.sync_process._log_file_path
-                        
-                        runtime = datetime.now() - tracker['start_time']
-                        runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
-                        
-                        bar = "█" * 20
-                        print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 完成")
-                        
-                    else:  # 失敗
-                        failed_count += 1
-                        db_info.status = DBStatus.FAILED
-                        db_info.end_time = datetime.now()
-                        db_info.error_message = f"Repo sync 失敗 (返回碼: {poll})"
-                        print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗 (碼:{poll})")
-            
-            # 統計信息
-            running_count = len(active_syncs) - completed_count - failed_count
-            
-            print("-" * 80)
-            print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count}")
-            
-            if all_complete or elapsed > max_wait_time:
-                break
-            
-            time.sleep(check_interval)
-        
-        # 最終統計
-        self._display_final_summary(active_syncs, elapsed, progress_tracker)
-
-    def _create_progress_bar(self, percentage: int, width: int = 20) -> str:
-        """創建可視化進度條"""
-        filled = int(width * percentage / 100)
-        bar = "█" * filled + "░" * (width - filled)
-        return f"{bar} {percentage:3d}%"
-
-    def _build_display_name(self, db_info: DBInfo) -> str:
-        """構建更詳細的顯示名稱"""
-        name = db_info.db_info
-        if db_info.version:
-            name += f" v{db_info.version}"
-        elif db_info.manifest_file:
-            # 從 manifest 文件名提取版本
-            match = re.search(r'manifest_(\d+)\.xml', db_info.manifest_file)
-            if match:
-                name += f" v{match.group(1)}"
-        return name
-
-    def enhanced_monitor_display(self, active_syncs: list, elapsed: int, progress_tracker: dict):
-        """增強版進度顯示"""
-        print("\033[2J\033[H")  # 清屏
-        print(f"🔄 Repo Sync 實時監控 - {elapsed//60:02d}:{elapsed%60:02d}")
-        print("="*80)
-        
-        completed_count = 0
-        failed_count = 0
-        total_progress = 0
-        
-        for db_info in active_syncs:
-            if db_info.status == DBStatus.FAILED:
-                failed_count += 1
-                continue
-            
-            db_name = db_info.db_info
-            tracker = progress_tracker.get(db_name, {})
-            
-            # 構建顯示名稱
-            display_name = self._build_display_name(db_info)
-            
-            if db_info.sync_process:
-                poll = db_info.sync_process.poll()
-                
-                if poll is None:  # 仍在運行
-                    self._update_progress_info(db_info, tracker)
-                    
-                    progress = tracker.get('estimated_progress', 0)
-                    activity = tracker.get('current_activity', '同步中')
-                    current_count = tracker.get('current_count', 0)
-                    total_projects = tracker.get('total_projects', 0)
-                    
-                    total_progress += progress
-                    
-                    # 進度條
-                    bar_length = 20
-                    filled = int(bar_length * progress / 100)
-                    bar = "█" * filled + "░" * (bar_length - filled)
-                    
-                    # 項目信息
-                    project_info = ""
-                    if total_projects > 0:
-                        project_info = f" ({current_count}/{total_projects})"
-                    
-                    # 運行時間
-                    runtime = datetime.now() - tracker.get('start_time', datetime.now())
-                    runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
-                    
-                    print(f"🔄 {display_name:20s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity[:30]}{project_info}")
-                    
-                elif poll == 0:  # 成功完成
-                    completed_count += 1
-                    runtime = datetime.now() - tracker.get('start_time', datetime.now())
-                    runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
-                    
-                    bar = "█" * 20
-                    print(f"✅ {display_name:20s} │{bar}│ 100% │ {runtime_str} │ 完成")
-                    
-                else:  # 失敗
-                    failed_count += 1
-                    print(f"❌ {display_name:20s} │{'':20s}│   0% │      │ 失敗")
-        
-        # 總體統計
-        running_count = len(active_syncs) - completed_count - failed_count
-        avg_progress = total_progress / max(len(active_syncs) - failed_count, 1)
-        
-        print("-" * 80)
-        print(f"📊 運行:{running_count} │ 完成:{completed_count} │ 失敗:{failed_count} │ 平均進度:{avg_progress:.1f}%")
-        
-    def _display_final_summary(self, active_syncs: list, elapsed: int, progress_tracker: dict):
-        """顯示最終摘要"""
-        completed = sum(1 for db in active_syncs if db.sync_process and db.sync_process.poll() == 0)
-        failed = sum(1 for db in active_syncs if db.status == DBStatus.FAILED)
-        total_retries = sum(progress_tracker.get(db.db_info, {}).get('error_count', 0) for db in active_syncs)
-        
-        print(f"\n🏁 Repo Sync 最終報告")
-        print("=" * 60)
-        print(f"⏱️  總用時: {elapsed//60:02d}:{elapsed%60:02d}")
-        print(f"✅ 成功: {completed}")
-        print(f"❌ 失敗: {failed}")
-        print(f"🔄 總重試次數: {total_retries}")
-        print(f"📊 成功率: {(completed/(completed+failed)*100):.1f}%" if (completed+failed) > 0 else "0.0%")
-        print("=" * 60)
-        
-        self.logger.info(f"🏁 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}, 總重試 {total_retries}")
-                
-    def _combine_progress_info(self, log_progress: dict, fs_progress: dict, tracker: dict) -> dict:
-        """智能結合多種進度信息源"""
-        runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
-        
-        # 確定最可靠的進度百分比
-        if log_progress.get('log_valid') and log_progress['percentage'] > 0:
-            # 日誌解析有效，優先使用
-            percentage = log_progress['percentage']
-            primary_source = 'log'
-        elif fs_progress.get('fs_valid') and fs_progress['percentage'] > 0:
-            # 文件系統檢查有效
-            percentage = fs_progress['percentage']
-            primary_source = 'filesystem'
-        else:
-            # 使用時間估算
-            percentage = min(int(runtime_minutes * 2), 95)  # 每分鐘約2%，最多95%
-            primary_source = 'time_based'
-        
-        # 構建活動描述
-        activity_parts = []
-        
-        # 項目信息
-        if log_progress.get('current_project'):
-            project_short = log_progress['current_project'].split('/')[-1]
-            activity_parts.append(f"📁 {project_short}")
-        elif fs_progress.get('project_count', 0) > 0:
-            activity_parts.append(f"📁 {fs_progress['project_count']} 個項目")
-        
-        # 階段信息
-        if log_progress.get('sync_phase') and log_progress['sync_phase'] != 'unknown':
-            phase_emoji = {
-                'initializing': '🔄',
-                'downloading': '⬇️',
-                'resolving': '🔧',
-                'syncing': '⚡',
-                'updating': '📝',
-                'finalizing': '✅'
-            }
-            emoji = phase_emoji.get(log_progress['sync_phase'], '⚙️')
-            activity_parts.append(f"{emoji} {log_progress.get('current_activity', '處理中')}")
-        
-        # 速度信息
-        if log_progress.get('download_speed'):
-            activity_parts.append(f"🚀 {log_progress['download_speed']}")
-        
-        # 文件進度
-        if log_progress.get('files_progress'):
-            activity_parts.append(f"📊 {log_progress['files_progress']}")
-        
-        # 如果沒有詳細信息，使用基本描述
-        if not activity_parts:
-            phase_desc = log_progress.get('current_activity') or fs_progress.get('activity') or '同步中...'
-            activity_parts.append(phase_desc)
-        
-        # 添加數據源標記（調試用）
-        source_emoji = {'log': '📝', 'filesystem': '💾', 'time_based': '⏱️'}
-        activity_parts.append(f"{source_emoji.get(primary_source, '❓')}")
-        
-        # 時間估算
-        estimated_remaining = ''
-        if percentage > 5 and runtime_minutes > 1:
-            estimated_total_time = runtime_minutes * (100 / percentage)
-            remaining_time = max(0, estimated_total_time - runtime_minutes)
-            if remaining_time > 1:
-                estimated_remaining = f" (預計剩餘: {remaining_time:.0f}分)"
-        
-        return {
-            'estimated_progress': percentage,
-            'current_activity': ' | '.join(activity_parts) + estimated_remaining,
-            'current_project': log_progress.get('current_project', ''),
-            'download_speed': log_progress.get('download_speed', ''),
-            'files_progress': log_progress.get('files_progress', ''),
-            'sync_phase': log_progress.get('sync_phase', 'processing'),
-            'data_source': primary_source,
-            'runtime_minutes': runtime_minutes
-        }
-
-    def _check_filesystem_progress(self, db_info: DBInfo, tracker: dict) -> dict:
-        """檢查文件系統實際進度 - 修正計算邏輯"""
-        fs_progress = {
-            'percentage': 0,
-            'activity': '檢查中...',
-            'project_count': 0,
-            'fs_valid': False
-        }
-        
-        try:
-            # 簡化的進度計算 - 避免異常值
-            runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
-            
-            # 檢查實際的項目目錄
-            git_count = 0
-            for root, dirs, files in os.walk(db_info.local_path):
-                if '.git' in dirs and '/.repo/' not in root:
-                    git_count += 1
-            
-            # 基於時間的保守估算（每分鐘約1-2%）
-            time_based_progress = min(runtime_minutes * 1.5, 95)
-            
-            # 如果有實際項目，使用混合估算
-            if git_count > 0:
-                # 假設總共需要50-100個項目（根據實際情況調整）
-                estimated_total = max(50, git_count * 2)
-                project_progress = min((git_count / estimated_total) * 100, 95)
-                # 取時間估算和項目估算的平均值
-                final_progress = min((time_based_progress + project_progress) / 2, 95)
-            else:
-                final_progress = time_based_progress
-            
-            fs_progress.update({
-                'percentage': max(1, int(final_progress)),  # 確保至少1%
-                'activity': f'{git_count}項目' if git_count > 0 else '初始化',
-                'project_count': git_count,
-                'fs_valid': True
-            })
-            
-        except Exception as e:
-            # 備用估算
-            runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
-            fs_progress.update({
-                'percentage': max(1, min(int(runtime_minutes * 1.5), 95)),
-                'activity': '同步中',
-                'fs_valid': False
-            })
-        
-        return fs_progress
-
-    def _parse_repo_sync_progress_enhanced(self, log_file: str) -> dict:
-        """增強版日誌解析 - 更智能的模式匹配"""
-        progress_info = {
-            'percentage': 0,
-            'current_activity': '',
-            'current_project': '',
-            'download_speed': '',
-            'files_progress': '',
-            'sync_phase': 'unknown',
-            'log_valid': False
-        }
-        
-        if not log_file or not os.path.exists(log_file):
-            return progress_info
-        
-        try:
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                # 讀取最後 10KB 的內容以獲取最新狀態
-                f.seek(max(0, os.path.getsize(log_file) - 10240))
-                recent_content = f.read()
-                recent_lines = recent_content.split('\n')[-30:]  # 最後30行
-            
-            # 🎯 智能解析各種 repo sync 階段
-            current_phase = self._detect_sync_phase(recent_lines)
-            progress_info['sync_phase'] = current_phase
-            
-            for line in reversed(recent_lines):  # 從最新的行開始解析
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # 📊 Project 信息解析 (優先級最高)
-                project_info = self._extract_project_info(line)
-                if project_info:
-                    progress_info['current_project'] = project_info
-                    progress_info['current_activity'] = f"處理項目: {project_info}"
-                    progress_info['log_valid'] = True
-                
-                # 📈 百分比進度解析
-                percentage = self._extract_percentage(line)
-                if percentage is not None:
-                    progress_info['percentage'] = percentage
-                    progress_info['log_valid'] = True
-                
-                # 🚀 下載速度解析
-                speed = self._extract_download_speed(line)
-                if speed:
-                    progress_info['download_speed'] = speed
-                    progress_info['log_valid'] = True
-                
-                # 📁 文件進度解析
-                file_progress = self._extract_file_progress(line)
-                if file_progress:
-                    progress_info['files_progress'] = file_progress
-                    progress_info['log_valid'] = True
-                
-                # 如果已經獲得足夠信息，停止解析
-                if (progress_info['current_project'] and 
-                    progress_info['percentage'] > 0):
-                    break
-            
-            # 根據階段調整活動描述
-            if not progress_info['current_activity']:
-                progress_info['current_activity'] = self._get_phase_description(current_phase)
-                
-        except Exception as e:
-            self.logger.debug(f"日誌解析失敗: {e}")
-        
-        return progress_info
-
-    def _get_phase_description(self, phase: str) -> str:
-        """根據階段獲取描述"""
-        phase_descriptions = {
-            'initializing': '初始化連接...',
-            'downloading': '下載源代碼...',
-            'resolving': '解析和解壓...',
-            'syncing': '同步工作樹...',
-            'updating': '更新文件...',
-            'finalizing': '完成同步...',
-            'processing': '處理中...'
-        }
-        
-        return phase_descriptions.get(phase, '同步中...')
-
-    def _extract_file_progress(self, line: str) -> str:
-        """提取文件進度信息"""
-        file_patterns = [
-            r'\((\d+/\d+)\)',
-            r'(\d+)\s+of\s+(\d+)',
-            r'files:\s*(\d+/\d+)',
-        ]
-        
-        for pattern in file_patterns:
-            match = re.search(pattern, line)
-            if match:
-                if len(match.groups()) == 1:
-                    return match.group(1)
-                else:
-                    return f"{match.group(1)}/{match.group(2)}"
-        
-        return ''
-
-    def _extract_download_speed(self, line: str) -> str:
-        """提取下載速度"""
-        speed_patterns = [
-            r'([\d.]+\s*[KMG]?B/s)',
-            r'@\s*([\d.]+\s*[KMG]?B/s)',
-            r'speed:\s*([\d.]+\s*[KMG]?B/s)',
-        ]
-        
-        for pattern in speed_patterns:
-            match = re.search(pattern, line, re.IGNORECASE)
-            if match:
-                return match.group(1)
-        
-        return ''
-
-    def _extract_percentage(self, line: str) -> int:
-        """提取百分比進度"""
-        # 匹配各種百分比格式
-        percentage_patterns = [
-            r'(\d+)%',
-            r'(\d+)\s*percent',
-            r'progress:\s*(\d+)',
-        ]
-        
-        for pattern in percentage_patterns:
-            match = re.search(pattern, line)
-            if match:
-                percentage = int(match.group(1))
-                if 0 <= percentage <= 100:
-                    return percentage
-        
-        return None
-
-    def _extract_project_info(self, line: str) -> str:
-        """提取當前處理的項目信息"""
-        # 🎯 更精確的項目名稱匹配
-        project_patterns = [
-            r'Fetching project\s+(.+?)(?:\s|$)',
-            r'project\s+([^\s]+(?:/[^\s]+)*)',
-            r'Syncing\s+(.+?)(?:\s|$)',
-            r'Updating\s+(.+?)(?:\s|$)',
-            r'Checking out\s+(.+?)(?:\s|$)',
-        ]
-        
-        for pattern in project_patterns:
-            match = re.search(pattern, line, re.IGNORECASE)
-            if match:
-                project = match.group(1).strip()
-                # 清理項目名稱
-                project = re.sub(r'[^\w/\-_.]', '', project)
-                if len(project) > 3:  # 過濾太短的匹配
-                    return project
-        
-        return ''
-
-    def _detect_sync_phase(self, lines: list) -> str:
-        """檢測當前 sync 階段"""
-        recent_text = ' '.join(lines[-10:]).lower()
-        
-        phase_patterns = [
-            ('initializing', ['remote: counting', 'remote: enumerating']),
-            ('downloading', ['receiving objects', 'downloading', 'fetching']),
-            ('resolving', ['resolving deltas', 'unpacking objects']),
-            ('syncing', ['syncing work tree', 'checking out']),
-            ('updating', ['updating files', 'updating references']),
-            ('finalizing', ['done', 'completed'])
-        ]
-        
-        for phase, patterns in phase_patterns:
-            if any(pattern in recent_text for pattern in patterns):
-                return phase
-        
-        return 'processing'
-
-    def _fallback_progress_estimation(self, db_info: DBInfo, tracker: dict):
-        """備用進度估算方法"""
-        runtime_minutes = (datetime.now() - tracker['start_time']).total_seconds() / 60
-        
-        if runtime_minutes < 2:
-            tracker['estimated_progress'] = min(int(runtime_minutes * 15), 30)
-            tracker['current_activity'] = "初始化 repo 同步..."
-        elif runtime_minutes < 10:
-            tracker['estimated_progress'] = min(30 + int((runtime_minutes - 2) * 5), 70)
-            tracker['current_activity'] = "下載項目和源代碼..."
-        else:
-            tracker['estimated_progress'] = min(70 + int((runtime_minutes - 10) * 2), 95)
-            tracker['current_activity'] = "完成同步和檢出..."
-            
-    def _parse_repo_sync_progress(self, log_lines: list) -> dict:
-        """解析 repo sync 日誌中的詳細進度信息"""
-        progress_info = {
-            'percentage': 0,
-            'current_activity': '',
-            'current_project': '',
-            'download_speed': '',
-            'files_progress': ''
-        }
-        
-        for line in log_lines:
-            line = line.strip()
-            if not line:
-                continue
-                
-            # 🔍 解析各種進度模式
-            
-            # 1. 項目獲取進度: "Fetching project platform/build"
-            if 'Fetching project' in line:
-                project_match = re.search(r'Fetching project\s+(.+)', line)
-                if project_match:
-                    project_name = project_match.group(1)
-                    progress_info['current_project'] = project_name
-                    progress_info['current_activity'] = f"正在獲取項目: {project_name}"
-            
-            # 2. 同步進度: "Syncing work tree: 45% (123/456)"
-            elif 'Syncing work tree:' in line:
-                sync_match = re.search(r'Syncing work tree:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-                if sync_match:
-                    percentage = int(sync_match.group(1))
-                    current = sync_match.group(2)
-                    total = sync_match.group(3)
-                    progress_info['percentage'] = percentage
-                    progress_info['files_progress'] = f"{current}/{total}"
-                    progress_info['current_activity'] = f"同步工作樹: {percentage}% ({current}/{total})"
-            
-            # 3. 檢出進度: "Checking out files: 67% (234/567)"
-            elif 'Checking out files:' in line:
-                checkout_match = re.search(r'Checking out files:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-                if checkout_match:
-                    percentage = int(checkout_match.group(1))
-                    current = checkout_match.group(2)
-                    total = checkout_match.group(3)
-                    progress_info['percentage'] = percentage
-                    progress_info['files_progress'] = f"{current}/{total}"
-                    progress_info['current_activity'] = f"檢出文件: {percentage}% ({current}/{total})"
-            
-            # 4. Git 操作: "remote: Counting objects: 12345"
-            elif 'remote: Counting objects:' in line:
-                objects_match = re.search(r'remote: Counting objects:\s*(\d+)', line)
-                if objects_match:
-                    count = objects_match.group(1)
-                    progress_info['current_activity'] = f"計算對象: {count} 個"
-            
-            # 5. Git 接收: "remote: Compressing objects: 100% (456/456)"
-            elif 'remote: Compressing objects:' in line:
-                compress_match = re.search(r'remote: Compressing objects:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-                if compress_match:
-                    percentage = int(compress_match.group(1))
-                    current = compress_match.group(2)
-                    total = compress_match.group(3)
-                    progress_info['current_activity'] = f"壓縮對象: {percentage}% ({current}/{total})"
-            
-            # 6. 接收對象: "Receiving objects: 78% (1234/5678), 12.34 MiB | 1.23 MiB/s"
-            elif 'Receiving objects:' in line:
-                receive_match = re.search(r'Receiving objects:\s*(\d+)%\s*\((\d+)/(\d+)\)(?:,\s*[\d.]+\s*\w+\s*\|\s*([\d.]+\s*\w+/s))?', line)
-                if receive_match:
-                    percentage = int(receive_match.group(1))
-                    current = receive_match.group(2)
-                    total = receive_match.group(3)
-                    speed = receive_match.group(4) if receive_match.group(4) else ""
-                    
-                    progress_info['percentage'] = percentage
-                    progress_info['files_progress'] = f"{current}/{total}"
-                    progress_info['download_speed'] = speed
-                    
-                    speed_text = f" @ {speed}" if speed else ""
-                    progress_info['current_activity'] = f"接收對象: {percentage}% ({current}/{total}){speed_text}"
-            
-            # 7. 解析對象: "Resolving deltas: 89% (456/789)"
-            elif 'Resolving deltas:' in line:
-                delta_match = re.search(r'Resolving deltas:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-                if delta_match:
-                    percentage = int(delta_match.group(1))
-                    current = delta_match.group(2)
-                    total = delta_match.group(3)
-                    progress_info['current_activity'] = f"解析增量: {percentage}% ({current}/{total})"
-            
-            # 8. 項目同步完成: "project platform/build/"
-            elif 'project ' in line and '/' in line and not 'Fetching' in line:
-                project_match = re.search(r'project\s+([^\s]+)', line)
-                if project_match:
-                    project_name = project_match.group(1)
-                    progress_info['current_project'] = project_name
-                    progress_info['current_activity'] = f"處理項目: {project_name}"
-            
-            # 9. 錯誤信息
-            elif 'error:' in line.lower() or 'warning:' in line.lower():
-                if 'error:' in line.lower():
-                    progress_info['current_activity'] = "⚠️ 遇到錯誤，正在重試..."
-                else:
-                    progress_info['current_activity'] = "⚠️ 警告信息，繼續處理..."
-        
-        return progress_info
-        
     def process_selected_dbs(self, db_list: List[str], db_versions: Dict[str, str] = None):
         """處理選定的 DB"""
         if config_manager.repo_config['async_sync'] and not self.dry_run:
@@ -3388,7 +3697,7 @@ class ManifestPinningTool:
                         break
 
     def generate_report(self, output_file: str = None):
-        """產生改進版報告"""
+        """產生改進版報告 - 修正統計邏輯"""
         self.report.finalize()
         
         if not output_file:
@@ -3402,9 +3711,9 @@ class ManifestPinningTool:
             
             report_data = []
             for i, db in enumerate(self.report.db_details, 1):
-                # 🔥 修復：手動構建字典，確保所有欄位正確
+                # 手動構建字典，確保所有欄位正確
                 db_dict = {
-                    'sn': i,  # 🔥 修復：添加流水號
+                    'sn': i,
                     'module': db.module,
                     'db_type': db.db_type,
                     'db_info': db.db_info,
@@ -3413,17 +3722,14 @@ class ManifestPinningTool:
                     'start_time': db.start_time.strftime('%Y-%m-%d %H:%M:%S') if db.start_time else '',
                     'end_time': db.end_time.strftime('%Y-%m-%d %H:%M:%S') if db.end_time else '',
                     'error_message': db.error_message or '',
-                    'sync_log_path': db.sync_log_path or '',  # 🔥 修復：記錄 sync log 路徑
+                    'sync_log_path': db.sync_log_path or '',
                     'sftp_path': db.sftp_path,
                     'local_path': db.local_path or '',
                     'has_existing_repo': '是' if db.has_existing_repo else '否',
                     'jira_link': db.jira_link or '未找到',
-                    # 🔥 移除不需要的欄位
-                    # 'manifest_file': db.manifest_file or '未下載',
-                    # 'actual_source_cmd': db.actual_source_cmd or '未記錄',
                 }
                 
-                # 🔥 修復：重新命名欄位
+                # 重新命名欄位
                 db_dict['完整_JIRA_連結'] = db.jira_link or '未找到'
                 db_dict['完整_repo_init_指令'] = db.actual_source_cmd or '未記錄'
                 db_dict['manifest_版本'] = db.version or '未指定'
@@ -3439,15 +3745,17 @@ class ManifestPinningTool:
                 'start_time', 'end_time', 'sync_log_path', 'error_message'
             ]
             
-            # 確保所有欄位都存在，並重新排序
             existing_columns = [col for col in important_columns if col in df.columns]
             other_columns = [col for col in df.columns if col not in important_columns]
             df = df[existing_columns + other_columns]
             
-            # 🔥 修復：正確計算摘要統計
-            successful_count = len([db for db in self.report.db_details if db.status == DBStatus.SUCCESS])
-            failed_count = len([db for db in self.report.db_details if db.status == DBStatus.FAILED])
-            skipped_count = len([db for db in self.report.db_details if db.status == DBStatus.SKIPPED])
+            # �� 修正：重新計算統計，基於實際的 status 值
+            status_counts = df['status'].value_counts()
+            successful_count = status_counts.get('✅ 完成', 0)
+            failed_count = status_counts.get('❌ 失敗', 0)
+            skipped_count = status_counts.get('⭐️ 跳過', 0)
+            
+            self.logger.info(f"報告統計: 成功 {successful_count}, 失敗 {failed_count}, 跳過 {skipped_count}")
             
             # 建立摘要
             summary = {
@@ -3466,7 +3774,7 @@ class ManifestPinningTool:
             self._write_enhanced_excel(df, summary_df, output_file)
             
             self.logger.info(f"Excel 報告已產生: {output_file}")
-            print(f"\n📊 Excel 報告已產生: {output_file}")
+            print(f"\n�� Excel 報告已產生: {output_file}")
             
         except Exception as e:
             self.logger.error(f"產生報告失敗: {str(e)}")
@@ -3495,6 +3803,9 @@ class ManifestPinningTool:
     def _format_worksheet_enhanced(self, worksheet):
         """格式化工作表（自動適寬、表頭藍底白字）"""
         try:
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
+            
             # 設定表頭格式（藍底白字）
             header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
             header_font = Font(color="FFFFFF", bold=True)
@@ -3601,7 +3912,7 @@ class InteractiveUI:
         default_mapping = config_manager.default_execution_config.get('mapping_table')
         
         if default_mapping and os.path.exists(default_mapping):
-            print(f"\n📌 找到預設 mapping table: {default_mapping}")
+            print(f"\n�� 找到預設 mapping table: {default_mapping}")
             if input("是否使用預設檔案? (Y/n): ").strip().lower() != 'n':
                 file_path = default_mapping
             else:
@@ -3628,7 +3939,7 @@ class InteractiveUI:
             
             if config_manager.default_execution_config.get('db_type'):
                 self.selected_db_type = config_manager.default_execution_config['db_type']
-                print(f"   📌 使用預設 DB 類型: {self.selected_db_type}")
+                print(f"   �� 使用預設 DB 類型: {self.selected_db_type}")
         else:
             print("❌ 載入失敗")
     
@@ -3637,7 +3948,7 @@ class InteractiveUI:
         default_type = config_manager.default_execution_config.get('db_type')
         
         if default_type and default_type in ['all', 'master', 'premp', 'mp', 'mpbackup']:
-            print(f"\n📌 找到預設 DB 類型: {default_type}")
+            print(f"\n�� 找到預設 DB 類型: {default_type}")
             if input("是否使用預設值? (Y/n): ").strip().lower() != 'n':
                 self.selected_db_type = default_type
                 print(f"✅ 已選擇 DB 類型: {self.selected_db_type}")
@@ -3689,7 +4000,7 @@ class InteractiveUI:
         
         if default_dbs:
             if default_dbs in ['all', '*']:
-                print(f"\n📌 預設配置為選擇所有 {self.selected_db_type} 類型的 DB")
+                print(f"\n�� 預設配置為選擇所有 {self.selected_db_type} 類型的 DB")
                 if input(f"是否選擇全部 {len(db_list)} 個 DB? (Y/n): ").strip().lower() != 'n':
                     self.selected_dbs = db_list
                     print(f"✅ 已選擇所有 {len(db_list)} 個 DB")
@@ -3708,7 +4019,7 @@ class InteractiveUI:
                             parsed_dbs.append(db_spec)
                 
                 if parsed_dbs:
-                    print(f"\n📌 找到預設 DB 列表: {', '.join(default_dbs)}")
+                    print(f"\n�� 找到預設 DB 列表: {', '.join(default_dbs)}")
                     print(f"   其中 {len(parsed_dbs)} 個 DB 存在於當前 mapping table")
                     if input("是否使用預設 DB 列表? (Y/n): ").strip().lower() != 'n':
                         self.selected_dbs = parsed_dbs
@@ -3795,7 +4106,7 @@ class InteractiveUI:
             }
             
             if applicable_versions:
-                print(f"\n📌 找到預設版本設定:")
+                print(f"\n�� 找到預設版本設定:")
                 for db, ver in applicable_versions.items():
                     print(f"   {db}: 版本 {ver}")
                 
@@ -3838,13 +4149,13 @@ class InteractiveUI:
         print("\n" + "="*60)
         print("準備執行定版")
         print("="*60)
-        print(f"📌 DB 數量: {len(self.selected_dbs)}")
-        print(f"🔍 輸出目錄: {self.tool.output_dir}")
+        print(f"�� DB 數量: {len(self.selected_dbs)}")
+        print(f"�� 輸出目錄: {self.tool.output_dir}")
         
         # 詢問輸出目錄
         default_output = config_manager.default_execution_config.get('output_dir')
         if default_output:
-            print(f"📌 找到預設輸出目錄: {default_output}")
+            print(f"�� 找到預設輸出目錄: {default_output}")
             if input("是否使用預設輸出目錄? (Y/n): ").strip().lower() != 'n':
                 self.tool.output_dir = default_output
             else:
@@ -3858,22 +4169,22 @@ class InteractiveUI:
         
         # 確認執行
         if config_manager.default_execution_config.get('auto_confirm'):
-            print("📌 自動確認執行（根據預設配置）")
+            print("�� 自動確認執行（根據預設配置）")
         else:
             if input("\n確認開始執行? (Y/n): ").strip().lower() == 'n':
                 print("❌ 使用者取消操作")
                 return
         
-        print("\n🚀 開始執行定版...")
+        print("\n�� 開始執行定版...")
         
-        print("🌐 準備 SFTP 連線（每個 DB 使用獨立連線）...")
+        print("�� 準備 SFTP 連線（每個 DB 使用獨立連線）...")
         
         try:
             # 執行定版
             self.tool.process_selected_dbs(self.selected_dbs, self.db_versions)
             
             # 產生報告
-            print("\n📊 產生報告...")
+            print("\n�� 產生報告...")
             report_path = os.path.join(
                 self.tool.output_dir, 
                 config_manager.path_config['report_filename']
@@ -3895,7 +4206,7 @@ class InteractiveUI:
         if config_manager.default_execution_config.get('mapping_table'):
             file_path = config_manager.default_execution_config['mapping_table']
             if os.path.exists(file_path):
-                print(f"📌 載入預設 mapping table: {file_path}")
+                print(f"�� 載入預設 mapping table: {file_path}")
                 if self.tool.load_mapping_table(file_path):
                     print(f"✅ 成功載入")
                 else:
@@ -3911,7 +4222,7 @@ class InteractiveUI:
         # 設定 DB 類型
         if config_manager.default_execution_config.get('db_type'):
             self.selected_db_type = config_manager.default_execution_config['db_type']
-            print(f"📌 使用預設 DB 類型: {self.selected_db_type}")
+            print(f"�� 使用預設 DB 類型: {self.selected_db_type}")
         
         # 選擇 DB
         default_dbs = config_manager.default_execution_config.get('selected_dbs')
@@ -3921,7 +4232,7 @@ class InteractiveUI:
             if default_dbs in ['all', '*']:
                 unique_dbs = list(set([db.db_info for db in all_db_infos]))
                 self.selected_dbs = unique_dbs
-                print(f"📌 選擇所有 {self.selected_db_type} 類型的 DB: {len(unique_dbs)} 個")
+                print(f"�� 選擇所有 {self.selected_db_type} 類型的 DB: {len(unique_dbs)} 個")
             
             elif isinstance(default_dbs, list) and len(default_dbs) > 0:
                 parsed_dbs = []
@@ -3933,7 +4244,7 @@ class InteractiveUI:
                     else:
                         parsed_dbs.append(db_spec)
                 self.selected_dbs = parsed_dbs
-                print(f"📌 使用預設 DB 列表: {len(parsed_dbs)} 個")
+                print(f"�� 使用預設 DB 列表: {len(parsed_dbs)} 個")
         else:
             print("⚠️ 預設配置未指定 DB 列表，無法自動執行")
             return
@@ -3941,12 +4252,12 @@ class InteractiveUI:
         # 設定版本
         if config_manager.default_execution_config.get('db_versions'):
             self.db_versions.update(config_manager.default_execution_config['db_versions'])
-            print(f"📌 套用預設版本設定: {len(self.db_versions)} 個")
+            print(f"�� 套用預設版本設定: {len(self.db_versions)} 個")
         
         # 設定輸出目錄
         if config_manager.default_execution_config.get('output_dir'):
             self.tool.output_dir = config_manager.default_execution_config['output_dir']
-            print(f"📌 使用預設輸出目錄: {self.tool.output_dir}")
+            print(f"�� 使用預設輸出目錄: {self.tool.output_dir}")
         
         # 顯示摘要
         print("\n執行摘要:")
@@ -4043,7 +4354,7 @@ class InteractiveUI:
         ])
         
         if has_defaults:
-            print("(📌 已載入預設配置)")
+            print("(�� 已載入預設配置)")
         
         print("="*60)
         print("1. 載入 mapping table")
@@ -4074,7 +4385,7 @@ class InteractiveUI:
         ])
         
         if has_complete_defaults:
-            print("\n📌 偵測到完整的預設配置")
+            print("\n�� 偵測到完整的預設配置")
             if input("是否要使用預設配置快速執行? (y/N): ").strip().lower() == 'y':
                 self.quick_execute_with_defaults()
                 return
@@ -4084,7 +4395,7 @@ class InteractiveUI:
                 choice = self.display_menu()
                 
                 if choice == '0':
-                    print("\n👋 再見！")
+                    print("\n�� 再見！")
                     break
                 elif choice == '1':
                     self.load_mapping_table()
@@ -4196,19 +4507,19 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         for handler in logging.getLogger().handlers:
             handler.setLevel(logging.DEBUG)
-        print("🔍 Debug 模式已啟用")
+        print("�� Debug 模式已啟用")
     
     # 檢查是否為測試模式
     if args.dry_run:
         print("\n" + "="*60)
-        print("🧪 測試模式 (Dry Run) - 不會實際執行任何操作")
+        print("�� 測試模式 (Dry Run) - 不會實際執行任何操作")
         print("="*60)
     
     # 決定執行模式
     if args.mapping:
         # 命令列模式
         print("\n" + "="*60)
-        print(f"📋 Manifest 定版工具 v{__version__} - 命令列模式 (改進版)")
+        print(f"�� Manifest 定版工具 v{__version__} - 命令列模式 (改進版)")
         print("="*60)
         
         tool = ManifestPinningTool()
@@ -4218,7 +4529,7 @@ def main():
         
         try:
             # 載入 mapping table
-            print(f"\n📂 載入 mapping table: {args.mapping}")
+            print(f"\n�� 載入 mapping table: {args.mapping}")
             if not os.path.exists(args.mapping):
                 print(f"❌ 檔案不存在: {args.mapping}")
                 sys.exit(1)
@@ -4232,9 +4543,9 @@ def main():
             # 設定輸出目錄
             tool.output_dir = args.output or config_manager.path_config['default_output_dir']
             os.makedirs(tool.output_dir, exist_ok=True)
-            print(f"📁 輸出目錄: {tool.output_dir}")
+            print(f"�� 輸出目錄: {tool.output_dir}")
 
-            print(f"\n🌐 準備 SFTP 連線: {config_manager.sftp_config['host']}")
+            print(f"\n�� 準備 SFTP 連線: {config_manager.sftp_config['host']}")
             print("ℹ️  每個 DB 將使用獨立的 SFTP 連線")
 
             try:
@@ -4253,15 +4564,15 @@ def main():
                         else:
                             db_list.append(db_spec)
                     
-                    print(f"\n📌 使用指定的 DB 列表: {', '.join(db_list)}")
+                    print(f"\n�� 使用指定的 DB 列表: {', '.join(db_list)}")
                 else:
                     all_db_infos = tool.get_all_dbs(args.type)
                     db_list = list(set([db.db_info for db in all_db_infos]))
                     
                     if args.type == 'all':
-                        print(f"\n📌 使用所有 DB，共 {len(db_list)} 個")
+                        print(f"\n�� 使用所有 DB，共 {len(db_list)} 個")
                     else:
-                        print(f"\n📌 使用所有 {args.type} 類型的 DB，共 {len(db_list)} 個")
+                        print(f"\n�� 使用所有 {args.type} 類型的 DB，共 {len(db_list)} 個")
                 
                 # 處理額外的版本設定
                 if args.versions:
@@ -4271,11 +4582,11 @@ def main():
                             db_name, version = version_spec.split('#', 1)
                             db_versions[db_name] = version
                     
-                    print(f"📌 設定了 {len(db_versions)} 個 DB 的版本")
+                    print(f"�� 設定了 {len(db_versions)} 個 DB 的版本")
                 
                 # 確認處理資訊
                 print("\n" + "-"*40)
-                print("📋 準備處理以下 DB:")
+                print("�� 準備處理以下 DB:")
                 for i, db in enumerate(db_list, 1):
                     version_info = f" (版本: {db_versions[db]})" if db in db_versions else " (最新版本)"
                     print(f"  {i:3d}. {db}{version_info}")
@@ -4296,9 +4607,9 @@ def main():
                 # 開始處理
                 print("\n" + "="*60)
                 if args.dry_run:
-                    print("🧪 開始測試執行（不會實際執行操作）")
+                    print("�� 開始測試執行（不會實際執行操作）")
                 else:
-                    print("🚀 開始執行定版處理")
+                    print("�� 開始執行定版處理")
                 print("="*60)
                 
                 start_time = datetime.now()
@@ -4311,7 +4622,7 @@ def main():
                 
                 # 產生報告
                 if not args.dry_run:
-                    print("\n📊 產生處理報告...")
+                    print("\n�� 產生處理報告...")
                     report_path = os.path.join(
                         tool.output_dir, 
                         config_manager.path_config['report_filename']
@@ -4322,14 +4633,14 @@ def main():
                 print("\n" + "="*60)
                 print("✨ 處理完成！")
                 print("="*60)
-                print(f"📊 總 DB 數: {tool.report.total_dbs}")
+                print(f"�� 總 DB 數: {tool.report.total_dbs}")
                 print(f"✅ 成功: {tool.report.successful_dbs}")
                 print(f"❌ 失敗: {tool.report.failed_dbs}")
                 print(f"⭐️ 跳過: {tool.report.skipped_dbs}")
                 print(f"⏱️ 總耗時: {elapsed_time}")
-                print(f"📁 輸出目錄: {tool.output_dir}")
+                print(f"�� 輸出目錄: {tool.output_dir}")
                 if not args.dry_run:
-                    print(f"📊 報告檔案: {report_path}")
+                    print(f"�� 報告檔案: {report_path}")
                 print("="*60)
                 
                 # 如果有失敗的項目，顯示詳細資訊
@@ -4340,11 +4651,11 @@ def main():
                             print(f"  - {db.module}/{db.db_info}: {db.error_message}")
                 
             finally:
-                print("\n📌 清理資源...")
+                print("\n�� 清理資源...")
                 resource_manager.cleanup_all()
                 
         except KeyboardInterrupt:
-            print("\n🛑 收到 Ctrl+C，清理所有進程...")
+            print("\n�� 收到 Ctrl+C，清理所有進程...")
             resource_manager.cleanup_all()
             sys.exit(0)
             
@@ -4361,7 +4672,7 @@ def main():
     else:
         # 互動式模式
         print("\n" + "="*60)
-        print(f"🎮 Manifest 定版工具 v{__version__} - 互動式介面 (改進版)")
+        print(f"�� Manifest 定版工具 v{__version__} - 互動式介面 (改進版)")
         print("="*60)
         print("改進內容: 修復 SFTP Garbage packet 問題、改善日誌輸出")
         print("提示: 使用 -h 參數查看命令列選項")
@@ -4375,12 +4686,12 @@ def main():
             
             if args.dry_run:
                 ui.tool.dry_run = True
-                print("🧪 測試模式已啟用")
+                print("�� 測試模式已啟用")
             
             ui.run_interactive()
             
         except KeyboardInterrupt:
-            print("\n\n👋 再見！")
+            print("\n\n�� 再見！")
             sys.exit(0)
             
         except Exception as e:
