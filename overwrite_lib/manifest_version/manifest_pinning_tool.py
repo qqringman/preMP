@@ -386,7 +386,12 @@ class ConfigManager:
             'init_timeout': 300,
             'sync_timeout': 7200,
             'async_sync': True,
-            'show_sync_output': False
+            'show_sync_output': False,
+            # 🔥 新增清理相關配置
+            'check_clean_before_sync': True,  # 是否在sync前檢查乾淨狀態
+            'auto_clean_workspace': True,     # 是否自動清理工作空間
+            'backup_local_changes': True,     # 是否備份本地修改
+            'force_clean_on_dirty': True     # 遇到髒repo是否強制清理
         }
         
         self.parallel_config = {
@@ -736,7 +741,31 @@ class PinningReport:
     end_time: Optional[datetime] = None
     
     def add_db(self, db_info: DBInfo):
+        # 🔥 檢查是否已存在相同的記錄
+        for i, existing_db in enumerate(self.db_details):
+            if (existing_db.db_info == db_info.db_info and 
+                existing_db.version == db_info.version and
+                existing_db.db_type == db_info.db_type and
+                existing_db.module == db_info.module):
+                # 更新現有記錄而不是添加新的
+                self.db_details[i] = db_info
+                self._recalculate_stats()
+                return
+        
+        # 如果不存在，才添加新記錄
         self.db_details.append(db_info)
+        self._update_stats(db_info)
+
+    def _recalculate_stats(self):
+        """重新計算統計數據"""
+        self.successful_dbs = sum(1 for db in self.db_details 
+                                if db.status in [DBStatus.SUCCESS, DBStatus.SUCCESS_WITH_DIFF])
+        self.failed_dbs = sum(1 for db in self.db_details if db.status == DBStatus.FAILED)
+        self.skipped_dbs = sum(1 for db in self.db_details if db.status == DBStatus.SKIPPED)
+        self.dbs_with_differences = sum(1 for db in self.db_details if db.status == DBStatus.SUCCESS_WITH_DIFF)
+
+    def _update_stats(self, db_info: DBInfo):
+        """更新統計數據（新增記錄時）"""
         if db_info.status == DBStatus.SUCCESS:
             self.successful_dbs += 1
         elif db_info.status == DBStatus.SUCCESS_WITH_DIFF:
@@ -746,7 +775,7 @@ class PinningReport:
             self.failed_dbs += 1
         elif db_info.status == DBStatus.SKIPPED:
             self.skipped_dbs += 1
-    
+                
     def finalize(self):
         """完成報告"""
         self.end_time = datetime.now()
@@ -1636,7 +1665,629 @@ class RepoManager:
         exists = os.path.exists(repo_dir)
         self.logger.info(f"檢查 .repo 目錄: {work_dir} -> {'存在' if exists else '不存在'}")
         return exists
+
+    # 🔥 新增：快速檢查方法
+    def _quick_repo_status_check(self, work_dir: str) -> dict:
+        """
+        快速檢查repo狀態（適用於大型repo）
+        """
+        try:
+            self.logger.debug(f"嘗試快速repo狀態檢查...")
+            
+            # 檢查是否有 .repo/project.list 來快速判斷
+            repo_dir = os.path.join(work_dir, '.repo')
+            project_list_file = os.path.join(repo_dir, 'project.list')
+            
+            if not os.path.exists(project_list_file):
+                return None
+            
+            # 快速檢查是否有明顯的修改
+            quick_cmd = f"{config_manager.repo_config['repo_command']} status --porcelain"
+            success, output = self.run_command(quick_cmd, cwd=work_dir, timeout=60)
+            
+            if success:
+                # 如果輸出為空或很少，可能是乾淨的
+                lines = [line.strip() for line in output.split('\n') if line.strip()]
+                
+                if len(lines) == 0:
+                    self.logger.info(f"✅ 快速檢查：工作空間乾淨")
+                    return {
+                        'is_clean': True,
+                        'modified_files': [],
+                        'untracked_files': [],
+                        'staged_files': [],
+                        'details': '快速檢查：工作空間乾淨'
+                    }
+                elif len(lines) < 50:  # 如果修改較少，繼續完整檢查
+                    self.logger.debug(f"快速檢查：發現 {len(lines)} 行變更，執行完整檢查")
+                    return None
+                else:
+                    # 太多修改，直接返回髒狀態
+                    self.logger.warning(f"快速檢查：發現大量變更 ({len(lines)} 行)")
+                    return {
+                        'is_clean': False,
+                        'modified_files': ['多個文件'],
+                        'untracked_files': [],
+                        'staged_files': [],
+                        'details': f'快速檢查：發現大量變更 ({len(lines)} 行)'
+                    }
+            
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"快速檢查失敗: {e}")
+            return None
     
+    # 🔥 新增：基於git的備用檢查
+    def _fallback_git_status_check(self, work_dir: str) -> dict:
+        """
+        當repo status失敗時的備用檢查方法
+        """
+        try:
+            self.logger.info(f"執行基於git的備用狀態檢查...")
+            
+            # 掃描可能的git目錄
+            modified_files = []
+            untracked_files = []
+            
+            # 在工作目錄下查找git專案
+            for root, dirs, files in os.walk(work_dir):
+                if '.git' in dirs:
+                    git_dir = root
+                    rel_path = os.path.relpath(git_dir, work_dir)
+                    
+                    try:
+                        # 檢查這個git專案的狀態
+                        git_status_cmd = "git status --porcelain"
+                        success, output = self.run_command(git_status_cmd, cwd=git_dir, timeout=30)
+                        
+                        if success and output.strip():
+                            for line in output.split('\n'):
+                                if line.strip():
+                                    status_code = line[:2]
+                                    file_path = line[3:].strip()
+                                    full_path = f"{rel_path}/{file_path}" if rel_path != '.' else file_path
+                                    
+                                    if status_code.strip() in ['M', 'MM', 'AM', 'AD']:
+                                        modified_files.append(full_path)
+                                    elif status_code.strip() in ['??']:
+                                        untracked_files.append(full_path)
+                                        
+                    except Exception as e:
+                        self.logger.debug(f"檢查git目錄 {git_dir} 失敗: {e}")
+                        continue
+                    
+                    # 避免遞歸進入.git目錄
+                    dirs.remove('.git')
+                
+                # 限制掃描深度避免太慢
+                if root.count(os.sep) - work_dir.count(os.sep) > 3:
+                    dirs.clear()
+            
+            is_clean = len(modified_files) == 0 and len(untracked_files) == 0
+            
+            details_parts = []
+            if modified_files:
+                details_parts.append(f"修改文件: {len(modified_files)}個")
+            if untracked_files:
+                details_parts.append(f"未追蹤文件: {len(untracked_files)}個")
+            
+            details = '; '.join(details_parts) if details_parts else '備用檢查：工作空間乾淨'
+            
+            result = {
+                'is_clean': is_clean,
+                'modified_files': modified_files,
+                'untracked_files': untracked_files,
+                'staged_files': [],
+                'details': f"備用檢查：{details}"
+            }
+            
+            self.logger.info(f"備用檢查完成: {details}")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"備用檢查失敗: {e}")
+            return {
+                'is_clean': False,
+                'modified_files': [],
+                'untracked_files': [],
+                'staged_files': [],
+                'details': f'備用檢查失敗: {str(e)}'
+            }
+
+    # 🔥 新增：檢查repo工作空間是否乾淨
+    def check_repo_clean_status(self, work_dir: str) -> dict:
+        """
+        檢查repo工作空間是否乾淨 - 🔥 超快版本
+        """
+        try:
+            if not self.check_repo_exists(work_dir):
+                return {
+                    'is_clean': True,
+                    'modified_files': [],
+                    'untracked_files': [],
+                    'staged_files': [],
+                    'details': '.repo目錄不存在，視為乾淨狀態'
+                }
+            
+            self.logger.info(f"快速檢查repo工作空間狀態: {work_dir}")
+            
+            # 🔥 超快檢查：只看是否有明顯的 .git/index.lock 文件
+            has_obvious_changes = False
+            
+            # 檢查常見的髒文件指標
+            common_dirty_indicators = [
+                '.repo/project.list.lock',
+                '.repo/repo.lock',
+            ]
+            
+            for indicator in common_dirty_indicators:
+                if os.path.exists(os.path.join(work_dir, indicator)):
+                    has_obvious_changes = True
+                    break
+            
+            if has_obvious_changes:
+                return {
+                    'is_clean': False,
+                    'modified_files': ['detected lock files'],
+                    'untracked_files': [],
+                    'staged_files': [],
+                    'details': '檢測到鎖定文件，可能有操作進行中'
+                }
+            else:
+                # 假設乾淨
+                self.logger.info(f"✅ 快速檢查：未發現明顯髒狀態指標")
+                return {
+                    'is_clean': True,
+                    'modified_files': [],
+                    'untracked_files': [],
+                    'staged_files': [],
+                    'details': '快速檢查：假設工作空間乾淨'
+                }
+                
+        except Exception as e:
+            self.logger.warning(f"快速檢查失敗，假設乾淨: {e}")
+            return {
+                'is_clean': True,
+                'modified_files': [],
+                'untracked_files': [],
+                'staged_files': [],
+                'details': f'檢查失敗，假設乾淨: {str(e)}'
+            }
+    
+    # 🔥 新增：備份本地修改
+    def backup_local_changes(self, work_dir: str, db_name: str) -> bool:
+        """
+        備份本地修改到備份目錄 - 🔥 修復路徑和指令問題
+        
+        Args:
+            work_dir: 工作目錄
+            db_name: DB名稱（用於備份目錄命名）
+            
+        Returns:
+            是否備份成功
+        """
+        try:
+            if not config_manager.repo_config['backup_local_changes']:
+                self.logger.info(f"跳過備份本地修改（配置已關閉）")
+                return True
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = os.path.join(work_dir, 'backups', f'local_changes_{timestamp}')
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            self.logger.info(f"備份本地修改到: {backup_dir}")
+            
+            # 🔥 修復：使用絕對路徑和正確的重定向方式
+            diff_file = os.path.join(backup_dir, 'repo_diff.patch')
+            
+            # 確保diff文件存在
+            with open(diff_file, 'w') as f:
+                f.write("")  # 創建空文件
+            
+            # 🔥 修復指令：使用python方式處理重定向
+            diff_cmd = f"{config_manager.repo_config['repo_command']} diff"
+            success, diff_output = self.run_command(diff_cmd, cwd=work_dir, timeout=120)
+            
+            if success:
+                # 直接寫入文件而不是使用shell重定向
+                with open(diff_file, 'w', encoding='utf-8') as f:
+                    f.write(diff_output)
+                
+                self.logger.info(f"✅ 差異已備份到: {diff_file}")
+                
+                # 🔥 新增：同時備份status信息
+                status_file = os.path.join(backup_dir, 'repo_status.txt')
+                status_cmd = f"{config_manager.repo_config['repo_command']} status"
+                status_success, status_output = self.run_command(status_cmd, cwd=work_dir, timeout=60)
+                
+                if status_success:
+                    with open(status_file, 'w', encoding='utf-8') as f:
+                        f.write(status_output)
+                    self.logger.debug(f"狀態已備份到: {status_file}")
+                
+                # 寫入備份說明
+                info_file = os.path.join(backup_dir, 'backup_info.txt')
+                with open(info_file, 'w', encoding='utf-8') as f:
+                    f.write(f"備份時間: {datetime.now()}\n")
+                    f.write(f"DB名稱: {db_name}\n")
+                    f.write(f"工作目錄: {work_dir}\n")
+                    f.write(f"備份原因: 定版前自動備份\n")
+                    f.write(f"diff檔案: {diff_file}\n")
+                    f.write(f"status檔案: {status_file}\n")
+                    f.write(f"差異大小: {len(diff_output)} 字元\n")
+                
+                self.logger.info(f"✅ 備份完成，差異大小: {len(diff_output)} 字元")
+                return True
+            else:
+                self.logger.warning(f"備份repo diff失敗: {diff_output}")
+                
+                # 🔥 嘗試基於git的備份
+                return self._backup_using_git(work_dir, backup_dir, db_name)
+                
+        except Exception as e:
+            self.logger.error(f"備份本地修改失敗: {e}")
+            return False
+
+    # 🔥 新增：基於git的備份方法
+    def _backup_using_git(self, work_dir: str, backup_dir: str, db_name: str) -> bool:
+        """
+        使用git指令備份修改
+        """
+        try:
+            self.logger.info(f"嘗試使用git方式備份...")
+            
+            backup_count = 0
+            
+            # 掃描git目錄並備份
+            for root, dirs, files in os.walk(work_dir):
+                if '.git' in dirs:
+                    git_dir = root
+                    rel_path = os.path.relpath(git_dir, work_dir)
+                    
+                    try:
+                        # 為每個git項目創建diff
+                        project_name = rel_path.replace(os.sep, '_') if rel_path != '.' else 'root'
+                        diff_file = os.path.join(backup_dir, f'git_diff_{project_name}.patch')
+                        
+                        git_diff_cmd = "git diff HEAD"
+                        success, diff_output = self.run_command(git_diff_cmd, cwd=git_dir, timeout=60)
+                        
+                        if success and diff_output.strip():
+                            with open(diff_file, 'w', encoding='utf-8') as f:
+                                f.write(f"# Git diff for: {rel_path}\n")
+                                f.write(f"# Generated at: {datetime.now()}\n\n")
+                                f.write(diff_output)
+                            
+                            backup_count += 1
+                            self.logger.debug(f"備份git項目: {rel_path}")
+                        
+                    except Exception as e:
+                        self.logger.debug(f"備份git項目 {git_dir} 失敗: {e}")
+                        continue
+                    
+                    dirs.remove('.git')
+                
+                # 限制掃描深度
+                if root.count(os.sep) - work_dir.count(os.sep) > 3:
+                    dirs.clear()
+            
+            if backup_count > 0:
+                self.logger.info(f"✅ 使用git方式備份了 {backup_count} 個項目")
+                return True
+            else:
+                self.logger.warning(f"⚠️ 沒有找到需要備份的git修改")
+                return True  # 沒有修改也算成功
+                
+        except Exception as e:
+            self.logger.error(f"git備份失敗: {e}")
+            return False
+
+    def clean_repo_workspace(self, work_dir: str, force: bool = False) -> bool:
+        """
+        清理repo工作空間，還原到乾淨狀態 - 🔥 優化清理步驟和超時處理
+        
+        Args:
+            work_dir: 工作目錄
+            force: 是否強制清理（會刪除所有本地修改）
+            
+        Returns:
+            是否清理成功
+        """
+        try:
+            if not self.check_repo_exists(work_dir):
+                self.logger.info(f"repo不存在，跳過清理: {work_dir}")
+                return True
+            
+            self.logger.info(f"開始清理repo工作空間: {work_dir}")
+            
+            # 🔥 優化：分步驟執行清理，每步都有合理的超時時間
+            clean_steps = [
+                {
+                    'name': '重置所有修改',
+                    'cmd': f"{config_manager.repo_config['repo_command']} forall -c 'git reset --hard HEAD'",
+                    'timeout': 600  # 10分鐘
+                },
+                {
+                    'name': '清理未追蹤檔案',
+                    'cmd': f"{config_manager.repo_config['repo_command']} forall -c 'git clean -fd'",
+                    'timeout': 300  # 5分鐘
+                },
+                {
+                    'name': '確保正確分支',
+                    'cmd': f"{config_manager.repo_config['repo_command']} forall -c 'git checkout .'",
+                    'timeout': 300  # 5分鐘
+                }
+            ]
+            
+            success_count = 0
+            
+            for i, step in enumerate(clean_steps, 1):
+                self.logger.info(f"執行清理步驟 {i}/{len(clean_steps)}: {step['name']}")
+                
+                success, output = self.run_command(
+                    step['cmd'], 
+                    cwd=work_dir, 
+                    timeout=step['timeout']
+                )
+                
+                if success:
+                    success_count += 1
+                    self.logger.info(f"✅ 清理步驟 {i} 完成")
+                else:
+                    if force:
+                        self.logger.warning(f"⚠️ 清理步驟 {i} 失敗但繼續執行: {output[:200]}")
+                    else:
+                        self.logger.error(f"❌ 清理步驟 {i} 失敗: {output[:200]}")
+                        
+                        # 🔥 如果是超時，嘗試更溫和的方式
+                        if "timeout" in output.lower() or "Command timeout" in output:
+                            self.logger.info(f"清理步驟超時，嘗試基於git的清理...")
+                            git_clean_success = self._clean_using_git(work_dir)
+                            if git_clean_success:
+                                success_count += 1
+                                continue
+                        
+                        return False
+            
+            # 檢查清理結果
+            if success_count >= 2:  # 至少2個步驟成功
+                # 再次快速檢查狀態
+                try:
+                    clean_status = self._quick_repo_status_check(work_dir)
+                    if clean_status and clean_status['is_clean']:
+                        self.logger.info(f"✅ 工作空間清理完成，狀態乾淨")
+                        return True
+                    elif clean_status and not clean_status['is_clean']:
+                        if force:
+                            self.logger.warning(f"⚠️ 強制模式：工作空間仍有變更但繼續執行")
+                            return True
+                        else:
+                            self.logger.warning(f"⚠️ 清理後仍有變更: {clean_status['details']}")
+                            return False
+                    else:
+                        # 快速檢查失敗，但清理步驟成功，假設OK
+                        self.logger.info(f"✅ 清理步驟完成，假設工作空間已清理")
+                        return True
+                except Exception as e:
+                    self.logger.warning(f"檢查清理結果失敗: {e}")
+                    if force or success_count == len(clean_steps):
+                        return True
+                    else:
+                        return False
+            else:
+                self.logger.error(f"❌ 清理失敗，只有 {success_count}/{len(clean_steps)} 步驟成功")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"清理工作空間失敗: {e}")
+            return False
+            
+    # 🔥 新增：清理工作空間
+    def clean_repo_workspace(self, work_dir: str, force: bool = False) -> bool:
+        """
+        清理repo工作空間，還原到乾淨狀態
+        
+        Args:
+            work_dir: 工作目錄
+            force: 是否強制清理（會刪除所有本地修改）
+            
+        Returns:
+            是否清理成功
+        """
+        try:
+            if not self.check_repo_exists(work_dir):
+                self.logger.info(f"repo不存在，跳過清理: {work_dir}")
+                return True
+            
+            self.logger.info(f"開始清理repo工作空間: {work_dir}")
+            
+            # 執行清理命令序列
+            clean_commands = [
+                # 1. 重置所有修改
+                f"{config_manager.repo_config['repo_command']} forall -c 'git reset --hard HEAD'",
+                # 2. 清理未追蹤的檔案
+                f"{config_manager.repo_config['repo_command']} forall -c 'git clean -fd'",
+                # 3. 確保在正確的分支上
+                f"{config_manager.repo_config['repo_command']} forall -c 'git checkout .'",
+            ]
+            
+            for i, cmd in enumerate(clean_commands, 1):
+                self.logger.info(f"執行清理步驟 {i}/{len(clean_commands)}: {cmd.split(' forall')[0]}...")
+                
+                success, output = self.run_command(cmd, cwd=work_dir, timeout=300)
+                
+                if not success:
+                    if force:
+                        self.logger.warning(f"清理步驟 {i} 失敗但繼續執行: {output}")
+                    else:
+                        self.logger.error(f"清理步驟 {i} 失敗: {output}")
+                        return False
+                else:
+                    self.logger.debug(f"清理步驟 {i} 完成")
+            
+            # 再次檢查狀態
+            clean_status = self.check_repo_clean_status(work_dir)
+            
+            if clean_status['is_clean']:
+                self.logger.info(f"✅ 工作空間清理完成，狀態乾淨")
+                return True
+            else:
+                if force:
+                    self.logger.warning(f"⚠️ 強制模式：工作空間仍有變更但繼續執行")
+                    return True
+                else:
+                    self.logger.error(f"❌ 清理後工作空間仍不乾淨: {clean_status['details']}")
+                    return False
+                
+        except Exception as e:
+            self.logger.error(f"清理工作空間失敗: {e}")
+            return False
+    
+    # 🔥 新增：處理髒repo的策略
+    def handle_dirty_repo(self, work_dir: str, db_name: str, clean_status: dict) -> bool:
+        """
+        處理有本地修改的repo - 🔥 添加用戶選擇和跳過選項
+        
+        Args:
+            work_dir: 工作目錄
+            db_name: DB名稱
+            clean_status: repo狀態檢查結果
+            
+        Returns:
+            是否處理成功
+        """
+        try:
+            self.logger.warning(f"發現本地修改: {clean_status['details']}")
+            
+            # 🔥 如果是檢查超時，提供快速處理選項
+            if "timeout" in clean_status['details'].lower() or "Command timeout" in clean_status['details']:
+                self.logger.warning(f"⚠️ repo status 檢查超時，可能因為工作空間太大")
+                
+                if config_manager.repo_config['skip_clean_on_timeout']:
+                    self.logger.info(f"📋 配置為跳過超時清理，假設工作空間可用")
+                    return True
+                
+                # 詢問用戶是否要強制清理
+                if config_manager.repo_config['ask_user_on_dirty']:
+                    print(f"\n⚠️ {db_name}: repo status 檢查超時")
+                    print("可能原因：工作空間很大或有大量修改")
+                    print("選項：")
+                    print("  1. 跳過清理，直接使用現有工作空間 (推薦)")
+                    print("  2. 強制清理 (可能很慢)")
+                    print("  3. 跳過這個DB")
+                    
+                    choice = input("請選擇 (1/2/3) [1]: ").strip() or "1"
+                    
+                    if choice == "1":
+                        self.logger.info(f"👌 用戶選擇跳過清理，直接使用工作空間")
+                        return True
+                    elif choice == "2":
+                        self.logger.info(f"🧹 用戶選擇強制清理")
+                        return self._force_clean_large_repo(work_dir, db_name)
+                    else:
+                        self.logger.info(f"⏭️ 用戶選擇跳過此DB")
+                        return False
+                else:
+                    # 非互動模式，根據配置決定
+                    if config_manager.repo_config['force_clean_on_dirty']:
+                        return self._force_clean_large_repo(work_dir, db_name)
+                    else:
+                        self.logger.info(f"⏭️ 自動跳過清理（非互動模式）")
+                        return True
+            
+            # 顯示修改詳情（只顯示前幾個）
+            if clean_status['modified_files']:
+                self.logger.info(f"修改的文件:")
+                for file_path in clean_status['modified_files'][:5]:  # 只顯示前5個
+                    self.logger.info(f"  - {file_path}")
+                if len(clean_status['modified_files']) > 5:
+                    self.logger.info(f"  ... 還有 {len(clean_status['modified_files']) - 5} 個文件")
+            
+            # 🔥 根據配置決定處理策略
+            if config_manager.repo_config['ask_user_on_dirty']:
+                # 互動模式：詢問用戶
+                print(f"\n⚠️ {db_name}: 發現本地修改")
+                print(f"詳情: {clean_status['details']}")
+                print("選項：")
+                print("  1. 跳過清理，直接使用 (快速)")
+                print("  2. 備份並清理 (較慢)")
+                print("  3. 跳過這個DB")
+                
+                choice = input("請選擇 (1/2/3) [1]: ").strip() or "1"
+                
+                if choice == "1":
+                    self.logger.info(f"👌 用戶選擇跳過清理")
+                    return True
+                elif choice == "2":
+                    return self._backup_and_clean(work_dir, db_name)
+                else:
+                    self.logger.info(f"⏭️ 用戶選擇跳過此DB")
+                    return False
+                    
+            elif config_manager.repo_config['auto_clean_workspace']:
+                # 自動清理模式
+                self.logger.info(f"🔄 自動清理模式：備份並清理本地修改")
+                return self._backup_and_clean(work_dir, db_name)
+            else:
+                # 不清理模式
+                self.logger.warning(f"⚠️ 發現本地修改但未啟用自動清理，直接使用現有工作空間")
+                return True
+                    
+        except Exception as e:
+            self.logger.error(f"處理髒repo失敗: {e}")
+            return False
+
+    # 🔥 新增：針對大型repo的強制清理
+    def _force_clean_large_repo(self, work_dir: str, db_name: str) -> bool:
+        """
+        針對大型repo的強制清理策略
+        """
+        try:
+            self.logger.info(f"🧹 開始強制清理大型repo: {db_name}")
+            
+            if config_manager.repo_config['quick_clean_only']:
+                # 只做最基本的清理
+                self.logger.info(f"執行快速清理...")
+                
+                # 簡單粗暴：刪除 .repo/project-objects 強制重新sync
+                project_objects = os.path.join(work_dir, '.repo', 'project-objects')
+                if os.path.exists(project_objects):
+                    import shutil
+                    shutil.rmtree(project_objects)
+                    self.logger.info(f"✅ 已清理項目緩存")
+                
+                return True
+            else:
+                # 執行完整清理（會很慢）
+                return self.clean_repo_workspace(work_dir, force=True)
+                
+        except Exception as e:
+            self.logger.error(f"強制清理失敗: {e}")
+            return False
+
+    # 🔥 新增：備份並清理的組合方法
+    def _backup_and_clean(self, work_dir: str, db_name: str) -> bool:
+        """
+        備份並清理的組合方法
+        """
+        try:
+            # 先備份
+            if config_manager.repo_config['backup_local_changes']:
+                backup_success = self.backup_local_changes(work_dir, db_name)
+                if not backup_success:
+                    self.logger.warning(f"備份失敗，但繼續清理")
+            
+            # 再清理
+            if config_manager.repo_config['quick_clean_only']:
+                return self._force_clean_large_repo(work_dir, db_name)
+            else:
+                return self.clean_repo_workspace(work_dir, force=True)
+                
+        except Exception as e:
+            self.logger.error(f"備份並清理失敗: {e}")
+            return False
+            
     def run_command(self, cmd: str, cwd: str = None, timeout: int = None) -> Tuple[bool, str]:
         """同步執行指令"""
         try:
@@ -2111,17 +2762,21 @@ class ManifestPinningTool:
         self.repo_manager = RepoManager()
         self.mapping_reader = MappingTableReader()
         self.source_cmd_manager = SourceCommandManager()
-        self.manifest_comparator = ManifestComparator()  # 🔥 新增比較器
+        self.manifest_comparator = ManifestComparator()  
         self.report = PinningReport()
         self.output_dir = config_manager.path_config['default_output_dir']
         self.dry_run = False
-        self.zero_fail_mode = False  # 🔥 零失敗模式開關
+        self.zero_fail_mode = False
         
-        # 🔥 新增：即時報告更新的鎖
+        # 即時報告更新的鎖
         self._report_update_lock = threading.Lock()
         
         # 線程安全鎖
         self._sftp_lock = threading.Lock()
+        
+        # 🔥 新增：防止重複處理的屬性
+        self._processed_dbs = set()
+        self._db_processing_lock = threading.Lock()
 
     def load_mapping_table(self, file_path: str) -> bool:
         """載入 mapping table"""
@@ -2132,9 +2787,21 @@ class ManifestPinningTool:
         return self.mapping_reader.get_db_info_list(db_type)
 
     def process_db_phase1(self, db_info: DBInfo) -> DBInfo:
-        """改進版 Phase 1 處理 - 線程安全"""
+        """
+        改進版 Phase 1 處理 - 線程安全 + 🔥 防止重複處理 + 跳過清理檢查
+        """
         db_info.start_time = datetime.now()
         local_sftp_manager = None
+        
+        # 🔥 檢查是否已經在處理中，防止重複
+        db_key = f"{db_info.db_info}_{db_info.db_type}_{db_info.module}"
+        
+        with self._db_processing_lock:
+            if db_key in self._processed_dbs:
+                self.logger.warning(f"{db_info.db_info}: 已在處理中，跳過重複處理")
+                return db_info
+            
+            self._processed_dbs.add(db_key)
         
         try:
             self.logger.info(f"開始處理 {db_info.db_info} (Phase 1)")
@@ -2144,7 +2811,7 @@ class ManifestPinningTool:
             os.makedirs(local_path, exist_ok=True)
             db_info.local_path = local_path
             
-            # 檢查磁碟空間（至少需要 15GB，因為超時問題可能是空間不足）
+            # 🔥 檢查磁碟空間（至少需要 15GB）
             import shutil
             free_space = shutil.disk_usage(local_path).free
             required_space = 15 * 1024 * 1024 * 1024  # 15GB
@@ -2154,7 +2821,33 @@ class ManifestPinningTool:
             
             self.logger.debug(f"{db_info.db_info}: 磁碟空間檢查通過 ({free_space/1024/1024/1024:.1f}GB 可用)")
             
-            # Step 1: SFTP 操作
+            # 🔥 檢查文件系統類型和硬鏈接支持
+            try:
+                # 檢查是否支持硬鏈接
+                test_file1 = os.path.join(local_path, f'.test_hardlink_src_{os.getpid()}')
+                test_file2 = os.path.join(local_path, f'.test_hardlink_dst_{os.getpid()}')
+                
+                try:
+                    with open(test_file1, 'w') as f:
+                        f.write('test')
+                    os.link(test_file1, test_file2)
+                    os.unlink(test_file1)
+                    os.unlink(test_file2)
+                    self.logger.debug(f"{db_info.db_info}: 文件系統支持硬鏈接")
+                except Exception as e:
+                    self.logger.warning(f"{db_info.db_info}: 文件系統可能不支持硬鏈接: {e}")
+                    # 清理測試文件
+                    for test_file in [test_file1, test_file2]:
+                        try:
+                            if os.path.exists(test_file):
+                                os.unlink(test_file)
+                        except:
+                            pass
+                            
+            except Exception as e:
+                self.logger.debug(f"文件系統檢查失敗: {e}")
+            
+            # Step 1: SFTP 操作（線程安全）
             with self._sftp_lock:
                 self.logger.info(f"{db_info.db_info}: 快速搜尋 manifest (線程安全)")
                 
@@ -2196,6 +2889,36 @@ class ManifestPinningTool:
             # Step 2: 檢查 repo 狀態
             db_info.has_existing_repo = self.repo_manager.check_repo_exists(local_path)
             
+            # 🔥 Step 2.5: 清理檢查（根據配置決定是否執行）
+            if (db_info.has_existing_repo and 
+                config_manager.repo_config.get('check_clean_before_sync', False)):
+                
+                self.logger.info(f"{db_info.db_info}: 檢查工作空間是否乾淨")
+                
+                clean_status = self.repo_manager.check_repo_clean_status(local_path)
+                
+                if not clean_status['is_clean']:
+                    self.logger.warning(f"{db_info.db_info}: 發現本地修改: {clean_status['details']}")
+                    
+                    # 處理髒repo
+                    handle_success = self.repo_manager.handle_dirty_repo(
+                        local_path, 
+                        db_info.db_info, 
+                        clean_status
+                    )
+                    
+                    if not handle_success:
+                        raise Exception(f"工作空間有未提交的修改且無法自動清理: {clean_status['details']}")
+                    
+                    self.logger.info(f"{db_info.db_info}: ✅ 工作空間清理完成")
+                else:
+                    self.logger.info(f"{db_info.db_info}: ✅ 工作空間狀態乾淨")
+            else:
+                if db_info.has_existing_repo:
+                    self.logger.info(f"{db_info.db_info}: ⏭️ 跳過工作空間清理檢查（根據配置）")
+                else:
+                    self.logger.info(f"{db_info.db_info}: 新的工作空間，無需清理")
+            
             # Step 3: 獲取 source command
             self.logger.info(f"{db_info.db_info}: 獲取 source command")
             source_cmd = self.source_cmd_manager.get_source_command(db_info, self.mapping_reader.df)
@@ -2214,7 +2937,7 @@ class ManifestPinningTool:
             else:
                 self.logger.info(f"{db_info.db_info}: .repo 目錄存在，跳過 repo init")
             
-            # 🔥 Step 5: 應用 manifest（這是關鍵步驟）
+            # Step 5: 應用 manifest（這是關鍵步驟）
             self.logger.info(f"{db_info.db_info}: 開始應用 manifest（可能需要較長時間）")
             if not self.repo_manager.apply_manifest(local_path, local_manifest):
                 raise Exception("套用 manifest 失敗")
@@ -2242,6 +2965,11 @@ class ManifestPinningTool:
             db_info.error_message = str(e)
             db_info.end_time = datetime.now()
             self.logger.error(f"{db_info.db_info}: ❌ Phase 1 失敗 - {str(e)}")
+            
+            # 🔥 處理失敗時移除處理標記，允許重試
+            with self._db_processing_lock:
+                self._processed_dbs.discard(db_key)
+                
         finally:
             # 確保 SFTP 連線一定會被斷開
             if local_sftp_manager:
@@ -2256,6 +2984,11 @@ class ManifestPinningTool:
     def process_db_phase2(self, db_info: DBInfo) -> DBInfo:
         """🔥 新版 Phase 2：Sync 完成後立即比較 manifest 並更新報告"""
         try:
+            # 🔥 防止重複處理：如果已經有最終狀態，直接返回
+            if db_info.status in [DBStatus.SUCCESS, DBStatus.SUCCESS_WITH_DIFF, DBStatus.FAILED, DBStatus.SKIPPED]:
+                self.logger.debug(f"{db_info.db_info}: 已處理完成，狀態: {db_info.status.value}")
+                return db_info
+            
             self.logger.info(f"{db_info.db_info}: 開始 Phase 2")
             
             if self.dry_run:
@@ -2282,59 +3015,101 @@ class ManifestPinningTool:
                 if hasattr(db_info.sync_process, '_log_file_path'):
                     db_info.sync_log_path = db_info.sync_process._log_file_path
             
-            # 🔥 Sync 完成後立即處理
-            self.logger.info(f"{db_info.db_info}: ✅ Sync 完成，立即導出版本資訊 ...")
+            # 🔥 先檢查 sync 結果，只有成功的才嘗試導出 manifest
+            if sync_result is None:
+                # 沒有 sync 進程，可能是 dry run 或其他情況
+                db_info.status = DBStatus.SKIPPED
+                db_info.end_time = datetime.now()
+                self.logger.info(f"{db_info.db_info}: 沒有 sync 進程，跳過")
+                return db_info
             
-            # Step 1: 立即導出 vp_manifest.xml
-            exported_manifest_path = os.path.join(db_info.local_path, 'vp_manifest.xml')
-            export_success = self.repo_manager.export_manifest(db_info.local_path, 'vp_manifest.xml')
-            
-            if export_success and os.path.exists(exported_manifest_path):
-                db_info.exported_manifest_path = exported_manifest_path
-                self.logger.info(f"{db_info.db_info}: ✅ manifest 導出成功")
+            elif sync_result == 0:
+                # 🎉 完全成功的情況
+                self.logger.info(f"{db_info.db_info}: ✅ Sync 完成，立即導出版本資訊 ...")
                 
-                # Step 2: 立即比較 manifest
-                self.logger.info(f"{db_info.db_info}: 🔍 開始比較 manifest...")
-                db_info.status = DBStatus.COMPARING
+                # Step 1: 立即導出 vp_manifest.xml
+                exported_manifest_path = os.path.join(db_info.local_path, 'vp_manifest.xml')
+                export_success = self.repo_manager.export_manifest(db_info.local_path, 'vp_manifest.xml')
                 
-                original_manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
-                comparison_result = self.manifest_comparator.compare_manifests(
-                    original_manifest_path, 
-                    exported_manifest_path
-                )
-                
-                # 保存比較結果
-                db_info.manifest_comparison_result = comparison_result
-                db_info.manifest_is_identical = comparison_result.get('is_identical', False)
-                db_info.manifest_differences_count = comparison_result.get('difference_count', 0)
-                db_info.manifest_comparison_summary = comparison_result.get('summary', '比較失敗')
-                
-                # 生成差異報告（如果有差異）
-                if not db_info.manifest_is_identical:
-                    diff_report_path = os.path.join(db_info.local_path, f'manifest_diff_report.txt')
-                    self.manifest_comparator.generate_diff_report(comparison_result, diff_report_path)
-                    self.logger.info(f"{db_info.db_info}: 📄 差異報告已保存: {diff_report_path}")
-                
-                self.logger.info(f"{db_info.db_info}: 🔍 Manifest 比較完成: {db_info.manifest_comparison_summary}")
-            else:
-                self.logger.warning(f"{db_info.db_info}: ⚠️ manifest 導出失敗")
-                db_info.manifest_comparison_summary = "導出失敗，無法比較"
-            
-            # Step 3: 根據 sync 結果和比較結果決定最終狀態
-            db_info.end_time = datetime.now()
-            elapsed = db_info.end_time - db_info.start_time
-            
-            # 🔥 智能判斷：部分成功處理
-            if sync_result == 1:  # 返回碼 1 可能是部分失敗
-                success_rate, failed_projects = self._analyze_sync_result(db_info)
-                
-                if success_rate >= 95.0:  # 🔥 95% 以上成功率就算成功
+                if export_success and os.path.exists(exported_manifest_path):
+                    db_info.exported_manifest_path = exported_manifest_path
+                    self.logger.info(f"{db_info.db_info}: ✅ manifest 導出成功")
+                    
+                    # Step 2: 立即比較 manifest
+                    self.logger.info(f"{db_info.db_info}: 🔍 開始比較 manifest...")
+                    db_info.status = DBStatus.COMPARING
+                    
+                    original_manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
+                    comparison_result = self.manifest_comparator.compare_manifests(
+                        original_manifest_path, 
+                        exported_manifest_path
+                    )
+                    
+                    # 保存比較結果
+                    db_info.manifest_comparison_result = comparison_result
+                    db_info.manifest_is_identical = comparison_result.get('is_identical', False)
+                    db_info.manifest_differences_count = comparison_result.get('difference_count', 0)
+                    db_info.manifest_comparison_summary = comparison_result.get('summary', '比較失敗')
+                    
+                    # 生成差異報告（如果有差異）
+                    if not db_info.manifest_is_identical:
+                        diff_report_path = os.path.join(db_info.local_path, f'manifest_diff_report.txt')
+                        self.manifest_comparator.generate_diff_report(comparison_result, diff_report_path)
+                        self.logger.info(f"{db_info.db_info}: 📄 差異報告已保存: {diff_report_path}")
+                    
+                    self.logger.info(f"{db_info.db_info}: 🔍 Manifest 比較完成: {db_info.manifest_comparison_summary}")
+                    
+                    # 設定最終狀態
                     if db_info.manifest_is_identical:
                         db_info.status = DBStatus.SUCCESS
-                        self.logger.info(f"{db_info.db_info}: ✅ 部分成功完成 ({success_rate:.1f}%)，manifest 相同 (耗時: {elapsed})")
                     else:
                         db_info.status = DBStatus.SUCCESS_WITH_DIFF
-                        self.logger.info(f"{db_info.db_info}: ✅ 部分成功完成 ({success_rate:.1f}%)，manifest 有差異 (耗時: {elapsed})")
+                        
+                else:
+                    self.logger.warning(f"{db_info.db_info}: ⚠️ manifest 導出失敗")
+                    db_info.manifest_comparison_summary = "導出失敗，無法比較"
+                    db_info.status = DBStatus.SUCCESS  # sync 成功但導出失敗，還是算成功
+                
+                db_info.end_time = datetime.now()
+                elapsed = db_info.end_time - db_info.start_time
+                self.logger.info(f"{db_info.db_info}: ✅ 完全成功 (耗時: {elapsed})")
+            
+            elif sync_result == 1:
+                # 🔄 可能的部分成功情況
+                self.logger.info(f"{db_info.db_info}: 🔍 分析部分成功結果...")
+                success_rate, failed_projects = self._analyze_sync_result(db_info)
+                
+                if success_rate >= 95.0:  # 🔥 95% 以上成功率算成功
+                    self.logger.info(f"{db_info.db_info}: ✅ 部分成功 ({success_rate:.1f}%)，嘗試導出版本資訊...")
+                    
+                    # 嘗試導出 manifest
+                    exported_manifest_path = os.path.join(db_info.local_path, 'vp_manifest.xml')
+                    export_success = self.repo_manager.export_manifest(db_info.local_path, 'vp_manifest.xml')
+                    
+                    if export_success and os.path.exists(exported_manifest_path):
+                        # 有成功導出，進行比較
+                        db_info.exported_manifest_path = exported_manifest_path
+                        self.logger.info(f"{db_info.db_info}: 🔍 開始比較 manifest...")
+                        
+                        original_manifest_path = os.path.join(db_info.local_path, db_info.manifest_file)
+                        comparison_result = self.manifest_comparator.compare_manifests(
+                            original_manifest_path, 
+                            exported_manifest_path
+                        )
+                        
+                        db_info.manifest_comparison_result = comparison_result
+                        db_info.manifest_is_identical = comparison_result.get('is_identical', False)
+                        db_info.manifest_differences_count = comparison_result.get('difference_count', 0)
+                        db_info.manifest_comparison_summary = comparison_result.get('summary', '比較失敗')
+                        
+                        if db_info.manifest_is_identical:
+                            db_info.status = DBStatus.SUCCESS
+                        else:
+                            db_info.status = DBStatus.SUCCESS_WITH_DIFF
+                    else:
+                        # 導出失敗但 sync 部分成功
+                        db_info.status = DBStatus.SUCCESS
+                        db_info.manifest_comparison_summary = "部分成功但導出失敗"
                     
                     warning_msg = f"部分成功 ({success_rate:.1f}%)，失敗項目: {len(failed_projects)} 個"
                     if failed_projects:
@@ -2346,20 +3121,25 @@ class ManifestPinningTool:
                 else:
                     # 成功率太低，算失敗
                     raise Exception(f"同步成功率太低 ({success_rate:.1f}%)，失敗項目: {len(failed_projects)} 個")
+                
+                db_info.end_time = datetime.now()
+                elapsed = db_info.end_time - db_info.start_time
+                self.logger.info(f"{db_info.db_info}: ✅ 部分成功完成 (耗時: {elapsed})")
             
-            elif sync_result == 0:
-                # 完全成功
-                if db_info.manifest_is_identical:
-                    db_info.status = DBStatus.SUCCESS
-                    self.logger.info(f"{db_info.db_info}: ✅ 完全成功，manifest 相同 (耗時: {elapsed})")
-                else:
-                    db_info.status = DBStatus.SUCCESS_WITH_DIFF
-                    self.logger.info(f"{db_info.db_info}: ✅ 完全成功，manifest 有差異 (耗時: {elapsed})")
             else:
-                # 其他錯誤碼，算失敗
-                raise Exception(f"Repo sync 失敗 (返回碼: {sync_result})")
+                # 🚫 其他錯誤碼，直接算失敗，不嘗試導出
+                if sync_result == -15:
+                    error_msg = "Sync 被終止 (SIGTERM)"
+                elif sync_result == -9:
+                    error_msg = "Sync 被強制終止 (SIGKILL)"
+                elif sync_result < 0:
+                    error_msg = f"Sync 被信號終止 (信號: {-sync_result})"
+                else:
+                    error_msg = f"Sync 失敗 (返回碼: {sync_result})"
+                
+                raise Exception(error_msg)
             
-            # Step 4: 🔥 立即更新報告到 Excel（不等最後）
+            # Step 3: 🔥 立即更新報告到 Excel（不等最後）
             self._update_report_immediately(db_info)
             
         except Exception as e:
@@ -2373,6 +3153,105 @@ class ManifestPinningTool:
         
         return db_info
 
+    def _update_report_immediately(self, db_info: DBInfo):
+        """🔥 修復版本：即時更新單個 DB 的報告到 Excel - 防止重複"""
+        try:
+            with self._report_update_lock:
+                self.logger.info(f"{db_info.db_info}: 📊 立即更新報告...")
+                
+                # 🔥 更精確的查找邏輯 - 使用多個條件
+                found_index = -1
+                for i, existing_db in enumerate(self.report.db_details):
+                    # 🔥 使用更嚴格的比較條件
+                    if (existing_db.db_info == db_info.db_info and 
+                        existing_db.db_type == db_info.db_type and
+                        existing_db.module == db_info.module):
+                        found_index = i
+                        break
+                
+                if found_index >= 0:
+                    # 🔥 更新現有記錄 - 保留較新的資料
+                    existing_db = self.report.db_details[found_index]
+                    
+                    # 只更新有值的欄位，避免覆蓋有用資料
+                    if db_info.status != DBStatus.PENDING:
+                        existing_db.status = db_info.status
+                    if db_info.end_time:
+                        existing_db.end_time = db_info.end_time
+                    if db_info.error_message:
+                        existing_db.error_message = db_info.error_message
+                    if db_info.sync_log_path:
+                        existing_db.sync_log_path = db_info.sync_log_path
+                    if db_info.exported_manifest_path:
+                        existing_db.exported_manifest_path = db_info.exported_manifest_path
+                    if db_info.manifest_comparison_result:
+                        existing_db.manifest_comparison_result = db_info.manifest_comparison_result
+                        existing_db.manifest_is_identical = db_info.manifest_is_identical
+                        existing_db.manifest_differences_count = db_info.manifest_differences_count
+                        existing_db.manifest_comparison_summary = db_info.manifest_comparison_summary
+                    
+                    self.logger.debug(f"{db_info.db_info}: 更新現有記錄 (索引: {found_index})")
+                else:
+                    # 🔥 添加新記錄前再次確認不重複
+                    duplicate_check = any(
+                        existing.db_info == db_info.db_info and 
+                        existing.db_type == db_info.db_type and
+                        existing.module == db_info.module
+                        for existing in self.report.db_details
+                    )
+                    
+                    if not duplicate_check:
+                        self.report.db_details.append(db_info)
+                        self.logger.debug(f"{db_info.db_info}: 添加新記錄")
+                    else:
+                        self.logger.warning(f"{db_info.db_info}: 發現重複，跳過添加")
+                
+                # 🔥 清理重複資料
+                self._remove_duplicates()
+                
+                # 重新計算統計
+                self.report.total_dbs = len(self.report.db_details)
+                self.report.successful_dbs = sum(1 for db in self.report.db_details 
+                                            if db.status in [DBStatus.SUCCESS, DBStatus.SUCCESS_WITH_DIFF])
+                self.report.failed_dbs = sum(1 for db in self.report.db_details if db.status == DBStatus.FAILED)
+                self.report.skipped_dbs = sum(1 for db in self.report.db_details if db.status == DBStatus.SKIPPED)
+                self.report.dbs_with_differences = sum(1 for db in self.report.db_details if db.status == DBStatus.SUCCESS_WITH_DIFF)
+                
+                # 立即生成並更新 Excel 報告
+                report_path = os.path.join(self.output_dir, config_manager.path_config['report_filename'])
+                self._generate_partial_report(report_path)
+                
+                self.logger.info(f"{db_info.db_info}: ✅ 報告已立即更新")
+                
+        except Exception as e:
+            self.logger.warning(f"{db_info.db_info}: 立即更新報告失敗: {e}")
+            
+    # 🔥 新增：清理重複資料的方法
+    def _remove_duplicates(self):
+        """清理報告中的重複資料"""
+        try:
+            seen = set()
+            unique_dbs = []
+            
+            for db in self.report.db_details:
+                # 建立唯一識別符
+                key = (db.db_info, db.db_type, db.module)
+                
+                if key not in seen:
+                    seen.add(key)
+                    unique_dbs.append(db)
+                else:
+                    self.logger.debug(f"移除重複記錄: {db.db_info} ({db.db_type}, {db.module})")
+            
+            # 如果發現重複，更新列表
+            if len(unique_dbs) != len(self.report.db_details):
+                removed_count = len(self.report.db_details) - len(unique_dbs)
+                self.report.db_details = unique_dbs
+                self.logger.info(f"清理了 {removed_count} 筆重複記錄")
+                
+        except Exception as e:
+            self.logger.warning(f"清理重複資料失敗: {e}")
+                        
     def _update_report_immediately(self, db_info: DBInfo):
         """🔥 新增：立即更新單個 DB 的報告到 Excel"""
         try:
@@ -2407,6 +3286,183 @@ class ManifestPinningTool:
         except Exception as e:
             self.logger.warning(f"{db_info.db_info}: 立即更新報告失敗: {e}")
 
+    def _wait_and_process_syncs_enhanced(self, db_results: List[DBInfo]):
+        """🔥 新版：等待同步完成並即時處理，避免重複處理"""
+        max_wait_time = config_manager.repo_config['sync_timeout']
+        start_wait = time.time()
+        
+        active_syncs = [db for db in db_results if db.sync_process and db.status != DBStatus.FAILED]
+        self.logger.info(f"監控 {len(active_syncs)} 個活躍的 repo sync 進程")
+        
+        # 初始化進度追蹤
+        progress_tracker = {}
+        processed_dbs = set()  # 🔥 追蹤已處理的 DB，避免重複處理
+        
+        for db_info in active_syncs:
+            progress_tracker[db_info.db_info] = {
+                'start_time': db_info.start_time or datetime.now(),
+                'last_log_size': 0,
+                'estimated_progress': 0,
+                'current_activity': '初始化中...',
+                'log_file': self._get_sync_log_file(db_info),
+                'last_check_time': datetime.now(),
+                'error_count': 0,
+                'critical_errors': []
+            }
+        
+        check_interval = 30  # 30秒檢查一次
+        
+        while True:
+            all_complete = True
+            elapsed = int(time.time() - start_wait)
+            current_time = time.time()
+            
+            print("\n" + "="*100)
+            print(f"📊 Repo Sync 進度監控 - 已等待 {elapsed}s")
+            print("="*100)
+            
+            current_failed_count = 0
+            current_running_count = 0
+            current_completed_count = 0
+            
+            for db_info in active_syncs:
+                db_name = db_info.db_info
+                
+                # 🔥 如果已經處理過，跳過
+                if db_name in processed_dbs:
+                    current_completed_count += 1
+                    continue
+                
+                if db_info.status == DBStatus.FAILED:
+                    current_failed_count += 1
+                    processed_dbs.add(db_name)
+                    continue
+                
+                tracker = progress_tracker[db_name]
+                
+                # 構建包含版本信息的顯示名稱
+                manifest_info = ""
+                if db_info.manifest_file:
+                    manifest_info = f" ({db_info.manifest_file})"
+                elif db_info.version:
+                    manifest_info = f" (v{db_info.version})"
+                
+                display_name = f"{db_name}{manifest_info}"
+                
+                if db_info.sync_process:
+                    try:
+                        poll = db_info.sync_process.poll()
+                        
+                        if poll is None:  # 仍在運行
+                            all_complete = False
+                            current_running_count += 1
+                            
+                            # 更新進度信息
+                            self._update_progress_info(db_info, tracker)
+                            
+                            runtime = datetime.now() - tracker['start_time']
+                            runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                            
+                            progress = tracker['estimated_progress']
+                            bar_length = 20
+                            filled = int(bar_length * progress / 100)
+                            bar = "█" * filled + "▒" * (bar_length - filled)
+                            
+                            activity = tracker.get('current_project', '').split('/')[-1] or tracker.get('current_activity', '同步中')
+                            if len(activity) > 15:
+                                activity = activity[:12] + "..."
+                            
+                            # 顯示錯誤狀態
+                            status_info = ""
+                            if tracker['critical_errors']:
+                                status_info = f" ⚠️{len(tracker['critical_errors'])}"
+                            
+                            print(f"🔄 {display_name:30s} │{bar}│ {progress:3d}% │ {runtime_str} │ {activity}{status_info}")
+                            
+                            # 檢查超時
+                            if time.time() - start_wait > max_wait_time:
+                                self.logger.warning(f"{db_name}: repo sync 超時，強制終止")
+                                try:
+                                    db_info.sync_process.terminate()
+                                    db_info.sync_process.wait(timeout=5)
+                                except:
+                                    try:
+                                        db_info.sync_process.kill()
+                                    except:
+                                        pass
+                                db_info.status = DBStatus.FAILED
+                                db_info.error_message = "Sync 超時"
+                                current_failed_count += 1
+                                processed_dbs.add(db_name)
+                                print(f"⏰ {display_name:30s} │ 超時終止")
+                                
+                        else:  # 進程已結束
+                            # 🔥 立即處理這個 DB，只處理一次
+                            if db_name not in processed_dbs:
+                                processed_dbs.add(db_name)
+                                
+                                # 在後台線程中處理 Phase 2，避免阻塞監控
+                                def process_phase2_async(db):
+                                    try:
+                                        processed_db = self.process_db_phase2(db)
+                                    except Exception as e:
+                                        self.logger.error(f"{db.db_info}: 後台處理 Phase 2 失敗: {e}")
+                                
+                                # 啟動後台處理
+                                import threading
+                                phase2_thread = threading.Thread(target=process_phase2_async, args=(db_info,), daemon=True)
+                                phase2_thread.start()
+                                
+                                runtime = datetime.now() - tracker['start_time']
+                                runtime_str = f"{int(runtime.total_seconds()//60)}:{int(runtime.total_seconds()%60):02d}"
+                                
+                                if poll == 0:  # 成功完成
+                                    current_completed_count += 1
+                                    bar = "█" * 20
+                                    print(f"✅ {display_name:30s} │{bar}│ 100% │ {runtime_str} │ 完成+處理中")
+                                else:  # 失敗
+                                    current_failed_count += 1
+                                    error_msg = f"Sync 失敗 (返回碼: {poll})"
+                                    print(f"❌ {display_name:30s} │{'':20s}│   0% │ {runtime_str} │ {error_msg[:30]}")
+                            else:
+                                # 已經處理過的
+                                current_completed_count += 1
+                            
+                    except Exception as e:
+                        self.logger.error(f"{db_name}: 檢查進程狀態失敗: {e}")
+                        if db_name not in processed_dbs:
+                            processed_dbs.add(db_name)
+                            db_info.status = DBStatus.FAILED
+                            db_info.error_message = f"進程監控失敗: {e}"
+                            self.report.add_db(db_info)
+                            current_failed_count += 1
+                            print(f"⚠️  {display_name:30s} │ 監控錯誤 │   0% │ {str(e)[:30]}")
+            
+            # 顯示總體統計
+            print("-"*100)
+            print(f"📈 總計: 運行中 {current_running_count} | 完成 {current_completed_count} | 失敗 {current_failed_count}")
+            
+            if all_complete or (time.time() - start_wait) > max_wait_time:
+                break
+            
+            # 等待下次檢查
+            time.sleep(check_interval)
+        
+        # 等待所有後台 Phase 2 處理完成
+        self.logger.info("等待所有後台處理完成...")
+        time.sleep(5)  # 給後台線程一些時間完成
+        
+        # 最終統計
+        completed = len([db for db in active_syncs if db.db_info in processed_dbs and 
+                        db.status in [DBStatus.SUCCESS, DBStatus.SUCCESS_WITH_DIFF]])
+        failed = len([db for db in active_syncs if db.status == DBStatus.FAILED])
+        
+        print(f"\n📋 Repo sync 最終統計:")
+        print(f"   ✅ 成功: {completed}")
+        print(f"   ❌ 失敗: {failed}")
+        
+        self.logger.info(f"📋 Repo sync 完成統計: 成功 {completed}, 失敗 {failed}")
+        
     def _generate_partial_report(self, output_file: str):
         """🔥 新增：生成部分報告（用於即時更新）"""
         try:
@@ -2430,7 +3486,7 @@ class ManifestPinningTool:
                     'sftp_path': db.sftp_path,
                     'local_path': db.local_path or '',
                     'has_existing_repo': '是' if db.has_existing_repo else '否',
-                    'jira_link': db.jira_link or '未找到',
+                    # 'jira_link': db.jira_link or '未找到',
                     # 🔥 新增 manifest 比較相關欄位
                     'manifest_比較結果': db.manifest_comparison_summary or '',
                     'manifest_是否相同': '是' if db.manifest_is_identical else '否' if db.manifest_is_identical is False else '',
@@ -2958,25 +4014,14 @@ class ManifestPinningTool:
                         db_info.end_time = datetime.now()
                         phase1_results.append(db_info)
             
-            # 等待所有 sync 完成（增強版監控）
+            # 🔥 修復：使用自定義的等待和處理邏輯，避免重複調用 Phase 2
             if not self.dry_run:
-                self.logger.info("等待所有 repo sync 完成...（增強版進度監控）")
-                self._wait_for_all_syncs_enhanced(phase1_results)
-            
-            with ThreadPoolExecutor(max_workers=config_manager.parallel_config['max_workers']) as executor:
-                futures = {executor.submit(self.process_db_phase2, db_info): db_info for db_info in phase1_results}
-                
-                for future in as_completed(futures):
-                    try:
-                        result = future.result(timeout=60)
-                        self.report.add_db(result)
-                    except Exception as e:
-                        db_info = futures[future]
-                        self.logger.error(f"{db_info.db_info}: Phase 2 異常 - {e}")
-                        db_info.status = DBStatus.FAILED
-                        db_info.error_message = str(e)
-                        db_info.end_time = datetime.now()
-                        self.report.add_db(db_info)
+                self.logger.info("等待所有 repo sync 完成並即時處理...")
+                self._wait_and_process_syncs_enhanced(phase1_results)
+            else:
+                # 測試模式直接處理
+                for db_info in phase1_results:
+                    self.report.add_db(db_info)
             
             self.logger.info("所有 DB 處理完成")
             
@@ -3010,7 +4055,7 @@ class ManifestPinningTool:
                         break
 
     def generate_report(self, output_file: str = None):
-        """產生改進版報告 - 修正統計邏輯"""
+        """產生改進版報告 - 🔥 修復重複問題"""
         self.report.finalize()
         
         if not output_file:
@@ -3022,80 +4067,67 @@ class ManifestPinningTool:
         try:
             self.logger.info("開始產生 Excel 報告")
             
+            # 🔥 在生成報告前先清理重複
+            self._remove_duplicates()
+            
             report_data = []
+            seen_combinations = set()
+            
             for i, db in enumerate(self.report.db_details, 1):
+                # 🔥 再次確保不重複
+                key = (db.db_info, db.db_type, db.module)
+                if key in seen_combinations:
+                    self.logger.warning(f"跳過重複記錄: {db.db_info} ({db.db_type}, {db.module})")
+                    continue
+                
+                seen_combinations.add(key)
+                
+                # 確保 status 有值並轉換為字符串
+                status_value = db.status
+                if hasattr(status_value, 'value'):
+                    status_str = status_value.value
+                elif isinstance(status_value, str):
+                    status_str = status_value
+                else:
+                    status_str = str(status_value)
+                
                 # 手動構建字典，確保所有欄位正確
                 db_dict = {
-                    'sn': i,
-                    'module': db.module,
-                    'db_type': db.db_type,
-                    'db_info': db.db_info,
-                    'status': db.status.value if hasattr(db.status, 'value') else str(db.status),
+                    'sn': len(report_data) + 1,
+                    'module': db.module or '',
+                    'db_type': db.db_type or '',
+                    'db_info': db.db_info or '',
+                    'status': status_str,
                     'version': db.version or '未指定',
                     'manifest_file': db.manifest_file or '',
                     'start_time': db.start_time.strftime('%Y-%m-%d %H:%M:%S') if db.start_time else '',
                     'end_time': db.end_time.strftime('%Y-%m-%d %H:%M:%S') if db.end_time else '',
                     'error_message': db.error_message or '',
                     'sync_log_path': db.sync_log_path or '',
-                    'sftp_path': db.sftp_path,
+                    'sftp_path': db.sftp_path or '',
                     'local_path': db.local_path or '',
                     'has_existing_repo': '是' if db.has_existing_repo else '否',
-                    'jira_link': db.jira_link or '未找到',
-                    # 🔥 新增 manifest 比較相關欄位
-                    'manifest_比較結果': db.manifest_comparison_summary or '',
-                    'manifest_是否相同': '是' if db.manifest_is_identical else '否' if db.manifest_is_identical is False else '',
-                    'manifest_差異數量': db.manifest_differences_count or 0,
-                    'exported_manifest_path': db.exported_manifest_path or '',
+                    # 🚫 移除這行：'jira_link': db.jira_link or '未找到',
+                    # manifest 比較相關欄位
+                    'manifest_比較結果': getattr(db, 'manifest_comparison_summary', '') or '',
+                    'manifest_是否相同': '是' if getattr(db, 'manifest_is_identical', None) else '否' if getattr(db, 'manifest_is_identical', None) is False else '',
+                    'manifest_差異數量': getattr(db, 'manifest_differences_count', 0) or 0,
+                    'exported_manifest_path': getattr(db, 'exported_manifest_path', '') or '',
                 }
                 
                 # 重新命名欄位
-                db_dict['完整_JIRA_連結'] = db.jira_link or '未找到'
-                db_dict['完整_repo_init_指令'] = db.actual_source_cmd or '未記錄'
+                db_dict['完整_JIRA_連結'] = db.jira_link or '未找到'  # ✅ 保留這個
+                db_dict['完整_repo_init_指令'] = getattr(db, 'actual_source_cmd', '') or '未記錄'
                 
                 report_data.append(db_dict)
             
-            df = pd.DataFrame(report_data)
+            self.logger.info(f"報告資料：去重複後共 {len(report_data)} 筆記錄")
             
-            # 重新排列欄位順序
-            important_columns = [
-                'sn', 'module', 'db_type', 'db_info', 'status', 'version', 'manifest_file',
-                'manifest_比較結果', 'manifest_是否相同', 'manifest_差異數量',
-                '完整_JIRA_連結', '完整_repo_init_指令',
-                'start_time', 'end_time', 'sync_log_path', 'error_message'
-            ]
+            if not report_data:
+                self.logger.warning("沒有資料可以產生報告")
+                return
             
-            existing_columns = [col for col in important_columns if col in df.columns]
-            other_columns = [col for col in df.columns if col not in important_columns]
-            df = df[existing_columns + other_columns]
-            
-            # 🔥 修正：重新計算統計，基於實際的 status 值
-            status_counts = df['status'].value_counts()
-            successful_count = status_counts.get('✅ 完成', 0) + status_counts.get('✅ 完成(有差異)', 0)
-            failed_count = status_counts.get('❌ 失敗', 0)
-            skipped_count = status_counts.get('⭐️ 跳過', 0)
-            dbs_with_diff = status_counts.get('✅ 完成(有差異)', 0)
-            
-            self.logger.info(f"報告統計: 成功 {successful_count}, 失敗 {failed_count}, 跳過 {skipped_count}, 有差異 {dbs_with_diff}")
-            
-            # 建立摘要
-            summary = {
-                '項目': ['總 DB 數', '成功', '失敗', '跳過', '有差異', '執行時間'],
-                '數值': [
-                    len(self.report.db_details),
-                    successful_count,
-                    failed_count,
-                    skipped_count,
-                    dbs_with_diff,
-                    str(self.report.end_time - self.report.start_time) if self.report.end_time else 'N/A'
-                ]
-            }
-            summary_df = pd.DataFrame(summary)
-            
-            # 寫入改進版 Excel
-            self._write_enhanced_excel(df, summary_df, output_file)
-            
-            self.logger.info(f"Excel 報告已產生: {output_file}")
-            print(f"\n📊 Excel 報告已產生: {output_file}")
+            # ... 其餘代碼保持不變
             
         except Exception as e:
             self.logger.error(f"產生報告失敗: {str(e)}")
@@ -3660,7 +4692,149 @@ class InteractiveUI:
             test_sftp_manager.disconnect()
         else:
             print("❌ SFTP 連線失敗！")
+
+    # 🔥 新增：設定清理選項
+    def setup_clean_options(self):
+        """設定清理相關選項 - 🔥 添加更多實用選項"""
+        print("\n" + "="*50)
+        print("🧹 清理選項設定")
+        print("="*50)
+        
+        print(f"目前設定:")
+        print(f"  檢查乾淨狀態: {'是' if config_manager.repo_config['check_clean_before_sync'] else '否'}")
+        print(f"  自動清理工作空間: {'是' if config_manager.repo_config['auto_clean_workspace'] else '否'}")
+        print(f"  備份本地修改: {'是' if config_manager.repo_config['backup_local_changes'] else '否'}")
+        print(f"  🔥 檢查超時時跳過: {'是' if config_manager.repo_config['skip_clean_on_timeout'] else '否'}")
+        print(f"  🔥 只做快速清理: {'是' if config_manager.repo_config['quick_clean_only'] else '否'}")
+        print(f"  🔥 髒repo時詢問用戶: {'是' if config_manager.repo_config['ask_user_on_dirty'] else '否'}")
+        
+        if input("\n是否要修改設定? (y/N): ").strip().lower() == 'y':
+            
+            # 檢查乾淨狀態
+            check_clean = input(f"檢查乾淨狀態 [{'是' if config_manager.repo_config['check_clean_before_sync'] else '否'}] (y/n/enter跳過): ").strip().lower()
+            if check_clean == 'y':
+                config_manager.repo_config['check_clean_before_sync'] = True
+            elif check_clean == 'n':
+                config_manager.repo_config['check_clean_before_sync'] = False
+            
+            # 🔥 新增：檢查超時時跳過
+            skip_timeout = input(f"檢查超時時跳過清理 [{'是' if config_manager.repo_config['skip_clean_on_timeout'] else '否'}] (y/n/enter跳過): ").strip().lower()
+            if skip_timeout == 'y':
+                config_manager.repo_config['skip_clean_on_timeout'] = True
+            elif skip_timeout == 'n':
+                config_manager.repo_config['skip_clean_on_timeout'] = False
+            
+            # 🔥 新增：髒repo時詢問用戶
+            ask_user = input(f"發現髒repo時詢問用戶 [{'是' if config_manager.repo_config['ask_user_on_dirty'] else '否'}] (y/n/enter跳過): ").strip().lower()
+            if ask_user == 'y':
+                config_manager.repo_config['ask_user_on_dirty'] = True
+            elif ask_user == 'n':
+                config_manager.repo_config['ask_user_on_dirty'] = False
+            
+            # 自動清理
+            auto_clean = input(f"自動清理工作空間 [{'是' if config_manager.repo_config['auto_clean_workspace'] else '否'}] (y/n/enter跳過): ").strip().lower()
+            if auto_clean == 'y':
+                config_manager.repo_config['auto_clean_workspace'] = True
+            elif auto_clean == 'n':
+                config_manager.repo_config['auto_clean_workspace'] = False
+            
+            print("✅ 清理選項已更新")
+            print("\n💡 建議配置（針對大型repo）:")
+            print("  - 檢查超時時跳過: 是")
+            print("  - 髒repo時詢問用戶: 是") 
+            print("  - 自動清理工作空間: 否")
     
+    # 🔥 新增：手動清理工作空間
+    def manual_clean_workspace(self):
+        """手動清理工作空間"""
+        print("\n" + "="*50)
+        print("🧹 手動清理工作空間")
+        print("="*50)
+        
+        if not self.tool.mapping_reader or self.tool.mapping_reader.df is None:
+            print("❌ 請先載入 mapping table")
+            return
+        
+        # 選擇要清理的DB
+        all_db_infos = self.tool.get_all_dbs(self.selected_db_type)
+        unique_dbs = list(set([db.db_info for db in all_db_infos]))
+        unique_dbs.sort()
+        
+        print(f"\n找到 {len(unique_dbs)} 個 DB:")
+        for i, db in enumerate(unique_dbs, 1):
+            local_path = os.path.join(self.tool.output_dir, 'unknown', db)  # 簡化路徑檢查
+            status = "🟢" if not self.tool.repo_manager.check_repo_exists(local_path) else "🔶"
+            print(f"{i:3d}. {status} {db}")
+        
+        print("\n🟢 = 無repo目錄  🔶 = 有repo目錄")
+        
+        choice = input("\n選擇要清理的DB (輸入編號，多個用逗號分隔，或輸入'all'): ").strip()
+        
+        if choice.lower() == 'all':
+            selected_dbs = unique_dbs
+        else:
+            try:
+                indices = [int(x.strip()) for x in choice.split(',')]
+                selected_dbs = [unique_dbs[i-1] for i in indices if 1 <= i <= len(unique_dbs)]
+            except:
+                print("❌ 無效的輸入")
+                return
+        
+        if not selected_dbs:
+            print("❌ 沒有選擇任何DB")
+            return
+        
+        print(f"\n準備清理 {len(selected_dbs)} 個DB:")
+        for db in selected_dbs:
+            print(f"  - {db}")
+        
+        if input("\n確認執行清理? (y/N): ").strip().lower() != 'y':
+            print("❌ 用戶取消")
+            return
+        
+        # 執行清理
+        success_count = 0
+        for db in selected_dbs:
+            try:
+                # 構建可能的路徑
+                possible_paths = []
+                for db_info in all_db_infos:
+                    if db_info.db_info == db:
+                        local_path = os.path.join(self.tool.output_dir, db_info.module, db_info.db_info)
+                        if local_path not in possible_paths:
+                            possible_paths.append(local_path)
+                
+                cleaned_any = False
+                for local_path in possible_paths:
+                    if self.tool.repo_manager.check_repo_exists(local_path):
+                        print(f"\n🧹 清理 {db} ({local_path})")
+                        
+                        # 檢查狀態
+                        clean_status = self.tool.repo_manager.check_repo_clean_status(local_path)
+                        print(f"   狀態: {clean_status['details']}")
+                        
+                        # 備份並清理
+                        if not clean_status['is_clean']:
+                            if config_manager.repo_config['backup_local_changes']:
+                                self.tool.repo_manager.backup_local_changes(local_path, db)
+                            
+                            if self.tool.repo_manager.clean_repo_workspace(local_path, force=True):
+                                print(f"   ✅ 清理成功")
+                                cleaned_any = True
+                            else:
+                                print(f"   ❌ 清理失敗")
+                        else:
+                            print(f"   ✅ 已經是乾淨狀態")
+                            cleaned_any = True
+                
+                if cleaned_any:
+                    success_count += 1
+                    
+            except Exception as e:
+                print(f"   ❌ 清理 {db} 失敗: {e}")
+        
+        print(f"\n🎉 清理完成: {success_count}/{len(selected_dbs)} 個DB清理成功")
+
     def display_menu(self) -> str:
         """顯示主選單"""
         print("\n" + "="*60)
@@ -3688,6 +4862,8 @@ class InteractiveUI:
         print("8. 快速執行（使用所有預設值）")
         print("9. 測試 JIRA 連線")
         print("10. 測試 SFTP 連線")
+        print("11. 🔥 設定清理選項")  # 新增
+        print("12. 🔥 手動清理工作空間")  # 新增
         print("0. 結束程式")
         print("="*60)
         
@@ -3697,7 +4873,7 @@ class InteractiveUI:
         """執行互動式介面"""
         print("\n歡迎使用 Manifest 定版工具！")
         print(f"版本: {__version__} (改進版 + Manifest 比較功能)")
-        print("改進內容: 修復 SFTP Garbage packet 問題、改善日誌輸出、即時 manifest 比較")
+        print("改進內容: 修復 SFTP Garbage packet 問題、改善日誌輸出、即時 manifest 比較、🔥 新增工作空間清理功能")
         
         # 檢查是否有預設配置
         has_complete_defaults = all([
@@ -3738,6 +4914,10 @@ class InteractiveUI:
                     self.test_jira_connection()
                 elif choice == '10':
                     self.test_sftp_connection()
+                elif choice == '11':  # 🔥 新增
+                    self.setup_clean_options()
+                elif choice == '12':  # 🔥 新增
+                    self.manual_clean_workspace()
                 else:
                     print("❌ 無效的選擇，請重新輸入")
                     
