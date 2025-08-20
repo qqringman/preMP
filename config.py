@@ -311,6 +311,52 @@ def get_linux_android_path(linux_version: str, template: str) -> str:
     return template.format(linux_ver=linux_version, android_version=CURRENT_ANDROID_VERSION)
 
 # =====================================
+# ===== Gerrit URL 動態生成函數 =====
+# =====================================
+
+def get_gerrit_manifest_base_path() -> str:
+    """取得 Gerrit manifest 的基礎路徑"""
+    return f'realtek/android-{CURRENT_ANDROID_VERSION}/master'
+
+def get_gerrit_manifest_url(filename: str) -> str:
+    """
+    生成 Gerrit manifest 檔案的完整 URL
+    
+    Args:
+        filename: manifest 檔案名 (如 'atv-google-refplus.xml')
+        
+    Returns:
+        完整的 Gerrit URL
+    """
+    base_path = get_gerrit_manifest_base_path()
+    return f'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{base_path}/{filename}'
+
+def get_repo_manifest_url() -> str:
+    """取得 repo manifest 的 SSH URL"""
+    return "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+
+def get_repo_branch() -> str:
+    """取得 repo 分支名稱"""
+    return get_gerrit_manifest_base_path()
+
+# 預定義常用的 manifest 檔案 URL
+def get_master_manifest_url() -> str:
+    """取得 Master manifest URL"""
+    return get_gerrit_manifest_url('atv-google-refplus.xml')
+
+def get_premp_manifest_url() -> str:
+    """取得 PreMP manifest URL"""
+    return get_gerrit_manifest_url('atv-google-refplus-premp.xml')
+
+def get_mp_manifest_url() -> str:
+    """取得 MP manifest URL"""
+    return get_gerrit_manifest_url('atv-google-refplus-wave.xml')
+
+def get_mp_backup_manifest_url() -> str:
+    """取得 MP Backup manifest URL"""
+    return get_gerrit_manifest_url('atv-google-refplus-wave-backup.xml')
+
+# =====================================
 # ===== 晶片映射設定 =====
 # =====================================
 
