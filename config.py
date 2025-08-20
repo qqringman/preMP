@@ -355,7 +355,7 @@ def get_mp_manifest_url() -> str:
 def get_mp_backup_manifest_url() -> str:
     """取得 MP Backup manifest URL"""
     return get_gerrit_manifest_url('atv-google-refplus-wave-backup.xml')
-
+    
 # =====================================
 # ===== 晶片映射設定 =====
 # =====================================
