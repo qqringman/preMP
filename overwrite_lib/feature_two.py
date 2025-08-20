@@ -414,19 +414,12 @@ class FeatureTwo:
                     
                     df_main = pd.DataFrame(clean_projects)
                     
-                    # 🔥 統一欄位順序（按照指定順序，移除重複的 branch_link）
+                    # 🔥 統一欄位順序（新增 target_open_project_link 和 open_project_link 在 branch_link 右方）
                     main_column_order = [
                         'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
                         'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
-                        'groups', 'clone-depth', 'remote'
-                    ]
-                    
-                    # 🔥 統一欄位順序（移除重複的 branch_link）
-                    main_column_order = [
-                        'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
-                        'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
+                        'target_open_project_link', 'open_project_link',  # 🔥 新增欄位
                         'groups', 'clone-depth', 'remote'
                     ]
                     
@@ -464,6 +457,7 @@ class FeatureTwo:
                         'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
                         'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
+                        'target_open_project_link', 'open_project_link',  # 🔥 新增欄位
                         'groups', 'clone-depth', 'remote'
                     ])
                 
@@ -914,6 +908,10 @@ class FeatureTwo:
                     link_columns['branch_link'] = col_num
                 elif header_value == 'target_branch_link':
                     link_columns['target_branch_link'] = col_num
+                elif header_value == 'target_open_project_link':  # 🔥 新增
+                    link_columns['target_open_project_link'] = col_num
+                elif header_value == 'open_project_link':  # 🔥 新增
+                    link_columns['open_project_link'] = col_num
             
             # 格式化 branch_link 欄位 (藍底白字，內容藍色連結)
             if 'branch_link' in link_columns:
@@ -950,7 +948,43 @@ class FeatureTwo:
                 
                 # 調整欄寬
                 worksheet.column_dimensions[col_letter].width = 60
+
+            # 🔥 格式化 target_open_project_link 欄位 (綠底白字，與 target_branch_link 一致)
+            if 'target_open_project_link' in link_columns:
+                col_num = link_columns['target_open_project_link']
+                col_letter = get_column_letter(col_num)
                 
+                header_cell = worksheet[f"{col_letter}1"]
+                header_cell.fill = green_fill
+                header_cell.font = white_font
+                
+                # 🔥 設定 HYPERLINK 內容為藍色連結
+                for row_num in range(2, worksheet.max_row + 1):
+                    content_cell = worksheet[f"{col_letter}{row_num}"]
+                    if content_cell.value and str(content_cell.value).startswith('=HYPERLINK'):
+                        content_cell.font = green_link_font
+                
+                # 調整欄寬
+                worksheet.column_dimensions[col_letter].width = 60
+
+            # 🔥 格式化 open_project_link 欄位 (藍底白字，與 branch_link 一致)
+            if 'open_project_link' in link_columns:
+                col_num = link_columns['open_project_link']
+                col_letter = get_column_letter(col_num)
+                
+                header_cell = worksheet[f"{col_letter}1"]
+                header_cell.fill = blue_fill
+                header_cell.font = white_font
+                
+                # 🔥 設定 HYPERLINK 內容為藍色連結
+                for row_num in range(2, worksheet.max_row + 1):
+                    content_cell = worksheet[f"{col_letter}{row_num}"]
+                    if content_cell.value and str(content_cell.value).startswith('=HYPERLINK'):
+                        content_cell.font = blue_link_font
+                
+                # 調整欄寬
+                worksheet.column_dimensions[col_letter].width = 60
+                                
             self.logger.info("已完成統一連結欄位格式化（支援 HYPERLINK，確保branch_link樣式一致）")
             
         except Exception as e:
@@ -1626,12 +1660,18 @@ class FeatureTwo:
             
             # 🔥 建立 target_manifest 連結
             target_manifest = self._build_target_manifest_link(target_branch, remote)
-            
+
+            # 🔥 新增：建立 target_open_project_link 和 open_project_link
+            target_open_project_link = self._build_open_project_link(project_name, project.get('dest-branch', ''), remote, is_target=True)
+            open_project_link = self._build_open_project_link(project_name, target_branch, remote, is_target=False)
+
             # revision_diff 欄位將使用 Excel 公式
             revision_diff = ''
             
             # 添加所有欄位
             enhanced_project['branch_link'] = branch_link
+            enhanced_project['target_open_project_link'] = target_open_project_link  # 🔥 新增
+            enhanced_project['open_project_link'] = open_project_link  # 🔥 新增            
             enhanced_project['target_branch_link'] = target_branch_link
             enhanced_project['target_manifest'] = target_manifest
             
@@ -1648,6 +1688,55 @@ class FeatureTwo:
         
         return projects_with_links
 
+    def _build_open_project_link(self, project_name: str, branch_name: str, remote: str = '', is_target: bool = True) -> str:
+        """
+        🔥 新方法：建立 Open Project 連結
+        
+        Args:
+            project_name: 專案名稱
+            branch_name: 分支名稱
+            remote: remote 類型
+            is_target: True=target_open_project_link, False=open_project_link
+            
+        Returns:
+            HYPERLINK 函數字串
+        """
+        try:
+            if not project_name or not branch_name:
+                return ""
+            
+            import urllib.parse
+            
+            # URL 編碼專案名稱和分支名稱
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_branch = urllib.parse.quote(branch_name, safe='')
+            
+            # 🔥 根據需求決定使用哪個服務器
+            if is_target:
+                # target_open_project_link: 根據 remote 決定服務器
+                if remote == 'rtk-prebuilt':
+                    base_url = 'https://mm2sd-git2.rtkbf.com'
+                else:
+                    base_url = 'https://mm2sd.rtkbf.com'
+            else:
+                # open_project_link: 一律使用 mm2sd.rtkbf.com
+                base_url = 'https://mm2sd.rtkbf.com'
+            
+            # 🔥 建立查詢 URL（添加 is:open 條件）
+            query_url = f"{base_url}/gerrit/q/project:{encoded_project}+branch:{encoded_branch}+is:open"
+            
+            # 建立 HYPERLINK 函數
+            hyperlink = f'=HYPERLINK("{query_url}","{query_url}")'
+            
+            link_type = "target_open_project_link" if is_target else "open_project_link"
+            self.logger.debug(f"建立 {link_type}: {project_name}/{branch_name} -> {base_url} (remote: {remote})")
+            
+            return hyperlink
+            
+        except Exception as e:
+            self.logger.error(f"建立 Open Project 連結失敗 {project_name}: {str(e)}")
+            return ""
+            
     def _build_target_manifest_link(self, target_branch: str, remote: str = '') -> str:
         """
         🔥 建立 target_manifest 連結 - 顯示文字使用完整 URL
