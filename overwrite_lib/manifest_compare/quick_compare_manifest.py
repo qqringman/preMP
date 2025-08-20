@@ -216,11 +216,12 @@ def integrate_with_main_menu():
             
             gerrit = GerritManager()
             
-            # 下載 master manifest
+            # 🔥 使用 config.py 動態生成預設 URL
             master_url = input("請輸入 Master manifest 的 Gerrit URL: ").strip()
             if not master_url:
-                master_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml"
+                master_url = config.get_master_manifest_url()
                 print(f"使用預設 URL: {master_url}")
+                print(f"🔧 動態生成，當前 Android 版本: {config.get_current_android_version()}")
             
             temp_dir = tempfile.mkdtemp()
             master_file = os.path.join(temp_dir, "master_manifest.xml")
@@ -231,11 +232,12 @@ def integrate_with_main_menu():
                 print(f"❌ 下載 Master manifest 失敗")
                 return False
             
-            # 下載 premp manifest
+            # 🔥 使用 config.py 動態生成預設 URL
             premp_url = input("請輸入 PreMP manifest 的 Gerrit URL: ").strip()
             if not premp_url:
-                premp_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml"
+                premp_url = config.get_premp_manifest_url()
                 print(f"使用預設 URL: {premp_url}")
+                print(f"🔧 動態生成，當前 Android 版本: {config.get_current_android_version()}")
             
             premp_file = os.path.join(temp_dir, "premp_manifest.xml")
             
