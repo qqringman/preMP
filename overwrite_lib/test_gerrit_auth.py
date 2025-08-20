@@ -29,6 +29,7 @@ def test_gerrit_auth():
         print(f"  User: {user}")
         print(f"  Password: {'已設定' if password else '未設定'}")
         print(f"  Base URL: {base_url}")
+        print(f"  📱 當前 Android 版本: {config.get_current_android_version()}")
         print()
         
     except ImportError:
@@ -39,8 +40,14 @@ def test_gerrit_auth():
         print("❌ 請先在 config.py 中設定 GERRIT_USER 和 GERRIT_PW")
         return
     
-    # 測試 URL
-    test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml?format=TEXT"
+    # 🔥 使用 config.py 動態生成測試 URL
+    base_test_url = config.get_master_manifest_url()
+    test_url = f"{base_test_url}?format=TEXT"
+    
+    print(f"🔧 使用動態生成的測試 URL:")
+    print(f"   基礎 URL: {base_test_url}")
+    print(f"   完整測試 URL: {test_url}")
+    print()
     
     # 瀏覽器標頭
     headers = {

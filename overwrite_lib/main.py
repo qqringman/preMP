@@ -13,6 +13,7 @@ from feature_three import FeatureThree
 import subprocess
 import tempfile
 import shutil
+import config
 
 logger = utils.setup_logger(__name__)
 
@@ -867,8 +868,12 @@ class FeatureManager:
         if push_to_gerrit:
             print(f"  5. 🚀 推送到 Gerrit (如需要)")
             print(f"     • Git clone ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest")
-            print(f"     • Git commit & push to refs/for/realtek/android-14/master")
+            
+            # 使用 config.py 生成動態分支路徑
+            push_branch = config.get_gerrit_manifest_base_path()
+            print(f"     • Git commit & push to refs/for/{push_branch}")
             print(f"     • 建立 Code Review")
+            print(f"     💡 當前 Android 版本: {config.get_current_android_version()}")
     
     def _show_feature_three_results(self, output_folder, push_to_gerrit):
         """顯示功能三結果"""
@@ -1427,20 +1432,20 @@ class MainApplication:
         from gerrit_manager import GerritManager
         gerrit = GerritManager()
         
-        # 定義不同比較類型的檔案配置
+        # 定義不同比較類型的檔案配置 - 使用 config.py 中的 URL 函數
         comparison_configs = {
             'master_vs_premp': {
                 'file1': {
                     'name': 'Master',
                     'filename': 'atv-google-refplus.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml',
+                    'url': config.get_master_manifest_url(),
                     'local_name': 'master_manifest.xml',
                     'need_expand_check': True  # 🔥 標記需要檢查 include
                 },
                 'file2': {
                     'name': 'PreMP',
                     'filename': 'atv-google-refplus-premp.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
+                    'url': config.get_premp_manifest_url(),
                     'local_name': 'premp_manifest.xml',
                     'need_expand_check': False
                 }
@@ -1449,14 +1454,14 @@ class MainApplication:
                 'file1': {
                     'name': 'PreMP',
                     'filename': 'atv-google-refplus-premp.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
+                    'url': config.get_premp_manifest_url(),
                     'local_name': 'premp_manifest.xml',
                     'need_expand_check': False
                 },
                 'file2': {
                     'name': 'MP Wave',
                     'filename': 'atv-google-refplus-wave.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
+                    'url': config.get_mp_manifest_url(),
                     'local_name': 'mp_manifest.xml',
                     'need_expand_check': False
                 }
@@ -1465,14 +1470,14 @@ class MainApplication:
                 'file1': {
                     'name': 'MP Wave',
                     'filename': 'atv-google-refplus-wave.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
+                    'url': config.get_mp_manifest_url(),
                     'local_name': 'mp_manifest.xml',
                     'need_expand_check': False
                 },
                 'file2': {
                     'name': 'MP Backup',
                     'filename': 'atv-google-refplus-wave-backup.xml',
-                    'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave-backup.xml',
+                    'url': config.get_mp_backup_manifest_url(),
                     'local_name': 'mp_backup_manifest.xml',
                     'need_expand_check': False
                 }
@@ -1774,28 +1779,28 @@ class MainApplication:
             '1': {
                 'name': 'Master',
                 'filename': 'atv-google-refplus.xml',
-                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml',
+                'url': config.get_master_manifest_url(),
                 'description': '原始 master manifest',
                 'need_expand': True
             },
             '2': {
                 'name': 'PreMP',
                 'filename': 'atv-google-refplus-premp.xml',
-                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-premp.xml',
+                'url': config.get_premp_manifest_url(),
                 'description': 'PreMP 轉換後 manifest',
                 'need_expand': False
             },
             '3': {
                 'name': 'MP Wave',
                 'filename': 'atv-google-refplus-wave.xml',
-                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml',
+                'url': config.get_mp_manifest_url(),
                 'description': 'MP Wave manifest',
                 'need_expand': False
             },
             '4': {
                 'name': 'MP Backup',
                 'filename': 'atv-google-refplus-wave-backup.xml',
-                'url': 'https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave-backup.xml',
+                'url': config.get_mp_backup_manifest_url(),
                 'description': 'MP Wave Backup manifest',
                 'need_expand': False
             }
@@ -1978,14 +1983,16 @@ class MainApplication:
             expanded_filename = input_filename.replace('.xml', '_expand.xml')
             final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
             
-            # Gerrit 設定
-            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
-            branch = "realtek/android-14/master"
+            # Gerrit 設定 - 使用 config.py 中的函數
+            repo_url = config.get_repo_manifest_url()
+            branch = config.get_repo_branch()
             
             self.logger.info(f"🎯 準備展開 manifest...")
             self.logger.info(f"🎯 源檔案: {input_filename}")
             self.logger.info(f"🎯 展開檔案名: {expanded_filename}")
             self.logger.info(f"🎯 目標絕對路徑: {final_expanded_path}")
+            self.logger.info(f"🎯 使用 repo URL: {repo_url}")
+            self.logger.info(f"🎯 使用分支: {branch}")
             
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
@@ -2084,7 +2091,12 @@ class MainApplication:
         """自定義 URL 下載"""
         print(f"\n📥 自定義 URL 下載")
         print(f"請輸入完整的 Gerrit manifest URL")
-        print(f"範例: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/your-file.xml")
+        
+        # 使用 config.py 生成動態範例 URL
+        base_path = config.get_gerrit_manifest_base_path()
+        example_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{base_path}/your-file.xml"
+        print(f"範例: {example_url}")
+        print(f"💡 當前 Android 版本: {config.get_current_android_version()}")
         
         custom_url = input(f"\nURL: ").strip()
         if not custom_url:
@@ -2122,10 +2134,13 @@ class MainApplication:
     
     def _open_gerrit_browser(self):
         """開啟 Gerrit 瀏覽器查看可用檔案"""
-        browse_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/"
+        # 使用 config.py 生成動態 URL
+        base_path = config.get_gerrit_manifest_base_path()
+        browse_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{base_path}/"
         
         print(f"\n🌐 開啟 Gerrit 瀏覽器")
         print(f"URL: {browse_url}")
+        print(f"📋 當前 Android 版本: {config.get_current_android_version()}")
         print(f"\n📋 已知的可用檔案:")
         print(f"  ✅ atv-google-refplus.xml (Master)")
         print(f"  ✅ atv-google-refplus-premp.xml (PreMP)")

@@ -101,7 +101,7 @@ class GerritManager:
         
         Args:
             repo_url: repo URL (ex: ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest)
-            branch: 分支名稱 (ex: realtek/android-14/master)
+            branch: 分支名稱 (ex: realtek/{config.get_current_android_version()}/master)
             manifest_file: manifest 檔案名稱 (ex: atv-google-refplus.xml)
             
         Returns:
@@ -184,8 +184,8 @@ class GerritManager:
         """
         將 gitiles URL 轉換為 API URL
         
-        原始: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
-        轉換: https://mm2sd.rtkbf.com/gerrit/a/projects/realtek%2Fandroid%2Fmanifest/branches/realtek%2Fandroid-14%2Fmaster/files/atv-google-refplus.xml/content
+        原始: https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/{config.get_current_android_version()}/master/atv-google-refplus.xml
+        轉換: https://mm2sd.rtkbf.com/gerrit/a/projects/realtek%2Fandroid%2Fmanifest/branches/realtek%2F{config.get_current_android_version()}%2Fmaster/files/atv-google-refplus.xml/content
         """
         try:
             if '/gerrit/plugins/gitiles/' not in original_url:
@@ -202,7 +202,7 @@ class GerritManager:
             path_part = parts[1]
             
             # 解析路徑組件
-            # realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml
+            # realtek/android/manifest/+/refs/heads/realtek/{config.get_current_android_version()}/master/atv-google-refplus.xml
             path_components = path_part.split('/')
             
             if len(path_components) < 7:
@@ -222,7 +222,7 @@ class GerritManager:
             
             # 提取組件
             project_path = '/'.join(path_components[:plus_index])  # realtek/android/manifest
-            ref_parts = path_components[plus_index + 1:]  # refs/heads/realtek/android-14/master/atv-google-refplus.xml
+            ref_parts = path_components[plus_index + 1:]  # refs/heads/realtek/{config.get_current_android_version()}/master/atv-google-refplus.xml
             
             if len(ref_parts) < 5:
                 self.logger.warning(f"ref 組件不足: {ref_parts}")
@@ -230,8 +230,8 @@ class GerritManager:
             
             # 提取分支和檔案
             if ref_parts[0] == 'refs' and ref_parts[1] == 'heads':
-                # refs/heads/realtek/android-14/master/atv-google-refplus.xml
-                branch_parts = ref_parts[2:-1]  # realtek/android-14/master
+                # refs/heads/realtek/{config.get_current_android_version()}/master/atv-google-refplus.xml
+                branch_parts = ref_parts[2:-1]  # realtek/{config.get_current_android_version()}/master
                 file_name = ref_parts[-1]  # atv-google-refplus.xml
                 
                 branch_path = '/'.join(branch_parts)
@@ -452,7 +452,6 @@ class GerritManager:
             self.logger.error(f"檢查檔案存在性失敗: {str(e)}")
             return False
     
-    # 保留其他方法不變...
     def test_connection(self) -> Dict[str, Any]:
         """測試 Gerrit 連線和認證"""
         result = {
@@ -511,9 +510,13 @@ class GerritManager:
                             result['details']['successful_endpoint'] = api_url
                             self.logger.info(f"API 認證成功 - 用戶: {user_info.get('name', 'Unknown')}")
                             
-                            # 3. 測試檔案下載（使用新的 API 方法）
+                            # 3. 測試檔案下載（使用 config.py 動態生成 URL）
                             self.logger.info("測試檔案下載...")
-                            test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus.xml"
+                            
+                            # 🔥 使用 config.py 中的函數動態生成測試 URL
+                            test_url = config.get_master_manifest_url()
+                            self.logger.info(f"使用測試 URL: {test_url}")
+                            self.logger.info(f"當前 Android 版本: {config.get_current_android_version()}")
                             
                             # 測試 API 風格下載
                             api_download_url = self._convert_to_api_url(test_url)
@@ -522,12 +525,15 @@ class GerritManager:
                                 if test_response.status_code == 200:
                                     result['tests_performed'].append(f"檔案下載測試 (API 成功)")
                                     result['details']['download_method'] = 'API'
+                                    result['details']['test_url'] = test_url
                                 else:
                                     result['tests_performed'].append(f"檔案下載測試 (API 失敗 HTTP {test_response.status_code})")
                                     result['details']['download_method'] = 'API 失敗'
+                                    result['details']['test_url'] = test_url
                             else:
                                 result['tests_performed'].append(f"檔案下載測試 (URL 轉換失敗)")
                                 result['details']['download_method'] = 'URL 轉換失敗'
+                                result['details']['test_url'] = test_url
                             
                             return result
                         except json.JSONDecodeError as e:
@@ -556,7 +562,6 @@ class GerritManager:
             self.logger.error(result['message'])
             return result
 
-    # 其他方法保持不變...
     def query_branches(self, project_name: str) -> List[str]:
         """查詢專案的所有分支"""
         try:

@@ -6,6 +6,7 @@ import requests
 import base64
 import os
 import sys
+import config
 
 # 加入上一層目錄到路徑以載入 config
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,9 +17,11 @@ if parent_dir not in sys.path:
 def diagnose_gerrit_download():
     """診斷 Gerrit 檔案下載問題 - 支援認證"""
     
-    # 載入認證資訊
+    # 顯示版本資訊
+    print("🔍 Gerrit 下載診斷工具 (支援認證)")
+    print("=" * 60)
+    
     try:
-        import config
         user = getattr(config, 'GERRIT_USER', '')
         password = getattr(config, 'GERRIT_PW', '')
         base_url = getattr(config, 'GERRIT_BASE', 'https://mm2sd.rtkbf.com/').rstrip('/')
@@ -28,6 +31,7 @@ def diagnose_gerrit_download():
         print(f"認證用戶: {user}")
         print(f"密碼長度: {len(password)} 字符")
         print(f"Base URL: {base_url}")
+        print(f"📱 當前 Android 版本: {config.get_current_android_version()}")
         
         if not user or not password:
             print("❌ 缺少認證資訊，請檢查 config.py 中的 GERRIT_USER 和 GERRIT_PW")
@@ -40,10 +44,11 @@ def diagnose_gerrit_download():
     # 設定認證
     auth = (user, password)
     
-    # 測試 URL
-    test_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master/atv-google-refplus-wave.xml"
+    # 🔥 使用 config.py 動態生成測試 URL
+    test_url = config.get_mp_manifest_url()
     
     print(f"測試 URL: {test_url}")
+    print(f"🔧 動態生成 URL，當前 Android 版本: {config.get_current_android_version()}")
     print()
     
     # 方法 1: 瀏覽器模式 + 認證
@@ -131,11 +136,17 @@ def diagnose_gerrit_download():
     print("📋 方法 3: 使用 API 風格 URL + 認證 (成功方法)")
     try:
         import urllib.parse
+        
+        # 🔥 使用 config.py 動態生成分支路徑
         project_encoded = urllib.parse.quote('realtek/android/manifest', safe='')
-        branch_encoded = urllib.parse.quote('realtek/android-14/master', safe='')
+        branch_path = config.get_gerrit_manifest_base_path()
+        branch_encoded = urllib.parse.quote(branch_path, safe='')
         file_encoded = urllib.parse.quote('atv-google-refplus-wave.xml', safe='')
         
         api_url = f"{base_url}/gerrit/a/projects/{project_encoded}/branches/{branch_encoded}/files/{file_encoded}/content"
+        
+        print(f"  🔧 使用動態分支路徑: {branch_path}")
+        print(f"  📱 當前 Android 版本: {config.get_current_android_version()}")
         
         response = requests.get(api_url, headers=headers, auth=auth, timeout=30)
         print(f"  URL: {api_url}")

@@ -44,28 +44,38 @@ class ManifestComparator:
         self.expanded_file_path = None
         self.use_expanded = False
         
-        # Gerrit 基礎 URL
-        self.gerrit_base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master"
+        # 🔥 使用 config.py 動態生成 Gerrit 基礎 URL
+        base_path = config.get_gerrit_manifest_base_path()
+        self.gerrit_base_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{base_path}"
         
-        # Gerrit 檔案 URL 映射
+        self.logger.info(f"🔧 初始化 ManifestComparator")
+        self.logger.info(f"   當前 Android 版本: {config.get_current_android_version()}")
+        self.logger.info(f"   Gerrit 基礎 URL: {self.gerrit_base_url}")
+        
+        # 🔥 使用 config.py 中的函數直接生成 Gerrit 檔案 URL 映射
         self.gerrit_urls = {
             'master': {
                 'filename': 'atv-google-refplus.xml',
-                'url': f'{self.gerrit_base_url}/atv-google-refplus.xml'
+                'url': config.get_master_manifest_url()
             },
             'premp': {
                 'filename': 'atv-google-refplus-premp.xml',
-                'url': f'{self.gerrit_base_url}/atv-google-refplus-premp.xml'
+                'url': config.get_premp_manifest_url()
             },
             'mp': {
                 'filename': 'atv-google-refplus-wave.xml',
-                'url': f'{self.gerrit_base_url}/atv-google-refplus-wave.xml'
+                'url': config.get_mp_manifest_url()
             },
             'mp_backup': {
                 'filename': 'atv-google-refplus-wave-backup.xml',
-                'url': f'{self.gerrit_base_url}/atv-google-refplus-wave-backup.xml'
+                'url': config.get_mp_backup_manifest_url()
             }
         }
+        
+        # 記錄所有生成的 URL 供調試
+        self.logger.debug(f"📋 Gerrit URL 映射:")
+        for key, value in self.gerrit_urls.items():
+            self.logger.debug(f"   {key.upper()}: {value['url']}")
     
     def compare_local_with_gerrit(self, local_file: str, gerrit_type: str, output_file: str) -> bool:
         """比較本地檔案與 Gerrit manifest 檔案"""
