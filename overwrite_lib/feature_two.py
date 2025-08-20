@@ -44,7 +44,11 @@ class FeatureTwo:
         self.logger = logger
         self.excel_handler = ExcelHandler()
         self.gerrit_manager = GerritManager()
-    
+
+        # 🔥 從 config 取得當前 Android 版本
+        self.current_android_version = config.get_current_android_version()
+        self.logger.info(f"使用 Android 版本: {self.current_android_version}")
+            
     def process(self, input_file: str, process_type: str, output_filename: str, 
                 remove_duplicates: bool, create_branches: bool, check_branch_exists: bool,
                 output_folder: str = './output', force_update_branches: bool = False) -> bool:
@@ -53,6 +57,7 @@ class FeatureTwo:
         """
         try:
             self.logger.info("=== 開始執行功能二：建立分支映射表 ===")
+            self.logger.info(f"🔥 使用 Android 版本: {self.current_android_version}")
             self.logger.info(f"輸入檔案: {input_file}")
             self.logger.info(f"處理類型: {process_type}")
             self.logger.info(f"輸出檔案: {output_filename}")
@@ -1214,13 +1219,12 @@ class FeatureTwo:
                 self.logger.debug(f"智能Android版本轉換: {revision} → {result}")
                 return result
             else:
-                result = 'realtek/android-14/premp.google-refplus'
-                self.logger.debug(f"智能預設轉換: {revision} → {result}")
+                # 🔥 使用當前配置的 Android 版本而非硬編碼
+                result = config.get_default_premp_branch()
                 return result
         
         # 如果完全沒有匹配，返回預設值
-        result = 'realtek/android-14/premp.google-refplus'
-        self.logger.debug(f"備案預設轉換: {revision} → {result}")
+        result = config.get_default_premp_branch()
         return result
 
     def _convert_master_to_premp(self, revision: str) -> str:
@@ -1241,17 +1245,12 @@ class FeatureTwo:
         
         # 精確匹配轉換規則
         exact_mappings = {
-            'realtek/master': 'realtek/android-14/premp.google-refplus',
-            'realtek/gaia': 'realtek/android-14/premp.google-refplus',
-            'realtek/gki/master': 'realtek/android-14/premp.google-refplus',
-            'realtek/android-14/master': 'realtek/android-14/premp.google-refplus',
-            'realtek/linux-5.15/android-14/master': 'realtek/linux-5.15/android-14/premp.google-refplus',
-            'realtek/linux-4.14/android-14/master': 'realtek/linux-4.14/android-14/premp.google-refplus',
-            'realtek/linux-5.4/android-14/master': 'realtek/linux-5.4/android-14/premp.google-refplus',
-            'realtek/linux-5.10/android-14/master': 'realtek/linux-5.10/android-14/premp.google-refplus',
-            'realtek/linux-6.1/android-14/master': 'realtek/linux-6.1/android-14/premp.google-refplus',
-            'realtek/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
-            'realtek/android-14/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+            'realtek/master': config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
+            'realtek/gaia': config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
+            'realtek/gki/master': config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
+            config.get_android_path('realtek/android-{android_version}/master'): config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
+            'realtek/mp.google-refplus': config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
+            config.get_android_path('realtek/android-{android_version}/mp.google-refplus'): config.get_android_path('realtek/android-{android_version}/premp.google-refplus'),
         }
         
         # 檢查精確匹配
@@ -1280,13 +1279,13 @@ class FeatureTwo:
             self.logger.debug(f"模式2轉換: {original_revision} → {result}")
             return result
         
-        # 規則 3: linux-X.X/master → linux-X.X/android-14/premp.google-refplus
+        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus
         pattern3 = r'realtek/linux-([\d.]+)/master$'
         match3 = re.match(pattern3, original_revision)
         if match3:
             linux_ver = match3.group(1)
-            result = f'realtek/linux-{linux_ver}/android-14/premp.google-refplus'
-            self.logger.debug(f"模式3轉換: {original_revision} → {result}")
+            result = config.get_android_path(f'realtek/linux-{linux_ver}/android-{{android_version}}/premp.google-refplus')
+            self.logger.debug(f"模式3轉換 (覆蓋原精確規則): {original_revision} → {result}")
             return result
         
         # 更多規則...（其他轉換規則保持不變）

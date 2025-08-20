@@ -241,21 +241,45 @@ Target: {target_file}"""
 
 # 選擇使用哪個模板
 USE_DETAILED_COMMIT_MESSAGE = True  # True = 使用詳細模板, False = 使用簡單模板
+
 # =====================================
 # ===== Android 版本設定 =====
 # =====================================
 
-# 預設 Android 版本
-DEFAULT_ANDROID_VERSION = '14'
+# 🔥 新增：當前 Android 版本（用於動態替換硬編碼的 android-14）
+CURRENT_ANDROID_VERSION = '14'
 
-# 支援的 Android 版本列表
-SUPPORTED_ANDROID_VERSIONS = ['11', '12', '13', '14', '15']
+# =====================================
+# ===== 動態 Android 版本輔助函數 =====
+# =====================================
 
-# 版本對應的 upgrade 版本
-ANDROID_UPGRADE_MAPPING = {
-    '14': '11',  # Android 14 升級自 Android 11
-    '15': '12'   # Android 15 升級自 Android 12
-}
+def get_current_android_version() -> str:
+    """取得當前使用的 Android 版本"""
+    return CURRENT_ANDROID_VERSION
+
+def get_android_path(template: str) -> str:
+    """
+    將模板中的 {android_version} 替換為當前版本
+    
+    Args:
+        template: 包含 {android_version} 的模板字符串
+        
+    Returns:
+        替換後的字符串
+        
+    Example:
+        get_android_path('realtek/android-{android_version}/premp.google-refplus')
+        -> 'realtek/android-14/premp.google-refplus'
+    """
+    return template.format(android_version=CURRENT_ANDROID_VERSION)
+
+def get_default_premp_branch() -> str:
+    """取得預設的 premp 分支"""
+    return f'realtek/android-{CURRENT_ANDROID_VERSION}/premp.google-refplus'
+
+def get_default_android_master_branch() -> str:
+    """取得預設的 Android master 分支"""
+    return f'realtek/android-{CURRENT_ANDROID_VERSION}/master'
 
 # =====================================
 # ===== 晶片映射設定 =====
@@ -369,7 +393,7 @@ def get_android_version_from_path(path: str) -> str:
     match = re.search(r'android-(\d+)', path)
     if match:
         return match.group(1)
-    return DEFAULT_ANDROID_VERSION
+    return CURRENT_ANDROID_VERSION
 
 def get_chip_from_path(path: str) -> str:
     """從路徑中提取晶片名稱"""
