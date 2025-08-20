@@ -12,6 +12,7 @@ import re
 import tempfile
 from typing import Dict, List, Any, Optional, Tuple
 import utils
+import config  # 🔥 新增：導入 config 模組
 from excel_handler import ExcelHandler
 from gerrit_manager import GerritManager
 
@@ -26,7 +27,8 @@ class FeatureThree:
         self.gerrit_manager = GerritManager()
         
         # Gerrit 基礎 URL 模板
-        self.gerrit_base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master"
+        android_master_branch = config.get_default_android_master_branch()
+        self.gerrit_base_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{android_master_branch}"
         
         # 檔案映射表
         self.source_files = {
@@ -230,13 +232,6 @@ class FeatureThree:
     def _expand_manifest_with_repo_fixed(self, overwrite_type: str, output_folder: str) -> tuple:
         """
         使用 repo 命令展開包含 include 的 manifest - 修正版本，同時保存到臨時目錄和輸出目錄
-        
-        Args:
-            overwrite_type: 轉換類型
-            output_folder: 輸出資料夾
-            
-        Returns:
-            (expanded_content, expanded_file_path) 或 (None, None) 如果失敗
         """
         import subprocess
         import tempfile
@@ -246,24 +241,26 @@ class FeatureThree:
             # 取得相關參數
             source_filename = self.source_files[overwrite_type]
             repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
-            branch = "realtek/android-14/master"
+            # 🔥 修改：使用動態分支
+            branch = config.get_default_android_master_branch()
             
-            # 🆕 生成展開檔案名稱 - 使用絕對路徑解決臨時目錄問題
+            # 生成展開檔案名稱 - 使用絕對路徑解決臨時目錄問題
             expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expand.xml')}"
-            # 🔥 關鍵修正：轉為絕對路徑，避免在臨時目錄中誤保存
+            # 關鍵修正：轉為絕對路徑，避免在臨時目錄中誤保存
             final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
             
             self.logger.info(f"🎯 準備展開 manifest...")
             self.logger.info(f"🎯 源檔案: {source_filename}")
+            self.logger.info(f"🎯 使用分支: {branch}")  # 🔥 新增：顯示使用的動態分支
             self.logger.info(f"🎯 展開檔案名: {expanded_filename}")
             self.logger.info(f"🎯 目標絕對路徑: {final_expanded_path}")
             
-            # 🆕 在切換目錄前確保輸出資料夾存在
+            # 在切換目錄前確保輸出資料夾存在
             utils.ensure_dir(output_folder)
             abs_output_folder = os.path.abspath(output_folder)
             self.logger.info(f"🎯 輸出資料夾絕對路徑: {abs_output_folder}")
             
-            # 🆕 檢查 repo 命令是否可用
+            # 檢查 repo 命令是否可用
             try:
                 repo_check = subprocess.run(
                     ["repo", "--version"], 
@@ -295,12 +292,12 @@ class FeatureThree:
                 os.chdir(temp_work_dir)
                 self.logger.info(f"📂 切換到臨時目錄: {temp_work_dir}")
                 
-                # 步驟 1: repo init
+                # 🔥 步驟 1: repo init - 使用動態分支
                 self.logger.info(f"📄 執行 repo init...")
                 init_cmd = [
                     "repo", "init", 
                     "-u", repo_url,
-                    "-b", branch,
+                    "-b", branch,  # 🔥 使用動態分支
                     "-m", source_filename
                 ]
                 
@@ -325,7 +322,7 @@ class FeatureThree:
                 
                 self.logger.info("✅ repo init 成功")
                 
-                # 🆕 檢查 .repo 目錄是否存在
+                # 檢查 .repo 目錄是否存在
                 repo_dir = os.path.join(temp_work_dir, ".repo")
                 if os.path.exists(repo_dir):
                     self.logger.info(f"✅ .repo 目錄已建立: {repo_dir}")
@@ -362,14 +359,14 @@ class FeatureThree:
                 
                 self.logger.info(f"✅ repo manifest 成功，內容長度: {len(expanded_content)} 字符")
                 
-                # 🆕 檢查展開內容的基本特徵
+                # 檢查展開內容的基本特徵
                 project_count = expanded_content.count('<project ')
                 include_count = expanded_content.count('<include ')
                 self.logger.info(f"🔍 展開內容分析:")
                 self.logger.info(f"   - Project 標籤數量: {project_count}")
                 self.logger.info(f"   - Include 標籤數量: {include_count}")
                 
-                # 🆕 步驟 3A: 在臨時目錄保存一份展開檔案
+                # 步驟 3A: 在臨時目錄保存一份展開檔案
                 temp_expanded_path = os.path.join(temp_work_dir, expanded_filename)
                 self.logger.info(f"📁 在臨時目錄保存展開檔案: {temp_expanded_path}")
                 
@@ -387,12 +384,12 @@ class FeatureThree:
                     self.logger.error(f"❌ 臨時目錄檔案保存失敗: {str(temp_write_error)}")
                     return None, None
                 
-                # 🆕 步驟 3B: 同時複製到輸出資料夾（使用絕對路徑）
+                # 步驟 3B: 同時複製到輸出資料夾（使用絕對路徑）
                 self.logger.info(f"📁 複製展開檔案到輸出資料夾...")
                 self.logger.info(f"📁 目標絕對路徑: {final_expanded_path}")
                 self.logger.info(f"📁 當前工作目錄: {os.getcwd()}")
                 
-                # 🔥 關鍵：確保目標資料夾存在（使用絕對路徑）
+                # 關鍵：確保目標資料夾存在（使用絕對路徑）
                 target_dir = os.path.dirname(final_expanded_path)
                 utils.ensure_dir(target_dir)
                 self.logger.info(f"✅ 目標資料夾確認存在: {target_dir}")
@@ -407,7 +404,7 @@ class FeatureThree:
                     self.logger.error(f"❌ 目標路徑: {final_expanded_path}")
                     return None, None
                 
-                # 🆕 步驟 4: 驗證兩個位置的檔案都存在
+                # 步驟 4: 驗證兩個位置的檔案都存在
                 self.logger.info(f"🔍 驗證檔案保存狀態...")
                 
                 # 驗證臨時檔案
@@ -422,7 +419,7 @@ class FeatureThree:
                     file_size = os.path.getsize(final_expanded_path)
                     self.logger.info(f"✅ 輸出檔案存在: {final_expanded_path} ({file_size} bytes)")
                     
-                    # 🆕 驗證檔案內容一致性
+                    # 驗證檔案內容一致性
                     try:
                         with open(final_expanded_path, 'r', encoding='utf-8') as f:
                             saved_content = f.read()
@@ -440,7 +437,7 @@ class FeatureThree:
                         self.logger.error(f"❌ 檔案內容驗證失敗: {str(read_error)}")
                         return None, None
                     
-                    # 🎉 成功返回
+                    # 成功返回
                     self.logger.info(f"🎉 展開檔案處理完成!")
                     self.logger.info(f"   📁 臨時位置: {temp_expanded_path}")
                     self.logger.info(f"   📁 輸出位置: {final_expanded_path}")
@@ -451,7 +448,7 @@ class FeatureThree:
                 else:
                     self.logger.error(f"❌ 輸出檔案不存在: {final_expanded_path}")
                     
-                    # 🆕 檢查輸出目錄狀態
+                    # 檢查輸出目錄狀態
                     if os.path.exists(abs_output_folder):
                         files_in_output = os.listdir(abs_output_folder)
                         self.logger.error(f"❌ 輸出目錄內容: {files_in_output}")
@@ -461,7 +458,7 @@ class FeatureThree:
                     return None, None
                 
             finally:
-                # 🆕 在清理前顯示臨時目錄內容
+                # 在清理前顯示臨時目錄內容
                 self.logger.info(f"🔍 清理前臨時目錄內容:")
                 try:
                     temp_files = os.listdir(temp_work_dir)
@@ -479,11 +476,11 @@ class FeatureThree:
                 os.chdir(original_cwd)
                 self.logger.info(f"📂 恢復原始工作目錄: {original_cwd}")
                 
-                # 🆕 延遲清理臨時目錄（可選：保留一段時間供調試）
+                # 延遲清理臨時目錄（可選：保留一段時間供調試）
                 # 注意：這裡我們還是清理，但添加了更多日誌
                 try:
                     shutil.rmtree(temp_work_dir)
-                    self.logger.info(f"🗑️ 清理臨時目錄成功: {temp_work_dir}")
+                    self.logger.info(f"🗑️  清理臨時目錄成功: {temp_work_dir}")
                 except Exception as e:
                     self.logger.warning(f"⚠️ 清理臨時目錄失敗: {str(e)}")
                 
@@ -828,64 +825,47 @@ class FeatureThree:
     
     def _convert_master_to_premp(self, revision: str) -> str:
         """
-        master → premp 轉換規則 - 與 test_manifest_conversion.py 完全同步
-        修改：確保與測試模組使用完全相同的轉換邏輯
-        新增：支援 vX.X.X 版本格式的特殊轉換
-        
-        Args:
-            revision: 原始 revision
-            
-        Returns:
-            轉換後的 revision
+        master → premp 轉換規則 - 使用動態 Android 版本，動態 kernel 版本匹配
         """
         if not revision:
             return revision
         
         original_revision = revision.strip()
         
-        # 🆕 跳過 Google 開頭的項目（如 google/u-tv-keystone-rtk-refplus-wave4-release）
+        # 跳過 Google 開頭的項目
         if original_revision.startswith('google/'):
             self.logger.debug(f"跳過 Google 項目: {original_revision}")
             return original_revision
         
-        # 🆕 跳過特殊項目（與測試模組保持一致）
+        # 跳過特殊項目
         if self._should_skip_revision_conversion(original_revision):
             return original_revision
         
-        # 🆕 精確匹配轉換規則（優先級最高）- 與測試模組完全同步
+        # 🔥 修改：精確匹配轉換規則 - 使用動態版本（移除預定義 kernel 版本）
         exact_mappings = {
             # 基本 master 分支轉換
-            'realtek/master': 'realtek/android-14/premp.google-refplus',
-            'realtek/gaia': 'realtek/android-14/premp.google-refplus',
-            'realtek/gki/master': 'realtek/android-14/premp.google-refplus',
+            'realtek/master': config.get_default_premp_branch(),
+            'realtek/gaia': config.get_default_premp_branch(),
+            'realtek/gki/master': config.get_default_premp_branch(),
             
-            # Android 14 主要分支
-            'realtek/android-14/master': 'realtek/android-14/premp.google-refplus',
+            # Android master 分支
+            config.get_default_android_master_branch(): config.get_default_premp_branch(),
             
-            # 🔥 修正：Linux kernel android master 分支轉換（保留 linux 路徑）
-            'realtek/linux-5.15/android-14/master': 'realtek/linux-5.15/android-14/premp.google-refplus',
-            'realtek/linux-4.14/android-14/master': 'realtek/linux-4.14/android-14/premp.google-refplus',
-            'realtek/linux-5.4/android-14/master': 'realtek/linux-5.4/android-14/premp.google-refplus',
-            'realtek/linux-5.10/android-14/master': 'realtek/linux-5.10/android-14/premp.google-refplus',
-            'realtek/linux-6.1/android-14/master': 'realtek/linux-6.1/android-14/premp.google-refplus',
-            
-            # 🔥 修正：直接的 mp.google-refplus 轉換（需要加上 android-14）
-            'realtek/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
-            
-            # 其他常見的轉換
-            'realtek/android-14/mp.google-refplus': 'realtek/android-14/premp.google-refplus',
+            # mp.google-refplus 轉換
+            'realtek/mp.google-refplus': config.get_default_premp_branch(),
+            config.get_android_path('realtek/android-{android_version}/mp.google-refplus'): config.get_default_premp_branch(),
         }
         
         # 檢查精確匹配
         if original_revision in exact_mappings:
-            self.logger.debug(f"精確匹配轉換: {original_revision} → {exact_mappings[original_revision]}")
-            return exact_mappings[original_revision]
+            result = exact_mappings[original_revision]
+            self.logger.debug(f"精確匹配轉換: {original_revision} → {result}")
+            return result
         
-        # 🆕 模式匹配轉換規則（使用正則表達式）- 與測試模組完全同步
+        # 🔥 修改：模式匹配轉換規則 - 完全使用正則表達式動態匹配
         import re
         
-        # 🔥 新增規則：vX.X.X 版本轉換 - 保留版本號
-        # 規則 0: realtek/vX.X.X/master → realtek/vX.X.X/premp.google-refplus
+        # vX.X.X 版本轉換 - 保留版本號
         pattern_version = r'realtek/(v\d+\.\d+(?:\.\d+)?)/master$'
         match_version = re.match(pattern_version, original_revision)
         if match_version:
@@ -899,7 +879,11 @@ class FeatureThree:
         match1 = re.match(pattern1, original_revision)
         if match1:
             android_ver, upgrade_ver, rtd_chip = match1.groups()
-            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}.{rtd_chip}'
+            if android_ver == config.get_current_android_version():
+                result = config.get_premp_branch_with_upgrade(upgrade_ver, rtd_chip)
+            else:
+                # 如果是不同的 Android 版本，保持原版本
+                result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}.{rtd_chip}'
             self.logger.debug(f"模式1轉換: {original_revision} → {result}")
             return result
         
@@ -908,82 +892,85 @@ class FeatureThree:
         match2 = re.match(pattern2, original_revision)
         if match2:
             android_ver, upgrade_ver = match2.groups()
-            result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}'
+            if android_ver == config.get_current_android_version():
+                result = config.get_premp_branch_with_upgrade(upgrade_ver)
+            else:
+                result = f'realtek/android-{android_ver}/premp.google-refplus.upgrade-{upgrade_ver}'
             self.logger.debug(f"模式2轉換: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-14/premp.google-refplus（修正版）
+        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern3 = r'realtek/linux-([\d.]+)/master$'
         match3 = re.match(pattern3, original_revision)
         if match3:
             linux_ver = match3.group(1)
-            result = f'realtek/linux-{linux_ver}/android-14/premp.google-refplus'
-            self.logger.debug(f"模式3轉換（Linux master）: {original_revision} → {result}")
+            result = config.get_linux_android_path(
+                linux_ver, 'realtek/linux-{linux_ver}/android-{android_version}/premp.google-refplus'
+            )
+            self.logger.debug(f"模式3轉換（動態 kernel 版本）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-Y/premp.google-refplus（修正版）
+        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/master$'
         match4 = re.match(pattern4, original_revision)
         if match4:
             linux_ver, android_ver = match4.groups()
-            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
-            self.logger.debug(f"模式4轉換（Linux Android master）: {original_revision} → {result}")
+            # 自動升級到當前 Android 版本
+            result = config.get_linux_android_path(
+                linux_ver, 'realtek/linux-{linux_ver}/android-{android_version}/premp.google-refplus'
+            )
+            self.logger.debug(f"模式4轉換（動態 kernel，升級 Android）: {original_revision} → {result}")
             return result
         
-        # 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-Y/premp.google-refplus
+        # 🔥 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
         match5 = re.match(pattern5, original_revision)
         if match5:
             linux_ver, android_ver = match5.groups()
-            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus'
-            self.logger.debug(f"模式5轉換: {original_revision} → {result}")
+            result = config.get_linux_android_path(
+                linux_ver, 'realtek/linux-{linux_ver}/android-{android_version}/premp.google-refplus'
+            )
+            self.logger.debug(f"模式5轉換（動態 kernel）: {original_revision} → {result}")
             return result
         
-        # 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-Y/premp.google-refplus.rtdXXXX
+        # 🔥 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-{current_version}/premp.google-refplus.rtdXXXX（完全動態）
         pattern6 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
         match6 = re.match(pattern6, original_revision)
         if match6:
             linux_ver, android_ver, rtd_chip = match6.groups()
-            result = f'realtek/linux-{linux_ver}/android-{android_ver}/premp.google-refplus.{rtd_chip}'
-            self.logger.debug(f"模式6轉換: {original_revision} → {result}")
+            base_path = config.get_linux_android_path(
+                linux_ver, 'realtek/linux-{linux_ver}/android-{android_version}/premp.google-refplus'
+            )
+            result = f"{base_path}.{rtd_chip}"
+            self.logger.debug(f"模式6轉換（動態 kernel）: {original_revision} → {result}")
             return result
         
-        # 規則 7: android-Y/mp.google-refplus → android-Y/premp.google-refplus
+        # 規則 7: android-Y/mp.google-refplus → android-{current_version}/premp.google-refplus
         pattern7 = r'realtek/android-(\d+)/mp\.google-refplus$'
         match7 = re.match(pattern7, original_revision)
         if match7:
             android_ver = match7.group(1)
-            result = f'realtek/android-{android_ver}/premp.google-refplus'
-            self.logger.debug(f"模式7轉換: {original_revision} → {result}")
+            result = config.get_default_premp_branch()
+            self.logger.debug(f"模式7轉換（升級到當前版本）: {original_revision} → {result}")
             return result
         
-        # 規則 8: android-Y/mp.google-refplus.rtdXXXX → android-Y/premp.google-refplus.rtdXXXX
+        # 規則 8: android-Y/mp.google-refplus.rtdXXXX → android-{current_version}/premp.google-refplus.rtdXXXX
         pattern8 = r'realtek/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
         match8 = re.match(pattern8, original_revision)
         if match8:
             android_ver, rtd_chip = match8.groups()
-            result = f'realtek/android-{android_ver}/premp.google-refplus.{rtd_chip}'
-            self.logger.debug(f"模式8轉換: {original_revision} → {result}")
+            result = config.get_premp_branch_with_chip(rtd_chip)
+            self.logger.debug(f"模式8轉換（升級到當前版本）: {original_revision} → {result}")
             return result
         
-        # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX
-        chip_mappings = {
-            'mac7p': 'rtd2851a',
-            'mac8q': 'rtd2851f', 
-            'mac9p': 'rtd2895p',
-            'merlin7': 'rtd6748',
-            'merlin8': 'rtd2885p',
-            'merlin8p': 'rtd2885q',
-            'merlin9': 'rtd2875q',
-        }
-        
-        for chip, rtd_model in chip_mappings.items():
+        # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX（使用當前 Android 版本）
+        for chip, rtd_model in config.CHIP_TO_RTD_MAPPING.items():
             if f'realtek/{chip}/master' == original_revision:
-                result = f'realtek/android-14/premp.google-refplus.{rtd_model}'
-                self.logger.debug(f"晶片轉換: {original_revision} → {result}")
+                result = config.get_premp_branch_with_chip(rtd_model)
+                self.logger.debug(f"晶片轉換（當前 Android 版本）: {original_revision} → {result}")
                 return result
         
-        # 🆕 如果沒有匹配的規則，根據關鍵字進行智能轉換
+        # 智能轉換備案
         smart_result = self._smart_conversion_fallback(original_revision)
         self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
         return smart_result
@@ -1013,39 +1000,32 @@ class FeatureThree:
 
     def _smart_conversion_fallback(self, revision: str) -> str:
         """
-        智能轉換備案 - 當沒有精確規則時使用 - 與測試模組完全同步
-        
-        Args:
-            revision: 原始 revision
-            
-        Returns:
-            轉換後的 revision
+        智能轉換備案 - 使用動態 Android 版本
         """
         # 如果包含 mp.google-refplus，嘗試替換為 premp.google-refplus
         if 'mp.google-refplus' in revision:
-            # 保留原始路徑，只替換關鍵字
             result = revision.replace('mp.google-refplus', 'premp.google-refplus')
             self.logger.debug(f"智能替換 mp→premp: {revision} → {result}")
             return result
         
-        # 如果是 master 但沒有匹配到特定規則，使用預設轉換
+        # 如果是 master 但沒有匹配到特定規則
         if '/master' in revision and 'realtek/' in revision:
-            # 提取 android 版本（如果有）
+            # 🔥 修改：使用動態 Android 版本提取
             import re
             android_match = re.search(r'android-(\d+)', revision)
             if android_match:
-                android_ver = android_match.group(1)
-                result = f'realtek/android-{android_ver}/premp.google-refplus'
-                self.logger.debug(f"智能Android版本轉換: {revision} → {result}")
+                # 保持原 Android 版本或升級到當前版本（可選）
+                result = config.get_default_premp_branch()  # 使用當前版本
+                self.logger.debug(f"智能Android版本轉換（升級到當前）: {revision} → {result}")
                 return result
             else:
-                result = 'realtek/android-14/premp.google-refplus'
+                result = config.get_default_premp_branch()
                 self.logger.debug(f"智能預設轉換: {revision} → {result}")
                 return result
         
-        # 如果完全沒有匹配，返回預設值
-        result = 'realtek/android-14/premp.google-refplus'
-        self.logger.debug(f"備案預設轉換: {revision} → {result}")
+        # 如果完全沒有匹配，返回當前版本的預設值
+        result = config.get_default_premp_branch()
+        self.logger.debug(f"備案預設轉換（當前版本）: {revision} → {result}")
         return result
             
     def _convert_premp_to_mp(self, revision: str) -> str:
@@ -1849,7 +1829,7 @@ class FeatureThree:
             return True
     
     def _execute_git_push(self, overwrite_type: str, converted_content: str, output_folder: str) -> Dict[str, Any]:
-        """執行 Git clone, commit, push 操作 - 使用 config.py 的 commit message 模板"""
+        """執行 Git clone, commit, push 操作 - 使用動態 Android 版本"""
         import subprocess
         import tempfile
         import shutil
@@ -1868,9 +1848,9 @@ class FeatureThree:
             temp_git_dir = tempfile.mkdtemp(prefix='gerrit_push_')
             self.logger.info(f"📁 建立臨時 Git 目錄: {temp_git_dir}")
             
-            # Git 設定
+            # 🔥 修改：Git 設定 - 使用動態版本
             repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
-            branch = "realtek/android-14/master"
+            branch = config.get_default_android_master_branch()  # 使用動態分支
             target_filename = self.output_files[overwrite_type]
             source_filename = self.source_files[overwrite_type]
             
@@ -2706,7 +2686,7 @@ class FeatureThree:
 
     def _generate_gerrit_manifest_link(self, filename: str) -> str:
         """
-        生成 Gerrit manifest 檔案的連結
+        生成 Gerrit manifest 檔案的連結 - 使用動態 Android 版本
         
         Args:
             filename: manifest 檔案名稱
@@ -2721,11 +2701,12 @@ class FeatureThree:
             # 移除 gerrit_ 前綴（如果有的話）
             clean_filename = filename.replace('gerrit_', '') if filename.startswith('gerrit_') else filename
             
-            # 構建 Gerrit 連結
-            base_url = "https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/realtek/android-14/master"
+            # 🔥 修改：構建 Gerrit 連結 - 使用動態分支
+            master_branch = config.get_default_android_master_branch()
+            base_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{master_branch}"
             gerrit_link = f"{base_url}/{clean_filename}"
             
-            self.logger.debug(f"生成 Gerrit 連結: {clean_filename} → {gerrit_link}")
+            self.logger.debug(f"生成 Gerrit 連結（動態版本）: {clean_filename} → {gerrit_link}")
             return gerrit_link
             
         except Exception as e:

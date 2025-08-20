@@ -281,6 +281,35 @@ def get_default_android_master_branch() -> str:
     """取得預設的 Android master 分支"""
     return f'realtek/android-{CURRENT_ANDROID_VERSION}/master'
 
+# 🆕 新增輔助函數
+def get_premp_branch_with_chip(chip_rtd: str) -> str:
+    """取得帶晶片型號的 premp 分支"""
+    return f'realtek/android-{CURRENT_ANDROID_VERSION}/premp.google-refplus.{chip_rtd}'
+
+def get_premp_branch_with_upgrade(upgrade_version: str, chip_rtd: str = None) -> str:
+    """取得帶 upgrade 版本的 premp 分支"""
+    if chip_rtd:
+        return f'realtek/android-{CURRENT_ANDROID_VERSION}/premp.google-refplus.upgrade-{upgrade_version}.{chip_rtd}'
+    else:
+        return f'realtek/android-{CURRENT_ANDROID_VERSION}/premp.google-refplus.upgrade-{upgrade_version}'
+
+def get_linux_android_path(linux_version: str, template: str) -> str:
+    """
+    取得 Linux + Android 的動態路徑
+    
+    Args:
+        linux_version: Linux 版本 (如 '5.15')
+        template: 路徑模板
+        
+    Returns:
+        完整路徑
+        
+    Example:
+        get_linux_android_path('5.15', 'realtek/linux-{linux_ver}/android-{android_version}/premp.google-refplus')
+        -> 'realtek/linux-5.15/android-14/premp.google-refplus'
+    """
+    return template.format(linux_ver=linux_version, android_version=CURRENT_ANDROID_VERSION)
+
 # =====================================
 # ===== 晶片映射設定 =====
 # =====================================
@@ -298,13 +327,6 @@ CHIP_TO_RTD_MAPPING = {
 
 # RTD 型號到晶片的反向映射（自動生成）
 RTD_TO_CHIP_MAPPING = {v: k for k, v in CHIP_TO_RTD_MAPPING.items()}
-
-# =====================================
-# ===== Kernel 版本設定 =====
-# =====================================
-
-# 支援的 Linux Kernel 版本
-SUPPORTED_KERNEL_VERSIONS = ['4.14', '4.19', '5.4', '5.10', '5.15', '6.1']
 
 # =====================================
 # ===== Manifest 轉換映射規則 =====
