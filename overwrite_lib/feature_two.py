@@ -1661,8 +1661,8 @@ class FeatureTwo:
             target_manifest = self._build_target_manifest_link(target_branch, remote)
 
             # 🔥 新增：建立 target_open_project_link 和 open_project_link
-            target_open_project_link = self._build_open_project_link(project_name, project.get('dest-branch', ''), remote, is_target=True)
-            open_project_link = self._build_open_project_link(project_name, target_branch, remote, is_target=False)
+            target_open_project_link = self._build_open_project_link(project_name, target_branch, remote, is_target=True)
+            open_project_link = self._build_open_project_link(project_name, project.get('dest-branch', ''), remote, is_target=False)
 
             # revision_diff 欄位將使用 Excel 公式
             revision_diff = ''
