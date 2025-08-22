@@ -303,6 +303,9 @@ class ManifestComparator:
                     else:
                         description = f"來源檔案: {source_rev} → 目標檔案: {target_rev}"
                     
+                    # 🔥 修正：確保使用目標專案的 dest-branch（如果存在），否則使用來源專案的
+                    dest_branch = target_proj.get('dest-branch', '') or source_proj.get('dest-branch', '')
+                    
                     project_info = {
                         'SN': i,
                         'name': source_proj['name'],
@@ -312,7 +315,7 @@ class ManifestComparator:
                         'revision_equal': '',  # 將用 Excel 公式填充
                         'description': description,
                         'upstream': target_proj['upstream'],
-                        'dest-branch': target_proj['dest-branch'],
+                        'dest-branch': dest_branch,  # 🔥 重要：確保包含 dest-branch
                         'groups': target_proj['groups'],
                         'clone-depth': target_proj['clone-depth'],
                         'remote': target_proj['remote'],
@@ -329,7 +332,7 @@ class ManifestComparator:
                         'revision_equal': '',
                         'description': '專案僅存在於來源檔案',
                         'upstream': source_proj['upstream'],
-                        'dest-branch': source_proj['dest-branch'],
+                        'dest-branch': source_proj['dest-branch'],  # 🔥 重要：確保包含 dest-branch
                         'groups': source_proj['groups'],
                         'clone-depth': source_proj['clone-depth'],
                         'remote': source_proj['remote'],
@@ -338,10 +341,13 @@ class ManifestComparator:
                 
                 project_info_list.append(project_info)
             
+            self.logger.info(f"✅ 創建專案資訊列表完成: {len(project_info_list)} 個專案（包含 dest-branch）")
             return project_info_list
             
         except Exception as e:
             self.logger.error(f"創建專案資訊列表失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
             return []
 
     def _format_summary_sheet_in_context(self, worksheet, comparison_type: str, target_file_path: str):
@@ -569,6 +575,9 @@ class ManifestComparator:
                 default_remote = default_element.get('remote', '')
                 default_revision = default_element.get('revision', '')
             
+            # 🔥 新增調試信息
+            dest_branch_count = 0
+
             for project in root.findall('project'):
                 project_name = project.get('name', '')
                 
@@ -577,6 +586,11 @@ class ManifestComparator:
                 # 確保所有欄位都用空字串，不用 N/A
                 project_revision = project.get('revision', '')
                 project_remote = project.get('remote', '')
+                project_dest_branch = project.get('dest-branch', '')  # 🔥 重要：提取 dest-branch
+                
+                # 🔥 調試：統計有 dest-branch 的專案
+                if project_dest_branch:
+                    dest_branch_count += 1
                 
                 final_revision = project_revision if project_revision else (default_revision if default_revision else '')
                 final_remote = project_remote if project_remote else (default_remote if default_remote else '')
@@ -893,6 +907,20 @@ class ManifestComparator:
             
             df_projects = pd.DataFrame(diff_analysis['project_info_list'])
             
+            self.logger.info(f"🔍 比較後專案原始欄位: {list(df_projects.columns)}")
+            
+            # 🔥 新增：為每一行添加 type 欄位（基於 Dest-Branch，空值則用 revision）
+            type_values = []
+            for _, row in df_projects.iterrows():
+                dest_branch = row.get('dest-branch', '')
+                # 🔥 新增：如果 dest-branch 為空，則使用 source_revision
+                revision = row.get('source_revision', '') if not dest_branch else ''
+                type_value = self._determine_dest_branch_type(dest_branch, revision)
+                type_values.append(type_value)
+                
+            # 🔥 重要：先添加 type 欄位到 DataFrame
+            df_projects['type'] = type_values
+            
             # 重新命名欄位以符合比較模式
             column_mapping = {
                 'SN': 'SN',
@@ -901,6 +929,7 @@ class ManifestComparator:
                 'source_revision': '來源 Revision',
                 'target_revision': '目標 Revision',
                 'revision_equal': 'Revision 是否相等',
+                'type': 'type',  # 🔥 重要：保持 type 欄位
                 'description': '比較說明',
                 'upstream': 'Upstream',
                 'dest-branch': 'Dest-Branch',
@@ -911,15 +940,28 @@ class ManifestComparator:
             
             df_projects = df_projects.rename(columns=column_mapping)
             
-            # 只保留需要的欄位
-            keep_columns = list(column_mapping.values())
-            available_columns = [col for col in keep_columns if col in df_projects.columns]
+            # 🔥 在 "Revision 是否相等" 右邊安排 "type" 欄位的順序
+            # 定義最終欄位順序
+            final_column_order = [
+                'SN', '專案名稱', '專案路徑', 
+                '來源 Revision', '目標 Revision', 'Revision 是否相等', 'type',  # type 在 Revision 是否相等 右邊
+                '比較說明', 'Upstream', 'Dest-Branch', 'Groups', 'Clone-Depth', 'Remote'
+            ]
+            
+            # 只保留存在的欄位
+            available_columns = [col for col in final_column_order if col in df_projects.columns]
             df_projects = df_projects[available_columns]
+            
+            self.logger.info(f"✅ 比較後專案最終欄位: {list(df_projects.columns)}")
             
             df_projects.to_excel(writer, sheet_name='比較後專案', index=False)
             
+            self.logger.info(f"✅ 比較後專案頁籤已創建，包含 type 欄位: {len(df_projects)} 個專案")
+            
         except Exception as e:
             self.logger.error(f"創建比較後專案頁籤失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
 
     def _create_differences_sheet(self, writer, diff_analysis: Dict, is_local_comparison: bool):
         """創建差異明細頁籤（顯示所有專案的比較結果）"""
@@ -929,11 +971,38 @@ class ManifestComparator:
             
             df_differences = pd.DataFrame(diff_analysis['differences'])
             
+            # 🔥 新增：為每一行添加 type 欄位（基於來源檔案的 dest-branch，空值則用 revision）
+            type_values = []
+            for _, row in df_differences.iterrows():
+                # 優先使用來源檔案的 dest-branch，如果沒有則使用目標檔案的
+                dest_branch = ''
+                revision = ''
+                
+                # 從 differences 數據中獲取 dest-branch
+                if 'dest-branch' in row and pd.notna(row['dest-branch']):
+                    dest_branch = str(row['dest-branch'])
+                elif is_local_comparison and 'compare_dest-branch' in row and pd.notna(row['compare_dest-branch']):
+                    dest_branch = str(row['compare_dest-branch'])
+                elif not is_local_comparison and 'gerrit_dest-branch' in row and pd.notna(row['gerrit_dest-branch']):
+                    dest_branch = str(row['gerrit_dest-branch'])
+                
+                # 🔥 新增：如果 dest-branch 為空，則使用 revision
+                if not dest_branch:
+                    if 'revision' in row and pd.notna(row['revision']):
+                        revision = str(row['revision'])
+                    elif is_local_comparison and 'compare_revision' in row and pd.notna(row['compare_revision']):
+                        revision = str(row['compare_revision'])
+                    elif not is_local_comparison and 'gerrit_revision' in row and pd.notna(row['gerrit_revision']):
+                        revision = str(row['gerrit_revision'])
+                
+                type_value = self._determine_dest_branch_type(dest_branch, revision)
+                type_values.append(type_value)
+            
             # 根據比較模式調整欄位順序
             if is_local_comparison:
                 # 本地比較模式的欄位順序
                 column_order = [
-                    'SN', 'comparison_status', 'comparison_result',
+                    'SN', 'comparison_status', 'comparison_result', 'type',  # 🔥 在 comparison_result 後插入 type
                     'source_file', 'content', 'name', 'path', 'revision',
                     'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                     'compare_source_file', 'compare_content', 'compare_name', 'compare_path', 'compare_revision',
@@ -942,12 +1011,15 @@ class ManifestComparator:
             else:
                 # Gerrit 比較模式的欄位順序
                 column_order = [
-                    'SN', 'comparison_status', 'comparison_result',
+                    'SN', 'comparison_status', 'comparison_result', 'type',  # 🔥 在 comparison_result 後插入 type
                     'source_file', 'content', 'name', 'path', 'revision',
                     'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                     'gerrit_source_file', 'gerrit_content', 'gerrit_name', 'gerrit_path', 'gerrit_revision',
                     'gerrit_upstream', 'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote', 'gerrit_source_link'
                 ]
+            
+            # 添加 type 欄位到 DataFrame
+            df_differences['type'] = type_values
             
             # 只保留存在的欄位
             available_columns = [col for col in column_order if col in df_differences.columns]
@@ -955,8 +1027,12 @@ class ManifestComparator:
             
             df_differences.to_excel(writer, sheet_name='比較專案內容差異明細', index=False)
             
+            self.logger.info(f"✅ 差異明細頁籤已創建，包含 type 欄位: {len(df_differences)} 個專案")
+            
         except Exception as e:
             self.logger.error(f"創建差異明細頁籤失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
 
     def _create_raw_manifest_sheet(self, writer, file_path: str, sheet_name: str):
         """創建原始 manifest 頁籤"""
@@ -975,12 +1051,16 @@ class ManifestComparator:
             for i, proj in enumerate(projects, 1):
                 source_link = self._generate_source_link(proj['name'], proj['revision'], proj['remote'])
                 
+                # 🔥 新增：判斷 type（基於 dest-branch，空值則用 revision）
+                type_value = self._determine_dest_branch_type(proj['dest-branch'], proj['revision'])
+                
                 raw_data.append({
                     'SN': i,
                     'source_file': os.path.basename(file_path),
                     'name': proj['name'],
                     'path': proj['path'],
                     'revision': proj['revision'],
+                    'type': type_value,  # 🔥 在 revision 右邊插入 type
                     'upstream': proj['upstream'],
                     'dest-branch': proj['dest-branch'],
                     'groups': proj['groups'],
@@ -991,11 +1071,24 @@ class ManifestComparator:
             
             if raw_data:
                 df_raw = pd.DataFrame(raw_data)
+                
+                # 🔥 確保欄位順序正確（type 在 revision 右邊）
+                column_order = [
+                    'SN', 'source_file', 'name', 'path', 'revision', 'type',  # type 在 revision 右邊
+                    'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link'
+                ]
+                
+                # 只保留存在的欄位
+                available_columns = [col for col in column_order if col in df_raw.columns]
+                df_raw = df_raw[available_columns]
+                
                 df_raw.to_excel(writer, sheet_name=sheet_name, index=False)
-                self.logger.info(f"✅ {sheet_name} 頁籤已創建: {len(raw_data)} 個專案")
+                self.logger.info(f"✅ {sheet_name} 頁籤已創建，包含 type 欄位: {len(raw_data)} 個專案")
             
         except Exception as e:
             self.logger.error(f"創建 {sheet_name} 頁籤失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
 
     def _format_worksheet_in_context(self, worksheet, sheet_name: str, is_local_comparison: bool):
         """在 ExcelWriter context 內格式化工作表"""
@@ -1019,19 +1112,32 @@ class ManifestComparator:
             purple_fill = PatternFill(start_color="8A2BE2", end_color="8A2BE2", fill_type="solid")
             # 🔥 重點修正：使用正確的藍色 RGB(0, 112, 192)
             link_blue_fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            # 🔥 新增：type 欄位表頭的綠色
+            type_header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
             
             white_font = Font(color="FFFFFF", bold=True)
             
             # 🔥 定義 link 欄位（這些欄位必須使用新藍色）
             link_fields = ["source_link", "gerrit_source_link", "compare_source_link"]
             
+            # 🔥 儲存 type 欄位的位置，稍後設定內容顏色
+            type_column = None
+            
             # 設定表頭格式和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
                 col_letter = get_column_letter(col_num)
                 header_value = str(cell.value) if cell.value else ''
                 
-                # 🔥 第一優先級：link 欄位設定為新藍色
-                if header_value in link_fields:
+                # 🔥 第一優先級：type 欄位設定為綠底白字
+                if header_value == 'type':
+                    cell.fill = type_header_fill
+                    cell.font = white_font
+                    worksheet.column_dimensions[col_letter].width = 15
+                    type_column = col_num  # 記錄 type 欄位位置
+                    self.logger.info(f"🟢 設定 type 欄位表頭: 綠底白字 ({col_letter}欄)")
+                
+                # 🔥 第二優先級：link 欄位設定為新藍色
+                elif header_value in link_fields:
                     cell.fill = link_blue_fill
                     cell.font = white_font
                     worksheet.column_dimensions[col_letter].width = 60
@@ -1080,7 +1186,7 @@ class ManifestComparator:
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 
                 # 設定其他欄位的寬度
-                if header_value not in link_fields and 'revision' not in header_value.lower():
+                if header_value not in link_fields and 'revision' not in header_value.lower() and header_value != 'type':
                     if header_value == 'SN':
                         worksheet.column_dimensions[col_letter].width = 8
                     elif header_value in ['專案名稱', 'name', 'gerrit_name', 'compare_name']:
@@ -1101,6 +1207,10 @@ class ManifestComparator:
                     else:
                         worksheet.column_dimensions[col_letter].width = 20
             
+            # 🔥 新增：為 type 欄位的內容設定顏色
+            if type_column:
+                self._set_type_column_colors_in_context(worksheet, type_column)
+            
             # 🔥 新增：為所有 SN 欄位的內容設定置中對齊
             self._set_sn_column_center_alignment(worksheet)
             
@@ -1109,6 +1219,33 @@ class ManifestComparator:
         except Exception as e:
             self.logger.error(f"格式化工作表失敗 {sheet_name}: {str(e)}")
 
+    def _set_type_column_colors_in_context(self, worksheet, type_column: int):
+        """在 ExcelWriter context 內為 type 欄位的內容設定顏色"""
+        try:
+            from openpyxl.styles import Alignment
+            
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 為 type 欄位的所有內容設定顏色和對齊
+            for row_num in range(2, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row_num, column=type_column)
+                type_value = str(cell.value) if cell.value else ''
+                
+                # 設定置中對齊
+                cell.alignment = center_alignment
+                
+                # 根據 type 值設定顏色（只設定文字顏色）
+                if type_value:
+                    fill, font = self._get_type_color_style(type_value)
+                    # 🔥 修正：只設定字體，不設定背景色
+                    if font:
+                        cell.font = font
+            
+            self.logger.info(f"✅ type 欄位內容文字顏色已設定完成 ({worksheet.max_row - 1} 行)")
+            
+        except Exception as e:
+            self.logger.error(f"設定 type 欄位內容顏色失敗: {str(e)}")
+            
     def _set_sn_column_center_alignment(self, worksheet):
         """為 SN 欄位的所有內容設定置中對齊"""
         try:
@@ -1408,7 +1545,7 @@ class ManifestComparator:
             return None
 
     def _handle_gerrit_include_expansion(self, gerrit_file_path: str, output_folder: str) -> str:
-        """處理 Gerrit manifest 的 include 展開"""
+        """處理 Gerrit manifest 的 include 展開 - 使用 repo 命令"""
         try:
             self.logger.info("🔍 檢查 Gerrit manifest 是否需要展開")
             
@@ -1421,18 +1558,197 @@ class ManifestComparator:
                 self.logger.info("ℹ️ 未檢測到 include 標籤，使用原始檔案")
                 return gerrit_file_path
             
-            self.logger.info("🔍 檢測到 include 標籤，開始展開 manifest...")
+            self.logger.info("🔍 檢測到 include 標籤，開始使用 repo 命令展開 manifest...")
             
-            # 這裡可以添加展開 manifest 的邏輯
-            # 為了簡化，暫時返回原始檔案
-            self.logger.warning("⚠️ include 展開功能待實現，使用原始檔案")
-            return gerrit_file_path
+            # 🔥 使用 repo 命令展開
+            expanded_content, expanded_file_path = self._expand_manifest_with_repo(gerrit_file_path, output_folder)
+            
+            if expanded_content and expanded_file_path:
+                # 設定展開檔案路徑
+                self.expanded_file_path = expanded_file_path
+                self.use_expanded = True
+                
+                self.logger.info(f"✅ 成功使用 repo 命令展開 manifest: {os.path.basename(expanded_file_path)}")
+                return expanded_file_path
+            else:
+                self.logger.warning("⚠️ repo 命令展開失敗，使用原始檔案")
+                return gerrit_file_path
                 
         except Exception as e:
             self.logger.error(f"處理 include 展開時發生錯誤: {str(e)}")
+            import traceback
+            self.logger.error(f"詳細錯誤: {traceback.format_exc()}")
             self.logger.warning("⚠️ 使用原始檔案繼續執行")
             return gerrit_file_path
 
+    def _expand_manifest_with_repo(self, gerrit_file_path: str, output_folder: str) -> tuple:
+        """使用 repo 命令展開包含 include 的 manifest"""
+        import subprocess
+        import tempfile
+        import shutil
+        
+        try:
+            # 從檔案路徑取得檔案名
+            source_filename = os.path.basename(gerrit_file_path).replace('gerrit_', '')
+            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+            # 🔥 使用動態分支
+            branch = config.get_default_android_master_branch()
+            
+            # 生成展開檔案名稱
+            expanded_filename = f"gerrit_{source_filename.replace('.xml', '_expanded.xml')}"
+            final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
+            
+            self.logger.info(f"🎯 準備使用 repo 命令展開 manifest...")
+            self.logger.info(f"🎯 源檔案: {source_filename}")
+            self.logger.info(f"🎯 使用分支: {branch}")
+            self.logger.info(f"🎯 展開檔案名: {expanded_filename}")
+            self.logger.info(f"🎯 目標路徑: {final_expanded_path}")
+            
+            # 確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            
+            # 檢查 repo 命令是否可用
+            try:
+                repo_check = subprocess.run(
+                    ["repo", "--version"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=10
+                )
+                if repo_check.returncode == 0:
+                    self.logger.info(f"✅ repo 工具可用: {repo_check.stdout.strip()}")
+                else:
+                    self.logger.error(f"❌ repo 工具檢查失敗: {repo_check.stderr}")
+                    return None, None
+            except FileNotFoundError:
+                self.logger.error("❌ repo 命令未找到，請確認已安裝 repo 工具")
+                return None, None
+            except Exception as e:
+                self.logger.error(f"❌ repo 工具檢查異常: {str(e)}")
+                return None, None
+            
+            # 建立臨時工作目錄
+            temp_work_dir = tempfile.mkdtemp(prefix='repo_expand_manifest_')
+            self.logger.info(f"📁 建立臨時工作目錄: {temp_work_dir}")
+            
+            original_cwd = os.getcwd()
+            
+            try:
+                # 切換到臨時目錄
+                os.chdir(temp_work_dir)
+                self.logger.info(f"📂 切換到臨時目錄: {temp_work_dir}")
+                
+                # 步驟 1: repo init
+                self.logger.info(f"📄 執行 repo init...")
+                init_cmd = [
+                    "repo", "init", 
+                    "-u", repo_url,
+                    "-b", branch,
+                    "-m", source_filename
+                ]
+                
+                self.logger.info(f"🎯 Init 指令: {' '.join(init_cmd)}")
+                
+                init_result = subprocess.run(
+                    init_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                
+                self.logger.info(f"🔍 repo init 返回碼: {init_result.returncode}")
+                if init_result.stdout:
+                    self.logger.info(f"🔍 repo init stdout: {init_result.stdout}")
+                if init_result.stderr:
+                    self.logger.info(f"🔍 repo init stderr: {init_result.stderr}")
+                
+                if init_result.returncode != 0:
+                    self.logger.error(f"❌ repo init 失敗 (返回碼: {init_result.returncode})")
+                    return None, None
+                
+                self.logger.info("✅ repo init 成功")
+                
+                # 檢查 .repo 目錄
+                repo_dir = os.path.join(temp_work_dir, ".repo")
+                if not os.path.exists(repo_dir):
+                    self.logger.error(f"❌ .repo 目錄不存在: {repo_dir}")
+                    return None, None
+                
+                # 步驟 2: repo manifest 展開
+                self.logger.info(f"📄 執行 repo manifest 展開...")
+                
+                manifest_cmd = ["repo", "manifest"]
+                self.logger.info(f"🎯 Manifest 指令: {' '.join(manifest_cmd)}")
+                
+                manifest_result = subprocess.run(
+                    manifest_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                self.logger.info(f"🔍 repo manifest 返回碼: {manifest_result.returncode}")
+                if manifest_result.stderr:
+                    self.logger.info(f"🔍 repo manifest stderr: {manifest_result.stderr}")
+                
+                if manifest_result.returncode != 0:
+                    self.logger.error(f"❌ repo manifest 失敗 (返回碼: {manifest_result.returncode})")
+                    return None, None
+                
+                expanded_content = manifest_result.stdout
+                
+                if not expanded_content.strip():
+                    self.logger.error("❌ repo manifest 返回空內容")
+                    return None, None
+                
+                # 分析展開內容
+                project_count = expanded_content.count('<project ')
+                include_count = expanded_content.count('<include ')
+                self.logger.info(f"✅ repo manifest 成功:")
+                self.logger.info(f"   📊 內容長度: {len(expanded_content)} 字符")
+                self.logger.info(f"   📊 Project 數量: {project_count}")
+                self.logger.info(f"   📊 Include 數量: {include_count}")
+                
+                # 步驟 3: 保存展開檔案
+                self.logger.info(f"📁 保存展開檔案到: {final_expanded_path}")
+                
+                with open(final_expanded_path, 'w', encoding='utf-8') as f:
+                    f.write(expanded_content)
+                
+                # 驗證保存結果
+                if os.path.exists(final_expanded_path):
+                    file_size = os.path.getsize(final_expanded_path)
+                    self.logger.info(f"✅ 展開檔案保存成功:")
+                    self.logger.info(f"   📁 檔案路徑: {final_expanded_path}")
+                    self.logger.info(f"   📊 檔案大小: {file_size} bytes")
+                    self.logger.info(f"   📊 專案數量: {project_count}")
+                    
+                    return expanded_content, final_expanded_path
+                else:
+                    self.logger.error(f"❌ 展開檔案保存失敗: {final_expanded_path}")
+                    return None, None
+                    
+            finally:
+                # 恢復原始工作目錄
+                os.chdir(original_cwd)
+                self.logger.info(f"📂 恢復原始工作目錄: {original_cwd}")
+                
+                # 清理臨時目錄
+                try:
+                    shutil.rmtree(temp_work_dir)
+                    self.logger.info(f"🗑️ 清理臨時目錄成功: {temp_work_dir}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ 清理臨時目錄失敗: {str(e)}")
+            
+        except subprocess.TimeoutExpired:
+            self.logger.error("❌ repo 命令執行超時")
+            return None, None
+        except Exception as e:
+            self.logger.error(f"❌ 使用 repo 展開 manifest 失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"❌ 錯誤詳情: {traceback.format_exc()}")
+            return None, None
+            
     def _has_include_tags(self, xml_content: str) -> bool:
         """檢查 XML 內容是否包含 include 標籤"""
         try:
@@ -1477,7 +1793,64 @@ class ManifestComparator:
         
         self.logger.info("=" * 80)
 
+    def _determine_dest_branch_type(self, dest_branch: str, revision: str = '') -> str:
+        """判斷 dest-branch 或 revision 的類型"""
+        try:
+            # 🔥 修改邏輯：優先看 dest-branch，如果是空值則看 revision
+            value_to_check = ''
+            
+            if dest_branch and dest_branch.strip():
+                value_to_check = dest_branch.strip()
+                self.logger.debug(f"使用 dest-branch 判斷: '{value_to_check}'")
+            elif revision and revision.strip():
+                value_to_check = revision.strip()
+                self.logger.debug(f"dest-branch 為空，使用 revision 判斷: '{value_to_check}'")
+            else:
+                return ''
+            
+            # 檢查是否為 tag 形式 (以 refs/tags/ 開頭)
+            if value_to_check.startswith('refs/tags/'):
+                return 'Tag'
+            
+            # 檢查是否為 hash 形式 (40 字符的十六進制)
+            if len(value_to_check) == 40 and all(c in '0123456789abcdefABCDEF' for c in value_to_check):
+                return 'Hash'
+            
+            # 檢查是否為 branch 形式 (包含 / 但不是 refs/tags/)
+            if '/' in value_to_check and not value_to_check.startswith('refs/'):
+                return 'Branch'
+            
+            # 檢查是否為完整的 branch 路徑 (refs/heads/)
+            if value_to_check.startswith('refs/heads/'):
+                return 'Branch'
+            
+            # 其他情況默認為 Branch
+            return 'Branch'
+            
+        except Exception as e:
+            self.logger.error(f"判斷 dest-branch/revision 類型失敗: {str(e)}")
+            return ''
 
+    def _get_type_color_style(self, type_value: str):
+        """根據 type 值獲取對應的樣式"""
+        try:
+            from openpyxl.styles import Font
+            
+            # 🔥 修正：只設定文字顏色，不設定背景色
+            if type_value == 'Branch':
+                return None, Font(color="8A2BE2", bold=True)  # 紫色文字
+            elif type_value == 'Tag':
+                return None, Font(color="8B0000", bold=True)  # 深紅色文字
+            elif type_value == 'Hash':
+                return None, Font(color="0000FF", bold=True)  # 藍色文字
+            else:
+                return None, Font(color="000000", bold=False)  # 黑色文字
+                
+        except Exception as e:
+            self.logger.error(f"獲取 type 顏色樣式失敗: {str(e)}")
+            from openpyxl.styles import Font
+            return None, Font(color="000000", bold=False)
+            
 def main():
     """主函數"""
     parser = argparse.ArgumentParser(description='Manifest 比較工具 - 純比較版本')
