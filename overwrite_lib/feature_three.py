@@ -1450,10 +1450,10 @@ class FeatureThree:
     
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
                                 target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異 - 完整版本，包含 type 欄位、預設值處理、連結優化"""
+        """使用轉換資訊比較專案差異 - 修正連結邏輯版本"""
         differences = []
         
-        # 🔥 修改：建立目標專案的索引 - 使用 name+path 組合作為 key
+        # 建立目標專案的索引 - 使用 name+path 組合作為 key
         target_index = {}
         for proj in target_projects:
             name = proj['name']
@@ -1464,46 +1464,41 @@ class FeatureThree:
         # 取得正確的檔案名稱
         source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
-        # 🆕 新增：獲取預設值
+        # 獲取預設值
         source_default_remote = getattr(self, 'source_default_remote', '')
         source_default_revision = getattr(self, 'source_default_revision', '')
         target_default_remote = getattr(self, 'target_default_remote', '')
         target_default_revision = getattr(self, 'target_default_revision', '')
         
-        # 🔥 統計計數器
+        # 統計計數器
         total_compared = 0
         same_count = 0
         different_count = 0
         new_count = 0
-        na_link_count = 0  # 🆕 新增：統計 N/A 連結數量
+        na_source_link_count = 0  # source_link 是 N/A 的數量
+        na_gerrit_link_count = 0  # gerrit_source_link 是 N/A 的數量
         
         self.logger.info(f"🔍 開始差異比較，預設值:")
         self.logger.info(f"   源檔案預設 remote: {source_default_remote}")
         self.logger.info(f"   源檔案預設 revision: {source_default_revision}")
-        self.logger.info(f"   目標檔案預設 remote: {target_default_remote}")
-        self.logger.info(f"   目標檔案預設 revision: {target_default_revision}")
         
         for conv_proj in converted_projects:
             project_name = conv_proj['name']
             project_path = conv_proj['path']
             conv_composite_key = f"{project_name}|{project_path}"
-            has_conversion = conv_proj.get('changed', False)
             
-            # 🔥 移除轉換過濾條件 - 比較所有專案，不管是否有轉換
             total_compared += 1
             
-            # 🆕 新增：處理轉換後專案的預設值
+            # 處理轉換後專案的預設值
             conv_proj_processed = conv_proj.copy()
             
-            # 如果 remote 為空，使用源檔案的預設值
             if not conv_proj_processed.get('remote', '').strip():
                 conv_proj_processed['remote'] = source_default_remote
             
-            # 如果 converted_revision 為空，使用源檔案的預設值
             if not conv_proj_processed.get('converted_revision', '').strip():
                 conv_proj_processed['converted_revision'] = source_default_revision
             
-            # 🆕 新增：計算版本類型
+            # 計算版本類型
             conv_type = self._determine_revision_type(
                 conv_proj_processed.get('dest-branch', ''), 
                 conv_proj_processed.get('converted_revision', '')
@@ -1514,23 +1509,34 @@ class FeatureThree:
                 # 專案在轉換後存在，但在 Gerrit 中不存在 - 新增
                 new_count += 1
                 
-                # 🆕 修改：檢查 name 是否有效再生成連結
-                if conv_proj_processed['name'] and conv_proj_processed['name'] != 'N/A':
+                # 🔥 新增專案情況：gerrit_name 一定是 'N/A'
+                final_name = conv_proj_processed['name']
+                final_gerrit_name = 'N/A'  # 明確設定為 'N/A'
+                
+                # 檢查 name 決定 source_link
+                if final_name and final_name != 'N/A':
                     source_link = self._generate_source_link(
-                        conv_proj_processed['name'], 
+                        final_name, 
                         conv_proj_processed['converted_revision'], 
                         conv_proj_processed['remote']
                     )
+                    self.logger.debug(f"🔗 新增專案 source_link: {final_name} → {source_link}")
                 else:
                     source_link = 'N/A'
-                    na_link_count += 1
+                    na_source_link_count += 1
+                    self.logger.debug(f"🚫 新增專案 source_link: {final_name} → N/A")
+                
+                # 🔥 重要：gerrit_name 是 'N/A'，所以 gerrit_source_link 必須是 'N/A'
+                gerrit_source_link = 'N/A'
+                na_gerrit_link_count += 1
+                self.logger.debug(f"🚫 新增專案 gerrit_source_link: {final_gerrit_name} → N/A")
                 
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'type': conv_type,  # 🆕 新增欄位
+                    'type': conv_type,
                     'content': conv_proj_processed.get('content', self._build_project_line_content(conv_proj_processed, use_converted_revision=True)),
-                    'name': conv_proj_processed['name'],
+                    'name': final_name,
                     'path': conv_proj_processed['path'],
                     'revision': conv_proj_processed['converted_revision'],
                     'upstream': conv_proj_processed['upstream'],
@@ -1538,11 +1544,11 @@ class FeatureThree:
                     'groups': conv_proj_processed['groups'],
                     'clone-depth': conv_proj_processed['clone-depth'],
                     'remote': conv_proj_processed['remote'],
-                    'source_link': source_link,  # 🆕 修改：使用檢查後的連結
+                    'source_link': source_link,
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_type': 'N/A',  # 🆕 新增欄位
+                    'gerrit_type': 'N/A',
                     'gerrit_content': 'N/A (專案不存在)',
-                    'gerrit_name': 'N/A',
+                    'gerrit_name': final_gerrit_name,  # 'N/A'
                     'gerrit_path': 'N/A',
                     'gerrit_revision': 'N/A',
                     'gerrit_upstream': 'N/A',
@@ -1550,7 +1556,7 @@ class FeatureThree:
                     'gerrit_groups': 'N/A',
                     'gerrit_clone-depth': 'N/A',
                     'gerrit_remote': 'N/A',
-                    'gerrit_source_link': 'N/A',  # 🆕 修改：gerrit_name 是 N/A，所以連結也是 N/A
+                    'gerrit_source_link': gerrit_source_link,  # 'N/A'
                     'comparison_status': '🆕 新增',
                     'comparison_result': '僅存在於轉換後',
                     'status_color': 'yellow'
@@ -1561,20 +1567,20 @@ class FeatureThree:
             # 使用 composite key 取得目標專案
             target_proj = target_index[conv_composite_key].copy()
             
-            # 🆕 新增：處理目標專案的預設值
+            # 處理目標專案的預設值
             if not target_proj.get('remote', '').strip():
                 target_proj['remote'] = target_default_remote
             
             if not target_proj.get('revision', '').strip():
                 target_proj['revision'] = target_default_revision
             
-            # 🆕 新增：計算目標專案的版本類型
+            # 計算目標專案的版本類型
             gerrit_type = self._determine_revision_type(
                 target_proj.get('dest-branch', ''), 
                 target_proj.get('revision', '')
             )
             
-            # 🔥 修正比較邏輯：取得詳細差異
+            # 取得詳細差異
             diff_details = self._get_detailed_differences_between_projects(conv_proj_processed, target_proj, use_converted_revision=True)
             is_identical = len(diff_details) == 0
 
@@ -1586,40 +1592,47 @@ class FeatureThree:
                 same_count += 1
             else:
                 comparison_status = '❌ 不同'
-                # 🔥 使用詳細的差異摘要
                 comparison_result = self._format_difference_summary(diff_details)
                 status_color = 'red'
                 different_count += 1
             
-            # 🆕 修改：檢查 name 是否有效再生成連結
-            if conv_proj_processed['name'] and conv_proj_processed['name'] != 'N/A':
+            # 🔥 正常比較情況：根據實際的 name 和 gerrit_name 決定連結
+            final_name = conv_proj_processed['name']
+            final_gerrit_name = target_proj['name']
+            
+            # 檢查 name 決定 source_link
+            if final_name and final_name != 'N/A':
                 source_link = self._generate_source_link(
-                    conv_proj_processed['name'], 
+                    final_name, 
                     conv_proj_processed['converted_revision'], 
                     conv_proj_processed['remote']
                 )
+                self.logger.debug(f"🔗 比較專案 source_link: {final_name} → {source_link}")
             else:
                 source_link = 'N/A'
-                na_link_count += 1
+                na_source_link_count += 1
+                self.logger.debug(f"🚫 比較專案 source_link: {final_name} → N/A")
 
-            # 🆕 修改：檢查 gerrit_name 是否有效再生成連結
-            if target_proj['name'] and target_proj['name'] != 'N/A':
+            # 檢查 gerrit_name 決定 gerrit_source_link
+            if final_gerrit_name and final_gerrit_name != 'N/A':
                 gerrit_source_link = self._generate_source_link(
-                    target_proj['name'], 
+                    final_gerrit_name, 
                     target_proj['revision'], 
                     target_proj['remote']
                 )
+                self.logger.debug(f"🔗 比較專案 gerrit_source_link: {final_gerrit_name} → {gerrit_source_link}")
             else:
                 gerrit_source_link = 'N/A'
-                na_link_count += 1
+                na_gerrit_link_count += 1
+                self.logger.debug(f"🚫 比較專案 gerrit_source_link: {final_gerrit_name} → N/A")
             
-            # 記錄所有比較結果（包含相同的）
+            # 記錄比較結果
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'type': conv_type,  # 🆕 新增欄位
+                'type': conv_type,
                 'content': conv_proj_processed.get('content', self._build_project_line_content(conv_proj_processed, use_converted_revision=True)),
-                'name': conv_proj_processed['name'],
+                'name': final_name,
                 'path': conv_proj_processed['path'],
                 'revision': conv_proj_processed['converted_revision'],
                 'upstream': conv_proj_processed['upstream'],
@@ -1627,11 +1640,11 @@ class FeatureThree:
                 'groups': conv_proj_processed['groups'],
                 'clone-depth': conv_proj_processed['clone-depth'],
                 'remote': conv_proj_processed['remote'],
-                'source_link': source_link,  # 🆕 修改：使用檢查後的連結
+                'source_link': source_link,
                 'gerrit_source_file': gerrit_source_file,
-                'gerrit_type': gerrit_type,  # 🆕 新增欄位
+                'gerrit_type': gerrit_type,
                 'gerrit_content': target_proj.get('full_line', target_proj['full_line']),
-                'gerrit_name': target_proj['name'],
+                'gerrit_name': final_gerrit_name,
                 'gerrit_path': target_proj['path'],
                 'gerrit_revision': target_proj['revision'],
                 'gerrit_upstream': target_proj['upstream'],
@@ -1639,7 +1652,7 @@ class FeatureThree:
                 'gerrit_groups': target_proj['groups'],
                 'gerrit_clone-depth': target_proj['clone-depth'],
                 'gerrit_remote': target_proj['remote'],
-                'gerrit_source_link': gerrit_source_link,  # 🆕 修改：使用檢查後的連結
+                'gerrit_source_link': gerrit_source_link,
                 'comparison_status': comparison_status,
                 'comparison_result': comparison_result,
                 'status_color': status_color
@@ -1657,7 +1670,7 @@ class FeatureThree:
             if composite_key not in converted_composite_keys:
                 deleted_count += 1
                 
-                # 🆕 新增：處理刪除專案的預設值
+                # 處理刪除專案的預設值
                 target_proj_processed = target_proj.copy()
                 if not target_proj_processed.get('remote', '').strip():
                     target_proj_processed['remote'] = target_default_remote
@@ -1665,29 +1678,41 @@ class FeatureThree:
                 if not target_proj_processed.get('revision', '').strip():
                     target_proj_processed['revision'] = target_default_revision
                 
-                # 🆕 新增：計算刪除專案的版本類型
+                # 計算刪除專案的版本類型
                 deleted_gerrit_type = self._determine_revision_type(
                     target_proj_processed.get('dest-branch', ''), 
                     target_proj_processed.get('revision', '')
                 )
                 
-                # 🆕 修改：檢查 gerrit_name 是否有效再生成連結
-                if target_proj_processed['name'] and target_proj_processed['name'] != 'N/A':
+                # 🔥 刪除專案情況：name 填專案名稱，gerrit_name 也是專案名稱
+                final_name = target_proj_processed['name']  # 實際專案名稱
+                final_gerrit_name = target_proj_processed['name']  # 實際專案名稱
+                
+                # 🔥 重要：刪除情況下，name 不是 'N/A' 但邏輯上 source_link 應該是 'N/A'
+                # 因為專案在轉換後不存在，沒有轉換後的資訊
+                source_link = 'N/A'
+                na_source_link_count += 1
+                self.logger.debug(f"🚫 刪除專案 source_link: {final_name} → N/A (專案已刪除)")
+
+                # 檢查 gerrit_name 決定 gerrit_source_link
+                if final_gerrit_name and final_gerrit_name != 'N/A':
                     gerrit_source_link = self._generate_source_link(
-                        target_proj_processed['name'], 
+                        final_gerrit_name, 
                         target_proj_processed['revision'], 
                         target_proj_processed['remote']
                     )
+                    self.logger.debug(f"🔗 刪除專案 gerrit_source_link: {final_gerrit_name} → {gerrit_source_link}")
                 else:
                     gerrit_source_link = 'N/A'
-                    na_link_count += 1
+                    na_gerrit_link_count += 1
+                    self.logger.debug(f"🚫 刪除專案 gerrit_source_link: {final_gerrit_name} → N/A")
                 
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'type': 'N/A',  # 🆕 新增欄位
+                    'type': 'N/A',
                     'content': 'N/A (專案已刪除)',
-                    'name': target_proj_processed['name'],
+                    'name': final_name,
                     'path': target_proj_processed['path'],
                     'revision': 'N/A',
                     'upstream': 'N/A',
@@ -1695,11 +1720,11 @@ class FeatureThree:
                     'groups': 'N/A',
                     'clone-depth': 'N/A',
                     'remote': 'N/A',
-                    'source_link': 'N/A',  # 🆕 修改：name 是 N/A，所以連結也是 N/A
+                    'source_link': source_link,  # 'N/A'
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_type': deleted_gerrit_type,  # 🆕 新增欄位
+                    'gerrit_type': deleted_gerrit_type,
                     'gerrit_content': target_proj_processed.get('full_line', target_proj_processed['full_line']),
-                    'gerrit_name': target_proj_processed['name'],
+                    'gerrit_name': final_gerrit_name,
                     'gerrit_path': target_proj_processed['path'],
                     'gerrit_revision': target_proj_processed['revision'],
                     'gerrit_upstream': target_proj_processed['upstream'],
@@ -1707,14 +1732,14 @@ class FeatureThree:
                     'gerrit_groups': target_proj_processed['groups'],
                     'gerrit_clone-depth': target_proj_processed['clone-depth'],
                     'gerrit_remote': target_proj_processed['remote'],
-                    'gerrit_source_link': gerrit_source_link,  # 🆕 修改：使用檢查後的連結
+                    'gerrit_source_link': gerrit_source_link,
                     'comparison_status': '🗑️ 刪除',
                     'comparison_result': '僅存在於 Gerrit',
                     'status_color': 'orange'
                 }
                 differences.append(difference)
         
-        # 🔥 添加詳細統計日誌
+        # 🔥 詳細統計日誌
         self.logger.info(f"🔍 差異比較詳細統計:")
         self.logger.info(f"   總比較專案數: {total_compared}")
         self.logger.info(f"   ✔️ 相同: {same_count}")
@@ -1722,8 +1747,9 @@ class FeatureThree:
         self.logger.info(f"   🆕 新增: {new_count}")
         self.logger.info(f"   🗑️ 刪除: {deleted_count}")
         self.logger.info(f"   📋 差異頁籤總項目: {len(differences)}")
-        self.logger.info(f"   🆕 已新增 type 和 gerrit_type 欄位")
-        self.logger.info(f"   🔗 N/A 連結數量: {na_link_count} (優化連結生成邏輯)")
+        self.logger.info(f"   🔗 source_link 是 N/A 的數量: {na_source_link_count}")
+        self.logger.info(f"   🔗 gerrit_source_link 是 N/A 的數量: {na_gerrit_link_count}")
+        self.logger.info(f"   ✅ 已嚴格執行規則：name='N/A'→source_link='N/A', gerrit_name='N/A'→gerrit_source_link='N/A'")
         
         return differences
     
@@ -2580,7 +2606,7 @@ class FeatureThree:
 
     def _add_manifest_hyperlinks(self, worksheet, sheet_name: str):
         """
-        為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結
+        為 manifest 相關頁籤添加 source_link 欄位的正確 gerrit 連結 - 修正版本，遵守 N/A 規則
         
         Args:
             worksheet: Excel 工作表
@@ -2592,6 +2618,8 @@ class FeatureThree:
             gerrit_source_file_col = None
             source_link_col = None
             gerrit_source_link_col = None
+            name_col = None  # 🆕 新增：找到 name 欄位
+            gerrit_name_col = None  # 🆕 新增：找到 gerrit_name 欄位
             
             for col_num, cell in enumerate(worksheet[1], 1):  # 表頭行
                 header_value = str(cell.value) if cell.value else ''
@@ -2604,6 +2632,10 @@ class FeatureThree:
                     source_link_col = col_num
                 elif header_value == 'gerrit_source_link':
                     gerrit_source_link_col = col_num
+                elif header_value == 'name':  # 🆕 新增
+                    name_col = col_num
+                elif header_value == 'gerrit_name':  # 🆕 新增
+                    gerrit_name_col = col_num
             
             # 🔥 只有特定頁籤的 source_file 欄位需要添加連結
             source_file_need_link = sheet_name in ['來源 gerrit manifest', '目的 gerrit manifest']
@@ -2628,16 +2660,24 @@ class FeatureThree:
                         gerrit_url = self._generate_gerrit_manifest_link(filename)
                         self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_file_col, gerrit_url, filename)
             
-            # 🆕 為 source_link 欄位添加正確的專案連結（重點修改）
-            if source_link_col:
+            # 🆕 修改：為 source_link 欄位添加正確的專案連結，但要檢查 name 是否為 N/A
+            if source_link_col and name_col:
                 for row_num in range(2, worksheet.max_row + 1):
-                    # 取得該行的專案資訊
-                    name_cell = self._find_cell_value_in_row(worksheet, row_num, ['name'])
+                    # 🔥 重要：先檢查 name 欄位的值
+                    name_cell = worksheet.cell(row=row_num, column=name_col)
+                    name_value = str(name_cell.value) if name_cell.value else ''
+                    
+                    # 🔥 如果 name 是 N/A，直接跳過，不要重新生成連結
+                    if name_value == 'N/A' or not name_value:
+                        self.logger.debug(f"跳過 source_link 生成：第 {row_num} 行 name 是 '{name_value}'")
+                        continue
+                    
+                    # 取得該行的其他專案資訊
                     revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['revision'])
                     remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['remote'])
                     
-                    if name_cell:
-                        project_name = str(name_cell)
+                    if name_value:
+                        project_name = name_value
                         revision = str(revision_cell) if revision_cell else ''
                         remote = str(remote_cell) if remote_cell else ''
                         
@@ -2647,17 +2687,26 @@ class FeatureThree:
                         if gerrit_project_url and gerrit_project_url != 'N/A':
                             # 🔥 使用 HYPERLINK 格式，顯示連結本身
                             self._add_hyperlink_formula_to_cell(worksheet, row_num, source_link_col, gerrit_project_url, gerrit_project_url)
+                            self.logger.debug(f"生成 source_link：第 {row_num} 行 {project_name} → {gerrit_project_url}")
             
-            # 🆕 為 gerrit_source_link 欄位添加正確的專案連結（重點修改）
-            if gerrit_source_link_col:
+            # 🆕 修改：為 gerrit_source_link 欄位添加正確的專案連結，但要檢查 gerrit_name 是否為 N/A
+            if gerrit_source_link_col and gerrit_name_col:
                 for row_num in range(2, worksheet.max_row + 1):
+                    # 🔥 重要：先檢查 gerrit_name 欄位的值
+                    gerrit_name_cell = worksheet.cell(row=row_num, column=gerrit_name_col)
+                    gerrit_name_value = str(gerrit_name_cell.value) if gerrit_name_cell.value else ''
+                    
+                    # 🔥 如果 gerrit_name 是 N/A，直接跳過，不要重新生成連結
+                    if gerrit_name_value == 'N/A' or not gerrit_name_value:
+                        self.logger.debug(f"跳過 gerrit_source_link 生成：第 {row_num} 行 gerrit_name 是 '{gerrit_name_value}'")
+                        continue
+                    
                     # 取得該行的 Gerrit 專案資訊
-                    gerrit_name_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_name'])
                     gerrit_revision_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_revision'])
                     gerrit_remote_cell = self._find_cell_value_in_row(worksheet, row_num, ['gerrit_remote'])
                     
-                    if gerrit_name_cell:
-                        project_name = str(gerrit_name_cell)
+                    if gerrit_name_value:
+                        project_name = gerrit_name_value
                         revision = str(gerrit_revision_cell) if gerrit_revision_cell else ''
                         remote = str(gerrit_remote_cell) if gerrit_remote_cell else ''
                         
@@ -2667,6 +2716,7 @@ class FeatureThree:
                         if gerrit_project_url and gerrit_project_url != 'N/A':
                             # 🔥 使用 HYPERLINK 格式
                             self._add_hyperlink_formula_to_cell(worksheet, row_num, gerrit_source_link_col, gerrit_project_url, gerrit_project_url)
+                            self.logger.debug(f"生成 gerrit_source_link：第 {row_num} 行 {project_name} → {gerrit_project_url}")
             
             # 記錄處理結果
             if source_file_col and source_file_need_link:
@@ -2676,10 +2726,10 @@ class FeatureThree:
                 self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_file 欄位連結")
             
             if source_link_col:
-                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_link 欄位正確的專案連結")
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 source_link 欄位連結（遵守 N/A 規則）")
             
             if gerrit_source_link_col:
-                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_link 欄位正確的專案連結")
+                self.logger.info(f"✅ 已為 {sheet_name} 添加 gerrit_source_link 欄位連結（遵守 N/A 規則）")
             
         except Exception as e:
             self.logger.error(f"添加 {sheet_name} 超連結失敗: {str(e)}")
