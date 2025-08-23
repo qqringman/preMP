@@ -95,9 +95,13 @@ class FeatureThree:
             if source_content:
                 source_download_success = True
                 self.logger.info("✅ 源檔案下載成功")
+                
+                # 🆕 新增：提取預設值
+                self.source_default_remote, self.source_default_revision = self._get_default_values_from_xml(source_content)
+                self.logger.info(f"源檔案預設值: remote={self.source_default_remote}, revision={self.source_default_revision}")
             else:
                 self.logger.error("❌ 下載源檔案失敗")
-                # 仍然繼續執行，生成錯誤報告
+                self.source_default_remote, self.source_default_revision = '', ''
             
             # 步驟 1.5: 保存源檔案到 output 資料夾（加上 gerrit_ 前綴）
             source_file_path = None
@@ -153,9 +157,14 @@ class FeatureThree:
             if target_content:
                 target_download_success = True
                 target_file_path = self._save_target_file(target_content, overwrite_type, output_folder)
+                
+                # 🆕 新增：提取目標檔案的預設值
+                self.target_default_remote, self.target_default_revision = self._get_default_values_from_xml(target_content)
+                self.logger.info(f"目標檔案預設值: remote={self.target_default_remote}, revision={self.target_default_revision}")
                 self.logger.info("✅ 目標檔案下載成功")
             else:
                 self.logger.warning("⚠️ 無法下載目標檔案，將跳過差異比較")
+                self.target_default_remote, self.target_default_revision = '', ''
             
             # 步驟 5: 進行差異分析
             diff_analysis = self._analyze_differences(
@@ -1440,8 +1449,8 @@ class FeatureThree:
             return 0, f"<project name=\"{project_name}\" ... />"
     
     def _compare_projects_with_conversion_info(self, converted_projects: List[Dict], 
-                                    target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
-        """使用轉換資訊比較專案差異 - 修正版本，比較所有專案並修正統計"""
+                                target_projects: List[Dict], overwrite_type: str) -> List[Dict]:
+        """使用轉換資訊比較專案差異 - 完整版本，包含 type 欄位、預設值處理、連結優化"""
         differences = []
         
         # 🔥 修改：建立目標專案的索引 - 使用 name+path 組合作為 key
@@ -1455,11 +1464,24 @@ class FeatureThree:
         # 取得正確的檔案名稱
         source_file, gerrit_source_file = self._get_source_and_target_filenames(overwrite_type)
         
+        # 🆕 新增：獲取預設值
+        source_default_remote = getattr(self, 'source_default_remote', '')
+        source_default_revision = getattr(self, 'source_default_revision', '')
+        target_default_remote = getattr(self, 'target_default_remote', '')
+        target_default_revision = getattr(self, 'target_default_revision', '')
+        
         # 🔥 統計計數器
         total_compared = 0
         same_count = 0
         different_count = 0
         new_count = 0
+        na_link_count = 0  # 🆕 新增：統計 N/A 連結數量
+        
+        self.logger.info(f"🔍 開始差異比較，預設值:")
+        self.logger.info(f"   源檔案預設 remote: {source_default_remote}")
+        self.logger.info(f"   源檔案預設 revision: {source_default_revision}")
+        self.logger.info(f"   目標檔案預設 remote: {target_default_remote}")
+        self.logger.info(f"   目標檔案預設 revision: {target_default_revision}")
         
         for conv_proj in converted_projects:
             project_name = conv_proj['name']
@@ -1470,24 +1492,55 @@ class FeatureThree:
             # 🔥 移除轉換過濾條件 - 比較所有專案，不管是否有轉換
             total_compared += 1
             
+            # 🆕 新增：處理轉換後專案的預設值
+            conv_proj_processed = conv_proj.copy()
+            
+            # 如果 remote 為空，使用源檔案的預設值
+            if not conv_proj_processed.get('remote', '').strip():
+                conv_proj_processed['remote'] = source_default_remote
+            
+            # 如果 converted_revision 為空，使用源檔案的預設值
+            if not conv_proj_processed.get('converted_revision', '').strip():
+                conv_proj_processed['converted_revision'] = source_default_revision
+            
+            # 🆕 新增：計算版本類型
+            conv_type = self._determine_revision_type(
+                conv_proj_processed.get('dest-branch', ''), 
+                conv_proj_processed.get('converted_revision', '')
+            )
+            
             # 檢查專案是否在目標中存在
             if conv_composite_key not in target_index:
                 # 專案在轉換後存在，但在 Gerrit 中不存在 - 新增
                 new_count += 1
+                
+                # 🆕 修改：檢查 name 是否有效再生成連結
+                if conv_proj_processed['name'] and conv_proj_processed['name'] != 'N/A':
+                    source_link = self._generate_source_link(
+                        conv_proj_processed['name'], 
+                        conv_proj_processed['converted_revision'], 
+                        conv_proj_processed['remote']
+                    )
+                else:
+                    source_link = 'N/A'
+                    na_link_count += 1
+                
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
-                    'content': conv_proj.get('content', self._build_project_line_content(conv_proj, use_converted_revision=True)),
-                    'name': conv_proj['name'],
-                    'path': conv_proj['path'],
-                    'revision': conv_proj['converted_revision'],
-                    'upstream': conv_proj['upstream'],
-                    'dest-branch': conv_proj['dest-branch'],
-                    'groups': conv_proj['groups'],
-                    'clone-depth': conv_proj['clone-depth'],
-                    'remote': conv_proj['remote'],
-                    'source_link': self._generate_source_link(conv_proj['name'], conv_proj['converted_revision'], conv_proj['remote']),
+                    'type': conv_type,  # 🆕 新增欄位
+                    'content': conv_proj_processed.get('content', self._build_project_line_content(conv_proj_processed, use_converted_revision=True)),
+                    'name': conv_proj_processed['name'],
+                    'path': conv_proj_processed['path'],
+                    'revision': conv_proj_processed['converted_revision'],
+                    'upstream': conv_proj_processed['upstream'],
+                    'dest-branch': conv_proj_processed['dest-branch'],
+                    'groups': conv_proj_processed['groups'],
+                    'clone-depth': conv_proj_processed['clone-depth'],
+                    'remote': conv_proj_processed['remote'],
+                    'source_link': source_link,  # 🆕 修改：使用檢查後的連結
                     'gerrit_source_file': gerrit_source_file,
+                    'gerrit_type': 'N/A',  # 🆕 新增欄位
                     'gerrit_content': 'N/A (專案不存在)',
                     'gerrit_name': 'N/A',
                     'gerrit_path': 'N/A',
@@ -1497,7 +1550,7 @@ class FeatureThree:
                     'gerrit_groups': 'N/A',
                     'gerrit_clone-depth': 'N/A',
                     'gerrit_remote': 'N/A',
-                    'gerrit_source_link': 'N/A',
+                    'gerrit_source_link': 'N/A',  # 🆕 修改：gerrit_name 是 N/A，所以連結也是 N/A
                     'comparison_status': '🆕 新增',
                     'comparison_result': '僅存在於轉換後',
                     'status_color': 'yellow'
@@ -1506,10 +1559,23 @@ class FeatureThree:
                 continue
             
             # 使用 composite key 取得目標專案
-            target_proj = target_index[conv_composite_key]
+            target_proj = target_index[conv_composite_key].copy()
+            
+            # 🆕 新增：處理目標專案的預設值
+            if not target_proj.get('remote', '').strip():
+                target_proj['remote'] = target_default_remote
+            
+            if not target_proj.get('revision', '').strip():
+                target_proj['revision'] = target_default_revision
+            
+            # 🆕 新增：計算目標專案的版本類型
+            gerrit_type = self._determine_revision_type(
+                target_proj.get('dest-branch', ''), 
+                target_proj.get('revision', '')
+            )
             
             # 🔥 修正比較邏輯：取得詳細差異
-            diff_details = self._get_detailed_differences_between_projects(conv_proj, target_proj, use_converted_revision=True)
+            diff_details = self._get_detailed_differences_between_projects(conv_proj_processed, target_proj, use_converted_revision=True)
             is_identical = len(diff_details) == 0
 
             # 判斷比較狀態並計數
@@ -1525,21 +1591,45 @@ class FeatureThree:
                 status_color = 'red'
                 different_count += 1
             
+            # 🆕 修改：檢查 name 是否有效再生成連結
+            if conv_proj_processed['name'] and conv_proj_processed['name'] != 'N/A':
+                source_link = self._generate_source_link(
+                    conv_proj_processed['name'], 
+                    conv_proj_processed['converted_revision'], 
+                    conv_proj_processed['remote']
+                )
+            else:
+                source_link = 'N/A'
+                na_link_count += 1
+
+            # 🆕 修改：檢查 gerrit_name 是否有效再生成連結
+            if target_proj['name'] and target_proj['name'] != 'N/A':
+                gerrit_source_link = self._generate_source_link(
+                    target_proj['name'], 
+                    target_proj['revision'], 
+                    target_proj['remote']
+                )
+            else:
+                gerrit_source_link = 'N/A'
+                na_link_count += 1
+            
             # 記錄所有比較結果（包含相同的）
             difference = {
                 'SN': len(differences) + 1,
                 'source_file': source_file,
-                'content': conv_proj.get('content', self._build_project_line_content(conv_proj, use_converted_revision=True)),
-                'name': conv_proj['name'],
-                'path': conv_proj['path'],
-                'revision': conv_proj['converted_revision'],
-                'upstream': conv_proj['upstream'],
-                'dest-branch': conv_proj['dest-branch'],
-                'groups': conv_proj['groups'],
-                'clone-depth': conv_proj['clone-depth'],
-                'remote': conv_proj['remote'],
-                'source_link': self._generate_source_link(conv_proj['name'], conv_proj['converted_revision'], conv_proj['remote']),
+                'type': conv_type,  # 🆕 新增欄位
+                'content': conv_proj_processed.get('content', self._build_project_line_content(conv_proj_processed, use_converted_revision=True)),
+                'name': conv_proj_processed['name'],
+                'path': conv_proj_processed['path'],
+                'revision': conv_proj_processed['converted_revision'],
+                'upstream': conv_proj_processed['upstream'],
+                'dest-branch': conv_proj_processed['dest-branch'],
+                'groups': conv_proj_processed['groups'],
+                'clone-depth': conv_proj_processed['clone-depth'],
+                'remote': conv_proj_processed['remote'],
+                'source_link': source_link,  # 🆕 修改：使用檢查後的連結
                 'gerrit_source_file': gerrit_source_file,
+                'gerrit_type': gerrit_type,  # 🆕 新增欄位
                 'gerrit_content': target_proj.get('full_line', target_proj['full_line']),
                 'gerrit_name': target_proj['name'],
                 'gerrit_path': target_proj['path'],
@@ -1549,7 +1639,7 @@ class FeatureThree:
                 'gerrit_groups': target_proj['groups'],
                 'gerrit_clone-depth': target_proj['clone-depth'],
                 'gerrit_remote': target_proj['remote'],
-                'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
+                'gerrit_source_link': gerrit_source_link,  # 🆕 修改：使用檢查後的連結
                 'comparison_status': comparison_status,
                 'comparison_result': comparison_result,
                 'status_color': status_color
@@ -1566,30 +1656,58 @@ class FeatureThree:
         for composite_key, target_proj in target_index.items():
             if composite_key not in converted_composite_keys:
                 deleted_count += 1
+                
+                # 🆕 新增：處理刪除專案的預設值
+                target_proj_processed = target_proj.copy()
+                if not target_proj_processed.get('remote', '').strip():
+                    target_proj_processed['remote'] = target_default_remote
+                
+                if not target_proj_processed.get('revision', '').strip():
+                    target_proj_processed['revision'] = target_default_revision
+                
+                # 🆕 新增：計算刪除專案的版本類型
+                deleted_gerrit_type = self._determine_revision_type(
+                    target_proj_processed.get('dest-branch', ''), 
+                    target_proj_processed.get('revision', '')
+                )
+                
+                # 🆕 修改：檢查 gerrit_name 是否有效再生成連結
+                if target_proj_processed['name'] and target_proj_processed['name'] != 'N/A':
+                    gerrit_source_link = self._generate_source_link(
+                        target_proj_processed['name'], 
+                        target_proj_processed['revision'], 
+                        target_proj_processed['remote']
+                    )
+                else:
+                    gerrit_source_link = 'N/A'
+                    na_link_count += 1
+                
                 difference = {
                     'SN': len(differences) + 1,
                     'source_file': source_file,
+                    'type': 'N/A',  # 🆕 新增欄位
                     'content': 'N/A (專案已刪除)',
-                    'name': target_proj['name'],
-                    'path': target_proj['path'],
+                    'name': target_proj_processed['name'],
+                    'path': target_proj_processed['path'],
                     'revision': 'N/A',
                     'upstream': 'N/A',
                     'dest-branch': 'N/A',
                     'groups': 'N/A',
                     'clone-depth': 'N/A',
                     'remote': 'N/A',
-                    'source_link': 'N/A',
+                    'source_link': 'N/A',  # 🆕 修改：name 是 N/A，所以連結也是 N/A
                     'gerrit_source_file': gerrit_source_file,
-                    'gerrit_content': target_proj.get('full_line', target_proj['full_line']),
-                    'gerrit_name': target_proj['name'],
-                    'gerrit_path': target_proj['path'],
-                    'gerrit_revision': target_proj['revision'],
-                    'gerrit_upstream': target_proj['upstream'],
-                    'gerrit_dest-branch': target_proj['dest-branch'],
-                    'gerrit_groups': target_proj['groups'],
-                    'gerrit_clone-depth': target_proj['clone-depth'],
-                    'gerrit_remote': target_proj['remote'],
-                    'gerrit_source_link': self._generate_source_link(target_proj['name'], target_proj['revision'], target_proj['remote']),
+                    'gerrit_type': deleted_gerrit_type,  # 🆕 新增欄位
+                    'gerrit_content': target_proj_processed.get('full_line', target_proj_processed['full_line']),
+                    'gerrit_name': target_proj_processed['name'],
+                    'gerrit_path': target_proj_processed['path'],
+                    'gerrit_revision': target_proj_processed['revision'],
+                    'gerrit_upstream': target_proj_processed['upstream'],
+                    'gerrit_dest-branch': target_proj_processed['dest-branch'],
+                    'gerrit_groups': target_proj_processed['groups'],
+                    'gerrit_clone-depth': target_proj_processed['clone-depth'],
+                    'gerrit_remote': target_proj_processed['remote'],
+                    'gerrit_source_link': gerrit_source_link,  # 🆕 修改：使用檢查後的連結
                     'comparison_status': '🗑️ 刪除',
                     'comparison_result': '僅存在於 Gerrit',
                     'status_color': 'orange'
@@ -1604,6 +1722,8 @@ class FeatureThree:
         self.logger.info(f"   🆕 新增: {new_count}")
         self.logger.info(f"   🗑️ 刪除: {deleted_count}")
         self.logger.info(f"   📋 差異頁籤總項目: {len(differences)}")
+        self.logger.info(f"   🆕 已新增 type 和 gerrit_type 欄位")
+        self.logger.info(f"   🔗 N/A 連結數量: {na_link_count} (優化連結生成邏輯)")
         
         return differences
     
@@ -2194,6 +2314,11 @@ class FeatureThree:
                 # 頁籤 2: 轉換後專案（淺藍色底色）
                 if diff_analysis['converted_projects']:
                     converted_data = []
+                    
+                    # 🆕 新增：獲取預設值
+                    source_default_remote = getattr(self, 'source_default_remote', '')
+                    source_default_revision = getattr(self, 'source_default_revision', '')
+                    
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
                         has_conversion = proj.get('changed', False)
                         if has_conversion:
@@ -2203,22 +2328,42 @@ class FeatureThree:
                             conversion_status = '⭕ 未轉換'
                             status_description = f"保持原值: {proj['original_revision']}"
                         
+                        # 🆕 修改：處理所有預設值 - 包含原始 Revision
+                        effective_remote = proj.get('remote', '').strip() or source_default_remote
+                        effective_original_revision = proj.get('original_revision', '').strip() or source_default_revision  # 🆕 新增
+                        effective_converted_revision = proj.get('converted_revision', '').strip() or source_default_revision
+                        
+                        # 🆕 修改：重新生成狀態描述，使用處理過的值
+                        if has_conversion:
+                            conversion_status = '🔄 已轉換'
+                            status_description = f"{effective_original_revision} → {effective_converted_revision}"
+                        else:
+                            conversion_status = '⭕ 未轉換'
+                            status_description = f"保持原值: {effective_original_revision}"
+                        
+                        # 🆕 修改：判斷版本類型時使用處理過的值
+                        revision_type = self._determine_revision_type(
+                            proj.get('dest-branch', ''), 
+                            effective_converted_revision
+                        )
+                        
                         converted_data.append({
                             'SN': i,
                             '專案名稱': proj['name'],
                             '專案路徑': proj['path'],
                             '轉換狀態': conversion_status,
                             '來源檔案': f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}",
-                            '原始 Revision': proj['original_revision'],
+                            '原始 Revision': effective_original_revision,  # 🆕 修改：使用處理過的值
                             '轉換後檔案': self.output_files.get(overwrite_type, 'unknown.xml'),
-                            '轉換後 Revision': proj['converted_revision'],
+                            '轉換後 Revision': effective_converted_revision,  # 🆕 修改：使用處理過的值
                             'Revision 是否相等': '',
-                            '轉換說明': status_description,
+                            'type': revision_type,  # 🆕 新增欄位
+                            '轉換說明': status_description,  # 🆕 修改：使用處理過的狀態描述
                             'Upstream': proj['upstream'],
                             'Dest-Branch': proj['dest-branch'],
                             'Groups': proj['groups'],
                             'Clone-Depth': proj['clone-depth'],
-                            'Remote': proj['remote']
+                            'Remote': effective_remote  # 🆕 使用處理過的 remote
                         })
                     
                     df_converted = pd.DataFrame(converted_data)
@@ -2231,10 +2376,9 @@ class FeatureThree:
                     
                     diff_columns = [
                         'SN', 'comparison_status', 'comparison_result',
-                        'source_file', 'content', 'name', 'path', 
-                        'revision',
-                        'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
-                        'gerrit_source_file', 'gerrit_content', 'gerrit_name', 
+                        'source_file', 'type', 'content', 'name', 'path', 
+                        'revision', 'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
+                        'gerrit_source_file', 'gerrit_type', 'gerrit_content', 'gerrit_name', 
                         'gerrit_path', 'gerrit_revision', 'gerrit_upstream', 
                         'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote', 'gerrit_source_link'
                     ]
@@ -2247,45 +2391,77 @@ class FeatureThree:
                 # 🔥 頁籤 4: 來源 gerrit manifest（修改名稱）
                 if diff_analysis['converted_projects']:
                     source_data = []
+                    
+                    # 🆕 新增：獲取預設值
+                    source_default_remote = getattr(self, 'source_default_remote', '')
+                    source_default_revision = getattr(self, 'source_default_revision', '')
+                    
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['original_revision'], proj['remote'])
+                        # 🆕 新增：處理預設值
+                        effective_remote = proj.get('remote', '').strip() or source_default_remote
+                        effective_original_revision = proj.get('original_revision', '').strip() or source_default_revision
+                        
+                        source_link = self._generate_source_link(proj['name'], effective_original_revision, effective_remote)
                         gerrit_source_filename = f"gerrit_{self.source_files.get(overwrite_type, 'unknown.xml')}"
+                        
+                        # 🆕 新增：判斷版本類型
+                        source_type = self._determine_revision_type(
+                            proj.get('dest-branch', ''), 
+                            effective_original_revision
+                        )
                         
                         source_data.append({
                             'SN': i,
                             'source_file': gerrit_source_filename,
+                            'type': source_type,  # 🆕 新增欄位
                             'name': proj['name'],
                             'path': proj['path'],
-                            'revision': proj['original_revision'],
+                            'revision': effective_original_revision,  # 🆕 使用處理過的 revision
                             'upstream': proj['upstream'],
                             'dest-branch': proj['dest-branch'],
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
+                            'remote': effective_remote,  # 🆕 使用處理過的 remote
                             'source_link': source_link
                         })
                     
                     df_source = pd.DataFrame(source_data)
-                    df_source.to_excel(writer, sheet_name='來源 gerrit manifest', index=False)  # 🔥 修改名稱
+                    df_source.to_excel(writer, sheet_name='來源 gerrit manifest', index=False)
                 
                 # 頁籤 5: 轉換後的 manifest（淺綠色底色）
                 if diff_analysis['converted_projects']:
                     converted_manifest_data = []
+                    
+                    # 🆕 新增：獲取預設值
+                    source_default_remote = getattr(self, 'source_default_remote', '')
+                    source_default_revision = getattr(self, 'source_default_revision', '')
+                    
                     for i, proj in enumerate(diff_analysis['converted_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['converted_revision'], proj['remote'])
+                        # 🆕 新增：處理預設值
+                        effective_remote = proj.get('remote', '').strip() or source_default_remote
+                        effective_converted_revision = proj.get('converted_revision', '').strip() or source_default_revision
+                        
+                        source_link = self._generate_source_link(proj['name'], effective_converted_revision, effective_remote)
                         output_filename = self.output_files.get(overwrite_type, 'unknown.xml')
+                        
+                        # 🆕 新增：判斷版本類型
+                        converted_type = self._determine_revision_type(
+                            proj.get('dest-branch', ''), 
+                            effective_converted_revision
+                        )
                         
                         converted_manifest_data.append({
                             'SN': i,
                             'source_file': output_filename,
+                            'type': converted_type,  # 🆕 新增欄位
                             'name': proj['name'],
                             'path': proj['path'],
-                            'revision': proj['converted_revision'],
+                            'revision': effective_converted_revision,  # 🆕 使用處理過的 revision
                             'upstream': proj['upstream'],
                             'dest-branch': proj['dest-branch'],
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
+                            'remote': effective_remote,  # 🆕 使用處理過的 remote
                             'source_link': source_link
                         })
                     
@@ -2295,26 +2471,42 @@ class FeatureThree:
                 # 🔥 頁籤 6: 目的 gerrit manifest（修改名稱）
                 if diff_analysis['has_target'] and diff_analysis['target_projects']:
                     gerrit_data = []
+                    
+                    # 🆕 新增：獲取預設值
+                    target_default_remote = getattr(self, 'target_default_remote', '')
+                    target_default_revision = getattr(self, 'target_default_revision', '')
+                    
                     for i, proj in enumerate(diff_analysis['target_projects'], 1):
-                        source_link = self._generate_source_link(proj['name'], proj['revision'], proj['remote'])
+                        # 🆕 新增：處理預設值
+                        effective_remote = proj.get('remote', '').strip() or target_default_remote
+                        effective_revision = proj.get('revision', '').strip() or target_default_revision
+                        
+                        source_link = self._generate_source_link(proj['name'], effective_revision, effective_remote)
                         gerrit_target_filename = f"gerrit_{self.target_files.get(overwrite_type, 'unknown.xml')}"
+                        
+                        # 🆕 新增：判斷版本類型
+                        gerrit_target_type = self._determine_revision_type(
+                            proj.get('dest-branch', ''), 
+                            effective_revision
+                        )
                         
                         gerrit_data.append({
                             'SN': i,
                             'source_file': gerrit_target_filename,
+                            'type': gerrit_target_type,  # 🆕 新增欄位
                             'name': proj['name'],
                             'path': proj['path'],
-                            'revision': proj['revision'],
+                            'revision': effective_revision,  # 🆕 使用處理過的 revision
                             'upstream': proj['upstream'],
                             'dest-branch': proj['dest-branch'],
                             'groups': proj['groups'],
                             'clone-depth': proj['clone-depth'],
-                            'remote': proj['remote'],
+                            'remote': effective_remote,  # 🆕 使用處理過的 remote
                             'source_link': source_link
                         })
                     
                     df_gerrit = pd.DataFrame(gerrit_data)
-                    df_gerrit.to_excel(writer, sheet_name='目的 gerrit manifest', index=False)  # 🔥 修改名稱
+                    df_gerrit.to_excel(writer, sheet_name='目的 gerrit manifest', index=False)
                 
                 # 🔥 所有格式化都在 ExcelWriter context 內完成
                 workbook = writer.book
@@ -3103,11 +3295,11 @@ class FeatureThree:
             green_header_fields = ["Gerrit 源檔案", "Gerrit 展開檔案", "Gerrit 目標檔案",
                                 "gerrit_content", "gerrit_name", "gerrit_path", "gerrit_upstream", 
                                 "gerrit_dest-branch", "gerrit_groups", "gerrit_clone-depth", 
-                                "gerrit_remote"]  # 🔥 移除 gerrit_source_link
+                                "gerrit_remote", "type", "gerrit_type"]  # 🆕 新增 type 欄位到綠底白字
             purple_header_fields = ["源檔案", "輸出檔案", "目標檔案", "來源檔案", "轉換後檔案",
                                 "source_file", "gerrit_source_file"]
             dark_cyan_header_fields = ["🎯 目標檔案專案數", "❌ 轉換後與 Gerrit Manifest 差異數", "✔️ 轉換後與 Gerrit Manifest 相同數"]
-            link_blue_header_fields = ["source_link", "gerrit_source_link", "📊 總專案數", "🔄 實際轉換專案數", "⭕ 未轉換專案數"]  # 🔥 新增藍色背景欄位
+            link_blue_header_fields = ["source_link", "gerrit_source_link", "📊 總專案數", "🔄 實際轉換專案數", "⭕ 未轉換專案數"]
             
             # 設定表頭和欄寬
             for col_num, cell in enumerate(worksheet[1], 1):
@@ -3131,7 +3323,7 @@ class FeatureThree:
                     cell.fill = dark_cyan_fill
                     cell.font = white_font
                     self.logger.debug(f"設定藍深青色白字表頭: {header_value}")
-                elif header_value in link_blue_header_fields:  # 🔥 新增藍色背景表頭
+                elif header_value in link_blue_header_fields:
                     cell.fill = link_blue_fill
                     cell.font = white_font
                     self.logger.debug(f"設定藍色白字表頭: {header_value}")
@@ -3179,8 +3371,15 @@ class FeatureThree:
                     # 根據比較狀態設定行的背景色
                     self._set_comparison_row_colors(worksheet, col_num, header_value)
                 
-                # manifest 相關頁籤的處理
+                # 🆕 新增：特殊處理 manifest 相關頁籤
                 elif sheet_name in ['來源 gerrit manifest', '轉換後的 manifest', '目的 gerrit manifest']:
+                    # 🆕 設定 revision 欄位為紅底白字
+                    if header_value == 'revision':
+                        cell.fill = red_fill
+                        cell.font = white_font
+                        self.logger.debug(f"設定 {sheet_name} 的 revision 欄位為紅底白字")
+                    
+                    # 設定欄寬
                     if 'revision' in header_value.lower():
                         worksheet.column_dimensions[col_letter].width = 35
                     elif header_value in ['name']:
@@ -3193,6 +3392,8 @@ class FeatureThree:
                         worksheet.column_dimensions[col_letter].width = 60
                     elif header_value == 'source_file':
                         worksheet.column_dimensions[col_letter].width = 30
+                    elif header_value in ['type']:  # 🆕 新增 type 欄位寬度
+                        worksheet.column_dimensions[col_letter].width = 12
                 
                 # 其他頁籤的一般欄寬調整
                 else:
@@ -3202,13 +3403,18 @@ class FeatureThree:
                         worksheet.column_dimensions[col_letter].width = 25
                     elif '路徑' in header_value or 'path' in header_value:
                         worksheet.column_dimensions[col_letter].width = 30
+                    elif header_value in ['type', 'gerrit_type']:  # 🆕 新增 type 欄位寬度
+                        worksheet.column_dimensions[col_letter].width = 12
             
             # 🔥 添加 SN 欄位置中功能
             self._center_sn_columns(worksheet)
             
             # 設定轉換後專案頁籤的轉換狀態顏色
             if sheet_name == "轉換後專案":
-                self._set_conversion_status_colors_v3(worksheet)  # 使用新版本，不要粗體
+                self._set_conversion_status_colors_v3(worksheet)
+            
+            # 🆕 新增：設定 type 欄位的內容顏色和置中對齊
+            self._set_type_column_colors(worksheet)
             
             self.logger.debug(f"已格式化工作表: {sheet_name}")
             
@@ -3474,4 +3680,141 @@ class FeatureThree:
         
         # 如果沒有 revision，返回空字串（會由其他邏輯處理 default revision）
         self.logger.debug(f"專案 {project_element.get('name', '')} 沒有 revision")
-        return ''    
+        return ''
+
+    def _determine_revision_type(self, dest_branch: str, revision: str) -> str:
+        """
+        判斷版本類型：Branch、Tag 或 Hash
+        
+        Args:
+            dest_branch: dest-branch 欄位值
+            revision: revision 欄位值
+            
+        Returns:
+            版本類型字串：'Branch'、'Tag' 或 'Hash'
+        """
+        try:
+            # 優先檢查 dest-branch
+            target_value = dest_branch.strip() if dest_branch else ''
+            
+            # 如果 dest-branch 為空，則使用 revision
+            if not target_value:
+                target_value = revision.strip() if revision else ''
+            
+            if not target_value:
+                return 'Branch'  # 預設為 Branch
+            
+            # 判斷類型
+            if target_value.startswith('refs/tags/'):
+                return 'Tag'
+            elif self._is_revision_hash(target_value):
+                return 'Hash'
+            else:
+                # 包含路徑分隔符的通常是 branch
+                return 'Branch'
+                
+        except Exception as e:
+            self.logger.error(f"判斷版本類型失敗: {str(e)}")
+            return 'Branch'  # 預設為 Branch
+
+    def _set_type_column_colors(self, worksheet):
+        """設定 type 和 gerrit_type 欄位的內容顏色和置中對齊"""
+        try:
+            from openpyxl.styles import Font, Alignment
+            
+            # 定義類型對應的顏色
+            type_colors = {
+                'Branch': Font(color="8A2BE2", bold=True),  # 紫色
+                'Tag': Font(color="C5504B", bold=True),     # 深紅色
+                'Hash': Font(color="0070C0", bold=True)     # 藍色
+            }
+            
+            # 🆕 新增：置中對齊樣式
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 找到所有 type 相關欄位
+            type_columns = []
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                if header_value in ['type', 'gerrit_type']:
+                    type_columns.append(col_num)
+            
+            # 為每個 type 欄位設定顏色和對齊
+            for col_num in type_columns:
+                for row_num in range(2, worksheet.max_row + 1):
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    cell_value = str(cell.value) if cell.value else ''
+                    
+                    # 🆕 新增：設定置中對齊（所有內容都置中）
+                    cell.alignment = center_alignment
+                    
+                    # 根據內容設定顏色
+                    if cell_value in type_colors:
+                        cell.font = type_colors[cell_value]
+                        self.logger.debug(f"設定 {cell_value} 顏色和置中對齊: 行{row_num}, 列{col_num}")
+                    else:
+                        # 即使不是預期的類型值，也要置中
+                        self.logger.debug(f"設定置中對齊: 行{row_num}, 列{col_num}, 值: {cell_value}")
+            
+            if type_columns:
+                self.logger.info(f"✅ 已設定 {len(type_columns)} 個 type 欄位的內容顏色和置中對齊")
+                
+        except Exception as e:
+            self.logger.error(f"設定 type 欄位顏色和對齊失敗: {str(e)}")
+
+    def _get_default_values_from_xml(self, xml_content: str) -> tuple:
+        """
+        從 XML 內容中提取 default 標籤的 remote 和 revision 值
+        
+        Args:
+            xml_content: XML 檔案內容
+            
+        Returns:
+            (default_remote, default_revision) 元組
+        """
+        try:
+            if not xml_content:
+                return '', ''
+                
+            root = ET.fromstring(xml_content)
+            default_element = root.find('default')
+            
+            if default_element is not None:
+                default_remote = default_element.get('remote', '')
+                default_revision = default_element.get('revision', '')
+                self.logger.debug(f"找到預設值: remote={default_remote}, revision={default_revision}")
+                return default_remote, default_revision
+            else:
+                self.logger.debug("未找到 default 標籤")
+                return '', ''
+                
+        except Exception as e:
+            self.logger.error(f"提取預設值失敗: {str(e)}")
+            return '', ''
+
+    def _apply_default_values(self, proj_data: dict, default_remote: str, default_revision: str) -> dict:
+        """
+        為專案數據應用預設值
+        
+        Args:
+            proj_data: 專案數據字典
+            default_remote: 預設 remote
+            default_revision: 預設 revision
+            
+        Returns:
+            應用預設值後的專案數據
+        """
+        try:
+            # 如果 remote 為空，使用預設值
+            if not proj_data.get('remote', '').strip():
+                proj_data['remote'] = default_remote
+                
+            # 如果 revision 為空，使用預設值
+            if not proj_data.get('revision', '').strip():
+                proj_data['revision'] = default_revision
+                
+            return proj_data
+            
+        except Exception as e:
+            self.logger.error(f"應用預設值失敗: {str(e)}")
+            return proj_data            

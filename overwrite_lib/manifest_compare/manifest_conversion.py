@@ -1002,8 +1002,8 @@ class ManifestComparator:
             if is_local_comparison:
                 # 本地比較模式的欄位順序
                 column_order = [
-                    'SN', 'comparison_status', 'comparison_result', 'type',  # 🔥 在 comparison_result 後插入 type
-                    'source_file', 'content', 'name', 'path', 'revision',
+                    'SN', 'comparison_status', 'comparison_result',
+                    'source_file', 'type', 'content', 'name', 'path', 'revision',  # 🔥 type 移到 source_file 右邊
                     'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                     'compare_source_file', 'compare_content', 'compare_name', 'compare_path', 'compare_revision',
                     'compare_upstream', 'compare_dest-branch', 'compare_groups', 'compare_clone-depth', 'compare_remote', 'compare_source_link'
@@ -1011,8 +1011,8 @@ class ManifestComparator:
             else:
                 # Gerrit 比較模式的欄位順序
                 column_order = [
-                    'SN', 'comparison_status', 'comparison_result', 'type',  # 🔥 在 comparison_result 後插入 type
-                    'source_file', 'content', 'name', 'path', 'revision',
+                    'SN', 'comparison_status', 'comparison_result',
+                    'source_file', 'type', 'content', 'name', 'path', 'revision',  # 🔥 type 移到 source_file 右邊
                     'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link',
                     'gerrit_source_file', 'gerrit_content', 'gerrit_name', 'gerrit_path', 'gerrit_revision',
                     'gerrit_upstream', 'gerrit_dest-branch', 'gerrit_groups', 'gerrit_clone-depth', 'gerrit_remote', 'gerrit_source_link'
@@ -1060,7 +1060,7 @@ class ManifestComparator:
                     'name': proj['name'],
                     'path': proj['path'],
                     'revision': proj['revision'],
-                    'type': type_value,  # 🔥 在 revision 右邊插入 type
+                    'type': type_value,  # 🔥 在 source_file 右邊插入 type
                     'upstream': proj['upstream'],
                     'dest-branch': proj['dest-branch'],
                     'groups': proj['groups'],
@@ -1072,9 +1072,9 @@ class ManifestComparator:
             if raw_data:
                 df_raw = pd.DataFrame(raw_data)
                 
-                # 🔥 確保欄位順序正確（type 在 revision 右邊）
+                # 🔥 確保欄位順序正確（type 在 source_file 右邊）
                 column_order = [
-                    'SN', 'source_file', 'name', 'path', 'revision', 'type',  # type 在 revision 右邊
+                    'SN', 'source_file', 'type', 'name', 'path', 'revision',  # type 移到 source_file 右邊
                     'upstream', 'dest-branch', 'groups', 'clone-depth', 'remote', 'source_link'
                 ]
                 
