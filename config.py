@@ -369,4 +369,5 @@ CHIP_TO_RTD_MAPPING = {
     'merlin8': 'rtd2885p',
     'merlin8p': 'rtd2885q',
     'merlin9': 'rtd2875q',
+    'matrix': 'rtd2811'
 }

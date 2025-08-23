@@ -1369,10 +1369,13 @@ class FeatureTwo:
         
         # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX（使用當前 Android 版本）
         for chip, rtd_model in config.CHIP_TO_RTD_MAPPING.items():
+            self.logger.debug(f"檢查晶片規則: {chip} -> {rtd_model}")
             if f'realtek/{chip}/master' == original_revision:
                 result = config.get_premp_branch_with_chip(rtd_model)
-                self.logger.debug(f"晶片轉換（當前 Android 版本）: {original_revision} → {result}")
+                self.logger.info(f"✅ 晶片轉換匹配: {original_revision} → {result}")
                 return result
+            else:
+                self.logger.debug(f"❌ 不匹配: 'realtek/{chip}/master' != '{original_revision}'")
         
         # 智能轉換備案
         smart_result = self._smart_conversion_fallback(original_revision)
