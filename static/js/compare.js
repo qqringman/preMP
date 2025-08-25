@@ -3038,6 +3038,10 @@ function generateEmptyState(message = '暫無資料可顯示', showReloadBtn = t
 async function loadRecentComparisons() {
     try {
         const comparisons = await utils.apiRequest('/api/recent-comparisons');
+        
+        // 添加調試信息
+        console.log('Recent comparisons data:', comparisons);
+        
         const container = document.getElementById('comparisonTimeline');
         
         if (!comparisons || comparisons.length === 0) {
@@ -3056,6 +3060,12 @@ async function loadRecentComparisons() {
             const statusIcon = comp.status === 'completed' ? 'fa-check-circle' : 'fa-exclamation-circle';
             const statusColor = comp.status === 'completed' ? 'text-success' : 'text-danger';
             const taskId = comp.task_id || comp.id || '';
+            
+            // 調試每個項目的時間
+            console.log(`Comparison ${index}:`, {
+                timestamp: comp.timestamp,
+                formatted: formatTimeAgo(comp.timestamp)
+            });
             
             // 判斷是否為最新任務（第一筆）
             const isLatest = index === 0;
@@ -3103,20 +3113,64 @@ async function loadRecentComparisons() {
 
 // 格式化時間
 function formatTimeAgo(date) {
+    if (!date) return '未知時間';
+    
+    let targetDate;
+    
+    // 處理不同的時間格式
+    if (typeof date === 'string') {
+        targetDate = new Date(date);
+    } else {
+        targetDate = new Date(date);
+    }
+    
+    // 檢查日期是否有效
+    if (isNaN(targetDate.getTime())) {
+        console.warn('Invalid date format:', date);
+        return '時間格式錯誤';
+    }
+    
+    // 直接顯示具體時間 - 使用台灣時間格式
     const now = new Date();
-    const diff = now - new Date(date);
-    const minutes = Math.floor(diff / 60000);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
     
-    if (minutes < 1) return '剛剛';
-    if (minutes < 60) return `${minutes} 分鐘前`;
+    // 計算日期差異
+    const dayDiff = Math.floor((today - targetDay) / (1000 * 60 * 60 * 24));
     
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} 小時前`;
-    
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} 天前`;
-    
-    return new Date(date).toLocaleDateString('zh-TW');
+    if (dayDiff === 0) {
+        // 今天 - 只顯示時間
+        return '今天 ' + targetDate.toLocaleTimeString('zh-TW', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    } else if (dayDiff === 1) {
+        // 昨天 - 顯示昨天 + 時間
+        return '昨天 ' + targetDate.toLocaleTimeString('zh-TW', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    } else if (dayDiff <= 7) {
+        // 一週內 - 顯示星期 + 時間
+        const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+        return weekdays[targetDate.getDay()] + ' ' + targetDate.toLocaleTimeString('zh-TW', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    } else {
+        // 超過一週 - 顯示完整日期時間
+        return targetDate.toLocaleString('zh-TW', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    }
 }
 
 // 初始化路徑輸入自動補全
@@ -3258,7 +3312,7 @@ function compareAgain() {
     executeCompare();
 }
 
-// 比對新資料（重置表單）
+// 比對新資料（重置表單）- 添加重置標籤選擇
 function compareNewData() {
     // 銷毀現有的圖表實例
     if (chartInstances.success) {
@@ -3281,6 +3335,45 @@ function compareNewData() {
     document.getElementById('compareProgress').classList.add('hidden');
     document.getElementById('compareForm').classList.remove('hidden');
     
+    // 隱藏並清空結果檔案結構區域
+    const resultsStructureSection = document.getElementById('resultsStructureSection');
+    if (resultsStructureSection) {
+        resultsStructureSection.classList.add('hidden');
+    }
+    
+    const resultsStructureContent = document.getElementById('resultsStructureContent');
+    if (resultsStructureContent) {
+        resultsStructureContent.innerHTML = '';
+    }
+    
+    // 新增：重置來源目錄標籤選擇
+    // 重置標籤按鈕狀態 - 回到本地目錄標籤
+    const tabButtons = document.querySelectorAll('.source-tabs .tab-btn');
+    tabButtons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // 設定第一個標籤（本地目錄）為 active
+    const firstTabBtn = document.querySelector('.source-tabs .tab-btn:first-child');
+    if (firstTabBtn) {
+        firstTabBtn.classList.add('active');
+    }
+    
+    // 重置標籤內容顯示狀態
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // 顯示本地目錄標籤內容
+    const localTab = document.getElementById('local-tab');
+    if (localTab) {
+        localTab.classList.add('active');
+    }
+    
+    // 重置伺服器相關狀態
+    serverFilesLoaded = false;
+    
     // 重置表單
     document.getElementById('downloadedDirectories').value = '';
     document.getElementById('selectedDirectoryInfo').classList.add('hidden');
@@ -3290,8 +3383,19 @@ function compareNewData() {
     // 重置比對選項到預設值
     document.getElementById('scenario-all').checked = true;
     
-    // 清除路徑輸入
+    // 重置路徑輸入到預設值
     document.getElementById('serverPathInput').value = currentServerPath;
+    
+    // 清除伺服器瀏覽器內容
+    const serverBrowser = document.getElementById('serverBrowser');
+    if (serverBrowser) {
+        serverBrowser.innerHTML = `
+            <div class="empty-message">
+                <i class="fas fa-folder-open fa-3x"></i>
+                <p>請選擇來源目錄</p>
+            </div>
+        `;
+    }
     
     // 通知用戶
     utils.showNotification('已重置，請選擇新的資料進行比對', 'info');
