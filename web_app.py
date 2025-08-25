@@ -1525,60 +1525,72 @@ def download_ready(task_id):
 
 @app.route('/api/export-excel/<task_id>')
 def export_excel(task_id):
-    """匯出 Excel API - 使用真實檔案"""
+    """匯出 Excel API - 根據當前情境下載對應的檔案"""
     try:
-        # 查找比對結果檔案
+        # 獲取情境參數（從前端傳來）
+        scenario = request.args.get('scenario', 'all')
+        app.logger.info(f'匯出Excel: task_id={task_id}, scenario={scenario}')
+        
+        # 根據情境決定要下載的檔案路徑（與 get_pivot_data 邏輯一致）
         summary_report_path = None
         
-        # 1. 從處理狀態中查找
-        if task_id in processing_status:
-            task_data = processing_status[task_id]
-            results = task_data.get('results', {})
-            
-            # 嘗試多個可能的鍵值
-            if 'compare_results' in results:
-                compare_results = results['compare_results']
-                if isinstance(compare_results, dict) and 'summary_report' in compare_results:
-                    summary_report_path = compare_results['summary_report']
-            
-            if not summary_report_path and 'summary_report' in results:
-                summary_report_path = results['summary_report']
-        
-        # 2. 從比對結果目錄中查找
-        if not summary_report_path:
-            compare_dir = os.path.join('compare_results', task_id)
-            if os.path.exists(compare_dir):
-                # 優先查找 all_scenarios_compare.xlsx
-                priority_files = ['all_scenarios_compare.xlsx', 'all_compare.xlsx']
-                
-                for filename in priority_files:
-                    file_path = os.path.join(compare_dir, filename)
-                    if os.path.exists(file_path):
-                        summary_report_path = file_path
+        if scenario == 'all':
+            # 全部情境使用 all_scenarios_summary.xlsx
+            summary_report_path = os.path.join('compare_results', task_id, 'all_scenarios_summary.xlsx')
+            if not os.path.exists(summary_report_path):
+                # 備選路徑
+                alt_paths = [
+                    os.path.join('compare_results', task_id, 'all_scenarios_compare.xlsx'),
+                    os.path.join('compare_results', task_id, 'all_compare.xlsx')
+                ]
+                for path in alt_paths:
+                    if os.path.exists(path):
+                        summary_report_path = path
                         break
-                
-                # 如果還是沒找到，查找任何 xlsx 檔案
-                if not summary_report_path:
-                    for file in os.listdir(compare_dir):
-                        if file.endswith('.xlsx'):
-                            summary_report_path = os.path.join(compare_dir, file)
-                            break
+        else:
+            # 特定情境使用對應資料夾下的 all_scenarios_compare.xlsx
+            folder_name = scenario  # 直接使用 scenario 作為資料夾名稱
+            summary_report_path = os.path.join('compare_results', task_id, folder_name, 'all_scenarios_compare.xlsx')
+            
+            if not os.path.exists(summary_report_path):
+                # 嘗試其他可能的檔名
+                alt_names = ['all_compare.xlsx', f'{folder_name}_compare.xlsx']
+                for alt_name in alt_names:
+                    alt_path = os.path.join('compare_results', task_id, folder_name, alt_name)
+                    if os.path.exists(alt_path):
+                        summary_report_path = alt_path
+                        break
         
-        # 3. 返回檔案
-        if summary_report_path and os.path.exists(summary_report_path):
-            return send_file(
-                summary_report_path, 
-                as_attachment=True,
-                download_name=f'compare_results_{task_id}.xlsx',
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
+        # 檢查檔案是否存在
+        if not summary_report_path or not os.path.exists(summary_report_path):
+            app.logger.error(f'找不到Excel檔案: scenario={scenario}, path={summary_report_path}')
+            return jsonify({'error': f'找不到 {scenario} 情境的報表檔案'}), 404
         
-        # 如果沒有找到檔案，嘗試從任務結果重新生成
-        app.logger.error(f'No Excel file found for task {task_id}')
-        return jsonify({'error': '找不到報表檔案，檔案可能已被移除或任務尚未完成'}), 404
+        # 生成檔案名稱（包含情境資訊）
+        if scenario == 'all':
+            filename = f'完整報表_{task_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        else:
+            scenario_names = {
+                'master_vs_premp': 'Master_vs_PreMP',
+                'premp_vs_wave': 'PreMP_vs_Wave', 
+                'wave_vs_backup': 'Wave_vs_Backup'
+            }
+            scenario_display = scenario_names.get(scenario, scenario)
+            filename = f'{scenario_display}報表_{task_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        
+        app.logger.info(f'匯出檔案: {summary_report_path} -> {filename}')
+        
+        return send_file(
+            summary_report_path, 
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
         
     except Exception as e:
         app.logger.error(f'Export Excel error: {e}')
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/export-zip/<task_id>')

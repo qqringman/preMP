@@ -2555,57 +2555,9 @@ function downloadBlob(blob, sheetName) {
 }
 
 // 下載完整報表
-async function downloadFullReport() {
-    try {
-        showExportLoading();
-        
-        // 使用後端的完整報表API
-        const apiUrl = `/api/export-excel/${encodeURIComponent(taskId)}`;
-        console.log(`完整報表API URL: ${apiUrl}`);
-        
-        const response = await fetch(apiUrl);
-        console.log('完整報表API回應:', response.status, response.statusText);
-        
-        if (response.ok) {
-            const blob = await response.blob();
-            
-            if (blob.size === 0) {
-                throw new Error('收到空的檔案');
-            }
-            
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `完整報表_${taskId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            hideExportLoading();
-            showToast('完整報表已下載', 'success');
-        } else {
-            // 如果完整報表API失敗，使用客戶端匯出所有工作表
-            let errorMessage = '下載失敗';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
-            } catch (e) {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            }
-            
-            console.log('完整報表API失敗，使用客戶端匯出:', errorMessage);
-            hideExportLoading();
-            exportAllSheetsClientSide();
-        }
-        
-    } catch (error) {
-        console.error('完整報表下載錯誤:', error);
-        hideExportLoading();
-        
-        console.log('網路錯誤，使用客戶端匯出');
-        exportAllSheetsClientSide();
-    }
+function downloadFullReport() {
+    const url = `/api/export-excel/${taskId}?scenario=${currentScenario}`;
+    window.open(url, '_blank');
 }
 
 // 客戶端Excel匯出功能
