@@ -1643,8 +1643,15 @@ class FileComparator:
                 else:
                     # 根據檔案類型和內容選擇處理方式
                     if str(file_type).lower() == 'f_version.txt' and base_content and compare_content:
-                        # F_Version.txt: 處理 P_GIT_xxx 行
-                        if str(base_content).startswith('P_GIT_') and str(compare_content).startswith('P_GIT_'):
+                        # F_Version.txt: 處理 P_GIT_xxx 行 - 支援多行處理
+                        base_lines = str(base_content).split('\n')
+                        compare_lines = str(compare_content).split('\n')
+                        
+                        # 檢查是否包含 P_GIT_ 行
+                        has_p_git_base = any(line.strip().startswith('P_GIT_') for line in base_lines)
+                        has_p_git_compare = any(line.strip().startswith('P_GIT_') for line in compare_lines)
+                        
+                        if has_p_git_base or has_p_git_compare:
                             self._format_f_version_content(worksheet, row_idx, column_indices, base_content, compare_content)
                         else:
                             # 其他行不需要特殊格式化
@@ -1657,44 +1664,84 @@ class FileComparator:
                         self._format_colon_content(worksheet, row_idx, column_indices, base_content, compare_content)
 
     def _format_f_version_content(self, worksheet, row_idx, column_indices, base_content, compare_content):
-        """格式化 F_Version.txt 內容 - 只標記 git hash 和 svn number"""
+        """格式化 F_Version.txt 內容 - 只標記 git hash 和 svn number，支援多行"""
         from openpyxl.cell.text import InlineFont
         from openpyxl.cell.rich_text import TextBlock, CellRichText
         
-        # 處理 base_content
+        # 處理 base_content - 支援多行
         if 'base_content' in column_indices and base_content:
-            base_parts = str(base_content).split(';')
-            compare_parts = str(compare_content).split(';') if compare_content else []
+            base_lines = str(base_content).split('\n')
+            compare_lines = str(compare_content).split('\n') if compare_content else []
             
             rich_text_parts = []
-            for i, part in enumerate(base_parts):
-                if i > 0:
-                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+            
+            for line_idx, base_line in enumerate(base_lines):
+                if line_idx > 0:  # 不是第一行就加換行
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), "\n"))
                 
-                # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
-                if i in [3, 4] and i < len(compare_parts) and part != compare_parts[i]:
-                    rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                base_line = base_line.strip()
+                if base_line.startswith('P_GIT_'):
+                    base_parts = base_line.split(';')
+                    compare_parts = []
+                    
+                    # 找到對應的比較行
+                    if line_idx < len(compare_lines):
+                        compare_line = compare_lines[line_idx].strip()
+                        if compare_line.startswith('P_GIT_'):
+                            compare_parts = compare_line.split(';')
+                    
+                    # 處理每個部分
+                    for i, part in enumerate(base_parts):
+                        if i > 0:
+                            rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+                        
+                        # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
+                        if i in [3, 4] and i < len(compare_parts) and part != compare_parts[i]:
+                            rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                        else:
+                            rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
                 else:
-                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
+                    # 非 P_GIT_ 行，保持原樣
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), base_line))
             
             cell_rich_text = CellRichText(rich_text_parts)
             worksheet.cell(row=row_idx, column=column_indices['base_content']).value = cell_rich_text
         
-        # 處理 compare_content
+        # 處理 compare_content - 支援多行
         if 'compare_content' in column_indices and compare_content:
-            base_parts = str(base_content).split(';') if base_content else []
-            compare_parts = str(compare_content).split(';')
+            base_lines = str(base_content).split('\n') if base_content else []
+            compare_lines = str(compare_content).split('\n')
             
             rich_text_parts = []
-            for i, part in enumerate(compare_parts):
-                if i > 0:
-                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+            
+            for line_idx, compare_line in enumerate(compare_lines):
+                if line_idx > 0:  # 不是第一行就加換行
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), "\n"))
                 
-                # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
-                if i in [3, 4] and i < len(base_parts) and part != base_parts[i]:
-                    rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                compare_line = compare_line.strip()
+                if compare_line.startswith('P_GIT_'):
+                    compare_parts = compare_line.split(';')
+                    base_parts = []
+                    
+                    # 找到對應的基準行
+                    if line_idx < len(base_lines):
+                        base_line = base_lines[line_idx].strip()
+                        if base_line.startswith('P_GIT_'):
+                            base_parts = base_line.split(';')
+                    
+                    # 處理每個部分
+                    for i, part in enumerate(compare_parts):
+                        if i > 0:
+                            rich_text_parts.append(TextBlock(InlineFont(color="000000"), ";"))
+                        
+                        # 只有第4和第5部分（索引3和4，即git hash 和 svn number）需要比較
+                        if i in [3, 4] and i < len(base_parts) and part != base_parts[i]:
+                            rich_text_parts.append(TextBlock(InlineFont(color="FF0000"), part))
+                        else:
+                            rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
                 else:
-                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), part))
+                    # 非 P_GIT_ 行，保持原樣
+                    rich_text_parts.append(TextBlock(InlineFont(color="000000"), compare_line))
             
             cell_rich_text = CellRichText(rich_text_parts)
             worksheet.cell(row=row_idx, column=column_indices['compare_content']).value = cell_rich_text
