@@ -4888,3 +4888,71 @@ input.path-input::-webkit-contacts-auto-fill-button {
     font-size: 0.875rem;
     margin-left: 8px;
 }
+
+/* 表格單元格樣式 */
+.modal-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #EDF2FC;
+    vertical-align: middle;
+    white-space: nowrap;
+    color: #424242;
+}
+
+/* 狀態標籤樣式輔助 */
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.status-badge.delete {
+    background: #F44336;
+    color: white;
+}
+
+.status-badge.add {
+    background: #4CAF50;
+    color: white;
+}
+
+/* has_wave 圓形樣式輔助 */
+.has-wave-indicator {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.875rem;
+    margin: 0 auto;
+}
+
+.has-wave-indicator.yes {
+    background: #4CAF50;
+}
+
+.has-wave-indicator.no {
+    background: #9E9E9E;
+}
+
+/* 確保紅底白字樣式有最高優先級 */
+.modal-table th.header-red-bg,
+#compareDetailsModal .modal-table th.header-red-bg,
+table.modal-table th.header-red-bg {
+    background: #C00000 !important;
+    color: white !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #A00000 !important;
+}
+
+/* 覆蓋任何可能的預設樣式 */
+#compareDetailsModal .files-table th.header-red-bg {
+    background: #C00000 !important;
+    color: white !important;
+}

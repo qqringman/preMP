@@ -1649,19 +1649,40 @@ function clearSingleSheetSearch() {
 // 生成比對表格內容 - 完整版本，包含版本差異顏色標註
 function generateCompareTableContent(sheetData, sheetName) {
     console.log('generateCompareTableContent - sheetName:', sheetName);
+    console.log('Original columns:', sheetData.columns); // 調試用
+    
     if (!sheetData || !sheetData.columns || !sheetData.data || sheetData.data.length === 0) {
         return generateEmptyState('此資料表沒有內容', false);
     }
     
-    // 定義需要特殊處理的欄位
-    const redHeaderColumns = {
-        'revision_diff': ['base_short', 'base_revision', 'compare_short', 'compare_revision'],
-        'branch_error': ['problem'],
-        'lost_project': ['Base folder', '狀態'],
-        'version_diff': ['base_content', 'compare_content']
-    };
+    // 調整欄位順序
+    let orderedColumns = [...sheetData.columns];
     
-    // 修改表格容器結構，確保有捲軸
+    // 版本檔案差異：強制將 SN 放在第一欄
+    if (sheetName === 'version_diff') {
+        console.log('Processing version_diff, looking for SN column...'); // 調試用
+        
+        // 找到 SN 欄位的索引
+        const snIndex = orderedColumns.findIndex(col => 
+            col === 'SN' || col === 'sn' || col.toLowerCase() === 'sn'
+        );
+        
+        console.log('SN column index:', snIndex); // 調試用
+        
+        if (snIndex > -1) {
+            // 移除 SN 欄位
+            const snColumn = orderedColumns.splice(snIndex, 1)[0];
+            // 插入到第一位
+            orderedColumns.unshift(snColumn);
+            console.log('Reordered columns:', orderedColumns); // 調試用
+        } else {
+            console.log('SN column not found in:', orderedColumns); // 調試用
+        }
+    }
+    
+    // 其餘代碼保持不變...
+    
+    // 修改表格容器結構
     let html = '<div class="table-wrapper" style="height: 100%; display: flex; flex-direction: column;">';
     html += '<div class="table-container" style="flex: 1; overflow: auto; max-height: 500px;">';
     html += '<table class="modal-table">';
@@ -1669,59 +1690,28 @@ function generateCompareTableContent(sheetData, sheetName) {
     // 表頭
     html += '<thead><tr>';
     
-    // 動態生成欄位
-    sheetData.columns.forEach(col => {
-        let thText = col;
-        let minWidth = '150px';
-        let headerClass = '';
+    orderedColumns.forEach(col => {
+        const columnInfo = getColumnInfo(col, sheetName);
+        let headerClass = columnInfo.headerClass || '';
         
-        // 檢查是否需要紅色標題
-        if (redHeaderColumns[sheetName] && redHeaderColumns[sheetName].includes(col)) {
+        // 明確指定需要紅底白字的欄位
+        let shouldBeRed = false;
+        
+        if (sheetName === 'revision_diff') {
+            shouldBeRed = ['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col);
+        } else if (sheetName === 'branch_error') {
+            shouldBeRed = ['problem'].includes(col);
+        } else if (sheetName === 'lost_project') {
+            shouldBeRed = ['Base folder', '狀態'].includes(col);
+        } else if (sheetName === 'version_diff') {
+            shouldBeRed = ['base_content', 'compare_content'].includes(col);
+        }
+        
+        if (shouldBeRed) {
             headerClass = 'header-red-bg';
         }
         
-        // 欄位名稱對應和寬度設定
-        const columnMap = {
-            'SN': { text: 'SN', width: '60px' },
-            'module': { text: '模組名稱', width: '200px' },
-            'location_path': { text: 'FTP 路徑', width: '400px' },
-            'path': { text: 'FTP 路徑', width: '400px' },
-            'base_folder': { text: '本地路徑', width: '300px' },
-            'compare_folder': { text: 'compare_folder', width: '200px' },
-            'file_type': { text: 'file_type', width: '150px' },
-            'base_content': { text: 'base_content', width: '400px' },
-            'compare_content': { text: 'compare_content', width: '400px' },
-            'org_content': { text: 'org_content', width: '500px' },
-            'problem': { text: '問題', width: '200px' },
-            'has_wave': { text: 'has_wave', width: '100px' },
-            'Base folder': { text: 'Base folder', width: '150px' },
-            '狀態': { text: '狀態', width: '100px' },
-            'name': { text: 'name', width: '250px' },
-            'revision': { text: 'revision', width: '150px' },
-            'revision_short': { text: 'revision_short', width: '100px' },
-            'upstream': { text: 'upstream', width: '300px' },
-            'dest-branch': { text: 'dest-branch', width: '300px' },
-            'base_link': { text: 'base_link', width: '200px' },
-            'compare_link': { text: 'compare_link', width: '200px' },
-            'base_upstream': { text: 'base_upstream', width: '300px' },
-            'compare_upstream': { text: 'compare_upstream', width: '300px' },
-            'base_dest-branch': { text: 'base_dest-branch', width: '300px' },
-            'compare_dest-branch': { text: 'compare_dest-branch', width: '300px' },
-            'folder': { text: 'folder', width: '200px' },
-            'link': { text: 'link', width: '200px' },
-            'folder_count': { text: 'folder_count', width: '100px' },
-            'folders': { text: 'folders', width: '300px' },
-            'reason': { text: 'reason', width: '400px' }
-        };
-        
-        if (columnMap[col]) {
-            thText = columnMap[col].text;
-            minWidth = columnMap[col].width;
-        } else if (col.length > 20) {
-            minWidth = '250px';
-        }
-        
-        html += `<th class="${headerClass}" style="min-width: ${minWidth};">${thText}</th>`;
+        html += `<th class="${headerClass}" style="min-width: ${columnInfo.width};">${columnInfo.text}</th>`;
     });
     
     html += '</tr></thead>';
@@ -1732,144 +1722,20 @@ function generateCompareTableContent(sheetData, sheetName) {
     sheetData.data.forEach((row) => {
         html += `<tr>`;
 
-        sheetData.columns.forEach(col => {
+        orderedColumns.forEach(col => {
             let value = row[col] || '';
-            let cellContent = value;
-            let cellClass = '';
-            let minWidth = '150px';
+            let cellContent = formatCellContent(value, col, row, sheetName);
+            let cellClass = getCellClass(col, value, sheetName);
+            const columnInfo = getColumnInfo(col, sheetName);
             
-            // 取得與標頭相同的寬度
-            const columnMap = {
-                'SN': { width: '60px' },
-                'module': { width: '200px' },
-                'location_path': { width: '400px' },
-                'path': { width: '400px' },
-                'base_folder': { width: '300px' },
-                'compare_folder': { width: '200px' },
-                'file_type': { width: '150px' },
-                'base_content': { width: '400px' },
-                'compare_content': { width: '400px' },
-                'org_content': { width: '500px' },
-                'problem': { width: '200px' },
-                'has_wave': { width: '100px' },
-                'Base folder': { width: '150px' },
-                '狀態': { width: '100px' },
-                'name': { width: '250px' },
-                'revision': { width: '150px' },
-                'revision_short': { width: '100px' },
-                'upstream': { width: '300px' },
-                'dest-branch': { width: '300px' },
-                'base_link': { width: '200px' },
-                'compare_link': { width: '200px' },
-                'base_upstream': { width: '300px' },
-                'compare_upstream': { width: '300px' },
-                'base_dest-branch': { width: '300px' },
-                'compare_dest-branch': { width: '300px' },
-                'folder': { width: '200px' },
-                'link': { width: '200px' },
-                'folder_count': { width: '100px' },
-                'folders': { width: '300px' },
-                'reason': { width: '400px' }
-            };
-            
-            if (columnMap[col]) {
-                minWidth = columnMap[col].width;
-            } else if (col.length > 20) {
-                minWidth = '250px';
-            }
-            
-            // 處理不同類型的欄位
-            if (col === 'SN') {
-                // SN 欄位居中顯示
-                cellContent = `<div style="text-align: center;">${value}</div>`;
-            } else if (col === 'module' || col === '模組名稱') {
-                // 模組名稱處理
-                let icon = 'fa-file';
-                const fileName = value.toLowerCase();
-                
-                if (fileName.includes('manifest.xml')) {
-                    icon = 'fa-file-code';
-                } else if (fileName.includes('version.txt') || fileName.includes('f_version.txt')) {
-                    icon = 'fa-file-alt';
-                } else if (fileName.includes('.txt')) {
-                    icon = 'fa-file-alt';
-                } else if (fileName.includes('dprx_quickshow')) {
-                    icon = 'fa-cube';
-                } else if (fileName.includes('bootcode')) {
-                    icon = 'fa-microchip';
-                } else if (fileName.includes('emcu')) {
-                    icon = 'fa-memory';
-                } else if (fileName.includes('audio_fw')) {
-                    icon = 'fa-volume-up';
-                } else if (fileName.includes('video_fw')) {
-                    icon = 'fa-video';
-                } else if (fileName.includes('tee')) {
-                    icon = 'fa-shield-alt';
-                } else if (fileName.includes('bl31')) {
-                    icon = 'fa-lock';
-                }
-                
-                cellContent = `
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fas ${icon}" style="color: #2196F3;"></i>
-                        <span>${value}</span>
-                    </div>
-                `;
-            } else if (col === 'problem' && value) {
-                // problem 欄位紅字
-                cellClass = 'text-red';
-                cellContent = value;
-            } else if (col === '狀態') {
-                // 狀態欄位根據值顯示不同顏色
-                if (value === '刪除') {
-                    cellClass = 'text-red';
-                } else if (value === '新增') {
-                    cellClass = 'text-blue';
-                }
-                cellContent = value;
-            } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
-                // revision 相關欄位紅字
-                cellClass = 'text-red';
-                cellContent = value;
-            } else if (col === 'has_wave' || col.toLowerCase().includes('has_wave')) {
-                if (value === 'Y' || value === 'y' || value === true || value === 'True') {
-                    cellContent = '<span class="badge-yes">Y</span>';
-                } else if (value === 'N' || value === 'n' || value === false || value === 'False') {
-                    cellContent = '<span class="badge-no">N</span>';
-                } else {
-                    cellContent = value;
-                }
-            } else if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
-                // 版本差異內容的特殊處理 - 關鍵部分！
-                cellContent = formatVersionDiffContentWithColors(row, col);
-            } else if (col.includes('link') || col.includes('_link')) {
-                // 連結欄位
-                if (value && value.startsWith('http')) {
-                    cellContent = `<a href="${value}" target="_blank" class="table-link">
-                        <i class="fas fa-external-link-alt"></i> 查看
-                    </a>`;
-                }
-            } else if (col.includes('path') || col.includes('folder')) {
-                // 路徑欄位使用等寬字型
-                cellContent = `<span style="font-family: monospace; font-size: 0.875rem;">${value}</span>`;
-            } else if (col === 'org_content') {
-                // org_content 欄位可能很長，限制顯示
-                if (value && value.length > 100) {
-                    const truncated = value.substring(0, 100) + '...';
-                    cellContent = `<span title="${value.replace(/"/g, '&quot;')}" style="cursor: help;">${truncated}</span>`;
-                } else {
-                    cellContent = value;
-                }
-            }
-            
-            html += `<td class="${cellClass}" style="min-width: ${minWidth};">${cellContent}</td>`;
+            html += `<td class="${cellClass}" style="min-width: ${columnInfo.width};">${cellContent}</td>`;
         });
         
         html += '</tr>';
     });
     
     html += '</tbody></table>';
-    html += '</div></div>';  // 關閉 table-container 和 table-wrapper
+    html += '</div></div>';
     
     return html;
 }
@@ -2445,15 +2311,41 @@ function generateCompareTable(sheetData, sheetName) {
         return '<div class="empty-message"><i class="fas fa-inbox"></i><p>此資料表沒有內容</p></div>';
     }
     
+    // 關鍵修正：調整欄位順序
+    let orderedColumns = [...sheetData.columns];
+    
+    // 版本檔案差異：SN 放在第一欄
+    if (sheetName === 'version_diff') {
+        const snIndex = orderedColumns.findIndex(col => 
+            col === 'SN' || col === 'sn' || col.toLowerCase() === 'sn'
+        );
+        if (snIndex > -1) {
+            const snColumn = orderedColumns.splice(snIndex, 1)[0];
+            orderedColumns.unshift(snColumn);
+        }
+    }
+    
+    // 分支錯誤：has_wave 和 problem 欄位互換
+    if (sheetName === 'branch_error') {
+        const hasWaveIndex = orderedColumns.indexOf('has_wave');
+        const problemIndex = orderedColumns.indexOf('problem');
+        
+        if (hasWaveIndex > -1 && problemIndex > -1) {
+            // 交換位置
+            [orderedColumns[hasWaveIndex], orderedColumns[problemIndex]] = 
+            [orderedColumns[problemIndex], orderedColumns[hasWaveIndex]];
+        }
+    }
+    
     let html = '<div class="table-wrapper">';
     html += '<div class="table-container">';
     html += `<table class="modal-table" id="table-${sheetName}">`;
     
-    // 表頭（加入排序功能）
+    // 表頭 - 使用調整後的欄位順序
     html += '<thead><tr>';
-    sheetData.columns.forEach((col, index) => {
+    orderedColumns.forEach((col, index) => {
         const columnInfo = getColumnInfo(col, sheetName);
-        const sortable = col !== 'reason' && col !== 'problem'; // 某些欄位不需要排序
+        const sortable = col !== 'reason' && col !== 'problem';
         
         html += `<th style="min-width: ${columnInfo.width};" 
                      class="${columnInfo.headerClass} ${sortable ? 'sortable' : ''}"
@@ -2463,10 +2355,10 @@ function generateCompareTable(sheetData, sheetName) {
     });
     html += '</tr></thead>';
     
-    // 表身
+    // 表身 - 使用調整後的欄位順序
     html += '<tbody>';
     sheetData.data.forEach((row, index) => {
-        html += generateCompareTableRow(row, sheetData.columns, sheetName, index);
+        html += generateCompareTableRow(row, orderedColumns, sheetName, index); // 注意：傳入 orderedColumns
     });
     html += '</tbody>';
     
@@ -2528,13 +2420,13 @@ function sortSheetTable(sheetName, columnIndex) {
 function generateCompareTableRow(row, columns, sheetName, rowIndex) {
     let html = '<tr>';
     
+    // 使用傳入的 columns 參數，而不是固定的順序
     columns.forEach(col => {
         const value = row[col];
         const cellContent = formatCellContent(value, col, row, sheetName);
         const cellClass = getCellClass(col, value, sheetName);
         const columnInfo = getColumnInfo(col, sheetName);
         
-        // 所有單元格都可以被搜尋
         html += `<td class="${cellClass}" style="min-width: ${columnInfo.width};">
                     ${cellContent}
                  </td>`;
@@ -2544,35 +2436,102 @@ function generateCompareTableRow(row, columns, sheetName, rowIndex) {
     return html;
 }
 
-// 獲取欄位資訊
+// 獲取欄位資訊 - 根據不同sheet類型返回正確的欄位顯示
 function getColumnInfo(col, sheetName) {
-    const columnMap = {
+    // 基本欄位對應
+    const baseColumnMap = {
         'SN': { text: 'SN', width: '60px', headerClass: '' },
         'module': { text: '模組名稱', width: '200px', headerClass: '' },
-        'location_path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
-        'path': { text: 'FTP 路徑', width: '400px', headerClass: '' },
-        'base_folder': { text: '本地路徑', width: '300px', headerClass: '' },
         'base_content': { text: 'base_content', width: '400px', headerClass: 'header-red-bg' },
         'compare_content': { text: 'compare_content', width: '400px', headerClass: 'header-red-bg' },
         'problem': { text: '問題', width: '200px', headerClass: 'header-red-bg' },
-        '狀態': { text: '狀態', width: '100px', headerClass: 'header-red-bg' },
-        // 其他欄位...
+        'has_wave': { text: 'has_wave', width: '100px', headerClass: '' },
+        'name': { text: 'name', width: '250px', headerClass: '' },
+        'revision': { text: 'revision', width: '150px', headerClass: '' },
+        'revision_short': { text: 'revision_short', width: '100px', headerClass: '' },
+        'upstream': { text: 'upstream', width: '300px', headerClass: '' },
+        'dest-branch': { text: 'dest-branch', width: '300px', headerClass: '' },
+        'base_link': { text: 'base_link', width: '200px', headerClass: '' },
+        'compare_link': { text: 'compare_link', width: '200px', headerClass: '' },
+        'base_upstream': { text: 'base_upstream', width: '300px', headerClass: '' },
+        'compare_upstream': { text: 'compare_upstream', width: '300px', headerClass: '' },
+        'base_dest-branch': { text: 'base_dest-branch', width: '300px', headerClass: '' },
+        'compare_dest-branch': { text: 'compare_dest-branch', width: '300px', headerClass: '' },
+        'folder': { text: 'folder', width: '200px', headerClass: '' },
+        'link': { text: 'link', width: '200px', headerClass: '' },
+        'folder_count': { text: 'folder_count', width: '100px', headerClass: '' },
+        'folders': { text: 'folders', width: '300px', headerClass: '' },
+        'reason': { text: 'reason', width: '400px', headerClass: '' }
     };
     
-    return columnMap[col] || { text: col, width: '150px', headerClass: '' };
+    // 根據不同 sheet 的特殊處理
+    switch(sheetName) {
+        case 'revision_diff':
+            // Revision 差異頁籤的特殊處理
+            if (col === 'location_path') {
+                return { text: 'location_path', width: '400px', headerClass: '' };
+            } else if (col === 'base_folder') {
+                return { text: 'base_folder', width: '300px', headerClass: '' };
+            } else if (col === 'path') {
+                return { text: 'path', width: '400px', headerClass: '' };
+            } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
+                // 關鍵修正：為這4個欄位設定紅底白字
+                return { text: col, width: '150px', headerClass: 'header-red-bg' };
+            }
+            break;
+            
+        case 'branch_error':
+            // 分支錯誤頁籤的特殊處理
+            if (col === 'location_path') {
+                return { text: 'location_path', width: '400px', headerClass: '' };
+            } else if (col === 'base_folder') {
+                return { text: 'base_folder', width: '300px', headerClass: '' };
+            } else if (col === 'path') {
+                return { text: 'path', width: '400px', headerClass: '' };
+            }
+            break;
+            
+        case 'lost_project':
+            // 新增/刪除專案頁籤的特殊處理
+            if (col === 'Base folder') {
+                return { text: 'Base folder', width: '150px', headerClass: 'header-red-bg' };
+            } else if (col === '狀態') {
+                return { text: '狀態', width: '100px', headerClass: 'header-red-bg' };
+            } else if (col === 'location_path') {
+                return { text: 'location_path', width: '400px', headerClass: '' };
+            }
+            break;
+            
+        case 'version_diff':
+            // 版本檔案差異頁籤的特殊處理
+            if (col === 'location_path') {
+                return { text: 'location_path', width: '400px', headerClass: '' };
+            } else if (col === 'base_folder') {
+                return { text: 'base_folder', width: '300px', headerClass: '' };
+            }
+            break;
+    }
+    
+    // 使用基本對應或預設值
+    return baseColumnMap[col] || { text: col, width: '150px', headerClass: '' };
 }
 
 // 獲取單元格樣式
 function getCellClass(col, value, sheetName) {
     let classes = [];
     
-    if (col === 'problem' && value) {
+    // revision_diff 頁籤的特殊處理 - 4個欄位內容設為紅字
+    if (sheetName === 'revision_diff' && ['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
         classes.push('text-red');
-    } else if (col === '狀態') {
+    }
+    // problem 欄位保持紅色文字
+    else if (col === 'problem' && value) {
+        classes.push('text-red');
+    }
+    // 狀態欄位的顏色處理
+    else if (col === '狀態') {
         if (value === '刪除') classes.push('text-red');
         else if (value === '新增') classes.push('text-blue');
-    } else if (['base_short', 'base_revision', 'compare_short', 'compare_revision'].includes(col)) {
-        classes.push('text-red');
     }
     
     return classes.join(' ');
@@ -2581,6 +2540,11 @@ function getCellClass(col, value, sheetName) {
 // 格式化單元格內容 - 保持原有功能
 function formatCellContent(value, col, row, sheetName) {
     if (!value && value !== 0) return '-';
+    
+    // SN 欄位
+    if (col === 'SN') {
+        return `<div style="text-align: center;">${value}</div>`;
+    }
     
     // 模組名稱處理
     if (col === 'module' || col === '模組名稱') {
@@ -2593,32 +2557,83 @@ function formatCellContent(value, col, row, sheetName) {
         `;
     }
     
-    // SN 欄位
-    if (col === 'SN') {
-        return `<div style="text-align: center;">${value}</div>`;
+    // has_wave 欄位 - 根據圖片設計，使用圓形背景樣式
+    if (col === 'has_wave') {
+        if (value === 'Y' || value === 'y' || value === true || value === 'True') {
+            return `
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <div style="
+                        width: 28px; 
+                        height: 28px; 
+                        background: #4CAF50; 
+                        border-radius: 50%; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        color: white; 
+                        font-weight: bold;
+                        font-size: 0.875rem;
+                    ">Y</div>
+                </div>
+            `;
+        } else if (value === 'N' || value === 'n' || value === false || value === 'False') {
+            return `
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <div style="
+                        width: 28px; 
+                        height: 28px; 
+                        background: #9E9E9E; 
+                        border-radius: 50%; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        color: white; 
+                        font-weight: bold;
+                        font-size: 0.875rem;
+                    ">N</div>
+                </div>
+            `;
+        }
+        return value;
+    }
+    
+    // 狀態欄位 - 根據圖片設計，使用標籤樣式
+    if (col === '狀態') {
+        if (value === '刪除') {
+            return `
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <span style="
+                        padding: 4px 12px;
+                        background: #F44336;
+                        color: white;
+                        border-radius: 12px;
+                        font-size: 0.8125rem;
+                        font-weight: 500;
+                        white-space: nowrap;
+                    ">刪除</span>
+                </div>
+            `;
+        } else if (value === '新增') {
+            return `
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <span style="
+                        padding: 4px 12px;
+                        background: #4CAF50;
+                        color: white;
+                        border-radius: 12px;
+                        font-size: 0.8125rem;
+                        font-weight: 500;
+                        white-space: nowrap;
+                    ">新增</span>
+                </div>
+            `;
+        }
+        return value;
     }
     
     // 版本差異處理
     if ((col === 'base_content' || col === 'compare_content') && sheetName === 'version_diff') {
         return formatVersionDiffContentWithColors(row, col);
-    }
-    
-    // has_wave 欄位
-    if (col === 'has_wave') {
-        if (value === 'Y') {
-            return '<span class="badge badge-info">Y</span>';
-        } else if (value === 'N') {
-            return '<span class="badge badge-warning">N</span>';
-        }
-    }
-    
-    // 狀態欄位
-    if (col === '狀態') {
-        if (value === '刪除') {
-            return `<span class="text-red">${value}</span>`;
-        } else if (value === '新增') {
-            return `<span class="text-blue">${value}</span>`;
-        }
     }
     
     // 連結處理
@@ -2816,82 +2831,82 @@ async function exportResults(format) {
     // 獲取當前選擇的情境
     const scenario = document.querySelector('input[name="scenario"]:checked').value;
     
-    const endpoints = {
-        excel: `/api/export-excel/${currentTaskId}`,
-        html: `/api/export-html/${currentTaskId}`,
-        zip: `/api/export-zip/${currentTaskId}`
-    };
-    
-    // 如果是特定情境，傳遞情境參數
-    if (scenario !== 'all') {
-        endpoints.excel += `?scenario=${scenario}`;
-        endpoints.html += `?scenario=${scenario}`;
-        endpoints.zip += `?scenario=${scenario}`;
-    }
-    
     if (format === 'excel') {
         // Excel 匯出支援多維度
         try {
-            const response = await fetch(endpoints.excel);
+            // 修正：使用正確的 API 端點
+            let apiUrl = `/api/export-excel/${currentTaskId}`;
+            
+            // 如果是特定情境，傳遞情境參數
+            if (scenario !== 'all') {
+                apiUrl += `?scenario=${scenario}`;
+            }
+            
+            utils.showNotification('正在準備 Excel 檔案...', 'info');
+            
+            const response = await fetch(apiUrl);
             
             if (!response.ok) {
-                throw new Error('匯出失敗');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            // 檢查回應的內容類型
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+                console.warn('Warning: Unexpected content type:', contentType);
             }
             
             const blob = await response.blob();
+            
+            if (blob.size === 0) {
+                throw new Error('下載的檔案為空');
+            }
+            
+            // 建立下載連結
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             
-            // 檔名包含情境資訊
+            // 檔名包含情境資訊和時間戳
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
             let filename = scenario === 'all' ? 
-                'all_scenarios_compare.xlsx' : 
-                `${scenario}_compare.xlsx`;
+                `all_scenarios_compare_${timestamp}.xlsx` : 
+                `${scenario}_compare_${timestamp}.xlsx`;
             
             a.download = filename;
             document.body.appendChild(a);
             a.click();
+            
+            // 清理
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             
             utils.showNotification('Excel 檔案匯出完成', 'success');
             
         } catch (error) {
-            console.error('Export error:', error);
-            utils.showNotification('匯出失敗', 'error');
+            console.error('Export Excel error:', error);
+            utils.showNotification(`匯出失敗: ${error.message}`, 'error');
         }
     } else if (format === 'zip') {
+        // ZIP 匯出邏輯保持不變...
         utils.showNotification('正在準備 ZIP 檔案，請稍候...', 'info');
         
         try {
-            // 先檢查任務是否存在
-            const checkResponse = await fetch(`/api/status/${currentTaskId}`);
-            if (!checkResponse.ok) {
-                utils.showNotification('找不到任務資料', 'error');
-                return;
+            let apiUrl = `/api/export-zip/${currentTaskId}`;
+            if (scenario !== 'all') {
+                apiUrl += `?scenario=${scenario}`;
             }
             
-            // 下載 ZIP 檔案
-            const response = await fetch(endpoints[format]);
+            const response = await fetch(apiUrl);
             
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 utils.showNotification(`下載失敗: ${error.error || '未知錯誤'}`, 'error');
                 return;
             }
             
-            // 檢查 content-type
-            const contentType = response.headers.get('content-type');
-            console.log('Content-Type:', contentType);
-            
-            if (!contentType || !contentType.includes('application/zip')) {
-                utils.showNotification('回應格式錯誤，不是有效的 ZIP 檔案', 'error');
-                return;
-            }
-            
-            // 下載檔案
             const blob = await response.blob();
-            console.log('Blob size:', blob.size);
             
             if (blob.size === 0) {
                 utils.showNotification('下載的檔案為空', 'error');
@@ -2910,12 +2925,16 @@ async function exportResults(format) {
             utils.showNotification('ZIP 檔案下載完成', 'success');
             
         } catch (error) {
-            console.error('Download error:', error);
+            console.error('Download ZIP error:', error);
             utils.showNotification('下載失敗', 'error');
         }
     } else {
         // 其他格式直接下載
-        window.location.href = endpoints[format];
+        let apiUrl = `/api/export-${format}/${currentTaskId}`;
+        if (scenario !== 'all') {
+            apiUrl += `?scenario=${scenario}`;
+        }
+        window.location.href = apiUrl;
     }
 }
 
