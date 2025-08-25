@@ -4956,3 +4956,745 @@ table.modal-table th.header-red-bg {
     background: #C00000 !important;
     color: white !important;
 }
+
+/* ===== 檔案結構樣式 - 簡潔版本 ===== */
+
+.file-explorer-simple {
+    background: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #E8ECF4;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+/* 檔案瀏覽器主體 */
+.explorer-body {
+    background: linear-gradient(180deg, #FAFBFC 0%, #F5F7FA 100%);
+    padding: 24px;
+}
+
+.file-tree-simple {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1px solid #E8ECF4;
+}
+
+/* 樹狀項目樣式 */
+.tree-item-simple {
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.tree-item-simple:hover {
+    background: rgba(59, 130, 246, 0.04);
+    border-radius: 8px;
+}
+
+.item-content-simple {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    position: relative;
+}
+
+/* 樹狀縮排和連接線 */
+.tree-indent-simple {
+    width: 28px;
+    height: 28px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.tree-connector-simple {
+    position: absolute;
+    left: 13px;
+    top: -8px;
+    width: 1px;
+    height: 44px;
+    background: #CBD5E1;
+}
+
+.tree-connector-simple::after {
+    content: '';
+    position: absolute;
+    top: 22px;
+    left: 0;
+    width: 14px;
+    height: 1px;
+    background: #CBD5E1;
+}
+
+.tree-connector-simple.last-connector {
+    height: 22px;
+}
+
+.tree-connector-simple.transparent-connector {
+    background: transparent;
+}
+
+.tree-connector-simple.transparent-connector::after {
+    background: transparent;
+}
+
+.tree-sub-connector-simple {
+    position: absolute;
+    left: 27px;
+    top: -8px;
+    width: 1px;
+    height: 44px;
+    background: #E2E8F0;
+}
+
+.tree-sub-connector-simple::after {
+    content: '';
+    position: absolute;
+    top: 22px;
+    left: 0;
+    width: 10px;
+    height: 1px;
+    background: #E2E8F0;
+}
+
+.tree-sub-connector-simple.last-sub-connector {
+    height: 22px;
+}
+
+/* 圖標樣式 - 顏色區分更明顯 */
+.folder-root-icon {
+    color: #3B82F6 !important; /* 藍色 - 根資料夾 */
+    font-size: 1.25rem;
+    margin-right: 12px;
+}
+
+.folder-scenario-icon {
+    color: #F59E0B !important; /* 橘色 - 情境資料夾 */
+    font-size: 1.125rem;
+    margin-right: 12px;
+}
+
+.file-type-icon {
+    font-size: 1rem;
+    margin-right: 12px;
+    /* 顏色由 style 屬性控制 */
+}
+
+/* 項目資訊 */
+.item-info-simple {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.item-name-simple {
+    font-weight: 500;
+    color: #374151;
+}
+
+.root-name-simple {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #1F2937;
+}
+
+.scenario-name-simple {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.9375rem;
+    color: #D97706;
+    font-weight: 600;
+}
+
+.file-name-simple {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8125rem;
+    color: #6B7280;
+}
+
+/* 根項目特殊樣式 */
+.root-item-simple {
+    background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border: 1px solid #93C5FD;
+}
+
+.root-item-simple:hover {
+    background: linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%);
+}
+
+/* 情境項目樣式 */
+.scenario-item-simple {
+    margin-bottom: 6px;
+}
+
+.scenario-item-simple .item-content-simple {
+    padding: 10px 12px;
+}
+
+/* 檔案項目樣式 */
+.file-item-simple .item-content-simple {
+    padding: 6px 12px;
+    opacity: 0.85;
+}
+
+.file-item-simple:hover .item-content-simple {
+    opacity: 1;
+}
+
+/* 徽章和標籤 */
+.item-badges-simple {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.scenario-badge-simple {
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+    color: #92400E;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid #FBBF24;
+}
+
+.file-badge-simple {
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.success-badge {
+    background: #10B981;
+    color: white;
+}
+
+.empty-badge {
+    background: #9CA3AF;
+    color: white;
+}
+
+.file-size-simple {
+    font-size: 0.75rem;
+    color: #9CA3AF;
+    background: #F3F4F6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', Monaco, monospace;
+    white-space: nowrap;
+}
+
+/* 操作按鈕區域 */
+.explorer-actions-simple {
+    padding: 20px 24px;
+    background: #FFFFFF;
+    border-top: 1px solid #E5E7EB;
+    display: flex;
+    gap: 12px;
+}
+
+.action-btn-simple {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9375rem;
+    text-align: left;
+}
+
+.primary-action {
+    background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.primary-action:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+}
+
+.secondary-action {
+    background: #FFFFFF;
+    color: #3B82F6;
+    border: 2px solid #E5E7EB;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.secondary-action:hover {
+    background: #F8FAFC;
+    border-color: #3B82F6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.action-btn-simple i {
+    font-size: 1.125rem;
+    flex-shrink: 0;
+}
+
+.btn-content-simple {
+    flex: 1;
+}
+
+.btn-title-simple {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.btn-desc-simple {
+    display: block;
+    font-size: 0.8125rem;
+    opacity: 0.85;
+}
+
+/* 錯誤狀態 */
+.error-state-simple {
+    text-align: center;
+    padding: 40px;
+    color: #6B7280;
+}
+
+.error-state-simple i {
+    font-size: 2.5rem;
+    color: #EF4444;
+    margin-bottom: 12px;
+}
+
+.error-state-simple p {
+    font-size: 1rem;
+    margin-bottom: 16px;
+}
+
+.retry-btn-simple {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #3B82F6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.retry-btn-simple:hover {
+    background: #2563EB;
+    transform: translateY(-1px);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .explorer-actions-simple {
+        flex-direction: column;
+    }
+    
+    .item-info-simple {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .item-badges-simple {
+        align-self: stretch;
+        justify-content: flex-start;
+    }
+    
+    .explorer-body {
+        padding: 16px;
+    }
+}
+
+/* ===== 統計卡片 - 簡潔乾淨版本 ===== */
+
+/* 統計卡片容器 */
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 40px;
+    padding: 0;
+    width: 100%;
+}
+
+/* 統計卡片 - 簡潔設計 */
+.stat-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 24px 20px;
+    position: relative;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: none; /* 移除陰影 */
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: currentColor;
+}
+
+/* 移除複雜的背景效果 */
+.stat-card::before,
+.stat-card::after {
+    display: none;
+}
+
+/* 圖標容器 - 簡化 */
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    background: #F3F4F6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.05);
+}
+
+/* 狀態標記 - 簡化 */
+.stat-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* 數值 - 簡化 */
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 標題 */
+.stat-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+/* 副標題 */
+.stat-sublabel {
+    font-size: 0.8125rem;
+    color: #6B7280;
+    font-weight: 400;
+}
+
+/* Master vs PreMP - 藍色系 */
+.stat-card.blue {
+    border-color: #DBEAFE;
+}
+
+.stat-card.blue:hover {
+    border-color: #3B82F6;
+}
+
+.stat-card.blue .stat-icon {
+    background: #EBF8FF;
+    color: #2563EB;
+}
+
+.stat-card.blue .stat-value {
+    color: #1D4ED8;
+}
+
+.stat-card.blue .stat-badge {
+    background: #3B82F6;
+}
+
+/* PreMP vs Wave - 綠色系 */
+.stat-card.success {
+    border-color: #D1FAE5;
+}
+
+.stat-card.success:hover {
+    border-color: #10B981;
+}
+
+.stat-card.success .stat-icon {
+    background: #ECFDF5;
+    color: #059669;
+}
+
+.stat-card.success .stat-value {
+    color: #047857;
+}
+
+.stat-card.success .stat-badge {
+    background: #10B981;
+}
+
+/* Wave vs Backup - 橘色系 */
+.stat-card.warning {
+    border-color: #FED7AA;
+}
+
+.stat-card.warning:hover {
+    border-color: #F59E0B;
+}
+
+.stat-card.warning .stat-icon {
+    background: #FFFBEB;
+    color: #D97706;
+}
+
+.stat-card.warning .stat-value {
+    color: #B45309;
+}
+
+.stat-card.warning .stat-badge {
+    background: #F59E0B;
+}
+
+/* 失敗 - 紅色系 */
+.stat-card.danger {
+    border-color: #FECACA;
+}
+
+.stat-card.danger:hover {
+    border-color: #EF4444;
+}
+
+.stat-card.danger .stat-icon {
+    background: #FEF2F2;
+    color: #DC2626;
+}
+
+.stat-card.danger .stat-value {
+    color: #B91C1C;
+}
+
+.stat-card.danger .stat-badge {
+    background: #EF4444;
+}
+
+/* 空狀態卡片 */
+.stat-card-empty {
+    background: #FAFAFA;
+    border: 2px dashed #D1D5DB;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.stat-card-empty:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: #D1D5DB;
+}
+
+.stat-card-empty .stat-icon {
+    background: #F3F4F6;
+    color: #9CA3AF;
+}
+
+.stat-card-empty .stat-value {
+    color: #9CA3AF;
+}
+
+/* 移除複雜的動畫和效果 */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.stat-badge {
+    animation: none; /* 移除脈衝動畫 */
+}
+
+/* 響應式設計 */
+@media (max-width: 1024px) {
+    .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+}
+
+@media (max-width: 640px) {
+    .progress-stats {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .stat-card {
+        min-height: 100px;
+        padding: 20px 16px;
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+    }
+    
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.125rem;
+        margin-bottom: 12px;
+    }
+}
+
+/* 如果有4個卡片時自動調整 */
+.progress-stats:has(.stat-card:nth-child(4)) {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+    .progress-stats:has(.stat-card:nth-child(4)) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ===== 統一按鈕樣式 - 使用頁面藍色 ===== */
+
+.action-btn-simple {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 0.9375rem;
+    text-align: left;
+    background: #FFFFFF;
+    color: #6B7280;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+/* 主要按鈕和次要按鈕都使用相同的 hover 效果 */
+.primary-action:hover,
+.secondary-action:hover {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); /* 使用頁面統一的藍色 */
+    color: white;
+    border-color: #1976D2;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 25px rgba(33, 150, 243, 0.15), 0 2px 8px rgba(33, 150, 243, 0.1);
+}
+
+/* 按鈕內容動畫 */
+.action-btn-simple i {
+    font-size: 1.125rem;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+/* hover 時圖標稍微放大並變色 - 兩個按鈕統一 */
+.primary-action:hover i,
+.secondary-action:hover i {
+    color: white;
+    transform: scale(1.05);
+}
+
+.btn-content-simple {
+    flex: 1;
+}
+
+.btn-title-simple {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 2px;
+    transition: all 0.2s ease;
+}
+
+.btn-desc-simple {
+    display: block;
+    font-size: 0.8125rem;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+/* hover 時文字變色 - 兩個按鈕統一 */
+.primary-action:hover .btn-title-simple,
+.primary-action:hover .btn-desc-simple,
+.secondary-action:hover .btn-title-simple,
+.secondary-action:hover .btn-desc-simple {
+    color: white;
+}
+
+.primary-action:hover .btn-desc-simple,
+.secondary-action:hover .btn-desc-simple {
+    opacity: 0.9;
+}
+
+/* 添加微妙的光澤效果 - 兩個按鈕統一 */
+.action-btn-simple::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s ease;
+}
+
+.primary-action:hover::before,
+.secondary-action:hover::before {
+    left: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+/* 按鈕組容器 */
+.explorer-actions-simple {
+    padding: 20px 24px;
+    background: #FFFFFF;
+    border-top: 1px solid #E5E7EB;
+    display: flex;
+    gap: 14px;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .explorer-actions-simple {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .action-btn-simple {
+        padding: 16px;
+    }
+}

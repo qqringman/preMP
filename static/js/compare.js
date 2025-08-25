@@ -3530,80 +3530,136 @@ async function downloadAllScenarios() {
     }
 }
 
-// 顯示結果資料夾結構
+// 顯示結果資料夾結構 - 簡潔版本，移除多餘層級
 async function showResultsStructure(taskId) {
     try {
         const structure = await utils.apiRequest(`/api/results-structure/${taskId}`);
         
         if (structure && structure.scenarios) {
             let structureHtml = `
-                <div class="results-structure-card">
-                    <div class="structure-tree">
-                        <div class="tree-root">
-                            <i class="fas fa-folder-open"></i> ${taskId}/
-                        </div>
+                <div class="file-explorer-simple">
+                    <div class="explorer-body">
+                        <div class="file-tree-simple">
+                            <!-- 根目錄 -->
+                            <div class="tree-item-simple root-item-simple">
+                                <div class="item-content-simple">
+                                    <i class="fas fa-folder-open folder-root-icon"></i>
+                                    <span class="item-name-simple root-name-simple">${taskId}/</span>
+                                </div>
+                            </div>
             `;
             
-            // 顯示各情境資料夾
-            for (const [scenario, data] of Object.entries(structure.scenarios)) {
+            // 計算有多少個情境
+            const scenarios = Object.entries(structure.scenarios);
+            
+            scenarios.forEach(([scenario, data], index) => {
                 const scenarioName = getScenarioDisplayName(scenario);
                 const hasFiles = data.files && data.files.length > 0;
+                const isLastScenario = index === scenarios.length - 1;
                 
                 structureHtml += `
-                    <div class="tree-branch">
-                        <div class="tree-node ${hasFiles ? 'has-files' : 'no-files'}">
-                            <i class="fas fa-folder${hasFiles ? '' : '-open'}"></i> ${scenario}/
-                            <span class="tree-label">${scenarioName}</span>
-                            ${hasFiles ? `<span class="file-count">(${data.files.length} 個檔案)</span>` : '<span class="no-data-label">無資料</span>'}
+                    <!-- 情境資料夾 -->
+                    <div class="tree-item-simple scenario-item-simple">
+                        <div class="item-content-simple">
+                            <div class="tree-indent-simple">
+                                <div class="tree-connector-simple ${isLastScenario ? 'last-connector' : ''}"></div>
+                            </div>
+                            <i class="fas fa-folder folder-scenario-icon"></i>
+                            <div class="item-info-simple">
+                                <span class="item-name-simple scenario-name-simple">${scenario}/</span>
+                                <div class="item-badges-simple">
+                                    <span class="scenario-badge-simple">${scenarioName}</span>
+                                    ${hasFiles ? 
+                                        `<span class="file-badge-simple success-badge">${data.files.length} 個檔案</span>` : 
+                                        `<span class="file-badge-simple empty-badge">無資料</span>`
+                                    }
+                                </div>
+                            </div>
                         </div>
+                    </div>
                 `;
                 
+                // 顯示檔案
                 if (hasFiles) {
-                    structureHtml += '<div class="tree-files">';
-                    data.files.forEach(file => {
-                        const icon = file.name.endsWith('.xlsx') ? 'fa-file-excel' : 
-                                    file.name.endsWith('.json') ? 'fa-file-code' : 'fa-file';
+                    data.files.forEach((file, fileIndex) => {
+                        const isLastFile = fileIndex === data.files.length - 1;
+                        const icon = getFileTypeIconSimple(file.name);
                         const sizeKB = (file.size / 1024).toFixed(1);
                         
                         structureHtml += `
-                            <div class="tree-file">
-                                <i class="fas ${icon}"></i> 
-                                ${file.name}
-                                <span class="file-size">(${sizeKB} KB)</span>
+                            <div class="tree-item-simple file-item-simple">
+                                <div class="item-content-simple">
+                                    <div class="tree-indent-simple">
+                                        <div class="tree-connector-simple ${isLastScenario ? 'transparent-connector' : ''}"></div>
+                                        <div class="tree-sub-connector-simple ${isLastFile ? 'last-sub-connector' : ''}"></div>
+                                    </div>
+                                    <i class="fas ${icon.class} file-type-icon" style="color: ${icon.color};"></i>
+                                    <div class="item-info-simple">
+                                        <span class="item-name-simple file-name-simple">${file.name}</span>
+                                        <span class="file-size-simple">${sizeKB} KB</span>
+                                    </div>
+                                </div>
                             </div>
                         `;
                     });
-                    structureHtml += '</div>';
                 }
-                
-                structureHtml += '</div>';
-            }
+            });
             
             structureHtml += `
+                        </div>
                     </div>
-                    <div class="structure-actions">
-                        <button class="btn btn-primary btn-small" onclick="downloadAllScenarios()">
-                            <i class="fas fa-download"></i> 下載所有檔案
+                    
+                    <div class="explorer-actions-simple">
+                        <button class="action-btn-simple primary-action" onclick="downloadAllScenarios()">
+                            <i class="fas fa-download"></i>
+                            <div class="btn-content-simple">
+                                <span class="btn-title-simple">下載所有檔案</span>
+                                <span class="btn-desc-simple">獲取完整比對結果</span>
+                            </div>
                         </button>
-                        <button class="btn btn-secondary btn-small" onclick="window.location.href='/results/${taskId}'">
-                            <i class="fas fa-folder-open"></i> 開啟結果資料夾
+                        <button class="action-btn-simple secondary-action" onclick="window.location.href='/results/${taskId}'">
+                            <i class="fas fa-external-link-alt"></i>
+                            <div class="btn-content-simple">
+                                <span class="btn-title-simple">開啟結果資料夾</span>
+                                <span class="btn-desc-simple">瀏覽詳細內容</span>
+                            </div>
                         </button>
                     </div>
                 </div>
             `;
             
-            // 插入到獨立區塊
             document.getElementById('resultsStructureContent').innerHTML = structureHtml;
         }
         
     } catch (error) {
         console.error('Get results structure error:', error);
         document.getElementById('resultsStructureContent').innerHTML = `
-            <div class="empty-message">
-                <i class="fas fa-exclamation-triangle"></i>
+            <div class="error-state-simple">
+                <i class="fas fa-exclamation-circle"></i>
                 <p>無法載入檔案結構</p>
+                <button class="retry-btn-simple" onclick="showResultsStructure('${taskId}')">
+                    <i class="fas fa-redo"></i> 重試
+                </button>
             </div>
         `;
+    }
+}
+
+// 輔助函數：獲取檔案類型圖標 - 顏色區分更明顯
+function getFileTypeIconSimple(filename) {
+    const ext = filename.toLowerCase().split('.').pop();
+    switch(ext) {
+        case 'xlsx':
+        case 'xls':
+            return { class: 'fa-file-excel', color: '#16A085' }; // 深綠色
+        case 'json':
+            return { class: 'fa-file-code', color: '#8E44AD' }; // 紫色
+        case 'html':
+            return { class: 'fa-file-code', color: '#E74C3C' }; // 紅色
+        case 'csv':
+            return { class: 'fa-file-csv', color: '#27AE60' }; // 綠色
+        default:
+            return { class: 'fa-file', color: '#7F8C8D' }; // 灰色
     }
 }
 
