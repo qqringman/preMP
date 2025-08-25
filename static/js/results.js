@@ -640,10 +640,10 @@ function renderDataTable(sheetData) {
                         
                         let formattedValue = String(value);
                         
-                        // 檢查是否包含多行
+                        // 【修正】檢查是否包含多行內容，添加分隔線
                         if (value.includes('\n') || value.includes('P_GIT_')) {
-                            // 多行內容或包含 P_GIT 的內容
-                            formattedValue = formatMultiLineContent(value, compareValue, row['file_type']);
+                            // 多行內容需要添加分隔線
+                            formattedValue = formatMultiLineContentWithDivider(value, compareValue, row['file_type']);
                         } else if (value.includes('F_HASH:')) {
                             if (compareValue) {
                                 formattedValue = formatFHashContent(value, compareValue);
@@ -830,6 +830,85 @@ function renderDataTable(sheetData) {
             console.error('同步表格時發生錯誤:', error);
         }
     }, 100);
+}
+
+function formatMultiLineContentWithDivider(value, compareValue, fileType) {
+    if (!value) return value;
+    
+    const lines = value.split('\n');
+    let compareLines = [];
+    
+    if (compareValue) {
+        compareLines = compareValue.split('\n');
+    }
+    
+    // 建立比較行的映射表
+    const compareMap = {};
+    compareLines.forEach(line => {
+        if (line.startsWith('P_GIT_')) {
+            const gitId = line.split(';')[0];
+            compareMap[gitId] = line;
+        } else if (line.includes(':')) {
+            const key = line.split(':')[0].trim();
+            compareMap[key] = line;
+        } else {
+            compareMap[line.substring(0, 20)] = line;
+        }
+    });
+    
+    let formattedLines = [];
+    
+    lines.forEach((line, index) => {
+        let compareLine = '';
+        let formattedLine = line;
+        
+        if (line.startsWith('P_GIT_')) {
+            const gitId = line.split(';')[0];
+            compareLine = compareMap[gitId] || '';
+            
+            if (compareLine) {
+                // 直接比較並格式化 P_GIT 行
+                const parts1 = line.split(';');
+                const parts2 = compareLine.split(';');
+                
+                if (parts1.length >= 5 && parts2.length >= 5) {
+                    let result = '';
+                    for (let i = 0; i < parts1.length; i++) {
+                        if (i > 0) result += ';';
+                        
+                        // 索引 3 是 git hash，索引 4 是 revision
+                        if ((i === 3 || i === 4) && parts1[i] !== parts2[i]) {
+                            result += `<span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${parts1[i]}</span>`;
+                        } else {
+                            result += parts1[i];
+                        }
+                    }
+                    formattedLine = result;
+                }
+            }
+        } else if (line.includes(':')) {
+            const key = line.split(':')[0].trim();
+            compareLine = compareMap[key] || '';
+            
+            if (compareLine) {
+                const val1 = line.split(':')[1]?.trim() || '';
+                const val2 = compareLine.split(':')[1]?.trim() || '';
+                
+                if (val1 !== val2) {
+                    formattedLine = `${key}: <span class="highlight-red" style="color: #dc3545 !important; font-weight: 600 !important;">${val1}</span>`;
+                }
+            }
+        }
+        
+        // 【關鍵】添加分隔線，除了最後一行
+        if (index < lines.length - 1) {
+            formattedLine += '<div class="content-divider"></div>';
+        }
+        
+        formattedLines.push(formattedLine);
+    });
+    
+    return formattedLines;
 }
 
 function formatMultiLineContent(value, compareValue, fileType) {
@@ -1646,6 +1725,7 @@ function togglePivotMode() {
 }
 
 // 更新統計資料
+// 更新統計資料
 function updateStatistics(sheetData) {
     const statsGrid = document.getElementById('statsGrid');
     statsGrid.innerHTML = '';
@@ -1663,17 +1743,12 @@ function updateStatistics(sheetData) {
     
     // 根據資料表類型調整統計
     if (currentSheet === 'revision_diff') {
-        // 計算不同版號的數量（實際上就是總筆數，因為每一筆都代表版號不同）
+        // revision_diff 的統計保持不變
         const differentRevisions = sheetData.data.length;
-        
-        // 計算唯一模組數
         const uniqueModules = new Set(sheetData.data.map(row => row.module).filter(m => m));
-        
-        // 計算 has_wave 的統計
         const hasWaveY = sheetData.data.filter(row => row.has_wave === 'Y').length;
         const hasWaveN = sheetData.data.filter(row => row.has_wave === 'N').length;
         
-        // 加入不同版號統計
         stats.push({
             label: '不同版號',
             value: differentRevisions,
@@ -1681,7 +1756,6 @@ function updateStatistics(sheetData) {
             color: 'warning'
         });
         
-        // 加入模組數統計
         stats.push({
             label: '模組數',
             value: uniqueModules.size,
@@ -1689,7 +1763,6 @@ function updateStatistics(sheetData) {
             color: 'purple'
         });
         
-        // 加入 has_wave 統計
         if (hasWaveY > 0) {
             stats.push({
                 label: '包含 Wave',
@@ -1708,32 +1781,77 @@ function updateStatistics(sheetData) {
             });
         }
     } else if (currentSheet === '摘要' || currentSheet === '比對摘要' || currentSheet === 'summary') {
-        // 比對摘要的統計邏輯（保持不變）
+        // 【修正】比對摘要的統計邏輯
         let totalSuccess = 0;
         let totalFailed = 0;
+        let validItemCount = 0;
         
-        sheetData.data.forEach(row => {
-            const scenario = row['比對情境'] || row['scenario'] || '';
-            if (scenario === '總計' || scenario.toLowerCase() === 'total') {
+        console.log('比對摘要統計開始 - 資料筆數:', sheetData.data.length);
+        
+        sheetData.data.forEach((row, index) => {
+            console.log(`=== 第${index+1}行分析 ===`);
+            console.log('完整行資料:', row);
+            console.log('所有欄位名稱:', Object.keys(row));
+            
+            // 【修正】直接從項目欄位取值，不再要求情境欄位
+            const item = row['項目'] || row['item'] || row['Item'] || '';
+            
+            console.log(`第${index+1}行 - 項目: "${item}"`);
+            
+            // 跳過總計行和空項目
+            if (!item || 
+                item === '總計' || 
+                item.toLowerCase() === 'total' ||
+                item.trim() === '') {
+                console.log(`跳過第${index+1}行 - 項目為空或總計:${item}`);
                 return;
             }
             
-            const successCount = parseInt(row['成功模組數'] || row['success_count'] || 0);
-            const failedCount = parseInt(row['失敗模組數'] || row['failed_count'] || 0);
+            // 只處理包含"模組數"的項目
+            if (!item.includes('模組數') && !item.includes('模組')) {
+                console.log(`跳過第${index+1}行 - 不是模組統計:${item}`);
+                return;
+            }
             
-            if (!isNaN(successCount)) {
-                totalSuccess += successCount;
+            // 【修正】直接從"值"欄位取數字
+            const valueField = row['值'] || row['value'] || row['Value'] || row['數量'] || '';
+            const numValue = parseInt(valueField) || 0;
+            
+            console.log(`項目: "${item}", 值欄位: "${valueField}", 轉換後數值: ${numValue}`);
+            
+            // 根據項目名稱分類統計
+            if (item.includes('成功') || item.includes('通過') || item.includes('正確')) {
+                totalSuccess += numValue;
+                console.log(`識別為成功項目，累加成功數: ${numValue}, 總成功: ${totalSuccess}`);
+            } else if (item.includes('失敗') || item.includes('錯誤') || item.includes('異常')) {
+                totalFailed += numValue;
+                console.log(`識別為失敗項目，累加失敗數: ${numValue}, 總失敗: ${totalFailed}`);
             }
-            if (!isNaN(failedCount)) {
-                totalFailed += failedCount;
-            }
+            
+            validItemCount++;
+            console.log(`第${index+1}行處理完畢，有效項目計數: ${validItemCount}`);
         });
         
-        stats[0].value = sheetData.data.filter(row => {
-            const scenario = row['比對情境'] || row['scenario'] || '';
-            return scenario !== '總計' && scenario.toLowerCase() !== 'total';
-        }).length;
+        console.log(`最終統計結果:`);
+        console.log(`- 有效項目數: ${validItemCount}`);
+        console.log(`- 總成功模組: ${totalSuccess}`);
+        console.log(`- 總失敗模組: ${totalFailed}`);
         
+        // 計算總模組數
+        const totalModules = totalSuccess + totalFailed;
+        
+        // 重置stats陣列，只顯示需要的統計資訊
+        stats.length = 0;
+        
+        // 1. 總模組數（放在最前面）
+        stats.push({
+            label: '總模組數',
+            value: totalModules,
+            icon: 'fa-cubes',
+            color: 'blue'
+        });
+        
+        // 2. 成功模組
         stats.push({
             label: '成功模組',
             value: totalSuccess,
@@ -1741,16 +1859,26 @@ function updateStatistics(sheetData) {
             color: 'success'
         });
         
-        if (totalFailed > 0) {
+        // 3. 失敗模組
+        stats.push({
+            label: '失敗模組', 
+            value: totalFailed,
+            icon: 'fa-times-circle',
+            color: totalFailed > 0 ? 'danger' : 'blue'
+        });
+        
+        // 4. 成功率
+        if (totalModules > 0) {
+            const successRate = Math.round((totalSuccess / totalModules) * 100);
             stats.push({
-                label: '失敗模組',
-                value: totalFailed,
-                icon: 'fa-times-circle',
-                color: 'danger'
+                label: '成功率',
+                value: successRate + '%',
+                icon: 'fa-percentage',
+                color: successRate >= 80 ? 'success' : (successRate >= 60 ? 'warning' : 'danger')
             });
         }
     } else if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
-        // 版本檔案差異的統計邏輯（保持不變）
+        // version_diff 的統計保持不變
         let differentCount = 0;
         let fileNotFoundCount = 0;
         
@@ -1830,7 +1958,7 @@ function updateStatistics(sheetData) {
                 <i class="fas ${stat.icon}"></i>
             </div>
             <div class="stat-content">
-                <div class="stat-value">${stat.value.toLocaleString()}</div>
+                <div class="stat-value">${typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</div>
                 <div class="stat-label">${stat.label}</div>
             </div>
         `;

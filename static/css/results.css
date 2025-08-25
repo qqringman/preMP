@@ -3849,3 +3849,33 @@ body > .pvtFilterBox {
     margin: 0 !important;
     padding: 0 !important;
 }
+
+/* 內容分隔線樣式 */
+.content-divider {
+  width: 100%;
+  height: 1px;
+  margin: 8px 0;
+  background: repeating-linear-gradient(
+      to right,
+      #FF6B6B 0px,
+      #FF6B6B 6px,
+      transparent 6px,
+      transparent 14px
+  );
+  opacity: 0.7;
+}
+
+/* 確保內容單元格有足夠的行高 */
+.data-table td.content-cell {
+  font-family: "SF Mono", Monaco, "Consolas", "Courier New", monospace;
+  font-size: 0.85rem;
+  line-height: 1.8; /* 增加行高 */
+  padding: 16px 20px; /* 增加內邊距 */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 內容單元格內的分隔線hover效果 */
+.data-table tr:hover .content-divider {
+  opacity: 0.5;
+}
