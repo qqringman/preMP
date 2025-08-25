@@ -501,8 +501,18 @@ function renderDataTable(sheetData) {
     }
     
     // 取得欄位列表
-    const columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
-    console.log('欄位:', columns);
+    let columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+    console.log('原始欄位:', columns);
+    
+    // 【只保留版本檔案差異的 SN 欄位移至第一欄】
+    if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
+        const snIndex = columns.indexOf('SN');
+        if (snIndex > -1 && snIndex !== 0) {
+            columns.splice(snIndex, 1);
+            columns.unshift('SN');
+            console.log('版本檔案差異SN移至首位:', columns);
+        }
+    }
     
     // 先篩選再搜尋
     let filteredData = applyDataFilters(sheetData.data);
@@ -595,10 +605,6 @@ function renderDataTable(sheetData) {
             const td = document.createElement('td');
             const value = row[col];
             
-            // 移除固定寬度設定
-            // td.style.width = getColumnWidth(col);
-            // td.style.minWidth = getColumnWidth(col);
-            
             // 根據欄位類型添加 class
             td.classList.add('path-cell');
 
@@ -606,7 +612,7 @@ function renderDataTable(sheetData) {
             if (col === 'path' || col.toLowerCase().includes('path')) {
                 td.classList.add('path-cell');
                 
-                if (value && value.length > 80) {  // 從 50 改為 80
+                if (value && value.length > 80) {
                     // 使用 tooltip 顯示完整路徑
                     const truncated = value.substring(0, 40) + '...' + value.substring(value.length - 35);
                     td.innerHTML = `
@@ -617,7 +623,7 @@ function renderDataTable(sheetData) {
                 } else {
                     td.innerHTML = searchTerm ? highlightText(value || '', searchTerm) : (value || '');
                 }
-            } else             if (col === 'base_content' || col === 'compare_content') {
+            } else if (col === 'base_content' || col === 'compare_content') {
                 td.classList.add('content-cell');
                 
                 if (value) {
@@ -734,9 +740,21 @@ function renderDataTable(sheetData) {
             const headerContainer = document.querySelector('.table-header-container');
             const tableView = document.getElementById('tableView');
             
-            // 設定 data-sheet 屬性以應用特定樣式
+            // 設定 data-sheet 屬性以應用特定樣式（版本檔案差異的分隔線）
             if (tableView && currentSheet) {
-                tableView.setAttribute('data-sheet', currentSheet);
+                let dataSheetValue = currentSheet;
+                
+                // 統一工作表名稱映射
+                if (currentSheet === '版本檔案差異') {
+                    dataSheetValue = 'version_diff';
+                } else if (currentSheet === '分支錯誤') {
+                    dataSheetValue = 'branch_error';
+                } else if (currentSheet === 'Revision差異') {
+                    dataSheetValue = 'revision_diff';
+                }
+                
+                tableView.setAttribute('data-sheet', dataSheetValue);
+                console.log('設定 data-sheet 屬性:', dataSheetValue);
             }
             
             if (bodyContainer && headerContainer) {
@@ -2501,19 +2519,8 @@ function exportToExcelClientSide() {
         
         console.log(`篩選後資料筆數: ${data.length}`);
         
-        // 針對不同資料表調整欄位順序（與renderDataTable一致）
-        if (currentSheet === 'branch_error' || currentSheet === '分支錯誤') {
-            const desiredOrder = ['SN', 'module', 'location', 'location_path', 'problem', 'has_wave'];
-            const reorderedColumns = [];
-            desiredOrder.forEach(col => {
-                if (columns.includes(col)) reorderedColumns.push(col);
-            });
-            columns.forEach(col => {
-                if (!desiredOrder.includes(col)) reorderedColumns.push(col);
-            });
-            columns = reorderedColumns;
-            console.log('分支錯誤欄位重排:', columns);
-        } else if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
+        // 【只保留版本檔案差異的欄位順序調整】
+        if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
             const snIndex = columns.indexOf('SN');
             if (snIndex > -1 && snIndex !== 0) {
                 columns.splice(snIndex, 1);
@@ -2590,7 +2597,7 @@ function exportToExcelClientSide() {
             worksheet['!autofilter'] = { ref: range };
         }
         
-        // 【關鍵修正】清理工作表名稱
+        // 清理工作表名稱
         let sheetName = getSheetDisplayName(currentSheet);
         
         // 進一步清理，確保完全符合Excel規範
