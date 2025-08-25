@@ -347,9 +347,9 @@ function showErrorMessage(message = '無法載入資料') {
 // 取得資料表顯示名稱
 function getSheetDisplayName(sheetName) {
     const displayNames = {
-        'revision_diff': 'Revision 差異',
+        'revision_diff': 'Revision差異',
         'branch_error': '分支錯誤',
-        'lost_project': '新增/刪除專案',
+        'lost_project': '新增刪除專案',  // 移除 /
         'version_diff': '版本檔案差異',
         '無法比對': '無法比對的模組',
         '摘要': '比對摘要',
@@ -358,7 +358,18 @@ function getSheetDisplayName(sheetName) {
         'premp_vs_wave': 'PreMP vs Wave',
         'wave_vs_backup': 'Wave vs Backup'
     };
-    return displayNames[sheetName] || sheetName;
+    
+    let displayName = displayNames[sheetName] || sheetName;
+    
+    // 移除或替換Excel工作表名稱不支援的特殊字符
+    displayName = displayName.replace(/[\\\/\?\*\[\]:]/g, '_');
+    
+    // 限制長度（Excel工作表名稱最長31個字符）
+    if (displayName.length > 31) {
+        displayName = displayName.substring(0, 28) + '...';
+    }
+    
+    return displayName;
 }
 
 // 載入資料表
@@ -2238,10 +2249,9 @@ function toggleFilterPanel() {
     document.getElementById('filterPanel').classList.toggle('show');
 }
 
-// 修改匯出函數以包含情境資訊
 async function exportCurrentView(format) {
     if (!currentData || !currentSheet) {
-        alert('請先選擇資料表');
+        showAlertDialog('提示', '請先選擇資料表', 'warning');
         return;
     }
     
@@ -2249,43 +2259,116 @@ async function exportCurrentView(format) {
         if (format === 'excel') {
             showExportLoading();
             
-            // 構建 API URL，包含情境參數
-            let apiUrl = `/api/export-excel-single/${taskId}/${currentSheet}`;
-            if (currentScenario !== 'all') {
-                apiUrl += `?scenario=${currentScenario}`;
+            // 取得後端對應的資料表名稱
+            const backendSheetName = getCurrentSheetBackendName();
+            
+            console.log('匯出資訊:', {
+                taskId: taskId,
+                currentSheet: currentSheet,
+                backendSheetName: backendSheetName,
+                currentScenario: currentScenario
+            });
+            
+            // 建構API URL - 使用後端期望的路徑格式
+            let apiUrl = `/api/export-excel-single/${encodeURIComponent(taskId)}/${encodeURIComponent(backendSheetName)}`;
+            
+            // 如果有選擇特定情境，加入參數
+            if (currentScenario && currentScenario !== 'all') {
+                apiUrl += `?scenario=${encodeURIComponent(currentScenario)}`;
             }
+            
+            console.log(`匯出API URL: ${apiUrl}`);
             
             const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 }
             });
             
+            console.log('API回應狀態:', response.status, response.statusText);
+            
             if (!response.ok) {
-                throw new Error('無法獲取 Excel 檔案');
+                let errorMessage = '匯出失敗';
+                
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                    console.error('API錯誤詳情:', errorData);
+                } catch (parseError) {
+                    const errorText = await response.text();
+                    console.error('API錯誤文字:', errorText);
+                    errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
+                }
+                
+                // 根據錯誤類型提供不同的處理方式
+                if (response.status === 404) {
+                    if (errorMessage.includes('找不到資料表')) {
+                        // 資料表名稱不匹配，嘗試其他可能的名稱
+                        console.log('嘗試其他可能的資料表名稱...');
+                        const alternativeNames = [
+                            currentSheet, // 原始名稱
+                            getSheetDisplayName(currentSheet), // 顯示名稱
+                            getBackendSheetName(getSheetDisplayName(currentSheet)) // 映射名稱
+                        ];
+                        
+                        let success = false;
+                        for (const altName of alternativeNames) {
+                            if (altName !== backendSheetName) {
+                                const altUrl = `/api/export-excel-single/${encodeURIComponent(taskId)}/${encodeURIComponent(altName)}`;
+                                console.log(`嘗試替代名稱: ${altName}, URL: ${altUrl}`);
+                                
+                                try {
+                                    const altResponse = await fetch(altUrl, {
+                                        method: 'GET',
+                                        headers: {
+                                            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        }
+                                    });
+                                    
+                                    if (altResponse.ok) {
+                                        console.log(`替代名稱成功: ${altName}`);
+                                        const blob = await altResponse.blob();
+                                        downloadBlob(blob, altName);
+                                        hideExportLoading();
+                                        showToast('Excel 檔案已匯出', 'success');
+                                        success = true;
+                                        break;
+                                    }
+                                } catch (altError) {
+                                    console.log(`替代名稱失敗: ${altName}`, altError);
+                                }
+                            }
+                        }
+                        
+                        if (success) return;
+                    }
+                    
+                    // 如果所有伺服器端嘗試都失敗，使用客戶端匯出
+                    hideExportLoading();
+                    console.log('伺服器端匯出失敗，切換到客戶端匯出');
+                    exportToExcelClientSide();
+                    return;
+                }
+                
+                throw new Error(errorMessage);
             }
             
-            // 獲取檔案 blob
+            // 檢查回應內容類型
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
+                console.warn('警告：回應不是Excel格式，Content-Type:', contentType);
+            }
+            
+            // 獲取檔案blob
             const blob = await response.blob();
             
-            // 下載檔案
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            // 根據情境調整檔案名稱
-            let filename = `${currentSheet}_${new Date().toISOString().slice(0, 10)}`;
-            if (currentScenario !== 'all') {
-                filename += `_${currentScenario}`;
+            if (blob.size === 0) {
+                throw new Error('收到空的檔案');
             }
-            filename += '.xlsx';
             
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // 下載檔案
+            downloadBlob(blob, backendSheetName);
             
             hideExportLoading();
             showToast('Excel 檔案已匯出', 'success');
@@ -2293,18 +2376,430 @@ async function exportCurrentView(format) {
     } catch (error) {
         console.error('匯出錯誤:', error);
         hideExportLoading();
-        alert('匯出失敗：' + error.message);
+        
+        // 如果是網路錯誤或伺服器錯誤，嘗試客戶端匯出
+        if (error.message.includes('fetch') || error.message.includes('NetworkError') || 
+            error.message.includes('找不到') || error.message.includes('404')) {
+            console.log('切換到客戶端匯出作為備案');
+            exportToExcelClientSide();
+        } else {
+            showAlertDialog('匯出錯誤', `匯出失敗：${error.message}`, 'error');
+        }
     }
+}
+
+// 輔助函數：下載blob檔案
+function downloadBlob(blob, sheetName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    // 生成檔案名稱
+    let filename = `${getSheetDisplayName(sheetName)}_${new Date().toISOString().slice(0, 10)}`;
+    if (currentScenario && currentScenario !== 'all') {
+        filename += `_${currentScenario}`;
+    }
+    filename += '.xlsx';
+    
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // 下載完整報表
 async function downloadFullReport() {
     try {
-        // 直接下載原始的完整 Excel 檔案
-        window.location.href = `/api/export-excel/${taskId}`;
+        showExportLoading();
+        
+        // 使用後端的完整報表API
+        const apiUrl = `/api/export-excel/${encodeURIComponent(taskId)}`;
+        console.log(`完整報表API URL: ${apiUrl}`);
+        
+        const response = await fetch(apiUrl);
+        console.log('完整報表API回應:', response.status, response.statusText);
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            
+            if (blob.size === 0) {
+                throw new Error('收到空的檔案');
+            }
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `完整報表_${taskId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            hideExportLoading();
+            showToast('完整報表已下載', 'success');
+        } else {
+            // 如果完整報表API失敗，使用客戶端匯出所有工作表
+            let errorMessage = '下載失敗';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            
+            console.log('完整報表API失敗，使用客戶端匯出:', errorMessage);
+            hideExportLoading();
+            exportAllSheetsClientSide();
+        }
+        
     } catch (error) {
-        console.error('下載完整報表錯誤:', error);
-        alert('下載失敗：' + error.message);
+        console.error('完整報表下載錯誤:', error);
+        hideExportLoading();
+        
+        console.log('網路錯誤，使用客戶端匯出');
+        exportAllSheetsClientSide();
+    }
+}
+
+// 客戶端Excel匯出功能
+function exportToExcelClientSide() {
+    try {
+        console.log('開始客戶端Excel匯出...');
+        
+        if (!currentData || !currentSheet || !currentData[currentSheet]) {
+            showAlertDialog('錯誤', '沒有資料可以匯出', 'error');
+            return;
+        }
+        
+        // 檢查是否有 XLSX 庫
+        if (typeof XLSX === 'undefined') {
+            showAlertDialog('錯誤', 'Excel匯出庫未載入，請重新整理頁面', 'error');
+            return;
+        }
+        
+        showExportLoading();
+        
+        const sheetData = currentData[currentSheet];
+        console.log('當前資料表資料:', sheetData);
+        
+        if (!sheetData.data || sheetData.data.length === 0) {
+            hideExportLoading();
+            showAlertDialog('提示', '當前資料表沒有資料', 'warning');
+            return;
+        }
+        
+        // 獲取欄位和資料
+        let columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+        let data = [...sheetData.data]; // 創建副本避免修改原始資料
+        
+        // 應用目前的篩選和搜尋
+        data = applyDataFilters(data);
+        if (searchTerm) {
+            data = data.filter(row => rowMatchesSearch(row, columns, searchTerm));
+        }
+        
+        console.log(`篩選後資料筆數: ${data.length}`);
+        
+        // 針對不同資料表調整欄位順序（與renderDataTable一致）
+        if (currentSheet === 'branch_error' || currentSheet === '分支錯誤') {
+            const desiredOrder = ['SN', 'module', 'location', 'location_path', 'problem', 'has_wave'];
+            const reorderedColumns = [];
+            desiredOrder.forEach(col => {
+                if (columns.includes(col)) reorderedColumns.push(col);
+            });
+            columns.forEach(col => {
+                if (!desiredOrder.includes(col)) reorderedColumns.push(col);
+            });
+            columns = reorderedColumns;
+            console.log('分支錯誤欄位重排:', columns);
+        } else if (currentSheet === 'version_diff' || currentSheet === '版本檔案差異') {
+            const snIndex = columns.indexOf('SN');
+            if (snIndex > -1 && snIndex !== 0) {
+                columns.splice(snIndex, 1);
+                columns.unshift('SN');
+                console.log('版本檔案差異SN移至首位:', columns);
+            }
+        }
+        
+        // 建立工作簿
+        const workbook = XLSX.utils.book_new();
+        
+        // 準備資料陣列（表頭 + 資料）
+        const worksheetData = [];
+        
+        // 加入表頭
+        worksheetData.push(columns);
+        
+        // 加入資料行
+        data.forEach((row, rowIndex) => {
+            const rowData = columns.map(col => {
+                let value = row[col];
+                
+                // 處理 null/undefined
+                if (value === null || value === undefined) {
+                    return '';
+                }
+                
+                // 處理HTML內容（移除標籤）
+                if (typeof value === 'string' && value.includes('<')) {
+                    value = value.replace(/<[^>]*>/g, '');
+                    value = value.replace(/&nbsp;/g, ' ');
+                    value = value.replace(/&amp;/g, '&');
+                    value = value.replace(/&lt;/g, '<');
+                    value = value.replace(/&gt;/g, '>');
+                }
+                
+                // 處理長文字（截斷過長內容，Excel單元格限制）
+                if (typeof value === 'string' && value.length > 32767) {
+                    value = value.substring(0, 32764) + '...';
+                }
+                
+                return value;
+            });
+            worksheetData.push(rowData);
+        });
+        
+        console.log(`工作表資料行數: ${worksheetData.length}`);
+        
+        // 建立工作表
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        // 設定欄寬
+        const columnWidths = columns.map((col, index) => {
+            if (col === 'SN') return { wch: 8 };
+            if (col === 'module') return { wch: 25 };
+            if (col === 'location') return { wch: 15 };
+            if (col === 'location_path') return { wch: 35 };
+            if (col === 'problem') return { wch: 50 };
+            if (col === 'has_wave') return { wch: 12 };
+            if (col.includes('content')) return { wch: 60 };
+            if (col.includes('path')) return { wch: 45 };
+            if (col.includes('revision')) return { wch: 20 };
+            return { wch: 18 };
+        });
+        
+        worksheet['!cols'] = columnWidths;
+        
+        // 設定自動篩選
+        if (worksheetData.length > 1) {
+            const range = XLSX.utils.encode_range({
+                s: { c: 0, r: 0 },
+                e: { c: columns.length - 1, r: worksheetData.length - 1 }
+            });
+            worksheet['!autofilter'] = { ref: range };
+        }
+        
+        // 【關鍵修正】清理工作表名稱
+        let sheetName = getSheetDisplayName(currentSheet);
+        
+        // 進一步清理，確保完全符合Excel規範
+        sheetName = cleanExcelSheetName(sheetName);
+        
+        console.log(`清理後的工作表名稱: "${sheetName}"`);
+        
+        // 加入工作表到工作簿
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+        
+        // 生成檔案名稱（檔案名稱也要清理）
+        let filename = cleanFileName(sheetName) + '_' + new Date().toISOString().slice(0, 10);
+        if (currentScenario && currentScenario !== 'all') {
+            filename += '_' + cleanFileName(currentScenario);
+        }
+        filename += '.xlsx';
+        
+        console.log(`匯出檔案名稱: ${filename}`);
+        
+        // 匯出檔案
+        XLSX.writeFile(workbook, filename);
+        
+        hideExportLoading();
+        showToast(`Excel 檔案已匯出（${data.length} 筆資料）`, 'success');
+        
+    } catch (error) {
+        console.error('客戶端匯出錯誤:', error);
+        hideExportLoading();
+        showAlertDialog('匯出錯誤', `客戶端匯出失敗：${error.message}`, 'error');
+    }
+}
+
+// 清理Excel工作表名稱（移除特殊字符）
+function cleanExcelSheetName(name) {
+    if (!name) return 'Sheet1';
+    
+    // 移除Excel不支援的字符：: \ / ? * [ ]
+    let cleanName = String(name).replace(/[\\\/\?\*\[\]:]/g, '_');
+    
+    // 移除前後空白
+    cleanName = cleanName.trim();
+    
+    // 如果名稱為空，給予預設名稱
+    if (!cleanName) {
+        cleanName = 'Sheet1';
+    }
+    
+    // 限制長度（Excel工作表名稱最長31個字符）
+    if (cleanName.length > 31) {
+        cleanName = cleanName.substring(0, 28) + '...';
+    }
+    
+    // 確保名稱不以單引號開始或結束（Excel限制）
+    if (cleanName.startsWith("'")) {
+        cleanName = cleanName.substring(1);
+    }
+    if (cleanName.endsWith("'")) {
+        cleanName = cleanName.substring(0, cleanName.length - 1);
+    }
+    
+    return cleanName;
+}
+
+// 清理檔案名稱
+function cleanFileName(name) {
+    if (!name) return 'export';
+    
+    // 移除檔案名稱不支援的字符
+    let cleanName = String(name).replace(/[<>:"|?*\\\/]/g, '_');
+    
+    // 移除前後空白
+    cleanName = cleanName.trim();
+    
+    // 如果名稱為空，給予預設名稱
+    if (!cleanName) {
+        cleanName = 'export';
+    }
+    
+    return cleanName;
+}
+
+// 客戶端匯出所有資料表
+function exportAllSheetsClientSide() {
+    try {
+        console.log('開始客戶端匯出所有資料表...');
+        
+        if (!currentData || Object.keys(currentData).length === 0) {
+            showAlertDialog('錯誤', '沒有資料可以匯出', 'error');
+            return;
+        }
+        
+        if (typeof XLSX === 'undefined') {
+            showAlertDialog('錯誤', 'Excel匯出庫未載入，請重新整理頁面', 'error');
+            return;
+        }
+        
+        showExportLoading();
+        
+        const workbook = XLSX.utils.book_new();
+        let totalSheets = 0;
+        const usedSheetNames = new Set(); // 追蹤已使用的工作表名稱
+        
+        console.log('可用資料表:', Object.keys(currentData));
+        
+        // 遍歷所有資料表
+        Object.keys(currentData).forEach(sheetName => {
+            const sheetData = currentData[sheetName];
+            console.log(`處理資料表: ${sheetName}`);
+            
+            if (!sheetData.data || sheetData.data.length === 0) {
+                console.log(`跳過空資料表: ${sheetName}`);
+                return;
+            }
+            
+            let columns = sheetData.columns || Object.keys(sheetData.data[0] || {});
+            
+            // 應用欄位順序調整
+            if (sheetName === 'branch_error' || sheetName === '分支錯誤') {
+                const desiredOrder = ['SN', 'module', 'location', 'location_path', 'problem', 'has_wave'];
+                const reorderedColumns = [];
+                desiredOrder.forEach(col => {
+                    if (columns.includes(col)) reorderedColumns.push(col);
+                });
+                columns.forEach(col => {
+                    if (!desiredOrder.includes(col)) reorderedColumns.push(col);
+                });
+                columns = reorderedColumns;
+            } else if (sheetName === 'version_diff' || sheetName === '版本檔案差異') {
+                const snIndex = columns.indexOf('SN');
+                if (snIndex > -1 && snIndex !== 0) {
+                    columns.splice(snIndex, 1);
+                    columns.unshift('SN');
+                }
+            }
+            
+            // 準備工作表資料
+            const worksheetData = [columns];
+            
+            sheetData.data.forEach(row => {
+                const rowData = columns.map(col => {
+                    let value = row[col];
+                    if (value === null || value === undefined) return '';
+                    if (typeof value === 'string' && value.includes('<')) {
+                        value = value.replace(/<[^>]*>/g, '');
+                    }
+                    if (typeof value === 'string' && value.length > 32767) {
+                        value = value.substring(0, 32764) + '...';
+                    }
+                    return value;
+                });
+                worksheetData.push(rowData);
+            });
+            
+            // 建立工作表
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            
+            // 設定欄寬
+            const columnWidths = columns.map(col => {
+                if (col === 'SN') return { wch: 8 };
+                if (col === 'module') return { wch: 25 };
+                if (col.includes('content')) return { wch: 50 };
+                if (col.includes('path')) return { wch: 40 };
+                return { wch: 15 };
+            });
+            worksheet['!cols'] = columnWidths;
+            
+            // 【關鍵修正】清理工作表名稱
+            let displayName = getSheetDisplayName(sheetName);
+            displayName = cleanExcelSheetName(displayName);
+            
+            // 確保工作表名稱唯一
+            let finalSheetName = displayName;
+            let counter = 1;
+            while (usedSheetNames.has(finalSheetName)) {
+                finalSheetName = `${displayName}_${counter}`;
+                if (finalSheetName.length > 31) {
+                    finalSheetName = `${displayName.substring(0, 28)}_${counter}`;
+                }
+                counter++;
+            }
+            
+            usedSheetNames.add(finalSheetName);
+            console.log(`最終工作表名稱: "${finalSheetName}"`);
+            
+            XLSX.utils.book_append_sheet(workbook, worksheet, finalSheetName);
+            totalSheets++;
+            
+            console.log(`已加入工作表: ${finalSheetName} (${sheetData.data.length} 筆資料)`);
+        });
+        
+        if (totalSheets === 0) {
+            hideExportLoading();
+            showAlertDialog('提示', '沒有有效的資料表可以匯出', 'warning');
+            return;
+        }
+        
+        // 匯出完整工作簿
+        const filename = cleanFileName(`完整報表_${taskId}`) + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+        console.log(`匯出完整報表: ${filename}`);
+        
+        XLSX.writeFile(workbook, filename);
+        
+        hideExportLoading();
+        showToast(`完整報表已匯出（${totalSheets} 個工作表）`, 'success');
+        
+    } catch (error) {
+        console.error('客戶端完整匯出錯誤:', error);
+        hideExportLoading();
+        showAlertDialog('匯出錯誤', `完整報表匯出失敗：${error.message}`, 'error');
     }
 }
 
@@ -5454,6 +5949,37 @@ function renderPivotTable(sheetData) {
     }
 }
 
+// 取得後端對應的資料表名稱（英文）
+function getBackendSheetName(displaySheetName) {
+    const sheetMapping = {
+        // 中文顯示名稱 -> 後端實際名稱
+        'Revision 差異': 'revision_diff',
+        '分支錯誤': 'branch_error', 
+        '新增/刪除專案': 'lost_project',
+        '版本檔案差異': 'version_diff',
+        '無法比對的模組': '無法比對',
+        '比對摘要': '摘要',
+        '所有情境摘要': 'all_scenarios',
+        'Master vs PreMP': 'master_vs_premp',
+        'PreMP vs Wave': 'premp_vs_wave',
+        'Wave vs Backup': 'wave_vs_backup'
+    };
+    
+    // 如果有對應的映射，使用映射值；否則直接使用原值
+    return sheetMapping[displaySheetName] || displaySheetName;
+}
+
+// 檢查當前資料表的實際名稱
+function getCurrentSheetBackendName() {
+    // 優先使用原始的 key 名稱（通常是英文）
+    if (currentData && currentSheet && currentData[currentSheet]) {
+        return currentSheet;
+    }
+    
+    // 如果找不到，嘗試映射
+    return getBackendSheetName(getSheetDisplayName(currentSheet));
+}
+
 // 將函數綁定到 window
 window.closePivotFilterModal = closePivotFilterModal;
 window.selectAllPivotFilters = selectAllPivotFilters;
@@ -5475,3 +6001,7 @@ window.createCustomFilterModal = createCustomFilterModal;
 window.bindCustomFilterEvents = bindCustomFilterEvents;
 window.applyCustomFilter = applyCustomFilter;
 window.adjustPivotContainerSize = adjustPivotContainerSize;
+window.exportToExcelClientSide = exportToExcelClientSide;
+window.exportAllSheetsClientSide = exportAllSheetsClientSide;
+window.cleanExcelSheetName = cleanExcelSheetName;
+window.cleanFileName = cleanFileName;
