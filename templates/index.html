@@ -1156,22 +1156,32 @@ function getActionButtons(activity) {
                 console.log('一步到位活動有 task_id，生成結果按鈕:', activity.task_id);
                 
                 if (activity.status === 'success') {
+                    // 成功時提供兩個按鈕：查看下載結果和查看比對結果
+                    buttons += `<a href="/download?task_id=${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-download"></i> 查看下載結果
+                    </a>`;
                     buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
-                        <i class="fas fa-chart-line"></i> 查看執行結果
+                        <i class="fas fa-code-compare"></i> 查看比對結果
                     </a>`;
                 } else if (activity.status === 'error') {
+                    // 失敗時只提供一個錯誤詳情按鈕
                     buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn">
                         <i class="fas fa-exclamation-circle"></i> 查看錯誤詳情
                     </a>`;
                 } else if (activity.status === 'warning') {
+                    // 警告時提供兩個按鈕
+                    buttons += `<a href="/download?task_id=${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-download"></i> 查看下載結果
+                    </a>`;
                     buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
-                        <i class="fas fa-chart-line"></i> 查看執行結果
+                        <i class="fas fa-code-compare"></i> 查看比對結果
                     </a>`;
                 }
                 
+                // 如果有結果URL，額外提供下載完整報告的按鈕
                 if (activity.resultUrl) {
                     buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
-                        <i class="fas fa-download"></i> 下載完整報告
+                        <i class="fas fa-file-archive"></i> 下載完整報告
                     </a>`;
                 }
             } else {
@@ -1190,7 +1200,7 @@ function getActionButtons(activity) {
                 
                 if (activity.resultUrl) {
                     buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
-                        <i class="fas fa-download"></i> 下載完整報告
+                        <i class="fas fa-file-archive"></i> 下載完整報告
                     </a>`;
                 }
             }

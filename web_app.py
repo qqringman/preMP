@@ -107,48 +107,80 @@ class WebProcessor:
         }, room=self.task_id)
         
     def process_one_step(self, excel_file, sftp_config):
-        """執行一步到位處理"""
+        """執行一步到位處理 - 修正檔案資料保存"""
         try:
             # 步驟 1：下載
             self.update_progress(10, 'downloading', '正在連接 SFTP 伺服器...')
             
-            self.downloader = SFTPDownloader(
+            # 使用新的 Web 下載器
+            from sftp_web_downloader import SFTPWebDownloader
+            
+            self.downloader = SFTPWebDownloader(
                 sftp_config.get('host', config.SFTP_HOST),
                 sftp_config.get('port', config.SFTP_PORT),
                 sftp_config.get('username', config.SFTP_USERNAME),
                 sftp_config.get('password', config.SFTP_PASSWORD)
             )
             
-            self.update_progress(20, 'downloading', '正在下載檔案...')
+            # 設定進度回調
+            def progress_callback(progress, status, message, stats=None, files=None):
+                if stats:
+                    self.update_progress(
+                        int(progress * 0.4),  # 下載佔總進度的 40%
+                        status, 
+                        message, 
+                        stats=stats,
+                        files=files
+                    )
+                else:
+                    self.update_progress(int(progress * 0.4), status, message)
+            
+            self.downloader.set_progress_callback(progress_callback)
+            
+            self.update_progress(20, 'downloading', '開始下載檔案...')
+            
+            # 建立下載目錄
             download_dir = os.path.join('downloads', self.task_id)
             
-            # 確保下載目錄存在
-            if not os.path.exists(download_dir):
-                os.makedirs(download_dir)
-                
-            report_path = self.downloader.download_from_excel(excel_file, download_dir)
+            # 執行下載
+            report_path = self.downloader.download_from_excel_with_progress(
+                excel_file, download_dir
+            )
             
-            # 獲取下載統計
-            files_in_dir = []
-            for root, dirs, files in os.walk(download_dir):
-                files_in_dir.extend(files)
-                
-            stats = {
-                'total': len(files_in_dir),
-                'downloaded': len(files_in_dir),
-                'skipped': 0,
-                'failed': 0
-            }
+            # 取得統計資料和檔案列表
+            download_data = self.downloader.get_download_stats()
+            stats = download_data['stats']
+            files = download_data['files']
             
+            # 儲存下載結果
             self.results['download_report'] = report_path
             self.results['stats'] = stats
-            self.update_progress(40, 'downloaded', '下載完成！', stats)
+            self.results['files'] = files
+            self.results['download_results'] = {
+                'stats': stats,
+                'files': files,
+                'report_path': report_path
+            }
+            
+            self.update_progress(40, 'downloaded', '下載完成！', stats, files)
+            
+            # 處理 Excel 檔案複製改名
+            global excel_handler
+            if excel_file in uploaded_excel_metadata:
+                excel_metadata = uploaded_excel_metadata[excel_file]
+                excel_result = excel_handler.process_download_complete(
+                    self.task_id,
+                    download_dir,
+                    excel_metadata
+                )
+                if excel_result['excel_copied']:
+                    self.results['excel_copied'] = True
+                    self.results['excel_new_name'] = excel_result['excel_new_name']
             
             # 步驟 2：比較
             self.update_progress(50, 'comparing', '正在執行所有比對...')
             compare_dir = os.path.join('compare_results', self.task_id)
             
-            # 確保比對目錄存在
             if not os.path.exists(compare_dir):
                 os.makedirs(compare_dir)
                 
@@ -187,7 +219,24 @@ class WebProcessor:
                 zip_path = self.packager.create_zip(temp_dir, zip_path)
             
             self.results['zip_file'] = zip_path
-            self.update_progress(100, 'completed', '所有處理完成！')
+            
+            # 確保最終更新包含完整的檔案資料
+            final_update_data = {
+                'progress': 100,
+                'status': 'completed',
+                'message': '所有處理完成！',
+                'results': self.results,
+                'stats': stats,
+                'files': files
+            }
+            
+            processing_status[self.task_id] = final_update_data
+            
+            # 透過 SocketIO 發送最終更新
+            socketio.emit('progress_update', {
+                'task_id': self.task_id,
+                **final_update_data
+            }, room=self.task_id)
             
             # 記錄到最近活動
             add_activity('完成一步到位處理', 'success', 
@@ -197,7 +246,7 @@ class WebProcessor:
             add_comparison(self.task_id, '完成一步到位處理', 'completed', stats["downloaded"])
             
             # 儲存結果供樞紐分析使用
-            save_task_results(self.task_id, all_results)
+            save_task_results(self.task_id, self.results)
             
         except Exception as e:
             self.logger.error(f"One-step processing error: {str(e)}")
@@ -1096,7 +1145,7 @@ def get_status(task_id):
     })
 
 def recover_task_status_from_filesystem(task_id):
-    """從文件系統恢復任務狀態"""
+    """從文件系統恢復任務狀態 - 增強一步到位支援"""
     if not task_id.startswith('task_'):
         return None
     
@@ -1118,8 +1167,18 @@ def recover_task_status_from_filesystem(task_id):
         
         # 統計下載的文件
         download_stats = analyze_download_directory(download_dir)
+        
+        # 保存到多個位置確保相容性
         task_info['results']['stats'] = download_stats['stats']
         task_info['results']['files'] = download_stats['files']
+        task_info['results']['download_results'] = {
+            'stats': download_stats['stats'],
+            'files': download_stats['files']
+        }
+        
+        # 同時在頂層保存統計資料（供下載頁面使用）
+        task_info['stats'] = download_stats['stats']
+        task_info['files'] = download_stats['files']
         
         # 查找下載報告
         report_files = [f for f in os.listdir(download_dir) if f.endswith('_report.xlsx')]
@@ -1148,10 +1207,17 @@ def recover_task_status_from_filesystem(task_id):
         if summary_files:
             task_info['results']['summary_report'] = os.path.join(compare_dir, summary_files[0])
         
-        # 更新訊息
-        total_scenarios = len([d for d in os.listdir(compare_dir) 
-                             if os.path.isdir(os.path.join(compare_dir, d))])
-        task_info['message'] = f'比較完成，處理了 {total_scenarios} 個比較情境'
+        # 如果有下載和比對結果，這是一步到位任務
+        if os.path.exists(download_dir):
+            total_files = task_info.get('stats', {}).get('downloaded', 0)
+            total_scenarios = len([d for d in os.listdir(compare_dir) 
+                                 if os.path.isdir(os.path.join(compare_dir, d))])
+            task_info['message'] = f'一步到位處理完成：下載 {total_files} 個檔案，處理 {total_scenarios} 個比較情境'
+        else:
+            # 只有比較結果
+            total_scenarios = len([d for d in os.listdir(compare_dir) 
+                                 if os.path.isdir(os.path.join(compare_dir, d))])
+            task_info['message'] = f'比較完成，處理了 {total_scenarios} 個比較情境'
     
     # 如果沒有找到任何相關目錄，返回 None
     if not os.path.exists(download_dir) and not os.path.exists(compare_dir):
@@ -1222,7 +1288,7 @@ def check_task_exists(task_id):
             'exists': False,
             'error': str(e)
         })
-        
+
 def analyze_compare_directory(compare_dir):
     """分析比較結果目錄"""
     compare_results = {}

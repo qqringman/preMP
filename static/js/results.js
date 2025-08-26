@@ -21,13 +21,17 @@ console.log('Task ID:', taskId);
 // 頁面載入時初始化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('頁面載入完成，開始載入資料...');
-    // 初始化情境選擇器
+    
+    // 1. 首先從URL參數讀取情境設定
+    initializeScenarioFromURL();
+    
+    // 2. 初始化情境選擇器
     initializeScenarioSelector();
     
-    // 載入資料
+    // 3. 載入資料
     loadPivotData();
     
-    // 初始化搜尋功能
+    // 4. 初始化搜尋功能
     initializeSearch();
 });
 
@@ -64,11 +68,16 @@ function updateScenarioButtons(scenarioStatus) {
         container.style.display = hasAnyScenario ? 'block' : 'none';
     }
     
-    // 設定預設選中的情境
-    if (scenarioStatus.all) {
+    // 修正：根據URL參數或情境可用性設定預選情境
+    if (currentScenario && currentScenario !== 'all' && scenarioStatus[currentScenario]) {
+        // 如果URL中指定的情境存在，使用它
+        setActiveScenarioButton(currentScenario);
+    } else if (scenarioStatus.all) {
+        // 否則使用全部情境
         currentScenario = 'all';
         setActiveScenarioButton('all');
     } else {
+        // 最後備案：使用第一個可用的情境
         for (const [scenario, exists] of Object.entries(scenarioStatus)) {
             if (exists) {
                 currentScenario = scenario;
@@ -92,17 +101,20 @@ function setActiveScenarioButton(activeScenario) {
     }
 }
 
+// 當點擊情境tab時的處理邏輯
 function rebindScenarioEvents() {
     document.querySelectorAll('.scenario-tab').forEach(tab => {
         tab.onclick = function() {
             if (this.style.display === 'none') return;
             
+            // 更新視覺狀態
             document.querySelectorAll('.scenario-tab').forEach(t => t.classList.remove('active'));
             this.classList.add('active');
             
+            // 設定當前情境並重新載入資料
             const newScenario = this.dataset.scenario;
             currentScenario = newScenario;
-            loadPivotData(); // 您現有的載入資料函數
+            loadPivotData(); // 重新載入該情境的資料
         };
     });
 }
@@ -135,58 +147,25 @@ function debounce(func, wait) {
 
 // 修改 loadPivotData 函數以支援情境
 async function loadPivotData() {
-    try {
-        showLoading();
-        
-        console.log(`=== 載入資料 ===`);
-        console.log(`Task ID: ${taskId}`);
-        console.log(`Current Scenario: ${currentScenario}`);
-        
-        // 根據情境構建 API URL
-        let apiUrl = `/api/pivot-data/${taskId}`;
-        if (currentScenario !== 'all') {
-            apiUrl += `?scenario=${currentScenario}`;
-        }
-        
-        console.log(`API URL: ${apiUrl}`);
-        
-        const response = await fetch(apiUrl);
-        console.log('API 回應狀態:', response.status);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('API 錯誤回應:', errorText);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('收到的資料鍵值:', Object.keys(data));
-        
-        if (!data || Object.keys(data).length === 0) {
-            console.log('沒有找到資料');
-            showNoDataMessage();
-            return;
-        }
-        
-        currentData = data;
-        console.log('資料載入成功，工作表數量:', Object.keys(data).length);
-        
-        // 更新頁面標題以顯示當前情境
-        updatePageHeader();
-        
-        // 填充資料表選項
-        populateSheetSelector(data);
-        
-        // 載入第一個資料表
-        const sheets = Object.keys(data);
-        if (sheets.length > 0) {
-            console.log('載入第一個資料表:', sheets[0]);
-            loadSheet(sheets[0]);
-        }
-        
-    } catch (error) {
-        console.error('載入資料錯誤:', error);
-        showErrorMessage(error.message);
+    // 根據情境構建 API URL
+    let apiUrl = `/api/pivot-data/${taskId}`;
+    if (currentScenario !== 'all') {
+        apiUrl += `?scenario=${currentScenario}`;
+    }
+    
+    // 載入該情境的專屬資料
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+    
+    // 更新頁面顯示
+    currentData = data;
+    updatePageHeader(); // 顯示當前情境名稱
+    populateSheetSelector(data);
+    
+    // 載入第一個資料表
+    const sheets = Object.keys(data);
+    if (sheets.length > 0) {
+        loadSheet(sheets[0]);
     }
 }
 
@@ -202,22 +181,36 @@ function getScenarioDisplayName(scenario) {
 }
 
 // 更新頁面標題以顯示當前情境
+// 更新頁面標題以顯示當前情境
 function updatePageHeader() {
     const pageSubtitle = document.querySelector('.page-subtitle');
-    if (pageSubtitle && currentScenario !== 'all') {
+    if (!pageSubtitle) {
+        console.warn('找不到頁面副標題元素');
+        return;
+    }
+    
+    if (currentScenario !== 'all') {
         // 檢查是否已有情境指示器
         let indicator = pageSubtitle.querySelector('.current-scenario-indicator');
         if (!indicator) {
             indicator = document.createElement('span');
             indicator.className = 'current-scenario-indicator';
+            indicator.style.marginLeft = '10px';
+            indicator.style.padding = '4px 8px';
+            indicator.style.backgroundColor = '#2196F3';
+            indicator.style.color = 'white';
+            indicator.style.borderRadius = '4px';
+            indicator.style.fontSize = '0.85em';
             pageSubtitle.appendChild(indicator);
         }
         
-        indicator.innerHTML = `
-            <i class="fas fa-filter"></i>
-            ${getScenarioDisplayName(currentScenario)}
-        `;
-    } else if (pageSubtitle) {
+        if (indicator) {
+            indicator.innerHTML = `
+                <i class="fas fa-filter"></i>
+                ${getScenarioDisplayName(currentScenario)}
+            `;
+        }
+    } else {
         // 移除情境指示器
         const indicator = pageSubtitle.querySelector('.current-scenario-indicator');
         if (indicator) {
@@ -6065,6 +6058,22 @@ function getCurrentSheetBackendName() {
     
     // 如果找不到，嘗試映射
     return getBackendSheetName(getSheetDisplayName(currentSheet));
+}
+
+// 從URL參數初始化情境設定
+function initializeScenarioFromURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const scenarioParam = urlParams.get('scenario');
+    
+    if (scenarioParam) {
+        console.log('從URL讀取到情境:', scenarioParam);
+        currentScenario = scenarioParam;
+    } else {
+        console.log('URL中沒有情境參數，使用預設值');
+        currentScenario = 'all';
+    }
+    
+    console.log('初始化情境設定:', currentScenario);
 }
 
 // 將函數綁定到 window

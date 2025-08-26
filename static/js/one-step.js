@@ -992,6 +992,34 @@ function generateResultSummary(results, forceDisplay = false) {
             <div class="results-summary-content">
     `;
     
+    // 簡化的任務資訊卡片
+    html += `
+        <div class="task-info-section">
+            <div class="info-card">
+                <div class="info-header">
+                    <i class="fas fa-info-circle"></i>
+                    <span>任務資訊</span>
+                </div>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">任務 ID</span>
+                        <code class="info-value">${currentTaskId || 'N/A'}</code>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">完成時間</span>
+                        <span class="info-value">${new Date().toLocaleString('zh-TW')}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">處理模式</span>
+                        <span class="info-value">
+                            <i class="fas fa-rocket"></i> 一步到位
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
     // 檢查是否有真實資料
     const hasStats = Object.keys(stats).length > 0;
     const hasCompareResults = Object.keys(compareResults).length > 0;
@@ -1012,30 +1040,13 @@ function generateResultSummary(results, forceDisplay = false) {
         // 如果強制顯示但完全沒有資料，顯示完成狀態
         if (forceDisplay && !hasStats && !hasCompareResults && !hasFileData) {
             html += `
-                <div class="stats-section">
-                    <h4 class="stats-section-title">
-                        <i class="fas fa-check-circle"></i>
-                        處理完成
-                    </h4>
-                    
-                    <div class="completion-status" style="text-align: center; padding: 40px;">
-                        <div style="font-size: 4rem; color: #4CAF50; margin-bottom: 20px;">
+                <div class="completion-section">
+                    <div class="completion-card">
+                        <div class="completion-icon">
                             <i class="fas fa-check-circle"></i>
                         </div>
-                        <h3 style="color: #4CAF50; margin-bottom: 10px;">一步到位處理成功完成！</h3>
-                        <p style="color: #666; margin-bottom: 30px;">所有流程已執行完畢</p>
-                        
-                        <div style="display: flex; justify-content: center; gap: 16px; margin-top: 30px; flex-wrap: wrap;">
-                            <button class="btn btn-primary" onclick="viewResults()" style="min-width: 160px;">
-                                <i class="fas fa-chart-line"></i> 查看詳細結果
-                            </button>
-                            <button class="btn btn-success" onclick="downloadAll()" style="min-width: 160px;">
-                                <i class="fas fa-download"></i> 下載所有檔案
-                            </button>
-                            <button class="btn btn-secondary" onclick="startNew()" style="min-width: 160px;">
-                                <i class="fas fa-redo"></i> 開始新的處理
-                            </button>
-                        </div>
+                        <h3 class="completion-title">處理完成！</h3>
+                        <p class="completion-subtitle">所有流程已執行完畢</p>
                     </div>
                 </div>
             `;
@@ -1043,38 +1054,45 @@ function generateResultSummary(results, forceDisplay = false) {
             // 使用真實資料或生成的基本統計
             html += generateStatsSection(displayStats);
             html += generateCompareResultsSection(compareResults);
-            
-            // 操作按鈕區域
-            html += `
-                <div class="action-buttons" style="margin-top: 32px; text-align: center;">
-                    <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
-                        <button class="btn btn-primary" onclick="viewResults()" style="min-width: 160px;">
-                            <i class="fas fa-chart-line"></i> 查看詳細結果
-                        </button>
-                        <button class="btn btn-success" onclick="downloadAll()" style="min-width: 160px;">
-                            <i class="fas fa-download"></i> 下載所有檔案
-                        </button>
-                        <button class="btn btn-secondary" onclick="startNew()" style="min-width: 160px;">
-                            <i class="fas fa-redo"></i> 開始新的處理
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            // 提示區域
-            html += `
-                <div class="results-hint" style="margin-top: 24px;">
-                    <i class="fas fa-lightbulb"></i>
-                    <p class="results-hint-text">
-                        💡 點擊統計卡片查看詳細檔案列表 • 點擊比對結果查看差異報告
-                    </p>
-                </div>
-            `;
         }
+        
+        // 簡化的操作按鈕區域
+        html += `
+            <div class="action-section">
+                <div class="action-grid">
+                    <button class="action-btn primary" onclick="viewDownloadResults()">
+                        <i class="fas fa-download"></i>
+                        <span>查看下載結果</span>
+                    </button>
+                    <button class="action-btn success" onclick="viewCompareResults()">
+                        <i class="fas fa-code-compare"></i>
+                        <span>查看比對結果</span>
+                    </button>
+                    <button class="action-btn info" onclick="downloadAll()">
+                        <i class="fas fa-file-archive"></i>
+                        <span>下載所有檔案</span>
+                    </button>
+                    <button class="action-btn secondary" onclick="startNew()">
+                        <i class="fas fa-redo"></i>
+                        <span>開始新的處理</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // 簡化的提示區域
+        html += `
+            <div class="hint-section">
+                <div class="hint-card">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>點擊上方按鈕可分別查看下載結果和比對結果的詳細內容</span>
+                </div>
+            </div>
+        `;
     } else {
         // 沒有資料時顯示空狀態
         html += `
-            <div class="no-results">
+            <div class="empty-section">
                 <i class="fas fa-clock"></i>
                 <h5>處理進行中</h5>
                 <p>結果統計將在處理完成後顯示</p>
@@ -1315,13 +1333,7 @@ function generateStatsSection(stats) {
 
 // 查看結果
 function viewResults() {
-    if (currentTaskId) {
-        window.location.href = `/results/${currentTaskId}`;
-    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
-        window.location.href = `/results/${window.lastTaskResults.taskId}`;
-    } else {
-        utils.showNotification('無可查看的結果', 'error');
-    }
+    viewCompareResults();
 }
 
 // 下載所有檔案
@@ -1521,6 +1533,18 @@ async function pollTaskStatus() {
     }
 }
 
+// 查看情境結果
+function viewScenarioResults(scenario) {
+    if (currentTaskId) {
+        // 跳轉到結果頁面，並傳入情境參數
+        window.location.href = `/results/${currentTaskId}?scenario=${scenario}`;
+    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
+        window.location.href = `/results/${window.lastTaskResults.taskId}?scenario=${scenario}`;
+    } else {
+        utils.showNotification(`無法查看 ${scenario} 情境結果`, 'error');
+    }
+}
+
 function showFilesList(type) {
     console.log('showFilesList called:', type, {
         downloaded: downloadedFilesList.length,
@@ -1643,6 +1667,69 @@ function closeFilesModal() {
         modal.classList.add('hidden');
     }
 }
+
+// 顯示比對情境詳細結果的模態框
+function showScenarioDetails(scenario) {
+    // 這個函數可以用來顯示更詳細的情境資訊
+    // 目前直接跳轉到結果頁面
+    viewScenarioResults(scenario);
+}
+
+// 檢查模態框 HTML 是否存在，如果不存在則創建
+function ensureModalExists() {
+    if (!document.getElementById('filesListModal')) {
+        const modalHTML = `
+            <div class="modal hidden" id="filesListModal">
+                <div class="modal-content modal-large">
+                    <div class="modal-header">
+                        <h3 class="modal-title" id="filesModalTitle">
+                            <i class="fas fa-list"></i> 檔案列表
+                        </h3>
+                        <button class="modal-close" onclick="closeFilesModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="filesModalBody">
+                        <!-- 動態生成的檔案列表 -->
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+}
+
+// 頁面載入時確保模態框存在
+document.addEventListener('DOMContentLoaded', () => {
+    ensureModalExists();
+});
+
+// 查看下載結果
+function viewDownloadResults() {
+    if (currentTaskId) {
+        window.location.href = `/download?task_id=${currentTaskId}`;
+    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
+        window.location.href = `/download?task_id=${window.lastTaskResults.taskId}`;
+    } else {
+        utils.showNotification('無可查看的下載結果', 'error');
+    }
+}
+
+// 查看比對結果
+function viewCompareResults() {
+    if (currentTaskId) {
+        window.location.href = `/results/${currentTaskId}`;
+    } else if (window.lastTaskResults && window.lastTaskResults.taskId) {
+        window.location.href = `/results/${window.lastTaskResults.taskId}`;
+    } else {
+        utils.showNotification('無可查看的比對結果', 'error');
+    }
+}
+
+// 更新匯出到全域的函數列表
+window.viewDownloadResults = viewDownloadResults;
+window.viewCompareResults = viewCompareResults;
+window.ensureModalExists = ensureModalExists;
 
 // 匯出到全域
 window.switchTab = switchTab;
