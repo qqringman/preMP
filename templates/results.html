@@ -11,46 +11,27 @@
 
 {% block content %}
 <div class="container">
+    <!-- 頁面標題 -->
     <div class="page-header">
-        <h1 class="page-title">
-            <i class="fas fa-chart-line"></i> 比對結果報表
-        </h1>
-        <p class="page-subtitle">任務 ID: {{ task_id }}</p>
+        <h1><i class="fas fa-chart-line"></i> 比對結果報表</h1>
+        <p>任務 ID: {{ task_id }}</p>
     </div>
 
-    <!-- 步驟 1：資料統計 -->
-    <div class="step-section">
-        <div class="step-header">
-            <div class="step-number">1</div>
-            <div class="step-content">
-                <h2 class="step-title">資料統計</h2>
-                <p class="step-subtitle">查看資料的統計摘要</p>
-            </div>
-        </div>
-        
-        <div class="section-body">
-            <div class="stats-grid" id="statsGrid">
-                <!-- 動態填充統計資料 -->
-            </div>
-        </div>
+    <!-- 資料統計 -->
+    <div class="stats-section">
+        <h2><i class="fas fa-chart-bar"></i> 資料統計</h2>
+        <div class="stats-grid" id="statsGrid"></div>
     </div>
 
-    <!-- 步驟 2：資料檢視（整合選擇資料表） -->
-    <div class="step-section">
-        <div class="step-header">
-            <div class="step-number">2</div>
-            <div class="step-content">
-                <h2 class="step-title">資料檢視</h2>
-                <p class="step-subtitle">選擇資料表並查看詳細的比對結果</p>
-            </div>
-        </div>
+    <!-- 資料檢視 -->
+    <div class="data-section">
+        <h2><i class="fas fa-table"></i> 資料檢視</h2>
         
-        <div class="section-body">
-            <!-- 新增情境選擇器 -->
-            <div class="scenario-selector-container">
-                <label class="form-label">
-                    <i class="fas fa-layer-group"></i> 比對情境
-                </label>
+        <!-- 控制面板 -->
+        <div class="controls">
+            <!-- 情境選擇 -->
+            <div class="scenario-selector">
+                <label><i class="fas fa-layer-group"></i> 比對情境</label>
                 <div class="scenario-tabs">
                     <button class="scenario-tab active" data-scenario="all">
                         <i class="fas fa-globe"></i> 全部情境
@@ -65,178 +46,123 @@
                         <i class="fas fa-archive"></i> Wave vs Backup
                     </button>
                 </div>
-            </div>            
-            <!-- 資料表選擇與工具列 -->
-            <div class="data-controls">
-                <div class="control-left">
-                    <label class="form-label">
-                        <i class="fas fa-table"></i> 資料表
-                    </label>
+            </div>
+
+            <!-- 工具列 -->
+            <div class="toolbar">
+                <div class="toolbar-left">
                     <select class="form-input" id="sheetSelector">
                         <option value="">載入中...</option>
                     </select>
-                    
-                    <!-- 新增快速搜尋 -->
                     <div class="search-box">
                         <i class="fas fa-search"></i>
-                        <input type="text" 
-                               class="search-input" 
-                               id="quickSearchInput" 
-                               placeholder="快速搜尋..." 
-                               autocomplete="off">
+                        <input type="text" class="search-input" id="quickSearchInput" 
+                               placeholder="快速搜尋..." autocomplete="off">
                         <span class="search-count" id="searchCount"></span>
                     </div>
                 </div>
                 
-                <div class="control-right">
-                    <button class="btn-icon" onclick="togglePivotMode()" title="切換樞紐分析">
+                <div class="toolbar-right">
+                    <button class="btn-icon" onclick="togglePivotMode()" title="樞紐分析">
                         <i class="fas fa-chart-pie" id="pivotIcon"></i>
                     </button>
-                    <button class="btn-icon" onclick="toggleFilterPanel()" title="篩選資料">
+                    <button class="btn-icon" onclick="toggleFilterPanel()" title="篩選">
                         <i class="fas fa-filter"></i>
                     </button>
-                    <div class="btn-group">
-                        <button class="btn btn-primary btn-sm" onclick="exportCurrentView('excel')">
-                            <i class="fas fa-file-excel"></i> 匯出 Excel
-                        </button>
-                        <button class="btn btn-success btn-sm" onclick="downloadFullReport()">
-                            <i class="fas fa-download"></i> 下載完整報表
-                        </button>
-                    </div>
+                    <button class="btn btn-primary" onclick="exportCurrentView('excel')">
+                        <i class="fas fa-file-excel"></i> 匯出
+                    </button>
+                    <button class="btn btn-success" onclick="downloadFullReport()">
+                        <i class="fas fa-download"></i> 完整報表
+                    </button>
                 </div>
             </div>
+        </div>
 
-            <div class="data-view-container">
-                <!-- 修改表格檢視結構 -->
-                <div id="tableView" class="table-view">
-                    <!-- 新增固定標頭容器 -->
-                    <div class="table-header-container">
-                        <table class="data-table header-only">
-                            <thead id="tableHead"></thead>
-                        </table>
-                    </div>
-                    <!-- 內容捲動容器 -->
-                    <div class="table-body-container">
-                        <table class="data-table body-only">
-                            <tbody id="tableBody">
-                                <tr>
-                                    <td colspan="100%" style="text-align: center; padding: 0;">
-                                        <div class="loading">
-                                            <i class="fas fa-spinner fa-spin"></i>
-                                            <p>載入資料中...</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+        <!-- 資料檢視區 -->
+        <div class="data-view">
+            <!-- 表格檢視 -->
+            <div id="tableView" class="table-view">
+                <div class="table-header">
+                    <table class="data-table"><thead id="tableHead"></thead></table>
                 </div>
-                <!-- 修改 pivotView 部分 -->
-                <div id="pivotView" class="pivot-view hidden">
-                    <div class="step-section">
-                        <div class="step-header pivot-header">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h2 class="step-title">樞紐分析表</h2>
-                                <p class="step-subtitle">拖曳欄位來建立自訂的分析報表</p>
-                            </div>
-                        </div>
-                        
-                        <div class="section-body">
-                            <div class="pivot-controls">
-                                <div class="pivot-controls-left">
-                                </div>
-                                <div class="pivot-controls-right">
-                                    <button class="btn btn-outline btn-sm" onclick="togglePivotAreas()">
-                                        <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> 
-                                        <span id="toggleAreasText">隱藏拖曳區</span>
-                                    </button>
-                                    <button class="btn btn-outline btn-sm" onclick="togglePivotFullscreen()">
-                                        <i class="fas fa-expand" id="fullscreenIcon"></i> 
-                                        <span id="fullscreenText">全螢幕</span>
-                                    </button>
-                                    <button class="btn btn-outline btn-sm" onclick="resetPivotTable()">
-                                        <i class="fas fa-undo"></i> 重置
-                                    </button>
-                                    <button class="btn btn-primary btn-sm" onclick="exportPivotTable()">
-                                        <i class="fas fa-file-excel"></i> 匯出
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div id="pivotContainer"></div>
-                        </div>
-                    </div>
+                <div class="table-body">
+                    <table class="data-table"><tbody id="tableBody"></tbody></table>
                 </div>
+            </div>
+            
+            <!-- 樞紐分析檢視 -->
+            <div id="pivotView" class="pivot-view hidden">
+                <div class="pivot-controls">
+                    <button class="btn btn-outline" onclick="togglePivotAreas()">
+                        <i class="fas fa-eye-slash" id="toggleAreasIcon"></i> 
+                        <span id="toggleAreasText">隱藏拖曳區</span>
+                    </button>
+                    <button class="btn btn-outline" onclick="togglePivotFullscreen()">
+                        <i class="fas fa-expand" id="fullscreenIcon"></i> 
+                        <span id="fullscreenText">全螢幕</span>
+                    </button>
+                    <button class="btn btn-outline" onclick="resetPivotTable()">
+                        <i class="fas fa-undo"></i> 重置
+                    </button>
+                    <button class="btn btn-primary" onclick="exportPivotTable()">
+                        <i class="fas fa-file-excel"></i> 匯出
+                    </button>
+                </div>
+                <div id="pivotContainer"></div>
             </div>
         </div>
     </div>
 
-    <!-- 步驟 3：圖表分析 -->
-    <div class="step-section">
-        <div class="step-header">
-            <div class="step-number">3</div>
-            <div class="step-content">
-                <h2 class="step-title">圖表分析</h2>
-                <p class="step-subtitle">視覺化資料分析結果</p>
+    <!-- 圖表分析 -->
+    <div class="charts-section">
+        <h2><i class="fas fa-chart-area"></i> 圖表分析</h2>
+        <div class="charts">
+            <div class="chart">
+                <h3>資料分布圖</h3>
+                <canvas id="distributionChart"></canvas>
             </div>
-        </div>
-        
-        <div class="section-body">
-            <div class="charts-section">
-                <div class="chart-container">
-                    <h3 class="chart-title">資料分布圖</h3>
-                    <canvas id="distributionChart"></canvas>
-                </div>
-                <div class="chart-container">
-                    <h3 class="chart-title">趨勢分析圖</h3>
-                    <canvas id="trendChart"></canvas>
-                </div>
+            <div class="chart">
+                <h3>趨勢分析圖</h3>
+                <canvas id="trendChart"></canvas>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 篩選器面板 -->
-    <div class="filter-panel" id="filterPanel">
-        <div class="filter-header">
-            <h3>資料篩選器</h3>
-            <button class="btn-icon" onclick="toggleFilterPanel()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="filter-content" id="filterContent">
-            <!-- 動態生成篩選器 -->
-        </div>
-        <div class="filter-actions">
-            <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
-            <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
-        </div>
-    </div>
-
-    <!-- 右下角浮動按鈕 -->
-    <div class="fab-container">
-        <button class="fab-secondary" onclick="exportPageAsHTML()" title="匯出此頁面">
-            <i class="fas fa-file-code"></i>
-        </button>
-        <!-- 新增篩選器按鈕 -->
-        <button class="fab-filter" onclick="toggleFilterPanel()" title="資料篩選器" id="fabFilter" style="display: none;">
-            <i class="fas fa-filter"></i>
+<!-- 篩選面板 -->
+<div class="filter-panel" id="filterPanel">
+    <div class="filter-header">
+        <h3>資料篩選器</h3>
+        <button class="btn-icon" onclick="toggleFilterPanel()">
+            <i class="fas fa-times"></i>
         </button>
     </div>
+    <div class="filter-content" id="filterContent"></div>
+    <div class="filter-actions">
+        <button class="btn btn-primary" onclick="applyFilters()">套用篩選</button>
+        <button class="btn btn-outline" onclick="clearFilters()">清除篩選</button>
+    </div>
+</div>
+
+<!-- 浮動按鈕 -->
+<div class="fab-container">
+    <button class="fab" onclick="exportPageAsHTML()" title="匯出頁面">
+        <i class="fas fa-file-code"></i>
+    </button>
+    <button class="fab" onclick="toggleFilterPanel()" title="篩選器" id="fabFilter">
+        <i class="fas fa-filter"></i>
+    </button>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- jQuery 和 jQuery UI (PivotTable.js 和拖曳功能需要) -->
+<!-- 載入必要的 JS 庫 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
-<!-- PivotTable.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.zh.js"></script>
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<!-- Xlsx.js -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script src="{{ url_for('static', filename='js/results.js') }}"></script>
-
 {% endblock %}
