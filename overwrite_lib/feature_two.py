@@ -1390,6 +1390,41 @@ class FeatureTwo:
         """mp → mpbackup 轉換規則"""
         return revision.replace('mp.google-refplus.wave', 'mp.google-refplus.wave.backup')
 
+    def _convert_master_to_wave(self, revision: str) -> str:
+        """
+        master → wave 轉換規則
+        相當於 master → premp → wave 的鏈式轉換
+        """
+        if not revision:
+            return revision
+        
+        # 第一步：master → premp
+        premp_revision = self._convert_master_to_premp(revision)
+        
+        # 第二步：premp → wave
+        wave_revision = self._convert_premp_to_mp(premp_revision)
+        
+        return wave_revision
+
+    def _convert_master_to_wavebackup(self, revision: str) -> str:
+        """
+        master → wave.backup 轉換規則
+        相當於 master → premp → wave → wave.backup 的鏈式轉換
+        """
+        if not revision:
+            return revision
+        
+        # 第一步：master → premp
+        premp_revision = self._convert_master_to_premp(revision)
+        
+        # 第二步：premp → wave  
+        wave_revision = self._convert_premp_to_mp(premp_revision)
+        
+        # 第三步：wave → wave.backup
+        backup_revision = self._convert_mp_to_mpbackup(wave_revision)
+        
+        return backup_revision
+        
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, source_manifest_name: str = '') -> List[Dict]:
         """轉換專案的分支名稱 - 修正版（🔥 使用確定的 remote 進行分支檢查）"""
         converted_projects = []
@@ -1525,7 +1560,7 @@ class FeatureTwo:
         return converted_projects
 
     def _convert_revision_by_type(self, revision: str, process_type: str) -> str:
-        """根據處理類型轉換 revision"""
+        """根據處理類型轉換 revision - 更新版：支援新的轉換類型"""
         try:
             if not revision:
                 return ''
@@ -1542,6 +1577,13 @@ class FeatureTwo:
                 return self._convert_premp_to_mp(revision)
             elif process_type == 'mp_vs_mpbackup':
                 return self._convert_mp_to_mpbackup(revision)
+            # 新增：支援 tvconfig 的轉換類型
+            elif process_type == 'master_to_premp':
+                return self._convert_master_to_premp(revision)
+            elif process_type == 'master_to_mp':
+                return self._convert_master_to_wave(revision)
+            elif process_type == 'master_to_mpbackup':
+                return self._convert_master_to_wavebackup(revision)
             
             # 如果沒有匹配的處理類型，返回原值
             return revision
@@ -1692,7 +1734,7 @@ class FeatureTwo:
         return projects
     
     def _add_links_to_projects(self, projects: List[Dict]) -> List[Dict]:
-        """為專案添加 branch/tag 連結資訊"""
+        """為專案添加 branch/tag 連結資訊 - 修正版：處理 open_project_link 為空的問題"""
         projects_with_links = []
         
         revision_count = 0
@@ -1744,36 +1786,107 @@ class FeatureTwo:
             # 建立 target_branch_link
             target_branch_link = self._build_gerrit_link(project_name, target_branch, target_type, remote)
             
-            # 🔥 建立 target_manifest 連結
+            # 建立 target_manifest 連結
             target_manifest = self._build_target_manifest_link(target_branch, remote)
 
-            # 🔥 新增：建立 target_open_project_link 和 open_project_link
+            # 建立 target_open_project_link（使用 target_branch）
             target_open_project_link = self._build_open_project_link(project_name, target_branch, remote, is_target=True)
-            open_project_link = self._build_open_project_link(project_name, project.get('dest-branch', ''), remote, is_target=False)
+            
+            # 🔥 修正 open_project_link：使用 fallback 邏輯
+            open_project_link = self._build_open_project_link_with_fallback(project_name, project, remote)
 
             # revision_diff 欄位將使用 Excel 公式
             revision_diff = ''
             
             # 添加所有欄位
             enhanced_project['branch_link'] = branch_link
-            enhanced_project['target_open_project_link'] = target_open_project_link  # 🔥 新增
-            enhanced_project['open_project_link'] = open_project_link  # 🔥 新增            
+            enhanced_project['target_open_project_link'] = target_open_project_link
+            enhanced_project['open_project_link'] = open_project_link  
             enhanced_project['target_branch_link'] = target_branch_link
             enhanced_project['target_manifest'] = target_manifest
             
             projects_with_links.append(enhanced_project)
         
         self.logger.info(f"已為 {len(projects_with_links)} 個專案添加連結資訊")
-        self.logger.info(f"🔗 branch_link 邏輯: Hash revision 使用 upstream，Branch revision 使用 revision")
-        self.logger.info(f"📊 欄位統計:")
+        self.logger.info(f"連結 branch_link 邏輯: Hash revision 使用 upstream，Branch revision 使用 revision")
+        self.logger.info(f"欄位統計:")
         self.logger.info(f"  - revision 欄位有值: {revision_count}")
         self.logger.info(f"  - dest-branch 欄位有值: {dest_branch_count}")
-        self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count}")
-        self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count}")
-        self.logger.info(f"  - ⬆️ 使用 upstream 建立連結: {upstream_used_count}")
+        self.logger.info(f"  - Hash revision: {hash_revision_count}")
+        self.logger.info(f"  - Branch revision: {branch_revision_count}")
+        self.logger.info(f"  - 使用 upstream 建立連結: {upstream_used_count}")
         
         return projects_with_links
 
+    def _build_open_project_link_with_fallback(self, project_name: str, project: Dict, remote: str = '') -> str:
+        """
+        建立 open_project_link - 修正版：使用 fallback 邏輯處理空 dest-branch
+        
+        Args:
+            project_name: 專案名稱
+            project: 專案字典（包含所有欄位）
+            remote: remote 類型
+            
+        Returns:
+            HYPERLINK 函數字串
+        """
+        try:
+            if not project_name:
+                return ""
+            
+            # 取得分支名稱，使用 fallback 邏輯
+            branch_name = self._get_branch_for_open_project_link(project)
+            
+            if not branch_name:
+                self.logger.debug(f"專案 {project_name} 無法取得有效分支名稱，open_project_link 為空")
+                return ""
+            
+            # 使用標準的建立邏輯
+            return self._build_open_project_link(project_name, branch_name, remote, is_target=False)
+            
+        except Exception as e:
+            self.logger.error(f"建立 open_project_link 失敗 {project_name}: {str(e)}")
+            return ""
+
+    def _get_branch_for_open_project_link(self, project: Dict) -> str:
+        """
+        取得用於建立 open_project_link 的分支名稱 - 使用 fallback 邏輯
+        
+        Priority:
+        1. dest-branch (如果存在且非空)
+        2. 如果 dest-branch 為空：
+        - 如果 revision 不是 hash (如 realtek/android-14/master)，直接使用 revision
+        - 如果 revision 是 hash 且有 upstream，使用 upstream
+        - 否則返回空字串
+        """
+        dest_branch = project.get('dest-branch', '').strip()
+        revision = project.get('revision', '').strip()
+        upstream = project.get('upstream', '').strip()
+        
+        # 1. 優先使用 dest-branch
+        if dest_branch:
+            self.logger.debug(f"使用 dest-branch: {dest_branch}")
+            return dest_branch
+        
+        # 2. dest-branch 為空，檢查 revision
+        if revision:
+            # 如果 revision 不是 hash（如 realtek/android-14/master），直接使用
+            if not self._is_revision_hash(revision):
+                self.logger.debug(f"dest-branch 為空，revision 不是 hash，使用 revision: {revision}")
+                return revision
+            
+            # 如果 revision 是 hash，嘗試使用 upstream
+            if upstream:
+                self.logger.debug(f"dest-branch 為空，revision 是 hash，使用 upstream: {upstream}")
+                return upstream
+            else:
+                self.logger.debug(f"dest-branch 為空，revision 是 hash 但沒有 upstream，open_project_link 為空")
+                return ""
+        
+        # 3. 都沒有有效值
+        self.logger.debug(f"無法取得有效的分支名稱，open_project_link 為空")
+        return ""
+                    
     def _build_open_project_link(self, project_name: str, branch_name: str, remote: str = '', is_target: bool = True) -> str:
         """
         🔥 新方法：建立 Open Project 連結
@@ -2589,7 +2702,7 @@ class FeatureTwo:
 
     def process_tvconfig_alignment(self, output_folder: str = './output') -> bool:
         """
-        處理 Master Tvconfig 對齊功能 - 新增功能，不影響原有邏輯
+        處理 Master Tvconfig 對齊功能 - 修正版：使用正確的轉換命名
         
         Args:
             output_folder: 輸出資料夾路徑
@@ -2599,7 +2712,7 @@ class FeatureTwo:
         """
         try:
             self.logger.info("=== 開始執行對齊 Master Tvconfig 功能 ===")
-            self.logger.info(f"🔥 使用 Android 版本: {self.current_android_version}")
+            self.logger.info(f"使用 Android 版本: {self.current_android_version}")
             
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
@@ -2616,7 +2729,7 @@ class FeatureTwo:
             if not process_type:
                 return False
             
-            # 步驟 3: 詢問建立分支選項
+            # 步驟 3: 詢問分支建立選項
             branch_options = self._ask_tvconfig_branch_options()
             if not branch_options:
                 return False
@@ -2664,7 +2777,7 @@ class FeatureTwo:
             # 步驟 7: 提取來源 manifest 檔名
             source_manifest_name = self._extract_tvconfig_manifest_filename(processed_manifest_path)
             
-            # 步驟 8: 轉換專案（使用現有邏輯）
+            # 步驟 8: 轉換專案（使用現有邏輯，支援新的轉換類型）
             converted_projects = self._convert_projects(
                 tvconfig_projects, process_type, check_branch_exists, source_manifest_name
             )
@@ -2686,7 +2799,7 @@ class FeatureTwo:
             
             # 步驟 14: 如果選擇建立分支，執行分支建立
             if create_branches:
-                self.logger.info("🚀 開始執行分支建立流程...")
+                self.logger.info("開始執行分支建立流程...")
                 branch_results = self._create_branches(unique_projects, output_filename, output_folder, False)
                 self._add_branch_status_sheet_with_revision(output_filename, output_folder, branch_results)
                 self.logger.info("✅ 分支建立流程完成")
@@ -2740,7 +2853,7 @@ class FeatureTwo:
             return None
 
     def _choose_tvconfig_process_type(self) -> Optional[str]:
-        """選擇處理類型"""
+        """選擇處理類型 - 修正版：使用正確的 tvconfig 命名"""
         print("\n請選擇目的 code line:")
         print("[1] master_to_premp (master → premp)")
         print("[2] master_to_mp (master → mp)")  
