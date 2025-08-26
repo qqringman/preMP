@@ -65,13 +65,6 @@ recent_activities = []
 recent_comparisons = []
 task_results = {}  # 儲存任務結果以供樞紐分析
 
-# 模擬的統計資料（實際應用中應從資料庫讀取）
-statistics = {
-    'total': 1234,
-    'today': 56,
-    'successRate': 98
-}
-
 class WebProcessor:
     """Web 處理器類別"""
     
@@ -1101,14 +1094,90 @@ def list_directories():
 
 @app.route('/api/recent-activities')
 def get_recent_activities():
-    """取得最近活動"""
-    return jsonify([{
-        'timestamp': activity['timestamp'].isoformat(),
-        'action': activity['action'],
-        'status': activity['status'],
-        'details': activity['details']
-    } for activity in recent_activities[:10]])
+    """取得最近活動 - 包含從檔案系統推斷的活動"""
+    try:
+        activities = []
+        
+        # 1. 從記憶體中的活動記錄
+        for activity in recent_activities[:10]:
+            activities.append({
+                'timestamp': activity['timestamp'].isoformat(),
+                'action': activity['action'],
+                'status': activity['status'],
+                'details': activity['details']
+            })
+        
+        # 2. 如果記憶體中沒有足夠的活動，從檔案系統推斷
+        if len(activities) < 5:
+            inferred_activities = infer_activities_from_filesystem()
+            activities.extend(inferred_activities)
+        
+        # 3. 按時間排序並只取前10筆
+        activities = sorted(activities, key=lambda x: x['timestamp'], reverse=True)[:10]
+        
+        # 4. 如果還是沒有資料，返回空列表（前端會顯示友好訊息）
+        return jsonify(activities)
+        
+    except Exception as e:
+        app.logger.error(f'Get recent activities error: {e}')
+        return jsonify([])
 
+def infer_activities_from_filesystem():
+    """從檔案系統推斷歷史活動"""
+    activities = []
+    
+    try:
+        # 從下載目錄推斷活動
+        downloads_dir = 'downloads'
+        if os.path.exists(downloads_dir):
+            for item in os.listdir(downloads_dir):
+                if item.startswith('task_') and os.path.isdir(os.path.join(downloads_dir, item)):
+                    item_path = os.path.join(downloads_dir, item)
+                    mtime = os.path.getmtime(item_path)
+                    timestamp = datetime.fromtimestamp(mtime)
+                    
+                    # 統計該任務的檔案數量
+                    file_count = 0
+                    for root, dirs, files in os.walk(item_path):
+                        file_count += len([f for f in files if not f.endswith('_report.xlsx')])
+                    
+                    activities.append({
+                        'timestamp': timestamp.isoformat(),
+                        'action': '完成檔案下載',
+                        'status': 'success',
+                        'details': f'{file_count} 個檔案，任務 {item}'
+                    })
+        
+        # 從比對結果目錄推斷活動
+        compare_dir = 'compare_results'
+        if os.path.exists(compare_dir):
+            for item in os.listdir(compare_dir):
+                if item.startswith('task_') and os.path.isdir(os.path.join(compare_dir, item)):
+                    item_path = os.path.join(compare_dir, item)
+                    mtime = os.path.getmtime(item_path)
+                    timestamp = datetime.fromtimestamp(mtime)
+                    
+                    # 檢查比對情境
+                    scenarios = []
+                    for scenario in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']:
+                        scenario_path = os.path.join(item_path, scenario)
+                        if os.path.exists(scenario_path):
+                            scenarios.append(scenario)
+                    
+                    scenario_text = f"{len(scenarios)} 個比對情境" if scenarios else "比對處理"
+                    
+                    activities.append({
+                        'timestamp': timestamp.isoformat(),
+                        'action': '完成比對分析',
+                        'status': 'success',
+                        'details': f'{scenario_text}，任務 {item}'
+                    })
+    
+    except Exception as e:
+        app.logger.warning(f'Error inferring activities: {e}')
+    
+    return activities
+    
 @app.route('/api/recent-comparisons')
 def get_recent_comparisons():
     """取得最近比對記錄"""
@@ -1124,8 +1193,288 @@ def get_recent_comparisons():
 
 @app.route('/api/statistics')
 def get_statistics():
-    """取得統計資料"""
-    return jsonify(statistics)
+    """取得真實統計資料"""
+    try:
+        # 計算總處理數
+        total_processed = calculate_total_processed()
+        
+        # 計算今日處理數
+        today_processed = calculate_today_processed()
+        
+        # 計算成功率
+        success_rate = calculate_success_rate()
+        
+        return jsonify({
+            'total': total_processed,
+            'today': today_processed,
+            'successRate': success_rate
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Calculate statistics error: {e}')
+        # 如果計算失敗，返回 0 而不是假資料
+        return jsonify({
+            'total': 0,
+            'today': 0,
+            'successRate': 0
+        })
+
+def calculate_success_rate():
+    """計算成功率"""
+    if not processing_status and not recent_activities and not recent_comparisons:
+        return 0
+    
+    total_tasks = 0
+    successful_tasks = 0
+    
+    # 從處理狀態計算
+    for task_id, status in processing_status.items():
+        if task_id.startswith('task_'):
+            total_tasks += 1
+            if status.get('status') == 'completed':
+                successful_tasks += 1
+    
+    # 從比對記錄計算
+    for comparison in recent_comparisons:
+        total_tasks += 1
+        if comparison.get('status') == 'completed':
+            successful_tasks += 1
+    
+    # 從活動記錄計算（只計算明確標示成功/失敗的活動）
+    for activity in recent_activities:
+        if activity.get('status') in ['success', 'error']:
+            total_tasks += 1
+            if activity.get('status') == 'success':
+                successful_tasks += 1
+    
+    # 避免除以零
+    if total_tasks == 0:
+        return 0
+    
+    # 計算百分比並四捨五入
+    success_rate = (successful_tasks / total_tasks) * 100
+    return round(success_rate, 1)
+
+@app.route('/api/detailed-statistics')
+def get_detailed_statistics():
+    """取得詳細統計資料"""
+    try:
+        # 基本統計
+        total = calculate_total_processed()
+        today = calculate_today_processed()
+        success_rate = calculate_success_rate()
+        
+        # 額外統計
+        download_tasks = count_download_tasks()
+        compare_tasks = count_compare_tasks()
+        failed_tasks = count_failed_tasks()
+        
+        # 本週統計
+        week_processed = calculate_week_processed()
+        
+        # 平均處理時間（如果有記錄的話）
+        avg_processing_time = calculate_average_processing_time()
+        
+        return jsonify({
+            'basic': {
+                'total': total,
+                'today': today,
+                'successRate': success_rate
+            },
+            'breakdown': {
+                'downloadTasks': download_tasks,
+                'compareTasks': compare_tasks,
+                'failedTasks': failed_tasks
+            },
+            'temporal': {
+                'weekProcessed': week_processed,
+                'avgProcessingTime': avg_processing_time
+            }
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Detailed statistics error: {e}')
+        return jsonify({'error': str(e)}), 500
+
+def calculate_average_processing_time():
+    """計算平均處理時間（分鐘）"""
+    # 這個需要你在處理過程中記錄開始和結束時間
+    # 目前先返回估計值
+    try:
+        # 可以從 processing_status 或其他地方獲取實際處理時間
+        # 這裡提供一個簡單的估算
+        total_tasks = len(processing_status)
+        if total_tasks > 0:
+            # 假設平均每個任務 5 分鐘（你可以根據實際情況調整）
+            return 5.0
+        return 0.0
+    except Exception:
+        return 0.0
+
+def calculate_week_processed():
+    """計算本週處理數"""
+    from datetime import datetime, timedelta
+    
+    # 獲取本週的開始日期（週一）
+    today = datetime.now()
+    week_start = today - timedelta(days=today.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    week_count = 0
+    
+    # 從活動記錄計算
+    for activity in recent_activities:
+        try:
+            if activity['timestamp'] >= week_start:
+                week_count += 1
+        except Exception:
+            continue
+    
+    # 從比對記錄計算
+    for comparison in recent_comparisons:
+        try:
+            if comparison['timestamp'] >= week_start:
+                week_count += 1
+        except Exception:
+            continue
+            
+    return week_count
+
+def count_failed_tasks():
+    """統計失敗任務數量"""
+    failed_count = 0
+    
+    # 從處理狀態統計
+    for status in processing_status.values():
+        if status.get('status') == 'error':
+            failed_count += 1
+    
+    # 從活動記錄統計
+    for activity in recent_activities:
+        if activity.get('status') == 'error':
+            failed_count += 1
+            
+    return failed_count
+
+def count_compare_tasks():
+    """統計比對任務數量"""
+    count = 0
+    compare_dir = 'compare_results'
+    if os.path.exists(compare_dir):
+        try:
+            count = len([d for d in os.listdir(compare_dir) 
+                        if d.startswith('task_') and os.path.isdir(os.path.join(compare_dir, d))])
+        except Exception:
+            pass
+    return count
+
+def count_download_tasks():
+    """統計下載任務數量"""
+    count = 0
+    downloads_dir = 'downloads'
+    if os.path.exists(downloads_dir):
+        try:
+            count = len([d for d in os.listdir(downloads_dir) 
+                        if d.startswith('task_') and os.path.isdir(os.path.join(downloads_dir, d))])
+        except Exception:
+            pass
+    return count
+
+def calculate_today_processed():
+    """計算今日處理數"""
+    from datetime import datetime, timedelta
+    
+    today = datetime.now().date()
+    today_count = 0
+    
+    # 從活動記錄計算今日處理數
+    for activity in recent_activities:
+        try:
+            # activity['timestamp'] 是 datetime 物件
+            activity_date = activity['timestamp'].date()
+            if activity_date == today:
+                today_count += 1
+        except Exception as e:
+            app.logger.warning(f'Error parsing activity timestamp: {e}')
+            continue
+    
+    # 從比對記錄計算今日處理數
+    for comparison in recent_comparisons:
+        try:
+            # comparison['timestamp'] 是 datetime 物件
+            comparison_date = comparison['timestamp'].date()
+            if comparison_date == today:
+                today_count += 1
+        except Exception as e:
+            app.logger.warning(f'Error parsing comparison timestamp: {e}')
+            continue
+    
+    # 從任務目錄的修改時間計算
+    try:
+        for dir_name in ['downloads', 'compare_results']:
+            if os.path.exists(dir_name):
+                for item in os.listdir(dir_name):
+                    if item.startswith('task_'):
+                        item_path = os.path.join(dir_name, item)
+                        if os.path.isdir(item_path):
+                            # 獲取目錄的修改時間
+                            mtime = os.path.getmtime(item_path)
+                            mdate = datetime.fromtimestamp(mtime).date()
+                            if mdate == today:
+                                today_count += 1
+    except Exception as e:
+        app.logger.warning(f'Error counting today tasks from directories: {e}')
+    
+    return today_count
+
+def calculate_total_processed():
+    """計算總處理數"""
+    total = 0
+    
+    # 方法1：從活動記錄計算
+    total += len(recent_activities)
+    
+    # 方法2：從比對記錄計算
+    total += len(recent_comparisons)
+    
+    # 方法3：從檔案系統計算（統計已完成的任務目錄）
+    try:
+        # 統計 downloads 目錄下的任務資料夾
+        downloads_dir = 'downloads'
+        if os.path.exists(downloads_dir):
+            download_tasks = [d for d in os.listdir(downloads_dir) 
+                            if d.startswith('task_') and os.path.isdir(os.path.join(downloads_dir, d))]
+            total += len(download_tasks)
+        
+        # 統計 compare_results 目錄下的任務資料夾
+        compare_dir = 'compare_results'
+        if os.path.exists(compare_dir):
+            compare_tasks = [d for d in os.listdir(compare_dir) 
+                           if d.startswith('task_') and os.path.isdir(os.path.join(compare_dir, d))]
+            total += len(compare_tasks)
+            
+    except Exception as e:
+        app.logger.warning(f'Error counting task directories: {e}')
+    
+    # 去重複（因為同一個任務可能同時有下載和比對）
+    unique_tasks = set()
+    
+    # 從處理狀態獲取唯一任務
+    for task_id in processing_status.keys():
+        if task_id.startswith('task_'):
+            unique_tasks.add(task_id)
+    
+    # 從目錄獲取唯一任務
+    try:
+        for dir_name in ['downloads', 'compare_results']:
+            if os.path.exists(dir_name):
+                for item in os.listdir(dir_name):
+                    if item.startswith('task_') and os.path.isdir(os.path.join(dir_name, item)):
+                        unique_tasks.add(item)
+    except Exception:
+        pass
+    
+    return len(unique_tasks) if unique_tasks else max(total, 0)
 
 @app.route('/api/pivot-data/<task_id>')
 def get_pivot_data(task_id):
