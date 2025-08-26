@@ -1726,6 +1726,43 @@ function viewCompareResults() {
     }
 }
 
+// 在 one-step.js 的初始化部分加入
+document.addEventListener('DOMContentLoaded', () => {
+    // 檢查 URL 參數中是否有 task_id
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('task_id');
+    
+    if (taskId) {
+        // 如果有 task_id，載入該任務的結果
+        currentTaskId = taskId;
+        loadTaskResults(taskId);
+    } else {
+        // 正常初始化流程
+        initializeUpload();
+        initializeSftpConfig();
+        initializeEventListeners();
+        initializePathInput();
+        updateStepIndicator('upload', 'active');
+    }
+});
+
+// 載入任務結果的函數
+async function loadTaskResults(taskId) {
+    try {
+        // 隱藏表單，顯示結果
+        document.getElementById('mainForm').classList.add('hidden');
+        document.getElementById('resultContainer').classList.remove('hidden');
+        
+        // 載入任務狀態和結果
+        const status = await utils.apiRequest(`/api/status/${taskId}`);
+        if (status && status.status === 'completed') {
+            handleComplete(status.results || status);
+        }
+    } catch (error) {
+        console.error('載入任務結果失敗:', error);
+    }
+}
+
 // 更新匯出到全域的函數列表
 window.viewDownloadResults = viewDownloadResults;
 window.viewCompareResults = viewCompareResults;
