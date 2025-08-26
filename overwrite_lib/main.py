@@ -492,7 +492,7 @@ class FeatureManager:
         self.validator = InputValidator()
 
     def execute_tvconfig_alignment(self):
-        """執行對齊 Master Tvconfig 功能"""
+        """執行對齊 Master Tvconfig 功能 - 修正版：簡化交互，參考功能二流程"""
         print("\n" + "="*60)
         print("  📺 對齊 Master Tvconfig")
         print("="*60)
@@ -505,18 +505,43 @@ class FeatureManager:
         print("  5. 生成專門的對齊報告")
         
         try:
-            # 取得輸出資料夾
+            # 1. 取得輸出資料夾
             output_folder = self.validator.get_output_folder("請輸入輸出資料夾路徑")
             if not output_folder:
                 return
             
-            print(f"\n📋 處理參數:")
-            print(f"  輸出資料夾: {output_folder}")
-            print(f"  🔥 使用 Android 版本: {config.get_current_android_version()}")
-            print(f"  📧 處理引擎: FeatureTwo.process_tvconfig_alignment()")
-            print(f"  📄 處理模式: tvconfigs_prebuilt 專案過濾")
-            print(f"  🗂️ 檔案處理: 自動備份和 include 展開")
-            print(f"  📊 報告格式: 與功能二完全一致")
+            # 2. 選擇 manifest 來源
+            manifest_source = self._choose_tvconfig_manifest_source()
+            if not manifest_source:
+                return
+            
+            # 3. 選擇處理類型
+            process_type = self._choose_tvconfig_process_type()
+            if not process_type:
+                return
+            
+            # 4. 取得輸出檔案名稱
+            default_output = f"{process_type}_tvconfigs_prebuilt_prebuild.xlsx"
+            output_file = input(f"請輸入輸出檔案名稱 (預設: {default_output}): ").strip()
+            if not output_file:
+                output_file = default_output
+            
+            # 5. 是否建立分支
+            create_branches = self.validator.get_yes_no_input("是否建立分支？", False)
+            
+            # 6. 強制更新分支選項（參考功能二）
+            force_update_branches = False
+            if create_branches:
+                force_update_branches = self._get_force_update_option()
+            
+            # 7. 是否檢查分支存在性
+            check_branch_exists = self.validator.get_yes_no_input("是否檢查分支存在性？(會比較慢)", False)
+            
+            # 顯示所有參數供確認（參考功能二）
+            self._show_tvconfig_alignment_parameters(
+                manifest_source, output_folder, process_type, output_file,
+                create_branches, force_update_branches, check_branch_exists
+            )
             
             if not self.validator.confirm_execution():
                 return
@@ -524,25 +549,198 @@ class FeatureManager:
             print("\n📄 開始處理...")
             print("🎯 正在執行 tvconfigs_prebuilt 專案對齊...")
             
-            # 調用 feature_two 中已實現的方法
-            success = self.feature_two.process_tvconfig_alignment(output_folder)
+            # 調用簡化版的處理方法
+            success = self._execute_tvconfig_alignment_simplified(
+                manifest_source, process_type, output_file, output_folder,
+                create_branches, force_update_branches, check_branch_exists
+            )
             
             if success:
                 print("\n✅ 對齊 Master Tvconfig 功能執行成功！")
                 print(f"📁 結果檔案位於: {output_folder}")
                 print("📊 詳細報告請查看 Excel 檔案")
-                print("\n💡 提示:")
-                print("  📄 查看 '轉換摘要' 頁籤了解整體情況")
-                print("  📋 查看 '轉換後專案' 頁籤檢視所有 tvconfigs_prebuilt 專案")
-                print("  🌿 如有建立分支，查看分支建立狀態頁籤")
+                self._show_tvconfig_alignment_results(create_branches, force_update_branches, check_branch_exists)
             else:
                 print("\n❌ 對齊 Master Tvconfig 功能執行失敗")
                 print("📄 請查看詳細報告了解具體情況")
-                
+                    
         except Exception as e:
             print(f"\n❌ 執行過程發生錯誤: {str(e)}")
             self.logger.error(f"對齊 Master Tvconfig 功能執行失敗: {str(e)}")
+
+    def _execute_tvconfig_alignment_simplified(self, manifest_source, process_type, output_file, 
+                                            output_folder, create_branches, force_update_branches, 
+                                            check_branch_exists):
+        """執行簡化版的 tvconfig 對齊處理"""
+        try:
+            # 準備參數，直接調用 feature_two 但跳過內部交互
+            if manifest_source['type'] == 'gerrit':
+                # 使用 feature_two 的內部方法處理 Gerrit 下載
+                manifest_info = self.feature_two._download_tvconfig_master_manifest()
+                if not manifest_info:
+                    print("❌ 從 Gerrit 下載 manifest 失敗")
+                    return False
+                input_file, original_content = manifest_info
+            else:
+                # 使用本地檔案
+                input_file = manifest_source['source']
+                with open(input_file, 'r', encoding='utf-8') as f:
+                    original_content = f.read()
+            
+            # 直接調用 feature_two.process 方法，但需要先處理 tvconfig 特有邏輯
+            # 這裡我們需要調用一個新的內部方法來處理 tvconfig 邏輯
+            success = self._process_tvconfig_with_params(
+                input_file, original_content, process_type, output_file, output_folder,
+                create_branches, force_update_branches, check_branch_exists
+            )
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"簡化版 tvconfig 對齊處理失敗: {str(e)}")
+            return False
+
+    def _process_tvconfig_with_params(self, input_file, original_content, process_type, output_file, 
+                                    output_folder, create_branches, force_update_branches, check_branch_exists):
+        """使用指定參數處理 tvconfig，避免內部交互"""
+        try:
+            # 備份原始檔案
+            backup_info = self.feature_two._backup_tvconfig_manifest_files(
+                input_file, output_folder, True, original_content
+            )
+            
+            # 處理 manifest（展開 include 等）
+            processed_manifest_path = input_file
+            if self.feature_two._has_tvconfig_include_tags(original_content):
+                expanded_result = self.feature_two._expand_tvconfig_manifest(output_folder)
+                if expanded_result:
+                    expanded_manifest_path, expanded_content = expanded_result
+                    processed_manifest_path = expanded_manifest_path
+                    self.feature_two._save_expanded_tvconfig_manifest(expanded_content, output_folder)
+            
+            # 解析並過濾專案
+            all_projects = self.feature_two._parse_manifest(processed_manifest_path)
+            if not all_projects:
+                return False
                 
+            tvconfig_projects = self.feature_two._filter_tvconfigs_projects(all_projects)
+            if not tvconfig_projects:
+                return False
+            
+            # 提取來源 manifest 檔名
+            source_manifest_name = self.feature_two._extract_tvconfig_manifest_filename(processed_manifest_path)
+            
+            # 轉換專案
+            converted_projects = self.feature_two._convert_projects(
+                tvconfig_projects, process_type, check_branch_exists, source_manifest_name
+            )
+            
+            # 添加連結資訊
+            projects_with_links = self.feature_two._add_links_to_projects(converted_projects)
+            
+            # 重新編號
+            unique_projects = self.feature_two._renumber_projects(projects_with_links)
+            duplicate_projects = []
+            
+            # 寫入 Excel
+            self.feature_two._write_excel_unified_basic(unique_projects, duplicate_projects, output_file, output_folder)
+            
+            # 如果選擇建立分支，執行分支建立
+            if create_branches:
+                branch_results = self.feature_two._create_branches(
+                    unique_projects, output_file, output_folder, force_update_branches
+                )
+                self.feature_two._add_branch_status_sheet_with_revision(output_file, output_folder, branch_results)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"處理 tvconfig 參數失敗: {str(e)}")
+            return False
+                        
+    def _show_tvconfig_alignment_results(self, create_branches, force_update_branches, check_branch_exists):
+        """顯示 tvconfig 對齊結果（參考功能二格式）"""
+        print("\n💡 提示:")
+        print("  📄 查看 '專案列表' 頁籤了解所有 tvconfigs_prebuilt 專案")
+        print("  📊 所有專案都經過 tvconfigs_prebuilt 過濾")
+        
+        if create_branches:
+            print("  🌿 分支建立狀態已記錄在 Excel 的 'Branch 建立狀態' 頁籤")
+            if force_update_branches:
+                print("  📄 強制更新模式：已存在的分支已被更新到新的 revision")
+            else:
+                print("  ✅ 預設模式：已存在的分支被視為成功並跳過")
+            print("  💡 提示：查看 'Force_Update' 欄位了解各分支的處理方式")
+        if check_branch_exists:
+            print("  🔍 分支存在性檢查結果已記錄在 'target_branch_exists' 欄位")
+            
+    def _show_tvconfig_alignment_parameters(self, manifest_source, output_folder, process_type, 
+                                        output_file, create_branches, force_update_branches, 
+                                        check_branch_exists):
+        """顯示 tvconfig 對齊參數（參考功能二格式）"""
+        print(f"\n📋 處理參數:")
+        if manifest_source['type'] == 'gerrit':
+            print(f"  Manifest 來源: 從 Gerrit 自動下載")
+            print(f"  🔥 使用 Android 版本: {config.get_current_android_version()}")
+        else:
+            print(f"  Manifest 來源: {manifest_source['source']}")
+        print(f"  輸出資料夾: {output_folder}")
+        print(f"  處理類型: {process_type}")
+        print(f"  輸出檔案: {output_file}")
+        print(f"  過濾條件: tvconfigs_prebuilt 專案")
+        print(f"  建立分支: {'是' if create_branches else '否'}")
+        if create_branches:
+            print(f"  🆕 強制更新分支: {'是' if force_update_branches else '否'}")
+            if force_update_branches:
+                print(f"      ⚠️  將覆蓋已存在分支的 revision")
+            else:
+                print(f"      ✅ 已存在分支將被跳過（視為成功）")
+        print(f"  檢查分支存在性: {'是' if check_branch_exists else '否'}")
+        
+    def _choose_tvconfig_manifest_source(self):
+        """選擇 tvconfig manifest 來源"""
+        print("\n請選擇 manifest.xml 來源：")
+        print("[1] 從 Gerrit 自動下載 master 分支的 manifest.xml")
+        print("[2] 使用本地 manifest.xml 檔案")
+        print("[0] 返回上層選單")
+        
+        choice = input("請選擇 (1-2，預設: 1): ").strip() or "1"
+        
+        if choice == "0":
+            return None
+        elif choice == "1":
+            return {'type': 'gerrit', 'source': 'auto_download'}
+        elif choice == "2":
+            manifest_path = self.validator.get_input_file("請輸入 manifest.xml 檔案路徑")
+            if not manifest_path:
+                return None
+            return {'type': 'local', 'source': manifest_path}
+        else:
+            print("無效的選擇")
+            return None
+
+    def _choose_tvconfig_process_type(self):
+        """選擇 tvconfig 處理類型"""
+        print("\n請選擇目的 code line:")
+        print("[1] master_to_premp (master → premp)")
+        print("[2] master_to_mp (master → mp)")  
+        print("[3] master_to_mpbackup (master → mpbackup)")
+        print("[0] 返回上層選單")
+        
+        choice = input("請選擇 (1-3): ").strip()
+        
+        if choice == "0":
+            return None
+        elif choice == "1":
+            return "master_to_premp"
+        elif choice == "2":
+            return "master_to_mp"
+        elif choice == "3":
+            return "master_to_mpbackup"
+        else:
+            print("無效的選擇")
+            return None
+                            
     def execute_feature_one(self):
         """執行功能一：擴充晶片映射表"""
         print("\n" + "="*60)
