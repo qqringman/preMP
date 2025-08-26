@@ -71,9 +71,14 @@ class MenuManager:
         print("  🌿 分支管理工具")
         print("="*50)
         print("  [1] 建立分支映射表 (功能二)")
-        print("      ├─ 支援強制更新已存在分支")
+        print("      ├─ 支持強制更新已存在分支")
         print("      ├─ 智能跳過已存在分支")
         print("      └─ 詳細分支建立狀態報告")
+        print("  [2] 對齊 Master Tvconfig")
+        print("      ├─ 自動下載或使用本地 manifest.xml")
+        print("      ├─ 過濾 tvconfigs_prebuilt 專案")
+        print("      ├─ 支持 include 標籤展開")
+        print("      └─ 生成專門的 tvconfig 對齊報告")
         print("  [0] 返回主選單")
         print("="*50)
     
@@ -485,7 +490,59 @@ class FeatureManager:
         self.feature_two = feature_two
         self.feature_three = feature_three
         self.validator = InputValidator()
-    
+
+    def execute_tvconfig_alignment(self):
+        """執行對齊 Master Tvconfig 功能"""
+        print("\n" + "="*60)
+        print("  📺 對齊 Master Tvconfig")
+        print("="*60)
+        print("功能說明：針對 tvconfigs_prebuilt 專案進行分支對齊處理")
+        print("🔧 處理流程：")
+        print("  1. 選擇 manifest 來源（Gerrit 自動下載或本地檔案）")
+        print("  2. 自動展開 include 標籤（如需要）")
+        print("  3. 過濾出 tvconfigs_prebuilt 相關專案")
+        print("  4. 執行分支轉換和建立")
+        print("  5. 生成專門的對齊報告")
+        
+        try:
+            # 取得輸出資料夾
+            output_folder = self.validator.get_output_folder("請輸入輸出資料夾路徑")
+            if not output_folder:
+                return
+            
+            print(f"\n📋 處理參數:")
+            print(f"  輸出資料夾: {output_folder}")
+            print(f"  🔥 使用 Android 版本: {config.get_current_android_version()}")
+            print(f"  📧 處理引擎: FeatureTwo.process_tvconfig_alignment()")
+            print(f"  📄 處理模式: tvconfigs_prebuilt 專案過濾")
+            print(f"  🗂️ 檔案處理: 自動備份和 include 展開")
+            print(f"  📊 報告格式: 與功能二完全一致")
+            
+            if not self.validator.confirm_execution():
+                return
+            
+            print("\n📄 開始處理...")
+            print("🎯 正在執行 tvconfigs_prebuilt 專案對齊...")
+            
+            # 調用 feature_two 中已實現的方法
+            success = self.feature_two.process_tvconfig_alignment(output_folder)
+            
+            if success:
+                print("\n✅ 對齊 Master Tvconfig 功能執行成功！")
+                print(f"📁 結果檔案位於: {output_folder}")
+                print("📊 詳細報告請查看 Excel 檔案")
+                print("\n💡 提示:")
+                print("  📄 查看 '轉換摘要' 頁籤了解整體情況")
+                print("  📋 查看 '轉換後專案' 頁籤檢視所有 tvconfigs_prebuilt 專案")
+                print("  🌿 如有建立分支，查看分支建立狀態頁籤")
+            else:
+                print("\n❌ 對齊 Master Tvconfig 功能執行失敗")
+                print("📄 請查看詳細報告了解具體情況")
+                
+        except Exception as e:
+            print(f"\n❌ 執行過程發生錯誤: {str(e)}")
+            self.logger.error(f"對齊 Master Tvconfig 功能執行失敗: {str(e)}")
+                
     def execute_feature_one(self):
         """執行功能一：擴充晶片映射表"""
         print("\n" + "="*60)
@@ -1008,6 +1065,8 @@ class MainApplication:
                 break
             elif choice == '1':
                 self.feature_manager.execute_feature_two()
+            elif choice == '2':  # 🔥 新增選項
+                self.feature_manager.execute_tvconfig_alignment()
             else:
                 print(f"❌ 無效的選項: {choice}")
                 input("按 Enter 繼續...")

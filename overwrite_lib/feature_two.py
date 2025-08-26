@@ -2586,3 +2586,486 @@ class FeatureTwo:
                 'Remote': remote,
                 'Gerrit_Server': gerrit_server
             }        
+
+    def process_tvconfig_alignment(self, output_folder: str = './output') -> bool:
+        """
+        處理 Master Tvconfig 對齊功能 - 新增功能，不影響原有邏輯
+        
+        Args:
+            output_folder: 輸出資料夾路徑
+            
+        Returns:
+            是否執行成功
+        """
+        try:
+            self.logger.info("=== 開始執行對齊 Master Tvconfig 功能 ===")
+            self.logger.info(f"🔥 使用 Android 版本: {self.current_android_version}")
+            
+            # 確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            
+            # 步驟 1: 選擇 manifest 來源
+            manifest_info = self._choose_tvconfig_manifest_source()
+            if not manifest_info:
+                return False
+            
+            manifest_path, is_from_gerrit, original_manifest_content = manifest_info
+            
+            # 步驟 2: 選擇處理類型
+            process_type = self._choose_tvconfig_process_type()
+            if not process_type:
+                return False
+            
+            # 步驟 3: 詢問建立分支選項
+            branch_options = self._ask_tvconfig_branch_options()
+            if not branch_options:
+                return False
+            
+            create_branches, check_branch_exists, confirmed = branch_options
+            if not confirmed:
+                return False
+            
+            # 步驟 4: 備份原始檔案到輸出資料夾
+            backup_info = self._backup_tvconfig_manifest_files(
+                manifest_path, output_folder, is_from_gerrit, original_manifest_content
+            )
+            
+            # 步驟 5: 展開 manifest（如果需要且是從 gerrit 下載的）
+            processed_manifest_path = manifest_path
+            expanded_manifest_path = None
+            
+            if is_from_gerrit and original_manifest_content:
+                if self._has_tvconfig_include_tags(original_manifest_content):
+                    self.logger.info("檢測到 include 標籤，準備展開 manifest...")
+                    expanded_result = self._expand_tvconfig_manifest(output_folder)
+                    if expanded_result:
+                        expanded_manifest_path, expanded_content = expanded_result
+                        processed_manifest_path = expanded_manifest_path
+                        self.logger.info(f"✅ 使用展開後的檔案: {expanded_manifest_path}")
+                        # 保存展開檔案到輸出資料夾
+                        self._save_expanded_tvconfig_manifest(expanded_content, output_folder)
+                    else:
+                        self.logger.warning("⚠️ Manifest 展開失敗，使用原始檔案")
+            
+            # 步驟 6: 解析並過濾專案
+            all_projects = self._parse_manifest(processed_manifest_path)
+            if not all_projects:
+                self.logger.error("無法解析 manifest 檔案或檔案為空")
+                return False
+                
+            tvconfig_projects = self._filter_tvconfigs_projects(all_projects)
+            
+            if not tvconfig_projects:
+                self.logger.error("沒有找到 tvconfigs_prebuilt 相關的專案")
+                return False
+            
+            self.logger.info(f"找到 {len(tvconfig_projects)} 個 tvconfigs_prebuilt 專案")
+            
+            # 步驟 7: 提取來源 manifest 檔名
+            source_manifest_name = self._extract_tvconfig_manifest_filename(processed_manifest_path)
+            
+            # 步驟 8: 轉換專案（使用現有邏輯）
+            converted_projects = self._convert_projects(
+                tvconfig_projects, process_type, check_branch_exists, source_manifest_name
+            )
+            
+            # 步驟 9: 添加連結資訊（使用現有邏輯）
+            projects_with_links = self._add_links_to_projects(converted_projects)
+            
+            # 步驟 10: 處理重複（不去重）
+            unique_projects, duplicate_projects = projects_with_links, []
+            
+            # 步驟 11: 重新編號
+            unique_projects = self._renumber_projects(unique_projects)
+            
+            # 步驟 12: 生成輸出檔案名
+            output_filename = f"{process_type}_tvconfigs_prebuilt_prebuild.xlsx"
+            
+            # 步驟 13: 寫入 Excel（使用現有邏輯）
+            self._write_excel_unified_basic(unique_projects, duplicate_projects, output_filename, output_folder)
+            
+            # 步驟 14: 如果選擇建立分支，執行分支建立
+            if create_branches:
+                self.logger.info("🚀 開始執行分支建立流程...")
+                branch_results = self._create_branches(unique_projects, output_filename, output_folder, False)
+                self._add_branch_status_sheet_with_revision(output_filename, output_folder, branch_results)
+                self.logger.info("✅ 分支建立流程完成")
+            
+            excel_path = os.path.join(output_folder, output_filename)
+            self.logger.info(f"=== 對齊 Master Tvconfig 功能執行完成，Excel 檔案：{excel_path} ===")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"對齊 Master Tvconfig 功能執行失敗: {str(e)}")
+            import traceback
+            self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
+            return False
+
+    def _choose_tvconfig_manifest_source(self) -> Optional[tuple]:
+        """選擇 manifest 來源"""
+        print("\n請選擇 manifest.xml 來源：")
+        print("[1] 從 Gerrit 自動下載 master 分支的 manifest.xml")
+        print("[2] 使用本地 manifest.xml 檔案")
+        print("[0] 返回上層選單")
+        
+        choice = input("請選擇 (1-2，預設: 1): ").strip() or "1"
+        
+        if choice == "0":
+            return None
+        elif choice == "1":
+            # 從 Gerrit 下載
+            result = self._download_tvconfig_master_manifest()
+            if result:
+                manifest_path, original_content = result
+                return manifest_path, True, original_content
+            else:
+                return None
+        elif choice == "2":
+            # 使用本地檔案
+            manifest_path = input("請輸入 manifest.xml 檔案路徑: ").strip()
+            if not os.path.exists(manifest_path):
+                print(f"錯誤：檔案不存在 - {manifest_path}")
+                return None
+            
+            # 讀取本地檔案內容
+            try:
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return manifest_path, False, content
+            except Exception as e:
+                print(f"錯誤：無法讀取檔案 - {str(e)}")
+                return None
+        else:
+            print("無效的選擇")
+            return None
+
+    def _choose_tvconfig_process_type(self) -> Optional[str]:
+        """選擇處理類型"""
+        print("\n請選擇目的 code line:")
+        print("[1] master_to_premp (master → premp)")
+        print("[2] master_to_mp (master → mp)")  
+        print("[3] master_to_mpbackup (master → mpbackup)")
+        print("[0] 返回上層選單")
+        
+        choice = input("請選擇 (1-3): ").strip()
+        
+        if choice == "0":
+            return None
+        elif choice == "1":
+            return "master_to_premp"
+        elif choice == "2":
+            return "master_to_mp"
+        elif choice == "3":
+            return "master_to_mpbackup"
+        else:
+            print("無效的選擇")
+            return None
+
+    def _ask_tvconfig_branch_options(self) -> Optional[tuple]:
+        """詢問分支建立選項 - 修正版：獨立的分支存在性檢查選項"""
+        print("\n分支建立選項:")
+        
+        # 詢問是否建立分支
+        create_branches_input = input("是否建立分支？ (y/N): ").strip().lower()
+        create_branches = create_branches_input == 'y'
+        
+        # 🔥 修正：無論是否建立分支，都詢問是否檢查分支存在性
+        check_exists_input = input("是否檢查分支存在性？(會比較慢) (y/N): ").strip().lower()
+        check_branch_exists = check_exists_input == 'y'
+        
+        # 顯示設定摘要
+        print(f"\n設定摘要:")
+        print(f"- 建立分支: {'是' if create_branches else '否'}")
+        print(f"- 檢查分支存在性: {'是' if check_branch_exists else '否'}")
+        
+        # 最終確認
+        confirm_input = input("\n是否確認執行？ (Y/n): ").strip().lower()
+        confirmed = confirm_input != 'n'
+        
+        if not confirmed:
+            print("取消執行")
+            return None
+        
+        return create_branches, check_branch_exists, confirmed
+
+    def _download_tvconfig_master_manifest(self) -> Optional[tuple]:
+        """從 Gerrit 下載 master 分支的 manifest.xml"""
+        try:
+            # 🔥 使用動態 Android 版本
+            master_branch = config.get_default_android_master_branch()
+            manifest_filename = "atv-google-refplus.xml"  # 預設使用這個檔案
+            
+            gerrit_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{master_branch}/{manifest_filename}"
+            
+            self.logger.info(f"正在從 Gerrit 下載 master manifest...")
+            self.logger.info(f"URL: {gerrit_url}")
+            self.logger.info(f"分支: {master_branch}")
+            self.logger.info(f"檔案: {manifest_filename}")
+            
+            # 使用臨時檔案下載
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', prefix='tvconfig_master_') as temp_file:
+                temp_path = temp_file.name
+            
+            try:
+                success = self.gerrit_manager.download_file_from_link(gerrit_url, temp_path)
+                
+                if success and os.path.exists(temp_path):
+                    with open(temp_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    self.logger.info(f"✅ 成功下載 master manifest: {len(content)} 字符")
+                    return temp_path, content
+                else:
+                    self.logger.error("❌ 下載 master manifest 失敗")
+                    return None
+                    
+            except Exception as e:
+                self.logger.error(f"下載過程發生錯誤: {str(e)}")
+                return None
+            finally:
+                # 注意：這裡不清理臨時檔案，因為後續還需要使用
+                pass
+                
+        except Exception as e:
+            self.logger.error(f"下載 master manifest 異常: {str(e)}")
+            return None
+
+    def _backup_tvconfig_manifest_files(self, manifest_path: str, output_folder: str, 
+                                is_from_gerrit: bool, original_content: str) -> Dict[str, str]:
+        """備份 manifest 檔案到輸出資料夾 - 修正版：安全的檔案名稱處理"""
+        backup_info = {}
+        
+        try:
+            # 🔥 參考 feature_three.py 的備份規則
+            
+            if is_from_gerrit:
+                # 如果是從 gerrit 下載的，使用 gerrit_ 前綴
+                master_branch = config.get_default_android_master_branch()
+                # 🔥 修正：將路徑中的斜線替換為底線，確保檔案名稱安全
+                safe_branch_name = master_branch.replace('/', '_')
+                backup_filename = f"gerrit_atv-google-refplus_{safe_branch_name}.xml"
+            else:
+                # 如果是本地檔案，使用原檔名加 backup_ 前綴
+                original_filename = os.path.basename(manifest_path)
+                backup_filename = f"backup_{original_filename}"
+            
+            backup_path = os.path.join(output_folder, backup_filename)
+            
+            # 寫入備份檔案
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(original_content)
+            
+            backup_info['original_backup'] = backup_path
+            
+            self.logger.info(f"✅ 已備份原始 manifest: {backup_filename}")
+            
+            # 驗證備份檔案
+            if os.path.exists(backup_path):
+                file_size = os.path.getsize(backup_path)
+                self.logger.info(f"✅ 備份檔案驗證成功: {backup_filename} ({file_size} bytes)")
+            
+            return backup_info
+            
+        except Exception as e:
+            self.logger.error(f"備份 manifest 檔案失敗: {str(e)}")
+            return backup_info
+
+    def _has_tvconfig_include_tags(self, xml_content: str) -> bool:
+        """檢查 XML 內容是否包含 include 標籤 - 參考 feature_three.py"""
+        try:
+            import re
+            
+            # 使用正則表達式檢查 include 標籤
+            include_pattern = r'<include\s+name\s*=\s*["\'][^"\']*["\'][^>]*/?>'
+            matches = re.findall(include_pattern, xml_content, re.IGNORECASE)
+            
+            if matches:
+                self.logger.info(f"🔍 發現 {len(matches)} 個 include 標籤:")
+                for i, match in enumerate(matches, 1):
+                    self.logger.info(f"  {i}. {match}")
+                return True
+            else:
+                self.logger.info("ℹ️ 未發現 include 標籤")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"檢查 include 標籤時發生錯誤: {str(e)}")
+            return False
+
+    def _expand_tvconfig_manifest(self, output_folder: str) -> Optional[tuple]:
+        """
+        展開包含 include 的 manifest - 修正版：安全的檔案路徑處理
+        """
+        import subprocess
+        import tempfile
+        import shutil
+        
+        try:
+            # 🔥 使用動態分支
+            repo_url = "ssh://mm2sd.rtkbf.com:29418/realtek/android/manifest"
+            branch = config.get_default_android_master_branch()
+            source_filename = "atv-google-refplus.xml"
+            
+            # 🔥 修正：生成安全的展開檔案名稱
+            safe_branch_name = branch.replace('/', '_')
+            expanded_filename = f"gerrit_atv-google-refplus_{safe_branch_name}_expanded.xml"
+            final_expanded_path = os.path.abspath(os.path.join(output_folder, expanded_filename))
+            
+            self.logger.info(f"🎯 準備展開 tvconfig manifest...")
+            self.logger.info(f"🎯 源檔案: {source_filename}")
+            self.logger.info(f"🎯 使用分支: {branch}")
+            self.logger.info(f"🎯 展開檔案名: {expanded_filename}")
+            
+            # 確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            
+            # 檢查 repo 命令是否可用
+            try:
+                repo_check = subprocess.run(
+                    ["repo", "--version"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=10
+                )
+                if repo_check.returncode != 0:
+                    self.logger.error(f"❌ repo 工具檢查失敗: {repo_check.stderr}")
+                    return None
+            except FileNotFoundError:
+                self.logger.error("❌ repo 命令未找到，請確認已安裝 repo 工具")
+                return None
+            
+            # 建立臨時工作目錄
+            temp_work_dir = tempfile.mkdtemp(prefix='tvconfig_repo_expand_')
+            self.logger.info(f"📁 建立臨時工作目錄: {temp_work_dir}")
+            
+            original_cwd = os.getcwd()
+            
+            try:
+                # 切換到臨時目錄
+                os.chdir(temp_work_dir)
+                
+                # repo init
+                init_cmd = [
+                    "repo", "init", 
+                    "-u", repo_url,
+                    "-b", branch,
+                    "-m", source_filename
+                ]
+                
+                init_result = subprocess.run(
+                    init_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                
+                if init_result.returncode != 0:
+                    self.logger.error(f"❌ repo init 失敗: {init_result.stderr}")
+                    return None
+                
+                # repo manifest 展開
+                manifest_result = subprocess.run(
+                    ["repo", "manifest"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if manifest_result.returncode != 0:
+                    self.logger.error(f"❌ repo manifest 失敗: {manifest_result.stderr}")
+                    return None
+                
+                expanded_content = manifest_result.stdout
+                
+                if not expanded_content.strip():
+                    self.logger.error("❌ repo manifest 返回空內容")
+                    return None
+                
+                self.logger.info(f"✅ repo manifest 成功，內容長度: {len(expanded_content)} 字符")
+                
+                # 保存展開檔案到輸出資料夾
+                with open(final_expanded_path, 'w', encoding='utf-8') as f:
+                    f.write(expanded_content)
+                
+                # 驗證檔案
+                if os.path.exists(final_expanded_path):
+                    file_size = os.path.getsize(final_expanded_path)
+                    self.logger.info(f"✅ 展開檔案保存成功: {expanded_filename} ({file_size} bytes)")
+                    return final_expanded_path, expanded_content
+                else:
+                    self.logger.error(f"❌ 展開檔案保存失敗: {final_expanded_path}")
+                    return None
+                    
+            finally:
+                # 恢復原始工作目錄
+                os.chdir(original_cwd)
+                
+                # 清理臨時目錄
+                try:
+                    shutil.rmtree(temp_work_dir)
+                    self.logger.info(f"🗑️ 清理臨時目錄成功")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ 清理臨時目錄失敗: {str(e)}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ 展開 tvconfig manifest 時發生錯誤: {str(e)}")
+            return None
+
+    def _save_expanded_tvconfig_manifest(self, expanded_content: str, output_folder: str):
+        """保存展開後的 manifest 檔案 - 修正版：安全的檔案名稱"""
+        try:
+            branch = config.get_default_android_master_branch()
+            # 🔥 修正：安全的檔案名稱處理
+            safe_branch_name = branch.replace('/', '_')
+            expanded_filename = f"gerrit_atv-google-refplus_{safe_branch_name}_expanded.xml"
+            expanded_path = os.path.join(output_folder, expanded_filename)
+            
+            with open(expanded_path, 'w', encoding='utf-8') as f:
+                f.write(expanded_content)
+            
+            if os.path.exists(expanded_path):
+                file_size = os.path.getsize(expanded_path)
+                self.logger.info(f"✅ 展開檔案已保存: {expanded_filename} ({file_size} bytes)")
+            
+        except Exception as e:
+            self.logger.error(f"保存展開檔案失敗: {str(e)}")
+
+    def _filter_tvconfigs_projects(self, projects: List[Dict]) -> List[Dict]:
+        """過濾只保留 name 包含 tvconfigs_prebuilt 的專案"""
+        try:
+            tvconfig_projects = []
+            
+            for project in projects:
+                project_name = project.get('name', '')
+                
+                # 檢查 name 是否包含 tvconfigs_prebuilt
+                if 'tvconfigs_prebuilt' in project_name:
+                    tvconfig_projects.append(project)
+                    self.logger.debug(f"✅ 保留專案: {project_name}")
+                else:
+                    self.logger.debug(f"⏭️ 跳過專案: {project_name}")
+            
+            self.logger.info(f"過濾完成: 原始 {len(projects)} 個專案 → 保留 {len(tvconfig_projects)} 個 tvconfigs_prebuilt 專案")
+            
+            return tvconfig_projects
+            
+        except Exception as e:
+            self.logger.error(f"過濾 tvconfigs_prebuilt 專案失敗: {str(e)}")
+            return []
+
+    def _extract_tvconfig_manifest_filename(self, manifest_path: str) -> str:
+        """提取 manifest 檔案名稱 - 修正版：安全的檔案名稱處理"""
+        try:
+            if manifest_path:
+                filename = os.path.basename(manifest_path)
+                # 如果是展開檔案，使用原始檔案名
+                if 'expanded' in filename:
+                    return "atv-google-refplus.xml"
+                else:
+                    return filename
+            else:
+                return "atv-google-refplus.xml"
+        except Exception as e:
+            self.logger.error(f"提取檔案名失敗: {str(e)}")
+            return "atv-google-refplus.xml"           
