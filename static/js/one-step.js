@@ -886,25 +886,33 @@ function addLog(message, type = 'info') {
 
 // 處理完成
 function handleComplete(results) {
-    // 保存檔案列表 - 確保從正確的位置取得資料
+    console.log('=== handleComplete called ===');
+    console.log('Results received:', results);
+    
+    // 保存檔案列表 - 檢查多個可能的位置
+    let filesUpdated = false;
+    
     if (results) {
         // 優先從 results.files 取得
         if (results.files) {
             downloadedFilesList = results.files.downloaded || [];
             skippedFilesList = results.files.skipped || [];
             failedFilesList = results.files.failed || [];
+            filesUpdated = true;
         }
         // 如果沒有 files，嘗試從 download_results 取得
         else if (results.download_results && results.download_results.files) {
             downloadedFilesList = results.download_results.files.downloaded || [];
             skippedFilesList = results.download_results.files.skipped || [];
             failedFilesList = results.download_results.files.failed || [];
+            filesUpdated = true;
         }
         
-        console.log('Files saved in handleComplete:', {
+        console.log('Files updated in handleComplete:', {
             downloaded: downloadedFilesList.length,
             skipped: skippedFilesList.length,
-            failed: failedFilesList.length
+            failed: failedFilesList.length,
+            filesUpdated
         });
     }
     
@@ -916,8 +924,8 @@ function handleComplete(results) {
     document.getElementById('progressContainer').classList.add('hidden');
     document.getElementById('resultContainer').classList.remove('hidden');
     
-    // 生成結果摘要
-    const summaryHtml = generateResultSummary(results);
+    // 強制生成結果摘要，即使沒有完整資料
+    const summaryHtml = generateResultSummary(results, true); // 加入 forceDisplay 參數
     const summaryElement = document.getElementById('resultSummary');
     if (summaryElement) {
         summaryElement.innerHTML = summaryHtml;
@@ -952,152 +960,353 @@ function handleError(message) {
 }
 
 // 生成結果摘要
-function generateResultSummary(results) {
-    if (!results) {
-        return '<div class="no-data">無結果資料</div>';
-    }
-    
-    // 調試訊息
-    console.log('generateResultSummary - results:', results);
+function generateResultSummary(results, forceDisplay = false) {
+    console.log('generateResultSummary - results:', results, 'forceDisplay:', forceDisplay);
     
     // 確保檔案列表有被保存
-    if (results.files) {
+    if (results && results.files) {
         downloadedFilesList = results.files.downloaded || [];
         skippedFilesList = results.files.skipped || [];
         failedFilesList = results.files.failed || [];
-    } else if (results.download_results && results.download_results.files) {
+    } else if (results && results.download_results && results.download_results.files) {
         downloadedFilesList = results.download_results.files.downloaded || [];
         skippedFilesList = results.download_results.files.skipped || [];
         failedFilesList = results.download_results.files.failed || [];
     }
     
-    console.log('Files in generateResultSummary:', {
-        downloaded: downloadedFilesList,
-        skipped: skippedFilesList,
-        failed: failedFilesList
-    });
+    // 獲取統計資料
+    const stats = results?.stats || results?.download_results?.stats || {};
+    const compareResults = results?.compare_results || {};
     
-    const stats = results.stats || (results.download_results && results.download_results.stats) || {};
-    const compareResults = results.compare_results || {};
+    let html = `
+        <div class="results-summary-container">
+            <div class="results-summary-header">
+                <h3 class="results-summary-title">
+                    <i class="fas fa-chart-pie"></i> 處理結果摘要
+                </h3>
+                <p class="results-summary-subtitle">
+                    一步到位處理完成 • ${new Date().toLocaleString('zh-TW')}
+                </p>
+            </div>
+            
+            <div class="results-summary-content">
+    `;
     
-    let html = '';
+    // 檢查是否有真實資料
+    const hasStats = Object.keys(stats).length > 0;
+    const hasCompareResults = Object.keys(compareResults).length > 0;
+    const hasFileData = downloadedFilesList.length > 0 || skippedFilesList.length > 0 || failedFilesList.length > 0;
     
-    // 建立兩列容器
-    html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 32px;">';
-    
-    // 左邊：下載統計
-    html += '<div>';
-    html += '<h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;"><i class="fas fa-download"></i> 下載統計</h3>';
-    
-    if (stats && Object.keys(stats).length > 0) {
-        html += `
-            <div class="progress-stats" style="grid-template-columns: repeat(2, 1fr);">
-                <div class="stat-card blue" onclick="showFilesList('total')" title="點擊查看所有檔案" style="cursor: pointer;">
-                    <div class="stat-icon">
-                        <i class="fas fa-file"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value">${stats.total || 0}</div>
-                        <div class="stat-label">總檔案數</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card success" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案" style="cursor: pointer;">
-                    <div class="stat-icon">
+    if (hasStats || hasCompareResults || hasFileData || forceDisplay) {
+        // 如果沒有統計資料但有檔案資料，生成基本統計
+        let displayStats = stats;
+        if (!hasStats && hasFileData) {
+            displayStats = {
+                total: downloadedFilesList.length + skippedFilesList.length + failedFilesList.length,
+                downloaded: downloadedFilesList.length,
+                skipped: skippedFilesList.length,
+                failed: failedFilesList.length
+            };
+        }
+        
+        // 如果強制顯示但完全沒有資料，顯示完成狀態
+        if (forceDisplay && !hasStats && !hasCompareResults && !hasFileData) {
+            html += `
+                <div class="stats-section">
+                    <h4 class="stats-section-title">
                         <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value">${stats.downloaded || 0}</div>
-                        <div class="stat-label">已下載</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card warning" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案" style="cursor: pointer;">
-                    <div class="stat-icon">
-                        <i class="fas fa-forward"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value">${stats.skipped || 0}</div>
-                        <div class="stat-label">已跳過</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card danger" onclick="showFilesList('failed')" title="點擊查看失敗的檔案" style="cursor: pointer;">
-                    <div class="stat-icon">
-                        <i class="fas fa-times-circle"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value">${stats.failed || 0}</div>
-                        <div class="stat-label">失敗</div>
+                        處理完成
+                    </h4>
+                    
+                    <div class="completion-status" style="text-align: center; padding: 40px;">
+                        <div style="font-size: 4rem; color: #4CAF50; margin-bottom: 20px;">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3 style="color: #4CAF50; margin-bottom: 10px;">一步到位處理成功完成！</h3>
+                        <p style="color: #666; margin-bottom: 30px;">所有流程已執行完畢</p>
+                        
+                        <div style="display: flex; justify-content: center; gap: 16px; margin-top: 30px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="viewResults()" style="min-width: 160px;">
+                                <i class="fas fa-chart-line"></i> 查看詳細結果
+                            </button>
+                            <button class="btn btn-success" onclick="downloadAll()" style="min-width: 160px;">
+                                <i class="fas fa-download"></i> 下載所有檔案
+                            </button>
+                            <button class="btn btn-secondary" onclick="startNew()" style="min-width: 160px;">
+                                <i class="fas fa-redo"></i> 開始新的處理
+                            </button>
+                        </div>
                     </div>
                 </div>
+            `;
+        } else {
+            // 使用真實資料或生成的基本統計
+            html += generateStatsSection(displayStats);
+            html += generateCompareResultsSection(compareResults);
+            
+            // 操作按鈕區域
+            html += `
+                <div class="action-buttons" style="margin-top: 32px; text-align: center;">
+                    <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="viewResults()" style="min-width: 160px;">
+                            <i class="fas fa-chart-line"></i> 查看詳細結果
+                        </button>
+                        <button class="btn btn-success" onclick="downloadAll()" style="min-width: 160px;">
+                            <i class="fas fa-download"></i> 下載所有檔案
+                        </button>
+                        <button class="btn btn-secondary" onclick="startNew()" style="min-width: 160px;">
+                            <i class="fas fa-redo"></i> 開始新的處理
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // 提示區域
+            html += `
+                <div class="results-hint" style="margin-top: 24px;">
+                    <i class="fas fa-lightbulb"></i>
+                    <p class="results-hint-text">
+                        💡 點擊統計卡片查看詳細檔案列表 • 點擊比對結果查看差異報告
+                    </p>
+                </div>
+            `;
+        }
+    } else {
+        // 沒有資料時顯示空狀態
+        html += `
+            <div class="no-results">
+                <i class="fas fa-clock"></i>
+                <h5>處理進行中</h5>
+                <p>結果統計將在處理完成後顯示</p>
             </div>
         `;
     }
-    html += '</div>';
     
-    // 右邊：比對結果
-    html += '<div>';
-    html += '<h3 style="margin-bottom: 20px; color: #1A237E; text-align: center;"><i class="fas fa-code-compare"></i> 比對結果</h3>';
+    html += `
+            </div>
+        </div>
+    `;
     
-    if (compareResults && Object.keys(compareResults).length > 0) {
-        html += '<div class="summary-grid">';
+    return html;
+}
+
+// 生成比對結果區域
+function generateCompareResultsSection(compareResults) {
+    let html = `
+        <div class="stats-section" style="margin-top: 32px;">
+            <h4 class="stats-section-title">
+                <i class="fas fa-code-compare"></i>
+                版本比對結果
+            </h4>
+    `;
+    
+    if (!compareResults || Object.keys(compareResults).length === 0) {
+        html += `
+            <div class="no-results">
+                <i class="fas fa-search"></i>
+                <h5>尚未執行比對</h5>
+                <p>比對結果將在處理完成後顯示</p>
+            </div>
+        `;
+    } else {
+        html += '<div class="compare-results-grid">';
         
         // Master vs PreMP
         if (compareResults.master_vs_premp) {
             const data = compareResults.master_vs_premp;
-            html += `
-                <div class="summary-item clickable" style="cursor: pointer;">
-                    <i class="fas fa-code-branch text-info"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${data.total || data.success || 0}</div>
-                        <div class="summary-label">Master vs PreMP</div>
-                    </div>
-                </div>
-            `;
+            html += generateCompareCard(
+                'Master vs PreMP',
+                'fa-code-branch',
+                data.success || 0,
+                data.failed || 0,
+                'master_vs_premp'
+            );
         }
         
         // PreMP vs Wave
         if (compareResults.premp_vs_wave) {
             const data = compareResults.premp_vs_wave;
-            html += `
-                <div class="summary-item clickable" style="cursor: pointer;">
-                    <i class="fas fa-water text-info"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${data.total || data.success || 0}</div>
-                        <div class="summary-label">PreMP vs Wave</div>
-                    </div>
-                </div>
-            `;
+            html += generateCompareCard(
+                'PreMP vs Wave',
+                'fa-wave-square',
+                data.success || 0,
+                data.failed || 0,
+                'premp_vs_wave'
+            );
         }
         
         // Wave vs Backup
         if (compareResults.wave_vs_backup) {
             const data = compareResults.wave_vs_backup;
-            html += `
-                <div class="summary-item clickable" style="cursor: pointer;">
-                    <i class="fas fa-database text-info"></i>
-                    <div class="summary-content">
-                        <div class="summary-value">${data.total || data.success || 0}</div>
-                        <div class="summary-label">Wave vs Backup</div>
-                    </div>
-                </div>
-            `;
+            html += generateCompareCard(
+                'Wave vs Backup',
+                'fa-database',
+                data.success || 0,
+                data.failed || 0,
+                'wave_vs_backup'
+            );
         }
         
         html += '</div>';
-    } else {
-        html += '<div class="empty-message"><p>尚無比對結果</p></div>';
+        
+        // 總結資訊
+        const totalSuccess = Object.values(compareResults).reduce((sum, result) => sum + (result.success || 0), 0);
+        const totalFailed = Object.values(compareResults).reduce((sum, result) => sum + (result.failed || 0), 0);
+        const totalModules = totalSuccess + totalFailed;
+        const compareSuccessRate = totalModules > 0 ? Math.round((totalSuccess / totalModules) * 100) : 0;
+        
+        html += `
+            <div class="compare-summary" style="margin-top: 24px; padding: 20px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-radius: 12px; border: 1px solid #2196F3;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 20px; text-align: center;">
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #1976D2;">${totalModules}</div>
+                        <div style="font-size: 0.875rem; color: #1565C0;">總模組數</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #4CAF50;">${totalSuccess}</div>
+                        <div style="font-size: 0.875rem; color: #2E7D32;">比對成功</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #F44336;">${totalFailed}</div>
+                        <div style="font-size: 0.875rem; color: #C62828;">比對失敗</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #FF9800;">${compareSuccessRate}%</div>
+                        <div style="font-size: 0.875rem; color: #F57C00;">比對成功率</div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
+    
     html += '</div>';
+    return html;
+}
+
+// 生成比對卡片
+function generateCompareCard(title, icon, successCount, failedCount, scenario) {
+    const total = successCount + failedCount;
+    const successRate = total > 0 ? Math.round((successCount / total) * 100) : 0;
     
-    html += '</div>'; // 結束兩列容器
+    return `
+        <div class="compare-result-card" onclick="viewScenarioResults('${scenario}')" style="cursor: pointer;" title="點擊查看 ${title} 詳細結果">
+            <div class="compare-result-header">
+                <div class="compare-result-icon">
+                    <i class="fas ${icon}"></i>
+                </div>
+                <h5 class="compare-result-title">${title}</h5>
+            </div>
+            
+            <div class="compare-result-stats">
+                <div class="compare-stat">
+                    <div class="compare-stat-value" style="color: #4CAF50;">${successCount}</div>
+                    <div class="compare-stat-label">成功</div>
+                </div>
+                <div class="compare-stat">
+                    <div class="compare-stat-value" style="color: #F44336;">${failedCount}</div>
+                    <div class="compare-stat-label">失敗</div>
+                </div>
+                <div class="compare-stat">
+                    <div class="compare-stat-value" style="color: #2196F3;">${successRate}%</div>
+                    <div class="compare-stat-label">成功率</div>
+                </div>
+            </div>
+            
+            <!-- 進度條 -->
+            <div style="margin-top: 16px; height: 6px; background: #EEEEEE; border-radius: 3px; overflow: hidden;">
+                <div style="width: ${successRate}%; height: 100%; background: linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%); transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+    `;
+}
+
+// 生成統計區域
+function generateStatsSection(stats) {
+    const total = stats.total || 0;
+    const downloaded = stats.downloaded || 0;
+    const skipped = stats.skipped || 0;
+    const failed = stats.failed || 0;
     
-    // 提示文字
-    html += `
-        <div class="stats-hint">
-            <i class="fas fa-info-circle"></i>
-            <span>提示：點擊上方統計卡片可查看詳細的檔案列表</span>
+    // 如果沒有統計資料，顯示空狀態
+    if (total === 0) {
+        return `
+            <div class="stats-section">
+                <h4 class="stats-section-title">
+                    <i class="fas fa-download"></i>
+                    檔案下載統計
+                </h4>
+                
+                <div class="no-results">
+                    <i class="fas fa-inbox"></i>
+                    <h5>尚無下載統計</h5>
+                    <p>統計資料將在下載完成後顯示</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 計算成功率
+    const successRate = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+    
+    let html = `
+        <div class="stats-section">
+            <h4 class="stats-section-title">
+                <i class="fas fa-download"></i>
+                檔案下載統計
+            </h4>
+            
+            <div class="stat-cards">
+                <div class="stat-card clickable" onclick="showFilesList('total')" title="點擊查看所有檔案">
+                    <div class="stat-icon info">
+                        <i class="fas fa-files"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${total}</div>
+                        <div class="stat-label">總檔案數</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card clickable" onclick="showFilesList('downloaded')" title="點擊查看已下載檔案">
+                    <div class="stat-icon success">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${downloaded}</div>
+                        <div class="stat-label">成功下載</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card clickable" onclick="showFilesList('skipped')" title="點擊查看跳過的檔案">
+                    <div class="stat-icon warning">
+                        <i class="fas fa-forward"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${skipped}</div>
+                        <div class="stat-label">跳過檔案</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card clickable" onclick="showFilesList('failed')" title="點擊查看失敗的檔案">
+                    <div class="stat-icon danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${failed}</div>
+                        <div class="stat-label">下載失敗</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 成功率指示器 -->
+            <div class="success-rate-indicator" style="margin-top: 20px; padding: 16px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-radius: 12px; border: 1px solid #4CAF50;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-chart-line" style="color: #4CAF50; font-size: 1.25rem;"></i>
+                    <span style="color: #2E7D32; font-weight: 600;">成功率: ${successRate}%</span>
+                    <div style="flex: 1; background: rgba(76, 175, 80, 0.2); height: 8px; border-radius: 4px; margin-left: 12px;">
+                        <div style="width: ${successRate}%; height: 100%; background: linear-gradient(90deg, #4CAF50 0%, #66BB6A 100%); border-radius: 4px; transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
     
