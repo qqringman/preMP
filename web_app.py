@@ -189,8 +189,12 @@ class WebProcessor:
             self.results['zip_file'] = zip_path
             self.update_progress(100, 'completed', '所有處理完成！')
             
-            # 記錄活動
-            add_activity('完成一步到位處理', 'success', f'{stats["downloaded"]} 個檔案，3 個比對情境')
+            # 記錄到最近活動
+            add_activity('完成一步到位處理', 'success', 
+                        f'下載 {stats["downloaded"]} 個檔案，完成 3 個比對情境，任務 {self.task_id}')
+            
+            # 同時記錄到最近比對記錄
+            add_comparison(self.task_id, '完成一步到位處理', 'completed', stats["downloaded"])
             
             # 儲存結果供樞紐分析使用
             save_task_results(self.task_id, all_results)
@@ -198,7 +202,12 @@ class WebProcessor:
         except Exception as e:
             self.logger.error(f"One-step processing error: {str(e)}")
             self.update_progress(0, 'error', f'處理失敗：{str(e)}')
-            add_activity('一步到位處理失敗', 'error', str(e))
+            
+            # 記錄失敗到最近活動
+            add_activity('一步到位處理失敗', 'error', f'{str(e)}，任務 {self.task_id}')
+            
+            # 同時記錄失敗到最近比對記錄
+            add_comparison(self.task_id, '一步到位處理失敗', 'error', 0)
             raise
             
     def process_download(self, excel_file, sftp_config, options):
@@ -252,7 +261,7 @@ class WebProcessor:
                 self.logger.info("開始處理 Excel 檔案改名")
                 self.logger.info(f"  Task ID: {self.task_id}")
                 self.logger.info(f"  下載資料夾: {download_dir}")
-                self.logger.info(f"  Excel 檔案路徑: {excel_file}")  # 新增日誌
+                self.logger.info(f"  Excel 檔案路徑: {excel_file}")
                 
                 # 重新檢查 Excel 檔案的欄位（這會包含 filepath）
                 global excel_handler
@@ -285,30 +294,45 @@ class WebProcessor:
                     self.results['excel_new_name'] = excel_result['excel_new_name']
                     # 更新訊息
                     self.update_progress(95, 'downloading', 
-                        f'✅ Excel 檔案已另存為: {excel_result["excel_new_name"]}')
-                    self.logger.info(f"✅ Excel 檔案複製成功: {excel_result['excel_new_name']}")
+                        f'Excel 檔案已另存為: {excel_result["excel_new_name"]}')
+                    self.logger.info(f"Excel 檔案複製成功: {excel_result['excel_new_name']}")
                 else:
-                    self.logger.info(f"ℹ️ {excel_result['message']}")
+                    self.logger.info(f"{excel_result['message']}")
                 
                 self.logger.info("=" * 60)
                 
                 # 確保最終統計正確
                 self.update_progress(100, 'completed', '下載完成！', stats, files)
-                add_activity('下載 SFTP 檔案', 'success', 
-                            f'成功下載 {stats["downloaded"]} 個檔案')
+                
+                # 記錄到最近活動
+                add_activity('完成檔案下載', 'success', 
+                            f'成功下載 {stats["downloaded"]} 個檔案，任務 {self.task_id}')
+                
+                # 同時記錄到最近比對記錄
+                add_comparison(self.task_id, '完成檔案下載', 'completed', stats["downloaded"])
                 
             except Exception as e:
                 error_msg = str(e)
                 current_stats = self.downloader.get_download_stats()
                 self.update_progress(0, 'error', f'下載失敗：{error_msg}', 
                                 stats=current_stats['stats'])
-                add_activity('下載失敗', 'error', error_msg)
+                
+                # 記錄失敗到最近活動
+                add_activity('檔案下載失敗', 'error', f'{error_msg}，任務 {self.task_id}')
+                
+                # 同時記錄失敗到最近比對記錄
+                add_comparison(self.task_id, '檔案下載失敗', 'error', 0)
                 raise
                 
         except Exception as e:
             error_msg = str(e)
             self.update_progress(0, 'error', f'處理失敗：{error_msg}')
-            add_activity('下載失敗', 'error', error_msg)
+            
+            # 記錄失敗到最近活動
+            add_activity('檔案下載失敗', 'error', f'{error_msg}，任務 {self.task_id}')
+            
+            # 同時記錄失敗到最近比對記錄
+            add_comparison(self.task_id, '檔案下載失敗', 'error', 0)
             raise
 
     def _handle_excel_copy_rename(self, excel_file, download_dir):
@@ -864,12 +888,6 @@ def index():
     """首頁"""
     return render_template('index.html')
 
-@app.route('/download')
-@global_login_required
-def download_page():
-    """下載頁面"""
-    return render_template('download.html')
-
 @app.route('/compare')
 @global_login_required
 def compare_page():
@@ -1053,13 +1071,248 @@ def process_compare():
 
 @app.route('/api/status/<task_id>')
 def get_status(task_id):
-    """取得任務狀態 API"""
-    status = processing_status.get(task_id, {
+    """取得任務狀態 API - 增強版，支援從文件系統恢復任務狀態"""
+    
+    # 1. 首先檢查記憶體中的狀態
+    if task_id in processing_status:
+        return jsonify(processing_status[task_id])
+    
+    # 2. 如果記憶體中沒有，嘗試從文件系統恢復任務狀態
+    try:
+        task_status = recover_task_status_from_filesystem(task_id)
+        if task_status:
+            # 將恢復的狀態存回記憶體中，供後續使用
+            processing_status[task_id] = task_status
+            return jsonify(task_status)
+    except Exception as e:
+        app.logger.error(f'Error recovering task status for {task_id}: {str(e)}')
+    
+    # 3. 如果都找不到，返回 not_found 狀態
+    return jsonify({
         'progress': 0,
         'status': 'not_found',
-        'message': '找不到任務'
+        'message': '找不到任務',
+        'task_id': task_id
     })
-    return jsonify(status)
+
+def recover_task_status_from_filesystem(task_id):
+    """從文件系統恢復任務狀態"""
+    if not task_id.startswith('task_'):
+        return None
+    
+    # 檢查下載目錄
+    download_dir = os.path.join('downloads', task_id)
+    compare_dir = os.path.join('compare_results', task_id)
+    
+    task_info = {
+        'task_id': task_id,
+        'progress': 100,
+        'status': 'completed',
+        'message': '任務已完成（從文件系統恢復）',
+        'results': {}
+    }
+    
+    # 檢查是否有下載結果
+    if os.path.exists(download_dir):
+        app.logger.info(f'Found download directory for task {task_id}')
+        
+        # 統計下載的文件
+        download_stats = analyze_download_directory(download_dir)
+        task_info['results']['stats'] = download_stats['stats']
+        task_info['results']['files'] = download_stats['files']
+        
+        # 查找下載報告
+        report_files = [f for f in os.listdir(download_dir) if f.endswith('_report.xlsx')]
+        if report_files:
+            task_info['results']['download_report'] = os.path.join(download_dir, report_files[0])
+        
+        # 生成文件夾結構
+        task_info['results']['folder_structure'] = generate_folder_structure_from_directory(download_dir)
+        
+        # 如果只有下載，沒有比較，就返回下載完成狀態
+        if not os.path.exists(compare_dir):
+            task_info['message'] = f'下載完成，共 {download_stats["stats"]["downloaded"]} 個文件'
+            return task_info
+    
+    # 檢查是否有比較結果
+    if os.path.exists(compare_dir):
+        app.logger.info(f'Found compare directory for task {task_id}')
+        
+        # 分析比較結果
+        compare_stats = analyze_compare_directory(compare_dir)
+        task_info['results']['compare_results'] = compare_stats
+        
+        # 查找總摘要報告
+        summary_files = [f for f in os.listdir(compare_dir) 
+                        if f in ['all_scenarios_summary.xlsx', 'all_scenarios_compare.xlsx']]
+        if summary_files:
+            task_info['results']['summary_report'] = os.path.join(compare_dir, summary_files[0])
+        
+        # 更新訊息
+        total_scenarios = len([d for d in os.listdir(compare_dir) 
+                             if os.path.isdir(os.path.join(compare_dir, d))])
+        task_info['message'] = f'比較完成，處理了 {total_scenarios} 個比較情境'
+    
+    # 如果沒有找到任何相關目錄，返回 None
+    if not os.path.exists(download_dir) and not os.path.exists(compare_dir):
+        return None
+    
+    return task_info
+
+def generate_folder_structure_from_directory(directory):
+    """從目錄生成文件夾結構"""
+    structure = {}
+    
+    try:
+        for root, dirs, files in os.walk(directory):
+            # 獲取相對路徑
+            rel_path = os.path.relpath(root, directory)
+            if rel_path == '.':
+                current_level = structure
+            else:
+                # 構建嵌套結構
+                path_parts = rel_path.split(os.sep)
+                current_level = structure
+                for part in path_parts:
+                    if part not in current_level:
+                        current_level[part] = {}
+                    current_level = current_level[part]
+            
+            # 添加文件
+            for file in files:
+                if not file.endswith('_report.xlsx'):  # 跳過報告文件
+                    file_path = os.path.join(root, file)
+                    current_level[file] = os.path.relpath(file_path, os.getcwd())
+    
+    except Exception as e:
+        app.logger.error(f'Error generating folder structure: {str(e)}')
+    
+    return structure
+
+@app.route('/api/check-task-exists/<task_id>')
+def check_task_exists(task_id):
+    """檢查任務是否存在於文件系統中"""
+    try:
+        download_dir = os.path.join('downloads', task_id)
+        compare_dir = os.path.join('compare_results', task_id)
+        
+        exists_info = {
+            'task_id': task_id,
+            'exists': False,
+            'has_download': False,
+            'has_compare': False,
+            'paths': []
+        }
+        
+        if os.path.exists(download_dir):
+            exists_info['has_download'] = True
+            exists_info['exists'] = True
+            exists_info['paths'].append(f'downloads/{task_id}')
+        
+        if os.path.exists(compare_dir):
+            exists_info['has_compare'] = True
+            exists_info['exists'] = True  
+            exists_info['paths'].append(f'compare_results/{task_id}')
+        
+        return jsonify(exists_info)
+        
+    except Exception as e:
+        return jsonify({
+            'task_id': task_id,
+            'exists': False,
+            'error': str(e)
+        })
+        
+def analyze_compare_directory(compare_dir):
+    """分析比較結果目錄"""
+    compare_results = {}
+    
+    try:
+        # 檢查各個比較情境目錄
+        scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
+        
+        for scenario in scenarios:
+            scenario_dir = os.path.join(compare_dir, scenario)
+            if os.path.exists(scenario_dir):
+                # 統計該情境下的模組數量
+                module_count = count_modules_in_scenario(scenario_dir)
+                compare_results[scenario] = {
+                    'success': module_count,
+                    'failed': 0,  # 從文件系統恢復時很難確定失敗數量
+                    'modules': [],  # 可以進一步實現詳細模組列表
+                    'failed_modules': []
+                }
+    
+    except Exception as e:
+        app.logger.error(f'Error analyzing compare directory {compare_dir}: {str(e)}')
+    
+    return compare_results
+
+def count_modules_in_scenario(scenario_dir):
+    """計算情境目錄下的模組數量"""
+    try:
+        # 計算有比較報告的模組數量
+        module_count = 0
+        for root, dirs, files in os.walk(scenario_dir):
+            # 計算xlsx文件數量作為模組數量的參考
+            xlsx_files = [f for f in files if f.endswith('.xlsx') and not f.startswith('all_')]
+            module_count += len(xlsx_files)
+        return module_count
+    except Exception:
+        return 0
+
+def analyze_download_directory(download_dir):
+    """分析下載目錄，統計文件信息"""
+    stats = {'total': 0, 'downloaded': 0, 'skipped': 0, 'failed': 0}
+    files = {'downloaded': [], 'skipped': [], 'failed': []}
+    
+    try:
+        # 遍歷下載目錄
+        for root, dirs, file_list in os.walk(download_dir):
+            for file in file_list:
+                # 跳過報告文件
+                if file.endswith('_report.xlsx'):
+                    continue
+                
+                file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(file_path, download_dir)
+                
+                # 構建文件信息
+                file_info = {
+                    'name': file,
+                    'path': file_path,
+                    'ftp_path': rel_path,  # 使用相對路徑作為FTP路徑
+                    'size': os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                }
+                
+                files['downloaded'].append(file_info)
+                stats['downloaded'] += 1
+        
+        stats['total'] = stats['downloaded']
+        
+        # 嘗試從報告文件中獲取更準確的統計
+        report_files = [f for f in os.listdir(download_dir) if f.endswith('_report.xlsx')]
+        if report_files:
+            try:
+                report_path = os.path.join(download_dir, report_files[0])
+                import pandas as pd
+                df = pd.read_excel(report_path)
+                
+                # 從報告中獲取更準確的統計
+                if 'status' in df.columns:
+                    status_counts = df['status'].value_counts()
+                    stats['downloaded'] = status_counts.get('downloaded', 0)
+                    stats['skipped'] = status_counts.get('skipped', 0)
+                    stats['failed'] = status_counts.get('failed', 0)
+                    stats['total'] = len(df)
+                    
+            except Exception as e:
+                app.logger.warning(f'Could not read download report: {str(e)}')
+        
+    except Exception as e:
+        app.logger.error(f'Error analyzing download directory {download_dir}: {str(e)}')
+    
+    return {'stats': stats, 'files': files}
 
 @app.route('/api/list-directories')
 def list_directories():
@@ -1177,6 +1430,16 @@ def infer_activities_from_filesystem():
         app.logger.warning(f'Error inferring activities: {e}')
     
     return activities
+
+@app.route('/download')
+@global_login_required
+def download_page():
+    """下載頁面 - 支援 task_id 參數"""
+    # 獲取 task_id 參數
+    task_id = request.args.get('task_id')
+    
+    # 如果有 task_id，傳遞給模板
+    return render_template('download.html', task_id=task_id)
     
 @app.route('/api/recent-comparisons')
 def get_recent_comparisons():

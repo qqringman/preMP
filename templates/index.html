@@ -202,6 +202,48 @@
     margin-bottom: 12px;
 }
 
+/* 時間線操作按鈕 */
+.timeline-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-light);
+}
+
+.timeline-action-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.timeline-action-btn:hover {
+    background: var(--nordic-blue);
+    color: white;
+    border-color: var(--nordic-blue);
+    text-decoration: none;
+}
+
+.timeline-action-btn.primary {
+    background: var(--nordic-blue);
+    color: white;
+    border-color: var(--nordic-blue);
+}
+
+.timeline-action-btn.primary:hover {
+    background: var(--nordic-blue-dark);
+    border-color: var(--nordic-blue-dark);
+}
+
 /* 時間線項目詳情 */
 .timeline-details {
     display: none;
@@ -401,6 +443,10 @@
     
     .timeline-meta {
         grid-template-columns: 1fr;
+    }
+    
+    .timeline-actions {
+        flex-wrap: wrap;
     }
 }
 </style>
@@ -733,20 +779,25 @@ function initTimelineControls() {
 async function loadStatistics() {
     try {
         const stats = await utils.apiRequest('/api/statistics');
-        animateNumber('totalProcessed', stats.total || 1234);
-        animateNumber('todayProcessed', stats.today || 56);
-        animateNumber('successRate', stats.successRate || 98, '%');
+        animateNumber('totalProcessed', stats.total || 0);
+        animateNumber('todayProcessed', stats.today || 0);
+        animateNumber('successRate', stats.successRate || 0, '%');
     } catch (error) {
-        animateNumber('totalProcessed', 1234);
-        animateNumber('todayProcessed', 56);
-        animateNumber('successRate', 98, '%');
+        console.error('Load statistics error:', error);
+        // 失敗時不顯示數字，保持為 0
+        animateNumber('totalProcessed', 0);
+        animateNumber('todayProcessed', 0);
+        animateNumber('successRate', 0, '%');
     }
 }
 
 // 數字動畫效果
 function animateNumber(elementId, target, suffix = '') {
     const element = document.getElementById(elementId);
-    if (!element) return;
+    if (!element || target === 0) {
+        if (element) element.textContent = '0' + suffix;
+        return;
+    }
     
     const duration = 1000;
     const start = 0;
@@ -767,20 +818,43 @@ function animateNumber(elementId, target, suffix = '') {
 async function loadRecentActivities() {
     try {
         const activities = await utils.apiRequest('/api/recent-activities');
-        allActivities = activities.map(activity => ({
-            id: activity.id || utils.generateId(),
-            timestamp: new Date(activity.timestamp),
-            action: activity.action,
-            status: activity.status || 'success',
-            details: activity.details,
-            type: determineActivityType(activity), // 修正類型判斷
-            moduleCount: activity.moduleCount || null,
-            fileSize: activity.fileSize || null,
-            duration: activity.duration || null
-        }));
+        
+        if (activities && activities.length > 0) {
+            allActivities = activities.map(activity => {
+                console.log('處理活動:', activity);
+                
+                // 先從 task_id 欄位取值，如果沒有就從 details 中提取
+                let taskId = activity.task_id;
+                console.log('原始 task_id:', taskId);
+                
+                if (!taskId && activity.details) {
+                    taskId = extractTaskIdFromDetails(activity.details);
+                    console.log('從 details 提取的 task_id:', taskId);
+                }
+                
+                const processedActivity = {
+                    id: activity.id || utils.generateId(),
+                    timestamp: new Date(activity.timestamp),
+                    action: activity.action,
+                    status: activity.status || 'success',
+                    details: activity.details,
+                    type: determineActivityType(activity),
+                    moduleCount: activity.moduleCount || null,
+                    fileSize: activity.fileSize || null,
+                    duration: activity.duration || null,
+                    task_id: taskId,
+                    resultUrl: activity.resultUrl || null
+                };
+                
+                console.log('最終處理的活動:', processedActivity);
+                return processedActivity;
+            });
+        } else {
+            allActivities = [];
+        }
     } catch (error) {
-        console.warn('使用預設活動數據:', error);
-        loadDefaultActivities();
+        console.error('Load recent activities error:', error);
+        allActivities = [];
     }
     
     filterActivities();
@@ -791,83 +865,10 @@ function determineActivityType(activity) {
     if (activity.type) return activity.type;
     
     const action = activity.action.toLowerCase();
-    if (action.includes('下載')) return 'download';
-    if (action.includes('比對') || action.includes('vs')) return 'compare';
-    if (action.includes('一步到位')) return 'one-step';
+    if (action.includes('下載') || action.includes('download')) return 'download';
+    if (action.includes('比對') || action.includes('比較') || action.includes('vs') || action.includes('compare')) return 'compare';
+    if (action.includes('一步到位') || action.includes('one-step')) return 'one-step';
     return 'general';
-}
-
-// 載入預設活動數據
-function loadDefaultActivities() {
-    const now = new Date();
-    allActivities = [
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 5 * 60 * 1000),
-            action: '完成一步到位處理',
-            status: 'success',
-            details: '成功處理 15 個模組，完成 3 個比對情境',
-            type: 'one-step',
-            moduleCount: 15,
-            fileSize: '25.3 MB',
-            duration: '2分32秒'
-        },
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 15 * 60 * 1000),
-            action: 'Master vs PreMP 比對',
-            status: 'success',
-            details: '比對 8 個模組，發現 3 處差異',
-            type: 'compare',
-            moduleCount: 8,
-            fileSize: '12.1 MB',
-            duration: '1分15秒'
-        },
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 60 * 60 * 1000),
-            action: '下載 bootcode 模組檔案',
-            status: 'success',
-            details: '從 SFTP 下載 3 個檔案',
-            type: 'download',
-            moduleCount: 3,
-            fileSize: '8.7 MB',
-            duration: '45秒'
-        },
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 2 * 60 * 60 * 1000),
-            action: 'PreMP vs Wave 比對',
-            status: 'warning',
-            details: '比對過程中發現格式異常',
-            type: 'compare',
-            moduleCount: 12,
-            fileSize: '18.5 MB',
-            duration: '3分8秒'
-        },
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 4 * 60 * 60 * 1000),
-            action: '打包比對結果',
-            status: 'success',
-            details: '成功打包所有比對結果檔案',
-            type: 'general',
-            moduleCount: null,
-            fileSize: '32.4 MB',
-            duration: '1分2秒'
-        },
-        {
-            id: utils.generateId(),
-            timestamp: new Date(now - 6 * 60 * 60 * 1000),
-            action: '下載失敗重試',
-            status: 'error',
-            details: 'SFTP 連線超時，自動重試中',
-            type: 'download',
-            moduleCount: 1,
-            fileSize: null,
-            duration: null
-        }
-    ];
 }
 
 // 篩選活動
@@ -988,25 +989,33 @@ function createTimelineItem(activity, index) {
     const typeTag = getTypeTag(activity.type);
     const timeAgo = formatTimeAgo(activity.timestamp);
     
+    // 生成操作按鈕
+    const actionButtons = getActionButtons(activity);
+    
     return `
         <div class="timeline-item" style="--item-index: ${index}" data-id="${activity.id}">
             <div class="timeline-dot ${activity.status}"></div>
-            <div class="timeline-content" onclick="toggleTimelineDetails('${activity.id}')">
-                <div class="timeline-time">
-                    <i class="fas fa-clock"></i>
-                    ${timeAgo}
-                    ${typeTag}
-                </div>
-                <div class="timeline-title">
-                    ${activity.action}
-                    <div>
-                        <span class="text-${getStatusColor(activity.status)} mr-2">
-                            <i class="fas ${statusIcon}"></i>
-                        </span>
-                        <i class="fas fa-chevron-down timeline-toggle"></i>
+            <div class="timeline-content">
+                <div onclick="toggleTimelineDetails('${activity.id}')" style="cursor: pointer;">
+                    <div class="timeline-time">
+                        <i class="fas fa-clock"></i>
+                        ${timeAgo}
+                        ${typeTag}
                     </div>
+                    <div class="timeline-title">
+                        ${activity.action}
+                        <div>
+                            <span class="text-${getStatusColor(activity.status)} mr-2">
+                                <i class="fas ${statusIcon}"></i>
+                            </span>
+                            <i class="fas fa-chevron-down timeline-toggle"></i>
+                        </div>
+                    </div>
+                    <div class="timeline-desc">${activity.details}</div>
                 </div>
-                <div class="timeline-desc">${activity.details}</div>
+                
+                <!-- 操作按鈕 -->
+                ${actionButtons ? `<div class="timeline-actions">${actionButtons}</div>` : ''}
                 
                 <div class="timeline-details" id="details-${activity.id}">
                     <div class="timeline-meta">
@@ -1040,6 +1049,169 @@ function createTimelineItem(activity, index) {
             </div>
         </div>
     `;
+}
+
+function extractTaskIdFromDetails(details) {
+    if (!details) return null;
+    
+    console.log('提取 task_id，原始 details:', details);
+    
+    // 使用正則表達式提取 task_id
+    const match = details.match(/task_\d{8}_\d{6}_[a-zA-Z0-9]+/);
+    console.log('正則匹配結果:', match);
+    
+    const taskId = match ? match[0] : null;
+    console.log('提取到的 task_id:', taskId);
+    
+    return taskId;
+}
+
+// 生成操作按鈕
+function getActionButtons(activity) {
+    console.log('生成按鈕，活動:', activity);
+    console.log('task_id 檢查:', activity.task_id, typeof activity.task_id, !!activity.task_id);
+    
+    let buttons = '';
+    
+    // 根據類型生成查看歷史記錄的按鈕
+    switch (activity.type) {
+        case 'download':
+            if (activity.task_id && activity.task_id.trim() !== '') {
+                console.log('下載活動有 task_id，生成結果按鈕:', activity.task_id);
+                
+                if (activity.status === 'success') {
+                    buttons += `<a href="/download?task_id=${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看下載結果
+                    </a>`;
+                } else if (activity.status === 'error') {
+                    buttons += `<a href="/download?task_id=${activity.task_id}" class="timeline-action-btn">
+                        <i class="fas fa-exclamation-circle"></i> 查看錯誤詳情
+                    </a>`;
+                } else if (activity.status === 'warning') {
+                    buttons += `<a href="/download?task_id=${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看下載結果
+                    </a>`;
+                }
+                
+                if (activity.resultUrl) {
+                    buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
+                        <i class="fas fa-download"></i> 下載檔案
+                    </a>`;
+                }
+            } else {
+                // 沒有 task_id 時使用傳統的歷史記錄連結
+                console.log('下載活動無 task_id，使用傳統連結');
+                
+                if (activity.status === 'success') {
+                    buttons += `<a href="/history/download/${activity.id}" class="timeline-action-btn primary">
+                        <i class="fas fa-folder-open"></i> 查看下載記錄
+                    </a>`;
+                } else if (activity.status === 'error') {
+                    buttons += `<a href="/history/download/${activity.id}" class="timeline-action-btn">
+                        <i class="fas fa-exclamation-circle"></i> 查看錯誤詳情
+                    </a>`;
+                }
+                
+                if (activity.resultUrl) {
+                    buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
+                        <i class="fas fa-download"></i> 下載檔案
+                    </a>`;
+                }
+            }
+            break;
+            
+        case 'compare':
+            if (activity.task_id && activity.task_id.trim() !== '') {
+                console.log('比對活動有 task_id，生成結果按鈕:', activity.task_id);
+                
+                if (activity.status === 'success') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看比對結果
+                    </a>`;
+                } else if (activity.status === 'error') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn">
+                        <i class="fas fa-exclamation-circle"></i> 查看錯誤詳情
+                    </a>`;
+                } else if (activity.status === 'warning') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看比對結果
+                    </a>`;
+                }
+                
+                if (activity.resultUrl) {
+                    buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
+                        <i class="fas fa-download"></i> 下載報告
+                    </a>`;
+                }
+            } else {
+                console.log('比對活動無 task_id，顯示禁用按鈕');
+                buttons += `<span class="timeline-action-btn disabled">
+                    <i class="fas fa-info-circle"></i> 結果準備中
+                </span>`;
+            }
+            break;
+            
+        case 'one-step':
+            if (activity.task_id && activity.task_id.trim() !== '') {
+                console.log('一步到位活動有 task_id，生成結果按鈕:', activity.task_id);
+                
+                if (activity.status === 'success') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看執行結果
+                    </a>`;
+                } else if (activity.status === 'error') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn">
+                        <i class="fas fa-exclamation-circle"></i> 查看錯誤詳情
+                    </a>`;
+                } else if (activity.status === 'warning') {
+                    buttons += `<a href="/results/${activity.task_id}" class="timeline-action-btn primary">
+                        <i class="fas fa-chart-line"></i> 查看執行結果
+                    </a>`;
+                }
+                
+                if (activity.resultUrl) {
+                    buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
+                        <i class="fas fa-download"></i> 下載完整報告
+                    </a>`;
+                }
+            } else {
+                // 沒有 task_id 時使用傳統的歷史記錄連結
+                console.log('一步到位活動無 task_id，使用傳統連結');
+                
+                if (activity.status === 'success') {
+                    buttons += `<a href="/history/onestep/${activity.id}" class="timeline-action-btn primary">
+                        <i class="fas fa-list-alt"></i> 查看執行記錄
+                    </a>`;
+                } else if (activity.status === 'error') {
+                    buttons += `<a href="/history/onestep/${activity.id}" class="timeline-action-btn">
+                        <i class="fas fa-exclamation-circle"></i> 查看執行記錄
+                    </a>`;
+                }
+                
+                if (activity.resultUrl) {
+                    buttons += `<a href="${activity.resultUrl}" class="timeline-action-btn">
+                        <i class="fas fa-download"></i> 下載完整報告
+                    </a>`;
+                }
+            }
+            break;
+            
+        case 'general':
+            buttons += `<a href="/history/system/${activity.id}" class="timeline-action-btn">
+                <i class="fas fa-list"></i> 查看操作記錄
+            </a>`;
+            break;
+            
+        default:
+            console.log('未知的活動類型:', activity.type);
+            buttons += `<a href="/history/general/${activity.id}" class="timeline-action-btn">
+                <i class="fas fa-info-circle"></i> 查看詳情
+            </a>`;
+            break;
+    }
+    
+    console.log('生成的按鈕 HTML:', buttons);
+    return buttons;
 }
 
 // 取得狀態圖示
@@ -1121,7 +1293,7 @@ function toggleTimelineDetails(id) {
 // 添加時間線事件
 function addTimelineEvents() {
     // 阻止點擊詳情時觸發toggle
-    document.querySelectorAll('.timeline-details').forEach(el => {
+    document.querySelectorAll('.timeline-details, .timeline-actions').forEach(el => {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
         });

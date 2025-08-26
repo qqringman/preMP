@@ -5,6 +5,122 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/download.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css') }}">
+<style>
+    /* 任務結果顯示樣式 */
+    .task-results-container {
+        min-height: 100vh;
+        padding: 20px 0;
+    }
+    
+    .loading-container {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        margin-top: 32px;
+    }
+    
+    .loading-spinner {
+        margin-bottom: 24px;
+    }
+    
+    .loading-spinner i {
+        color: #2196F3;
+    }
+    
+    .loading-text {
+        font-size: 1.125rem;
+        color: #5C6BC0;
+        margin: 0;
+    }
+    
+    .error-container {
+        margin-top: 32px;
+    }
+    
+    .alert {
+        padding: 20px 24px;
+        border-radius: 12px;
+        border: 1px solid;
+        margin-bottom: 24px;
+    }
+    
+    .alert-danger {
+        background: #FFEBEE;
+        border-color: #FFCDD2;
+        color: #C62828;
+    }
+    
+    .alert-warning {
+        background: #FFF3E0;
+        border-color: #FFE0B2;
+        color: #E65100;
+    }
+    
+    .alert h4 {
+        margin-top: 0;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .alert p {
+        margin: 0;
+    }
+    
+    .error-actions, .result-actions {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .result-actions {
+        margin-top: 32px;
+    }
+    
+    .refresh-info {
+        text-align: center;
+        margin-top: 32px;
+        padding: 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    }
+    
+    .refresh-info p {
+        color: #5C6BC0;
+        margin-bottom: 16px;
+    }
+    
+    .refresh-info i {
+        color: #2196F3;
+    }
+    
+    .text-success {
+        color: #4CAF50 !important;
+    }
+    
+    .text-danger {
+        color: #F44336 !important;
+    }
+    
+    /* 響應式設計 */
+    @media (max-width: 768px) {
+        .error-actions, .result-actions {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .error-actions .btn, 
+        .result-actions .btn {
+            width: 100%;
+            max-width: 300px;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}

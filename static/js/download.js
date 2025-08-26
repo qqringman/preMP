@@ -43,7 +43,337 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         toggleSftpConfig(useDefaultConfig.checked);
     }
+
+    // 檢查 URL 參數中是否有 task_id
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('task_id');
+    
+    if (taskId) {
+        console.log('檢測到 task_id:', taskId);
+        // 顯示結果頁面
+        showTaskResults(taskId);
+    } else {
+        console.log('沒有檢測到 task_id，顯示下載表單');
+        // 初始化下載表單
+        initializeDownloadForm();
+    }
+
 });
+
+// 初始化下載表單（原有功能）
+function initializeDownloadForm() {
+    initializeTabs();
+    initializeUploadAreas();
+    initializeConfigToggles();
+    updateDownloadButton();
+    
+    // 修正預設設定開關
+    const useDefaultConfig = document.getElementById('useDefaultConfig');
+    if (useDefaultConfig) {
+        useDefaultConfig.addEventListener('change', (e) => {
+            toggleSftpConfig(e.target.checked);
+        });
+        toggleSftpConfig(useDefaultConfig.checked);
+    }
+}
+
+// 顯示任務結果
+async function showTaskResults(taskId) {
+    try {
+        // 隱藏下載表單
+        const downloadForm = document.getElementById('downloadForm');
+        if (downloadForm) {
+            downloadForm.style.display = 'none';
+        }
+        
+        // 顯示載入中
+        showResultsLoading(taskId);
+        
+        // 獲取任務狀態
+        const status = await utils.apiRequest(`/api/status/${taskId}`);
+        
+        if (status.status === 'completed') {
+            // 任務完成，顯示結果
+            displayTaskResults(taskId, status);
+        } else if (status.status === 'error') {
+            // 任務失敗，顯示錯誤
+            displayTaskError(taskId, status);
+        } else if (status.status === 'not_found') {
+            // 任務不存在
+            displayTaskNotFound(taskId);
+        } else {
+            // 任務進行中，顯示進度
+            displayTaskProgress(taskId, status);
+        }
+        
+    } catch (error) {
+        console.error('載入任務結果失敗:', error);
+        displayTaskError(taskId, { message: error.message });
+    }
+}
+
+// 顯示任務進度
+function displayTaskProgress(taskId, status) {
+    const container = document.querySelector('.container');
+    const progress = status.progress || 0;
+    const stats = status.stats || {};
+    
+    const progressHtml = `
+        <div class="task-results-container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-spinner fa-spin"></i> 正在下載
+                </h1>
+                <p class="page-subtitle">任務 ID: ${taskId}</p>
+                <p class="page-subtitle">${status.message || '請稍候，系統正在處理您的請求...'}</p>
+            </div>
+            
+            <!-- 進度統計 -->
+            <div class="progress-stats">
+                <div class="stat-card blue">
+                    <div class="stat-icon">
+                        <i class="fas fa-file"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.total || 0}</div>
+                        <div class="stat-label">總檔案數</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card success">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.downloaded || 0}</div>
+                        <div class="stat-label">已下載</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card warning">
+                    <div class="stat-icon">
+                        <i class="fas fa-forward"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.skipped || 0}</div>
+                        <div class="stat-label">已跳過</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card danger">
+                    <div class="stat-icon">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">${stats.failed || 0}</div>
+                        <div class="stat-label">失敗</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 總進度條 -->
+            <div class="progress-bar-wrapper">
+                <div class="progress-header">
+                    <div class="progress-title">下載進度</div>
+                    <div class="progress-percentage">${Math.round(progress)}%</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${progress}%"></div>
+                </div>
+            </div>
+            
+            <!-- 自動重新整理提示 -->
+            <div class="refresh-info">
+                <p><i class="fas fa-sync-alt fa-spin"></i> 頁面將每 3 秒自動重新整理以更新進度</p>
+                <button class="btn btn-secondary" onclick="location.reload()">
+                    <i class="fas fa-redo"></i> 手動重新整理
+                </button>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = progressHtml;
+    
+    // 設定自動重新整理
+    setTimeout(() => {
+        location.reload();
+    }, 3000);
+}
+
+// 顯示任務不存在
+function displayTaskNotFound(taskId) {
+    const container = document.querySelector('.container');
+    
+    const notFoundHtml = `
+        <div class="task-results-container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-search"></i> 找不到任務
+                </h1>
+                <p class="page-subtitle">任務 ID: ${taskId}</p>
+            </div>
+            
+            <div class="error-container">
+                <div class="alert alert-warning">
+                    <h4><i class="fas fa-info-circle"></i> 任務不存在</h4>
+                    <p>找不到指定的下載任務，任務可能已過期或 ID 不正確。</p>
+                </div>
+                
+                <div class="error-actions">
+                    <button class="btn btn-primary" onclick="window.location.href='/download'">
+                        <i class="fas fa-download"></i> 開始新下載
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='/'">
+                        <i class="fas fa-home"></i> 返回首頁
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = notFoundHtml;
+}
+
+// 顯示任務錯誤
+function displayTaskError(taskId, status) {
+    const container = document.querySelector('.container');
+    
+    const errorHtml = `
+        <div class="task-results-container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-exclamation-circle text-danger"></i> 下載失敗
+                </h1>
+                <p class="page-subtitle">任務 ID: ${taskId}</p>
+            </div>
+            
+            <div class="error-container">
+                <div class="alert alert-danger">
+                    <h4><i class="fas fa-times-circle"></i> 錯誤訊息</h4>
+                    <p>${status.message || '處理過程中發生未知錯誤'}</p>
+                </div>
+                
+                <div class="error-actions">
+                    <button class="btn btn-primary" onclick="window.location.href='/download'">
+                        <i class="fas fa-redo"></i> 重新下載
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.history.back()">
+                        <i class="fas fa-arrow-left"></i> 返回上一頁
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = errorHtml;
+}
+
+// 顯示任務結果
+function displayTaskResults(taskId, status) {
+    const container = document.querySelector('.container');
+    const results = status.results || {};
+    const stats = results.stats || {};
+    const files = results.files || {};
+    
+    // 更新全域變數以支援現有功能
+    downloadedFilesList = files.downloaded || [];
+    skippedFilesList = files.skipped || [];
+    failedFilesList = files.failed || [];
+    
+    const resultsHtml = `
+        <div class="task-results-container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-check-circle text-success"></i> 下載完成
+                </h1>
+                <p class="page-subtitle">任務 ID: ${taskId}</p>
+                <p class="page-subtitle">${status.message || '所有檔案已成功下載並分類整理'}</p>
+            </div>
+            
+            <!-- 結果摘要 -->
+            <div class="result-summary">
+                ${generateResultSummary(stats)}
+            </div>
+            
+            <!-- 操作按鈕 -->
+            <div class="result-actions">
+                <button class="btn btn-primary" onclick="window.location.href='/compare'">
+                    <i class="fas fa-code-compare"></i> 繼續比對
+                </button>
+                <button class="btn btn-secondary" onclick="viewTaskReport('${taskId}')">
+                    <i class="fas fa-file-alt"></i> 查看下載報表
+                </button>
+                <button class="btn btn-secondary" onclick="window.location.href='/download'">
+                    <i class="fas fa-redo"></i> 新的下載
+                </button>
+            </div>
+            
+            <!-- 檔案結構預覽 -->
+            ${results.folder_structure ? generateFolderTreeSection(results.folder_structure) : ''}
+        </div>
+    `;
+    
+    container.innerHTML = resultsHtml;
+}
+
+// 查看任務報表
+function viewTaskReport(taskId) {
+    window.location.href = `/api/download-report/${taskId}`;
+}
+
+
+// 生成資料夾樹區塊
+function generateFolderTreeSection(folderStructure) {
+    return `
+        <div class="step-section mt-4">
+            <div class="step-header">
+                <div class="step-number">
+                    <i class="fas fa-folder-tree"></i>
+                </div>
+                <div class="step-content">
+                    <h2 class="step-title">下載的檔案結構</h2>
+                    <p class="step-subtitle">雙擊檔案可預覽內容</p>
+                </div>
+            </div>
+            <div class="section-body">
+                <div class="structure-actions mb-3">
+                    <button class="btn btn-small" id="toggleFoldersBtn" onclick="toggleAllFolders()" title="展開/摺疊全部">
+                        <i class="fas fa-expand-alt"></i>
+                        <span id="toggleFoldersText">摺疊全部</span>
+                    </button>
+                </div>
+                <div class="file-tree-container" id="folderTree">
+                    ${buildTreeHTML(folderStructure, '', '')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 顯示結果載入中
+function showResultsLoading(taskId) {
+    const container = document.querySelector('.container');
+    
+    const loadingHtml = `
+        <div class="task-results-container">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-download"></i> 下載結果
+                </h1>
+                <p class="page-subtitle">任務 ID: ${taskId}</p>
+            </div>
+            
+            <div class="loading-container">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin fa-3x"></i>
+                </div>
+                <p class="loading-text">正在載入結果...</p>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = loadingHtml;
+}
 
 // 綁定函數到 window
 function bindWindowFunctions() {
@@ -3009,4 +3339,135 @@ function validateStats(stats) {
     }
     
     return stats;
+}
+
+// 更新 download.js 中的任務顯示函數
+
+// 顯示任務不存在 - 使用新的美化樣式
+function displayTaskNotFound(taskId) {
+    const container = document.querySelector('.container');
+    
+    const notFoundHtml = `
+        <div class="task-results-container">
+            <div class="task-not-found-container">
+                <div class="not-found-illustration">
+                    <i class="fas fa-search main-icon"></i>
+                    <div class="floating-elements">
+                        <i class="fas fa-file-alt element"></i>
+                        <i class="fas fa-folder element"></i>
+                        <i class="fas fa-question element"></i>
+                        <i class="fas fa-exclamation element"></i>
+                    </div>
+                </div>
+                
+                <div class="not-found-content">
+                    <h1 class="not-found-title">找不到任務</h1>
+                    <p class="not-found-subtitle">很抱歉，我們無法找到您要查看的任務</p>
+                    
+                    <div class="task-id-display">
+                        任務 ID: ${taskId}
+                    </div>
+                    
+                    <p class="not-found-description">
+                        系統在記錄中未找到此任務ID，這可能是由以下幾種原因造成的：
+                    </p>
+                    
+                    <div class="not-found-reasons">
+                        <h4><i class="fas fa-list-ul"></i> 可能的原因：</h4>
+                        <ul>
+                            <li>任務已過期或被系統清理</li>
+                            <li>任務ID輸入錯誤或格式不正確</li>
+                            <li>系統重啟後暫存記錄丟失</li>
+                            <li>任務尚未完成或正在處理中</li>
+                            <li>網路連接問題導致無法獲取任務狀態</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="not-found-actions">
+                        <a href="/download" class="btn-not-found btn-primary-nf">
+                            <i class="fas fa-download"></i> 開始新下載
+                        </a>
+                        <a href="/" class="btn-not-found btn-secondary-nf">
+                            <i class="fas fa-home"></i> 返回首頁
+                        </a>
+                        <button onclick="location.reload()" class="btn-not-found btn-info-nf">
+                            <i class="fas fa-sync-alt"></i> 重新載入
+                        </button>
+                    </div>
+                    
+                    <div class="help-section">
+                        <h4><i class="fas fa-lightbulb"></i> 建議解決方案</h4>
+                        <p>
+                            如果您確信此任務應該存在，請嘗試重新載入頁面或返回首頁查看最近的任務記錄。
+                            您也可以開始一個新的下載任務。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = notFoundHtml;
+}
+
+// 顯示任務錯誤 - 也使用類似的美化樣式
+function displayTaskError(taskId, status) {
+    const container = document.querySelector('.container');
+    
+    const errorHtml = `
+        <div class="task-results-container">
+            <div class="task-not-found-container">
+                <div class="not-found-illustration">
+                    <i class="fas fa-exclamation-triangle main-icon" style="color: #e74c3c;"></i>
+                    <div class="floating-elements">
+                        <i class="fas fa-times element"></i>
+                        <i class="fas fa-bug element"></i>
+                        <i class="fas fa-warning element"></i>
+                        <i class="fas fa-tools element"></i>
+                    </div>
+                </div>
+                
+                <div class="not-found-content">
+                    <h1 class="not-found-title" style="background: linear-gradient(45deg, #e74c3c, #c0392b); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        任務執行失敗
+                    </h1>
+                    <p class="not-found-subtitle">任務在執行過程中遇到錯誤</p>
+                    
+                    <div class="task-id-display">
+                        任務 ID: ${taskId}
+                    </div>
+                    
+                    <div class="alert alert-danger" style="background: #ffebee; border: 2px solid #ffcdd2; color: #c62828; padding: 20px; border-radius: 12px; margin: 24px 0;">
+                        <h4><i class="fas fa-times-circle"></i> 錯誤訊息</h4>
+                        <p style="margin: 8px 0 0 0;">${status.message || '處理過程中發生未知錯誤'}</p>
+                    </div>
+                    
+                    <div class="not-found-reasons">
+                        <h4><i class="fas fa-tools"></i> 建議處理方式：</h4>
+                        <ul>
+                            <li>檢查網路連接是否穩定</li>
+                            <li>確認SFTP伺服器設定是否正確</li>
+                            <li>檢查Excel檔案格式是否符合要求</li>
+                            <li>稍後重新嘗試執行任務</li>
+                            <li>如問題持續發生，請聯繫系統管理員</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="not-found-actions">
+                        <a href="/download" class="btn-not-found btn-primary-nf">
+                            <i class="fas fa-redo"></i> 重新下載
+                        </a>
+                        <a href="/" class="btn-not-found btn-secondary-nf">
+                            <i class="fas fa-home"></i> 返回首頁
+                        </a>
+                        <button onclick="window.history.back()" class="btn-not-found btn-info-nf">
+                            <i class="fas fa-arrow-left"></i> 返回上一頁
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = errorHtml;
 }
