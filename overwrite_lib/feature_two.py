@@ -132,7 +132,7 @@ class FeatureTwo:
 
     def _add_branch_status_sheet_with_revision(self, output_file: str, output_folder: str, branch_results: List[Dict]):
         """
-        🔥 修正方法：添加分支建立狀態頁籤 - 使用 openpyxl 保留公式
+        🔥 修正方法：添加分支建立狀態頁籤 - 包含 branch_revision 欄位，不影響原有邏輯
         """
         try:
             from openpyxl import load_workbook
@@ -147,11 +147,20 @@ class FeatureTwo:
             
             # 🔥 加入分支建立狀態頁籤
             if branch_results:
-                df_branch = pd.DataFrame(branch_results)
+                # 🔥 為分支結果添加 branch_revision 欄位（如果需要）
+                enhanced_branch_results = []
+                for result in branch_results:
+                    enhanced_result = result.copy()
+                    # 🔥 如果原始結果中沒有 branch_revision，添加空值
+                    if 'branch_revision' not in enhanced_result:
+                        enhanced_result['branch_revision'] = '-'  # 分支建立狀態通常不需要此資訊
+                    enhanced_branch_results.append(enhanced_result)
                 
-                # 🔥 調整欄位順序，在 Project 右邊添加 revision
+                df_branch = pd.DataFrame(enhanced_branch_results)
+                
+                # 🔥 調整欄位順序，在 revision 右邊添加 branch_revision
                 column_order = [
-                    'SN', 'Project', 'revision',  # 🔥 新添加 revision 欄位
+                    'SN', 'Project', 'revision', 'branch_revision',  # 🔥 新增但設為 '-'
                     'target_manifest',      # 🔥 紫底白字
                     'target_branch',        # 🔥 改為小寫，綠底白字
                     'target_type',          # 🔥 改為小寫，綠底白字
@@ -173,9 +182,10 @@ class FeatureTwo:
                 column_order = [col for col in column_order if col in df_branch.columns]
                 df_branch = df_branch[column_order]
             else:
-                # 🔥 空的 DataFrame 結構（包含 revision 欄位）
+                # 🔥 空的 DataFrame 結構（包含 branch_revision 欄位）
                 df_branch = pd.DataFrame(columns=[
-                    'SN', 'Project', 'revision', 'target_manifest', 'target_branch', 'target_type', 'target_branch_link', 
+                    'SN', 'Project', 'revision', 'branch_revision', 'target_manifest', 
+                    'target_branch', 'target_type', 'target_branch_link', 
                     'target_branch_revision', 'Status', 'Message', 'Already_Exists', 'Force_Update',
                     'Remote', 'Gerrit_Server'
                 ])
@@ -194,7 +204,7 @@ class FeatureTwo:
             workbook.save(full_output_path)
             workbook.close()
             
-            self.logger.info("✅ 成功加入包含 revision 欄位的分支建立狀態頁籤（保留公式）")
+            self.logger.info("✅ 成功加入包含 branch_revision 欄位的分支建立狀態頁籤（保留公式）")
             
         except Exception as e:
             self.logger.error(f"加入分支狀態頁籤失敗: {str(e)}")
@@ -238,7 +248,7 @@ class FeatureTwo:
 
     def _format_branch_status_sheet_with_revision(self, worksheet, green_fill, purple_fill, orange_fill, red_fill, white_font):
         """
-        🔥 新方法：格式化分支建立狀態頁籤 - 包含 revision 欄位格式
+        🔥 修正方法：格式化分支建立狀態頁籤 - 包含 branch_revision 欄位格式
         """
         try:
             from openpyxl.styles import Font, PatternFill
@@ -260,8 +270,8 @@ class FeatureTwo:
             # 🔥 紫底白字欄位
             purple_header_columns = ['Remote', 'Gerrit_Server', 'target_manifest']
             
-            # 🔥 深紅底白字欄位（revision 相關）
-            red_header_columns = ['revision', 'target_branch_revision']
+            # 🔥 深紅底白字欄位（revision 相關，包含新的 branch_revision）
+            red_header_columns = ['revision', 'branch_revision', 'target_branch_revision']
             
             # 🔥 橘底白字欄位
             orange_header_columns = ['Force_Update']
@@ -307,7 +317,7 @@ class FeatureTwo:
                             content_cell = worksheet[f"{col_letter}{row_num}"]
                             content_cell.font = black_font
                 
-                # 🔥 深紅底白字標頭（revision 相關欄位）
+                # 🔥 深紅底白字標頭（revision 相關欄位，包含新的 branch_revision）
                 elif header_value in red_header_columns:
                     cell.fill = red_fill
                     cell.font = white_font
@@ -377,15 +387,16 @@ class FeatureTwo:
                             content_cell.fill = status_colors[status]['fill']
                             content_cell.font = status_colors[status]['font']
             
-            self.logger.info("✅ 已設定包含 revision 欄位的分支建立狀態頁籤格式")
+            self.logger.info("✅ 已設定包含 branch_revision 欄位的分支建立狀態頁籤格式")
             
         except Exception as e:
             self.logger.error(f"格式化分支建立狀態頁籤失敗: {str(e)}")
 
+    # 修改 Excel 輸出的欄位順序，在 revision 右方添加 branch_revision
     def _write_excel_unified_basic(self, projects: List[Dict], duplicate_projects: List[Dict], 
-                              output_file: str, output_folder: str = None):
+                          output_file: str, output_folder: str = None):
         """
-        🔥 新方法：統一的基本 Excel 寫入 - 無論是否建立分支都使用相同格式
+        🔥 修正方法：統一的基本 Excel 寫入 - 添加 branch_revision 欄位，保持 revision_diff 公式
         """
         try:
             # 處理輸出檔案路徑
@@ -406,7 +417,7 @@ class FeatureTwo:
             self.logger.info(f"寫入統一格式 Excel 檔案: {full_output_path}")
             
             with pd.ExcelWriter(full_output_path, engine='openpyxl') as writer:
-                # 🔥 頁籤 1: 專案列表（統一格式）
+                # 🔥 頁籤 1: 專案列表（添加 branch_revision 欄位，保持 revision_diff）
                 if projects:
                     # 🔥 重要：移除任何可能存在的 revision_diff 值
                     clean_projects = []
@@ -419,57 +430,55 @@ class FeatureTwo:
                     
                     df_main = pd.DataFrame(clean_projects)
                     
-                    # 🔥 統一欄位順序（新增 target_open_project_link 和 open_project_link 在 branch_link 右方）
+                    # 🔥 修改欄位順序：在 revision 右方添加 branch_revision，保持 revision_diff 在原位置
                     main_column_order = [
-                        'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'source_manifest', 'name', 'path', 
+                        'revision', 'branch_revision',  # 🔥 新增 branch_revision 在 revision 後
+                        'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
-                        'target_open_project_link', 'open_project_link',  # 🔥 新增欄位
+                        'target_branch_revision', 'revision_diff',  # 🔥 保持 revision_diff 在原位置
+                        'target_branch_link', 'branch_link',
+                        'target_open_project_link', 'open_project_link',
                         'groups', 'clone-depth', 'remote'
                     ]
                     
-                    # 添加其他可能存在的欄位（groups, path, source_type 等）
-                    # 🔥 排除不需要匯出的欄位，移除重複的 branch_link
+                    # 添加其他可能存在的欄位
                     excluded_columns = ['effective_revision']
                     for col in df_main.columns:
                         if col not in main_column_order and col not in excluded_columns:
-                            # 🔥 如果是重複的 branch_link，跳過
-                            if col == 'branch_link' and 'branch_link' in main_column_order:
-                                continue
                             main_column_order.append(col)
                     
-                    # 🔥 移除重複的 branch_link，只保留最後面的位置
-                    final_order = []
-                    branch_link_added = False
-                    for col in main_column_order:
-                        if col == 'branch_link':
-                            if not branch_link_added:
-                                final_order.append(col)
-                                branch_link_added = True
-                        else:
-                            final_order.append(col)
-                    
                     # 只保留存在的欄位
-                    main_column_order = [col for col in final_order if col in df_main.columns]
+                    main_column_order = [col for col in main_column_order if col in df_main.columns]
                     df_main = df_main[main_column_order]
                     
-                    # 🔥 在寫入前添加空的 revision_diff 欄位（用於公式）
-                    revision_diff_position = main_column_order.index('target_branch_revision') + 1
-                    df_main.insert(revision_diff_position, 'revision_diff', None)
+                    # 🔥 關鍵修正：確保 revision_diff 欄位存在且在正確位置
+                    if 'revision_diff' not in df_main.columns:
+                        # 在 target_branch_revision 後面插入空的 revision_diff 欄位
+                        if 'target_branch_revision' in df_main.columns:
+                            target_revision_idx = df_main.columns.get_loc('target_branch_revision')
+                            # 在 target_branch_revision 後插入
+                            df_main.insert(target_revision_idx + 1, 'revision_diff', None)
+                        else:
+                            # 如果找不到 target_branch_revision，則在最後添加
+                            df_main['revision_diff'] = None
                 else:
-                    # 空的 DataFrame 結構（移除重複的 branch_link）
+                    # 空的 DataFrame 結構（確保包含所有必要欄位）
                     df_main = pd.DataFrame(columns=[
-                        'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'source_manifest', 'name', 'path', 
+                        'revision', 'branch_revision',  # 🔥 新增
+                        'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
-                        'target_open_project_link', 'open_project_link',  # 🔥 新增欄位
+                        'target_branch_revision', 'revision_diff',  # 🔥 確保 revision_diff 存在
+                        'target_branch_link', 'branch_link',
+                        'target_open_project_link', 'open_project_link',
                         'groups', 'clone-depth', 'remote'
                     ])
                 
                 df_main.to_excel(writer, sheet_name='專案列表', index=False)
                 self.logger.info(f"✅ 專案列表頁籤寫入完成，共 {len(projects)} 筆資料")
                 
-                # 🔥 頁籤 2: 重複專案（統一格式）
+                # 🔥 頁籤 2: 重複專案（同樣處理）
                 if duplicate_projects:
                     # 🔥 重要：移除任何可能存在的 revision_diff 值
                     clean_duplicates = []
@@ -482,49 +491,33 @@ class FeatureTwo:
                     
                     df_dup = pd.DataFrame(clean_duplicates)
                     
-                    # 🔥 重複頁籤也使用相同的欄位順序
+                    # 🔥 重複頁籤使用相同的欄位順序
                     dup_column_order = [
-                        'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
+                        'SN', 'source_manifest', 'name', 'path', 
+                        'revision', 'branch_revision',  # 🔥 新增
+                        'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
-                        'groups', 'clone-depth', 'remote'
-                    ]
-                    
-                    # 🔥 重複頁籤使用相同邏輯（移除重複的 branch_link）
-                    dup_column_order = [
-                        'SN', 'source_manifest', 'name', 'path', 'revision', 'upstream', 'dest-branch',
-                        'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff', 'target_branch_link', 'branch_link',
+                        'target_branch_revision', 'revision_diff',  # 🔥 保持原位置
+                        'target_branch_link', 'branch_link',
                         'groups', 'clone-depth', 'remote'
                     ]
                     
                     # 添加其他欄位
-                    # 🔥 排除不需要匯出的欄位，移除重複的 branch_link
                     excluded_columns = ['effective_revision']
                     for col in df_dup.columns:
                         if col not in dup_column_order and col not in excluded_columns:
-                            # 🔥 如果是重複的 branch_link，跳過
-                            if col == 'branch_link' and 'branch_link' in dup_column_order:
-                                continue
                             dup_column_order.append(col)
                     
-                    # 🔥 移除重複的 branch_link，只保留最後面的位置
-                    final_dup_order = []
-                    branch_link_added = False
-                    for col in dup_column_order:
-                        if col == 'branch_link':
-                            if not branch_link_added:
-                                final_dup_order.append(col)
-                                branch_link_added = True
-                        else:
-                            final_dup_order.append(col)
-                    
-                    dup_column_order = [col for col in final_dup_order if col in df_dup.columns]
+                    dup_column_order = [col for col in dup_column_order if col in df_dup.columns]
                     df_dup = df_dup[dup_column_order]
                     
-                    # 🔥 在寫入前添加空的 revision_diff 欄位（用於公式）
-                    revision_diff_position = dup_column_order.index('target_branch_revision') + 1
-                    df_dup.insert(revision_diff_position, 'revision_diff', None)
+                    # 🔥 關鍵修正：確保重複頁籤的 revision_diff 欄位也存在
+                    if 'revision_diff' not in df_dup.columns:
+                        if 'target_branch_revision' in df_dup.columns:
+                            target_revision_idx = df_dup.columns.get_loc('target_branch_revision')
+                            df_dup.insert(target_revision_idx + 1, 'revision_diff', None)
+                        else:
+                            df_dup['revision_diff'] = None
                     
                     df_dup.to_excel(writer, sheet_name='重覆', index=False)
                     self.logger.info(f"建立 '重覆' 頁籤，共 {len(duplicate_projects)} 筆資料")
@@ -600,9 +593,10 @@ class FeatureTwo:
             import traceback
             self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
 
+    # 修改格式化邏輯，讓 branch_revision 也使用深紅底白字
     def _format_revision_columns_unified(self, worksheet, red_fill, white_font):
         """
-        🔥 新方法：格式化 revision 相關欄位為深紅底白字
+        🔥 修正方法：格式化 revision 相關欄位為深紅底白字（包含新的 branch_revision）
         """
         try:
             from openpyxl.styles import Font
@@ -610,8 +604,8 @@ class FeatureTwo:
             
             content_font = Font(color="000000")           # 🔥 內容用黑字
             
-            # 🔥 需要深紅底白字的 revision 欄位
-            revision_columns = ['revision', 'target_branch_revision']
+            # 🔥 需要深紅底白字的 revision 欄位（新增 branch_revision）
+            revision_columns = ['revision', 'branch_revision', 'target_branch_revision']
             
             # 找到 revision 欄位的位置
             for col_num, cell in enumerate(worksheet[1], 1):
@@ -629,7 +623,7 @@ class FeatureTwo:
                         content_cell = worksheet[f"{col_letter}{row_num}"]
                         content_cell.font = content_font
             
-            self.logger.info("✅ 已設定 revision 欄位為深紅底白字")
+            self.logger.info("✅ 已設定 revision 欄位為深紅底白字（包含 branch_revision）")
             
         except Exception as e:
             self.logger.error(f"格式化 revision 欄位失敗: {str(e)}")
@@ -1426,12 +1420,13 @@ class FeatureTwo:
         return backup_revision
         
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, source_manifest_name: str = '') -> List[Dict]:
-        """轉換專案的分支名稱 - 修正版（🔥 使用確定的 remote 進行分支檢查）"""
+        """轉換專案的分支名稱 - 修正版（🔥 新增 branch_revision 欄位）"""
         converted_projects = []
         tag_count = 0
         branch_count = 0
         hash_revision_count = 0
         branch_revision_count = 0
+        branch_revision_query_count = 0  # 🔥 新增：記錄查詢 branch revision 的次數
         
         self.logger.info(f"🔄 開始轉換專案分支，處理類型: {process_type}")
         
@@ -1461,6 +1456,15 @@ class FeatureTwo:
                 hash_revision_count += 1
             elif original_revision:
                 branch_revision_count += 1
+            
+            # 🔥 新增：如果 original_revision 不是 hash，查詢對應的 branch revision
+            branch_revision_value = self._get_branch_revision_if_needed(
+                project.get('name', ''), original_revision, converted_project['remote']
+            )
+            converted_project['branch_revision'] = branch_revision_value
+            
+            if branch_revision_value and branch_revision_value != '-':
+                branch_revision_query_count += 1
             
             # 如果沒有有效的 revision，跳過轉換
             if not effective_revision:
@@ -1523,6 +1527,7 @@ class FeatureTwo:
         self.logger.info(f"📊 Revision 類型統計:")
         self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
         self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
+        self.logger.info(f"  - 🔍 Branch revision 查詢: {branch_revision_query_count} 個")
         
         # 🔥 統計 remote 分布
         remote_stats = {}
@@ -1559,6 +1564,46 @@ class FeatureTwo:
         
         return converted_projects
 
+    def _get_branch_revision_if_needed(self, project_name: str, revision: str, remote: str = '') -> str:
+        """
+        🔥 新方法：取得 revision 對應的實際 hash 值
+        
+        Args:
+            project_name: 專案名稱
+            revision: 原始 revision
+            remote: remote 類型
+            
+        Returns:
+            如果 revision 是 hash，返回 revision 本身
+            如果 revision 是 branch，返回查詢到的 hash 或 '-'（如果查詢失敗）
+        """
+        try:
+            if not project_name or not revision:
+                return '-'
+            
+            # 🔥 修正：如果 revision 已經是 hash，直接返回它的值
+            if self._is_revision_hash(revision):
+                self.logger.debug(f"專案 {project_name} revision 已是 hash，直接使用: {revision}")
+                return revision  # 🔥 改為返回 revision 本身，而不是 '-'
+            
+            # 如果是 branch name，查詢對應的 hash
+            self.logger.debug(f"專案 {project_name} revision 是 branch，查詢實際 hash: {revision}")
+            
+            # 使用與 target_branch_revision 相同的查詢邏輯
+            branch_info = self._query_branch_direct_enhanced(project_name, revision, remote)
+            
+            if branch_info['exists'] and branch_info['revision']:
+                actual_hash = branch_info['revision']
+                self.logger.debug(f"✅ 查詢到 {project_name}/{revision} 的實際 hash: {actual_hash}")
+                return actual_hash
+            else:
+                self.logger.debug(f"❌ 無法查詢 {project_name}/{revision} 的 hash: {branch_info.get('error', '未知錯誤')}")
+                return '-'
+                
+        except Exception as e:
+            self.logger.debug(f"查詢 {project_name}/{revision} branch revision 失敗: {str(e)}")
+            return '-'
+            
     def _convert_revision_by_type(self, revision: str, process_type: str) -> str:
         """根據處理類型轉換 revision - 更新版：支援新的轉換類型"""
         try:
@@ -2321,9 +2366,9 @@ class FeatureTwo:
     # ============================================
 
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
-                    force_update: bool = False) -> List[Dict]:
+                force_update: bool = False) -> List[Dict]:
         """
-        建立分支並返回結果 - 修正版 (🔥 只有版本不同時才建立/更新分支)
+        建立分支並返回結果 - 修正版 (🔥 包含 branch_revision 資訊)
         """
         try:
             self.logger.info("開始建立分支...")
@@ -2344,6 +2389,7 @@ class FeatureTwo:
                 target_type = project.get('target_type', 'Branch')
                 revision = project.get('revision', '')  # 🔥 來源 revision
                 target_branch_revision = project.get('target_branch_revision', '')  # 目標分支 revision
+                branch_revision = project.get('branch_revision', '-')  # 🔥 新增：來源分支的實際 hash
                 
                 # 🔥 使用項目中已設定的 remote
                 remote = project.get('remote', '')
@@ -2362,6 +2408,7 @@ class FeatureTwo:
                         'SN': len(branch_results) + 1,
                         'Project': project_name,
                         'revision': revision,
+                        'branch_revision': branch_revision,  # 🔥 新增
                         'target_branch': target_branch,
                         'target_type': 'Tag',
                         'target_branch_link': project.get('target_branch_link', ''),
@@ -2386,6 +2433,7 @@ class FeatureTwo:
                         'SN': len(branch_results) + 1,
                         'Project': project_name,
                         'revision': revision,
+                        'branch_revision': branch_revision,  # 🔥 新增
                         'target_branch': target_branch,
                         'target_type': 'Branch',
                         'target_branch_link': project.get('target_branch_link', ''),
@@ -2419,6 +2467,9 @@ class FeatureTwo:
                     temp_gerrit, project_name, target_branch, revision, remote, 
                     gerrit_server, force_update, len(branch_results) + 1
                 )
+                
+                # 🔥 確保 branch_result 包含 branch_revision 資訊
+                branch_result['branch_revision'] = branch_revision
                 
                 if success:
                     updated_branches += 1
