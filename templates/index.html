@@ -4,6 +4,406 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+<style>
+/* 時間線控制面板 */
+.timeline-controls {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-group label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.control-select, .control-input {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    min-width: 100px;
+}
+
+.control-select:focus, .control-input:focus {
+    outline: none;
+    border-color: var(--nordic-blue);
+    box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+.control-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--nordic-blue-light);
+}
+
+.control-btn.active {
+    background: var(--nordic-blue);
+    color: white;
+    border-color: var(--nordic-blue);
+}
+
+/* 時間線統計 */
+.timeline-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    background: var(--bg-tertiary);
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.stat-badge .stat-number {
+    font-weight: 600;
+    color: var(--nordic-blue);
+    font-size: 1rem;
+}
+
+/* 時間線卡片樣式 - 仿照圖片設計 */
+.timeline-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+}
+
+.timeline-card-header {
+    background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+    padding: 20px 24px;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.timeline-card-header .header-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.timeline-card-header .header-content h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.timeline-card-header .header-content p {
+    margin: 0;
+    font-size: 0.875rem;
+    opacity: 0.9;
+}
+
+.timeline-card-body {
+    padding: 24px;
+    background: #F8FBFF;
+}
+
+/* 改進的時間線樣式 */
+.timeline-item {
+    position: relative;
+    padding-left: 80px;
+    margin-bottom: 32px;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: fadeInLeft 0.5s ease forwards;
+}
+
+.timeline-item:nth-child(n) {
+    animation-delay: calc(var(--item-index, 0) * 0.1s);
+}
+
+@keyframes fadeInLeft {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.timeline-content {
+    background: white;
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.timeline-content:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--nordic-blue-light);
+}
+
+.timeline-content.expanded {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--nordic-blue);
+}
+
+.timeline-time {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.timeline-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.timeline-desc {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+/* 時間線項目詳情 */
+.timeline-details {
+    display: none;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-light);
+    background: var(--nordic-ice);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+}
+
+.timeline-details.show {
+    display: block;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 200px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+}
+
+.timeline-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.meta-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.meta-value {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* 類型標籤 */
+.type-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.type-tag.download {
+    background: var(--info-light);
+    color: var(--info);
+}
+
+.type-tag.compare {
+    background: var(--warning-light);
+    color: var(--warning);
+}
+
+.type-tag.one-step {
+    background: var(--success-light);
+    color: var(--success);
+}
+
+.type-tag.general {
+    background: var(--bg-hover);
+    color: var(--text-muted);
+}
+
+/* 載入更多按鈕 */
+.load-more-btn {
+    display: block;
+    width: 100%;
+    max-width: 200px;
+    margin: 24px auto 0;
+    padding: 12px 24px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.load-more-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--nordic-blue-light);
+}
+
+.load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 空狀態 */
+.timeline-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    background: white;
+    border-radius: var(--radius-md);
+}
+
+.timeline-empty i {
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.timeline-empty p {
+    font-size: 1rem;
+    margin-bottom: 16px;
+}
+
+.timeline-empty .empty-action {
+    color: var(--nordic-blue);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.timeline-empty .empty-action:hover {
+    text-decoration: underline;
+}
+
+/* 動畫 */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .timeline-card-header {
+        padding: 16px 20px;
+    }
+    
+    .timeline-card-header .header-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+    }
+    
+    .timeline-card-header .header-content h2 {
+        font-size: 1.125rem;
+    }
+    
+    .timeline-card-body {
+        padding: 20px;
+    }
+    
+    .timeline-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .control-group {
+        flex-wrap: wrap;
+    }
+    
+    .timeline-stats {
+        justify-content: center;
+    }
+    
+    .timeline-item {
+        padding-left: 60px;
+    }
+    
+    .timeline-dot {
+        left: 15px;
+        width: 16px;
+        height: 16px;
+    }
+    
+    .timeline-container::before {
+        left: 22px;
+    }
+    
+    .timeline-meta {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -176,24 +576,158 @@
 
     <!-- 最近活動 -->
     <section class="recent-section">
-        <div class="card-style">
-            <h2 class="section-title mb-4">最近活動</h2>
-            <div class="timeline" id="recentActivities">
-                <div class="timeline-placeholder">
-                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">載入中...</p>
+        <div class="timeline-card">
+            <!-- 卡片標題欄 -->
+            <div class="timeline-card-header">
+                <div class="header-icon">
+                    <i class="fas fa-history"></i>
                 </div>
+                <div class="header-content">
+                    <h2>最近比對記錄</h2>
+                    <p>查看所有比對結果</p>
+                </div>
+            </div>
+            
+            <!-- 卡片內容 -->
+            <div class="timeline-card-body">
+                <!-- 時間線控制面板 -->
+                <div class="timeline-controls">
+                    <div class="control-group">
+                        <label for="typeFilter">類型:</label>
+                        <select id="typeFilter" class="control-select">
+                            <option value="all">全部</option>
+                            <option value="download">下載</option>
+                            <option value="compare">比較</option>
+                            <option value="one-step">一步到位</option>
+                            <option value="general">一般</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="timeFilter">時間:</label>
+                        <select id="timeFilter" class="control-select">
+                            <option value="all">全部</option>
+                            <option value="today">今天</option>
+                            <option value="week">本週</option>
+                            <option value="month">本月</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="statusFilter">狀態:</label>
+                        <select id="statusFilter" class="control-select">
+                            <option value="all">全部</option>
+                            <option value="success">成功</option>
+                            <option value="error">失敗</option>
+                            <option value="warning">警告</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <button id="sortBtn" class="control-btn active" data-order="desc">
+                            <i class="fas fa-sort-amount-down"></i> 最新優先
+                        </button>
+                    </div>
+                    
+                    <div class="control-group">
+                        <button id="refreshBtn" class="control-btn">
+                            <i class="fas fa-sync-alt"></i> 重新整理
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 時間線統計 -->
+                <div class="timeline-stats">
+                    <div class="stat-badge">
+                        <span class="stat-number" id="totalItems">0</span> 總數
+                    </div>
+                    <div class="stat-badge">
+                        <span class="stat-number" id="filteredItems">0</span> 顯示
+                    </div>
+                    <div class="stat-badge">
+                        <span class="stat-number" id="successItems">0</span> 成功
+                    </div>
+                </div>
+                
+                <!-- 時間線容器 -->
+                <div class="timeline-container" id="timelineContainer">
+                    <div class="timeline-empty">
+                        <i class="fas fa-history fa-3x"></i>
+                        <p>載入中...</p>
+                    </div>
+                </div>
+                
+                <!-- 載入更多按鈕 -->
+                <button id="loadMoreBtn" class="load-more-btn" style="display: none;">
+                    <i class="fas fa-plus-circle"></i> 載入更多
+                </button>
             </div>
         </div>
     </section>
 </div>
 
 <script>
+// 全域變數
+let allActivities = [];
+let filteredActivities = [];
+let displayedCount = 10; // 初始顯示數量
+let maxDisplayCount = 10; // 每次載入更多的數量
+
 // 頁面載入時執行
 document.addEventListener('DOMContentLoaded', () => {
     loadStatistics();
     loadRecentActivities();
+    initTimelineControls();
 });
+
+// 初始化時間線控制項
+function initTimelineControls() {
+    // 類型篩選
+    document.getElementById('typeFilter').addEventListener('change', (e) => {
+        filterActivities();
+    });
+    
+    // 時間篩選
+    document.getElementById('timeFilter').addEventListener('change', (e) => {
+        filterActivities();
+    });
+    
+    // 狀態篩選
+    document.getElementById('statusFilter').addEventListener('change', (e) => {
+        filterActivities();
+    });
+    
+    // 排序切換
+    document.getElementById('sortBtn').addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        const currentOrder = btn.dataset.order;
+        const newOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+        
+        btn.dataset.order = newOrder;
+        btn.innerHTML = newOrder === 'desc' ? 
+            '<i class="fas fa-sort-amount-down"></i> 最新優先' : 
+            '<i class="fas fa-sort-amount-up"></i> 最舊優先';
+        
+        filterActivities();
+    });
+    
+    // 重新整理
+    document.getElementById('refreshBtn').addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        const icon = btn.querySelector('i');
+        
+        icon.style.animation = 'spin 1s linear infinite';
+        loadRecentActivities().finally(() => {
+            icon.style.animation = '';
+        });
+    });
+    
+    // 載入更多
+    document.getElementById('loadMoreBtn').addEventListener('click', () => {
+        displayedCount += maxDisplayCount;
+        renderTimeline();
+    });
+}
 
 // 載入統計資料
 async function loadStatistics() {
@@ -203,7 +737,6 @@ async function loadStatistics() {
         animateNumber('todayProcessed', stats.today || 56);
         animateNumber('successRate', stats.successRate || 98, '%');
     } catch (error) {
-        // 使用預設值
         animateNumber('totalProcessed', 1234);
         animateNumber('todayProcessed', 56);
         animateNumber('successRate', 98, '%');
@@ -234,76 +767,312 @@ function animateNumber(elementId, target, suffix = '') {
 async function loadRecentActivities() {
     try {
         const activities = await utils.apiRequest('/api/recent-activities');
-        displayActivities(activities);
+        allActivities = activities.map(activity => ({
+            id: activity.id || utils.generateId(),
+            timestamp: new Date(activity.timestamp),
+            action: activity.action,
+            status: activity.status || 'success',
+            details: activity.details,
+            type: determineActivityType(activity), // 修正類型判斷
+            moduleCount: activity.moduleCount || null,
+            fileSize: activity.fileSize || null,
+            duration: activity.duration || null
+        }));
     } catch (error) {
-        // 使用預設資料
-        const defaultActivities = [
-            { 
-                timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-                action: '完成一步到位處理',
-                status: 'success',
-                details: '15 個模組，3 個比對情境'
-            },
-            { 
-                timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-                action: '執行 Master vs PreMP 比對',
-                status: 'success',
-                details: '8 個模組比對成功'
-            },
-            { 
-                timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-                action: '下載 bootcode 模組檔案',
-                status: 'success',
-                details: '3 個檔案下載完成'
-            },
-            { 
-                timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-                action: '打包比對結果',
-                status: 'success',
-                details: 'ZIP 檔案大小: 25.3 MB'
-            }
-        ];
-        displayActivities(defaultActivities);
+        console.warn('使用預設活動數據:', error);
+        loadDefaultActivities();
     }
+    
+    filterActivities();
 }
 
-// 顯示活動時間軸
-function displayActivities(activities) {
-    const container = document.getElementById('recentActivities');
+// 根據活動內容判斷類型
+function determineActivityType(activity) {
+    if (activity.type) return activity.type;
     
-    if (!activities || activities.length === 0) {
+    const action = activity.action.toLowerCase();
+    if (action.includes('下載')) return 'download';
+    if (action.includes('比對') || action.includes('vs')) return 'compare';
+    if (action.includes('一步到位')) return 'one-step';
+    return 'general';
+}
+
+// 載入預設活動數據
+function loadDefaultActivities() {
+    const now = new Date();
+    allActivities = [
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 5 * 60 * 1000),
+            action: '完成一步到位處理',
+            status: 'success',
+            details: '成功處理 15 個模組，完成 3 個比對情境',
+            type: 'one-step',
+            moduleCount: 15,
+            fileSize: '25.3 MB',
+            duration: '2分32秒'
+        },
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 15 * 60 * 1000),
+            action: 'Master vs PreMP 比對',
+            status: 'success',
+            details: '比對 8 個模組，發現 3 處差異',
+            type: 'compare',
+            moduleCount: 8,
+            fileSize: '12.1 MB',
+            duration: '1分15秒'
+        },
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 60 * 60 * 1000),
+            action: '下載 bootcode 模組檔案',
+            status: 'success',
+            details: '從 SFTP 下載 3 個檔案',
+            type: 'download',
+            moduleCount: 3,
+            fileSize: '8.7 MB',
+            duration: '45秒'
+        },
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 2 * 60 * 60 * 1000),
+            action: 'PreMP vs Wave 比對',
+            status: 'warning',
+            details: '比對過程中發現格式異常',
+            type: 'compare',
+            moduleCount: 12,
+            fileSize: '18.5 MB',
+            duration: '3分8秒'
+        },
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 4 * 60 * 60 * 1000),
+            action: '打包比對結果',
+            status: 'success',
+            details: '成功打包所有比對結果檔案',
+            type: 'general',
+            moduleCount: null,
+            fileSize: '32.4 MB',
+            duration: '1分2秒'
+        },
+        {
+            id: utils.generateId(),
+            timestamp: new Date(now - 6 * 60 * 60 * 1000),
+            action: '下載失敗重試',
+            status: 'error',
+            details: 'SFTP 連線超時，自動重試中',
+            type: 'download',
+            moduleCount: 1,
+            fileSize: null,
+            duration: null
+        }
+    ];
+}
+
+// 篩選活動
+function filterActivities() {
+    const typeFilter = document.getElementById('typeFilter').value;
+    const timeFilter = document.getElementById('timeFilter').value;
+    const statusFilter = document.getElementById('statusFilter').value;
+    const sortOrder = document.getElementById('sortBtn').dataset.order;
+    
+    // 篩選
+    filteredActivities = allActivities.filter(activity => {
+        // 類型篩選
+        if (typeFilter !== 'all' && activity.type !== typeFilter) {
+            return false;
+        }
+        
+        // 狀態篩選
+        if (statusFilter !== 'all' && activity.status !== statusFilter) {
+            return false;
+        }
+        
+        // 時間篩選
+        if (timeFilter !== 'all') {
+            const now = new Date();
+            const activityDate = new Date(activity.timestamp);
+            
+            switch (timeFilter) {
+                case 'today':
+                    if (activityDate.toDateString() !== now.toDateString()) {
+                        return false;
+                    }
+                    break;
+                case 'week':
+                    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+                    if (activityDate < weekAgo) {
+                        return false;
+                    }
+                    break;
+                case 'month':
+                    const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+                    if (activityDate < monthAgo) {
+                        return false;
+                    }
+                    break;
+            }
+        }
+        
+        return true;
+    });
+    
+    // 排序
+    filteredActivities.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+    
+    // 重置顯示數量
+    displayedCount = maxDisplayCount;
+    
+    // 更新統計
+    updateTimelineStats();
+    
+    // 渲染時間線
+    renderTimeline();
+}
+
+// 更新時間線統計
+function updateTimelineStats() {
+    document.getElementById('totalItems').textContent = allActivities.length;
+    document.getElementById('filteredItems').textContent = filteredActivities.length;
+    
+    const successCount = filteredActivities.filter(a => a.status === 'success').length;
+    document.getElementById('successItems').textContent = successCount;
+}
+
+// 渲染時間線
+function renderTimeline() {
+    const container = document.getElementById('timelineContainer');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    
+    if (filteredActivities.length === 0) {
         container.innerHTML = `
-            <div class="timeline-placeholder">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <p class="text-muted">暫無最近活動</p>
+            <div class="timeline-empty">
+                <i class="fas fa-search fa-3x"></i>
+                <p>沒有找到符合條件的活動</p>
+                <a href="#" class="empty-action" onclick="clearAllFilters()">清除篩選條件</a>
             </div>
         `;
+        loadMoreBtn.style.display = 'none';
         return;
     }
     
+    const displayActivities = filteredActivities.slice(0, displayedCount);
     let html = '';
-    activities.forEach((activity) => {
-        const statusIcon = activity.status === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
-        const statusColor = activity.status === 'success' ? 'text-success' : 'text-danger';
-        
-        html += `
-            <div class="timeline-item">
-                <div class="timeline-dot ${activity.status}"></div>
-                <div class="timeline-content">
-                    <div class="timeline-time">${formatTimeAgo(activity.timestamp)}</div>
-                    <div class="timeline-title">
-                        ${activity.action}
-                        <span class="${statusColor} ml-2">
-                            <i class="fas ${statusIcon}"></i>
-                        </span>
-                    </div>
-                    ${activity.details ? `<div class="timeline-desc">${activity.details}</div>` : ''}
-                </div>
-            </div>
-        `;
+    
+    displayActivities.forEach((activity, index) => {
+        html += createTimelineItem(activity, index);
     });
     
     container.innerHTML = html;
+    
+    // 載入更多按鈕
+    if (displayedCount < filteredActivities.length) {
+        loadMoreBtn.style.display = 'block';
+        loadMoreBtn.textContent = `載入更多 (還有 ${filteredActivities.length - displayedCount} 項)`;
+    } else {
+        loadMoreBtn.style.display = 'none';
+    }
+    
+    // 添加點擊事件
+    addTimelineEvents();
+}
+
+// 創建時間線項目
+function createTimelineItem(activity, index) {
+    const statusIcon = getStatusIcon(activity.status);
+    const typeTag = getTypeTag(activity.type);
+    const timeAgo = formatTimeAgo(activity.timestamp);
+    
+    return `
+        <div class="timeline-item" style="--item-index: ${index}" data-id="${activity.id}">
+            <div class="timeline-dot ${activity.status}"></div>
+            <div class="timeline-content" onclick="toggleTimelineDetails('${activity.id}')">
+                <div class="timeline-time">
+                    <i class="fas fa-clock"></i>
+                    ${timeAgo}
+                    ${typeTag}
+                </div>
+                <div class="timeline-title">
+                    ${activity.action}
+                    <div>
+                        <span class="text-${getStatusColor(activity.status)} mr-2">
+                            <i class="fas ${statusIcon}"></i>
+                        </span>
+                        <i class="fas fa-chevron-down timeline-toggle"></i>
+                    </div>
+                </div>
+                <div class="timeline-desc">${activity.details}</div>
+                
+                <div class="timeline-details" id="details-${activity.id}">
+                    <div class="timeline-meta">
+                        ${activity.moduleCount ? `
+                        <div class="meta-item">
+                            <div class="meta-label">模組數量</div>
+                            <div class="meta-value">${activity.moduleCount} 個</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${activity.fileSize ? `
+                        <div class="meta-item">
+                            <div class="meta-label">檔案大小</div>
+                            <div class="meta-value">${activity.fileSize}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${activity.duration ? `
+                        <div class="meta-item">
+                            <div class="meta-label">處理時間</div>
+                            <div class="meta-value">${activity.duration}</div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="meta-item">
+                            <div class="meta-label">完整時間</div>
+                            <div class="meta-value">${activity.timestamp.toLocaleString('zh-TW')}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 取得狀態圖示
+function getStatusIcon(status) {
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+    return icons[status] || icons.info;
+}
+
+// 取得狀態顏色
+function getStatusColor(status) {
+    const colors = {
+        success: 'success',
+        error: 'danger',
+        warning: 'warning',
+        info: 'info'
+    };
+    return colors[status] || 'muted';
+}
+
+// 取得類型標籤
+function getTypeTag(type) {
+    const tags = {
+        download: '下載',
+        compare: '比較',
+        'one-step': '一步到位',
+        general: '一般'
+    };
+    return `<span class="type-tag ${type}">${tags[type] || tags.general}</span>`;
 }
 
 // 格式化時間
@@ -323,6 +1092,48 @@ function formatTimeAgo(dateString) {
     if (days < 7) return `${days} 天前`;
     
     return date.toLocaleDateString('zh-TW');
+}
+
+// 切換時間線詳情
+function toggleTimelineDetails(id) {
+    const details = document.getElementById(`details-${id}`);
+    const content = details.closest('.timeline-content');
+    const toggle = content.querySelector('.timeline-toggle');
+    
+    if (details.classList.contains('show')) {
+        details.classList.remove('show');
+        content.classList.remove('expanded');
+        toggle.style.transform = 'rotate(0deg)';
+    } else {
+        // 先關閉其他展開的項目
+        document.querySelectorAll('.timeline-details.show').forEach(el => {
+            el.classList.remove('show');
+            el.closest('.timeline-content').classList.remove('expanded');
+            el.closest('.timeline-content').querySelector('.timeline-toggle').style.transform = 'rotate(0deg)';
+        });
+        
+        details.classList.add('show');
+        content.classList.add('expanded');
+        toggle.style.transform = 'rotate(180deg)';
+    }
+}
+
+// 添加時間線事件
+function addTimelineEvents() {
+    // 阻止點擊詳情時觸發toggle
+    document.querySelectorAll('.timeline-details').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    });
+}
+
+// 清除所有篩選條件
+function clearAllFilters() {
+    document.getElementById('typeFilter').value = 'all';
+    document.getElementById('timeFilter').value = 'all';
+    document.getElementById('statusFilter').value = 'all';
+    filterActivities();
 }
 </script>
 {% endblock %}
