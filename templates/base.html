@@ -31,214 +31,7 @@
             z-index: 1000;
         }
         
-        .nav-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--text-primary, #1A237E);
-        }
-        
-        .nav-brand i {
-            color: var(--nordic-blue, #2196F3);
-            font-size: 1.5rem;
-        }
-        
-        .nav-menu {
-            display: flex;
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            gap: 0.5rem;
-        }
-        
-        .nav-item {
-            margin: 0;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1rem;
-            color: var(--text-secondary, #5C6BC0);
-            text-decoration: none;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .nav-link:hover {
-            background: rgba(33, 150, 243, 0.1);
-            color: var(--nordic-blue, #2196F3);
-            transform: translateY(-1px);
-        }
-        
-        .nav-link.active {
-            background: var(--nordic-blue, #2196F3);
-            color: white;
-            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
-        }
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-left: auto;
-        }
-        
-        .user-avatar {
-            width: 36px;
-            height: 36px;
-            background: linear-gradient(135deg, #64B5F6 0%, #2196F3 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 0.875rem;
-            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.25);
-        }
-        
-        .user-details {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        
-        .user-name {
-            color: var(--text-primary, #1A237E);
-            font-weight: 600;
-            font-size: 0.875rem;
-            line-height: 1.2;
-        }
-        
-        .user-status {
-            color: var(--text-secondary, #5C6BC0);
-            font-size: 0.75rem;
-            line-height: 1.2;
-        }
-        
-        .auth-buttons {
-            display: flex;
-            gap: 8px;
-        }
-        
-        .btn-auth {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .btn-login {
-            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-            color: white;
-            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
-        }
-        
-        .btn-login:hover {
-            background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
-        }
-        
-        .btn-logout {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-secondary, #5C6BC0);
-            border: 1px solid rgba(33, 150, 243, 0.2);
-        }
-        
-        .btn-logout:hover {
-            background: rgba(33, 150, 243, 0.1);
-            color: var(--text-primary, #1A237E);
-            border-color: rgba(33, 150, 243, 0.3);
-        }
-        
-        /* 響應式設計 */
-        @media (max-width: 768px) {
-            .nav-container {
-                grid-template-columns: auto 1fr auto;
-                gap: 1rem;
-            }
-            
-            .nav-menu {
-                justify-self: center;
-                flex-wrap: wrap;
-                gap: 0.25rem;
-            }
-            
-            .nav-item .nav-link {
-                padding: 0.5rem 0.75rem;
-                font-size: 0.875rem;
-            }
-            
-            .user-details {
-                display: none;
-            }
-            
-            .user-info {
-                gap: 8px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .nav-container {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto auto auto;
-                gap: 0.5rem;
-                text-align: center;
-            }
-            
-            .nav-brand,
-            .nav-menu,
-            .user-info {
-                justify-self: center;
-            }
-            
-            .nav-menu {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-        }
-        
-        /* 導航列調整 - 三欄布局：品牌靠左、選單置中、用戶信息靠右 */
-        .nav-container {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 2rem;
-            min-height: 64px;
-        }
-        
-        .nav-brand {
-            justify-self: start;
-        }
-        
-        .nav-menu {
-            justify-self: center;
-            display: flex;
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            gap: 0.5rem;
-        }
-        
-        .user-info {
-            justify-self: end;
-        }
-
-        /* 導航列調整 - 移除用戶信息 */
+        /* 導航列三欄布局 */
         .nav-container {
             display: grid;
             grid-template-columns: 1fr auto 1fr;
@@ -274,23 +67,81 @@
             gap: 0.5rem;
         }
         
+        .nav-item {
+            margin: 0;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            color: var(--text-secondary, #5C6BC0);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover {
+            background: rgba(33, 150, 243, 0.1);
+            color: var(--nordic-blue, #2196F3);
+            transform: translateY(-1px);
+        }
+        
+        .nav-link.active {
+            background: var(--nordic-blue, #2196F3);
+            color: white;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+        }
+
+        /* 美化版用戶信息樣式 */
         .user-info {
             justify-self: end;
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            border: 2px solid #10B981;
-            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
-            min-width: 120px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 255, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 
+                0 8px 32px rgba(16, 185, 129, 0.1),
+                0 2px 8px rgba(0, 0, 0, 0.05);
+            min-width: 140px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
-        
+
+        .user-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 12px 40px rgba(16, 185, 129, 0.15),
+                0 4px 12px rgba(0, 0, 0, 0.08);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .user-info::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .user-info:hover::before {
+            left: 100%;
+        }
+
         .user-avatar {
-            width: 36px;
-            height: 36px;
+            width: 38px;
+            height: 38px;
             background: linear-gradient(135deg, #10B981 0%, #059669 100%);
             border-radius: 50%;
             display: flex;
@@ -298,11 +149,32 @@
             justify-content: center;
             color: white;
             font-weight: 700;
-            font-size: 0.875rem;
-            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-            border: 2px solid rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            box-shadow: 
+                0 4px 12px rgba(16, 185, 129, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden; /* 改回 hidden */
         }
-        
+
+        .user-avatar::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
+            transform: rotate(45deg);
+            transition: transform 0.6s ease;
+        }
+
+        .user-info:hover .user-avatar::after {
+            transform: rotate(45deg) translate(50%, 50%);
+        }
+
         .user-details {
             display: flex;
             flex-direction: column;
@@ -310,84 +182,175 @@
             gap: 2px;
             flex: 1;
         }
-        
+
         .user-name {
-            color: #374151;
-            font-weight: 700;
-            font-size: 0.875rem;
-            line-height: 1;
+            color: #1f2937;
+            font-weight: 600;
+            font-size: 0.9rem;
+            line-height: 1.2;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            position: relative;
         }
-        
+
+        .user-name::after {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: #10B981;
+            border-radius: 50%;
+            animation: name-pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes name-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+                opacity: 1;
+            }
+            70% {
+                box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+                opacity: 0.8;
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+                opacity: 1;
+            }
+        }
+
         .user-status {
             color: #10B981;
             font-size: 0.75rem;
             line-height: 1;
-            font-weight: 600;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
         }
-        
+
+        .user-info:hover .user-status {
+            opacity: 1;
+        }
+
+        /* 為訪客狀態也加上一致的樣式 */
+        .user-name.guest {
+            color: #6b7280;
+        }
+
+        .user-name.guest::after {
+            background: #6b7280;
+            animation: none; /* 訪客不需要脈衝效果 */
+        }
+
         .auth-buttons {
             display: flex;
             gap: 8px;
         }
-        
+
         .btn-auth {
-            padding: 8px 12px;
+            padding: 6px 10px;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             font-size: 0.75rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-decoration: none;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
         }
-        
+
         .btn-login {
             background: linear-gradient(135deg, #10B981 0%, #059669 100%);
             color: white;
-            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
         }
-        
+
         .btn-login:hover {
             background: linear-gradient(135deg, #059669 0%, #047857 100%);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
         }
-        
+
         .btn-logout {
-            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: white;
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
         }
-        
+
         .btn-logout:hover {
-            background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
         }
-        
-        /* 系統模式樣式 */
+
+        /* 系統模式樣式優化 */
         .system-mode {
-            padding: 12px 16px;
-            background: rgba(107, 114, 128, 0.1);
-            border-radius: 12px;
-            border: 2px solid #9CA3AF;
-            box-shadow: 0 4px 20px rgba(107, 114, 128, 0.15);
+            padding: 12px 18px;
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.05) 0%, rgba(156, 163, 175, 0.05) 100%);
+            border-radius: 20px;
+            border: 1px solid rgba(107, 114, 128, 0.2);
+            box-shadow: 
+                0 4px 20px rgba(107, 114, 128, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
-        
+
+        .system-mode:hover {
+            transform: translateY(-1px);
+            box-shadow: 
+                0 6px 25px rgba(107, 114, 128, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
         .system-mode .user-status {
-            color: #6B7280;
-            font-size: 0.875rem;
+            color: #6b7280;
+            font-size: 0.85rem;
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .system-mode .user-status i {
+            font-size: 1rem;
+            opacity: 0.7;
+        }
+
+        /* 動畫效果 */
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
         }
 
         /* 響應式設計調整 */
@@ -418,22 +381,19 @@
             }
             
             .user-info {
-                min-width: 150px;
-                padding: 8px 12px;
+                min-width: 130px;
+                padding: 8px 14px;
+                gap: 10px;
             }
             
             .user-avatar {
-                width: 32px;
-                height: 32px;
-                font-size: 0.75rem;
-            }
-            
-            .user-details {
+                width: 34px;
+                height: 34px;
                 font-size: 0.8rem;
             }
             
             .user-name {
-                font-size: 0.8rem;
+                font-size: 0.85rem;
             }
             
             .user-status {
@@ -441,11 +401,15 @@
             }
             
             .btn-auth {
-                padding: 6px 8px;
+                padding: 5px 8px;
                 font-size: 0.7rem;
             }
-        }
 
+            .system-mode {
+                padding: 10px 16px;
+            }
+        }
+        
         @media (max-width: 480px) {
             .nav-container {
                 padding: 0.5rem;
@@ -469,17 +433,32 @@
             }
             
             .user-info {
-                min-width: 120px;
-                padding: 6px 10px;
+                min-width: 100px;
+                padding: 6px 12px;
                 gap: 8px;
             }
             
+            .user-avatar {
+                width: 30px;
+                height: 30px;
+                font-size: 0.75rem;
+            }
+            
             .user-details {
-                display: none; /* 在很小的屏幕上隱藏用戶詳情 */
+                display: none; /* 小屏幕隱藏詳情 */
+            }
+            
+            .btn-auth {
+                padding: 4px 6px;
+                font-size: 0.65rem;
+            }
+
+            .system-mode {
+                padding: 8px 14px;
             }
             
             .system-mode .user-status {
-                font-size: 0.7rem;
+                font-size: 0.75rem;
             }
         }
     </style>
@@ -516,6 +495,7 @@
                         <i class="fas fa-rocket"></i> 一步到位
                     </a>
                 </li>
+                <!-- 新增後台管理連結 -->
                 <li class="nav-item">
                     <a href="{{ url_for('admin.admin_page') }}" class="nav-link {% if request.endpoint == 'admin.admin_page' %}active{% endif %}">
                         <i class="fas fa-cog"></i> 後台管理
@@ -529,7 +509,7 @@
             </div>
         </div>
     </nav>
-    
+
     <!-- 主要內容 -->
     <main class="main-content">
         {% block content %}{% endblock %}
@@ -594,7 +574,7 @@
                                 <i class="fas fa-user"></i>
                             </div>
                             <div class="user-details">
-                                <div class="user-name">訪客</div>
+                                <div class="user-name guest">訪客</div>
                                 <div class="user-status">
                                     <i class="fas fa-lock"></i> 未登入
                                 </div>
