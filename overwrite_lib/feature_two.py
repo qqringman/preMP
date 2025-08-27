@@ -50,10 +50,10 @@ class FeatureTwo:
         self.logger.info(f"使用 Android 版本: {self.current_android_version}")
             
     def process(self, input_file: str, process_type: str, output_filename: str, 
-                remove_duplicates: bool, create_branches: bool, check_branch_exists: bool,
-                output_folder: str = './output', force_update_branches: bool = False) -> bool:
+            remove_duplicates: bool, create_branches: bool, check_branch_exists: bool,
+            output_folder: str = './output', force_update_branches: bool = False) -> bool:
         """
-        處理功能二的主要邏輯 - 修正版（統一報告格式）
+        處理功能二的主要邏輯 - 修正版（統一報告格式 + 保留 manifest 檔案）
         """
         try:
             self.logger.info("=== 開始執行功能二：建立分支映射表 ===")
@@ -70,7 +70,15 @@ class FeatureTwo:
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
             
-            # 🔥 步驟 0.5: 提取來源 manifest 檔名
+            # 🔥 新增：保存檔案列表，用於最終檢查
+            saved_files = []
+            
+            # 🔥 步驟 0: 保存原始 manifest 檔案
+            original_manifest_path = self._save_original_manifest_file(input_file, output_folder)
+            if original_manifest_path:
+                saved_files.append(original_manifest_path)
+            
+            # 步驟 0.5: 提取來源 manifest 檔名
             source_manifest_name = self._extract_manifest_filename(input_file)
             
             # 步驟 1: 解析 manifest.xml
@@ -96,10 +104,17 @@ class FeatureTwo:
             
             self.logger.info(f"處理完成: {len(unique_projects)} 個專案, {len(duplicate_projects)} 個重複")
             
-            # 🔥 步驟 5: 統一生成基本 Excel 報告（無論是否建立分支都使用相同邏輯）
+            # 🔥 步驟 4.7: 生成轉換後的 manifest 檔案
+            converted_manifest_path = self._generate_converted_manifest(
+                unique_projects, input_file, output_folder, process_type
+            )
+            if converted_manifest_path:
+                saved_files.append(converted_manifest_path)
+            
+            # 步驟 5: 統一生成基本 Excel 報告（無論是否建立分支都使用相同邏輯）
             self._write_excel_unified_basic(unique_projects, duplicate_projects, output_filename, output_folder)
             
-            # 🔥 步驟 6: 如果選擇建立分支，執行分支建立並添加狀態頁籤
+            # 步驟 6: 如果選擇建立分支，執行分支建立並添加狀態頁籤
             if create_branches:
                 self.logger.info("🚀 開始執行分支建立流程...")
                 branch_results = self._create_branches(unique_projects, output_filename, output_folder, force_update_branches)
@@ -109,7 +124,11 @@ class FeatureTwo:
             else:
                 self.logger.info("⏭️ 跳過分支建立流程")
             
+            # 🔥 步驟 7: 最終檔案檢查報告
             excel_path = os.path.join(output_folder, output_filename)
+            saved_files.append(excel_path)
+            self._final_file_report(output_folder, saved_files)
+            
             self.logger.info(f"=== 功能二執行完成，Excel 檔案：{excel_path} ===")
             return True
             
@@ -1419,20 +1438,41 @@ class FeatureTwo:
         
         return backup_revision
         
-    def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, source_manifest_name: str = '') -> List[Dict]:
-        """轉換專案的分支名稱 - 修正版（🔥 新增 branch_revision 欄位）"""
+    def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, 
+                     source_manifest_name: str = '', is_tvconfig: bool = False) -> List[Dict]:
+        """
+        轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援）
+        
+        Args:
+            projects: 專案列表
+            process_type: 處理類型
+            check_branch_exists: 是否檢查分支存在性
+            source_manifest_name: 來源 manifest 檔名
+            is_tvconfig: 是否為 tvconfig 轉換
+            
+        Returns:
+            轉換後的專案列表
+        """
         converted_projects = []
         tag_count = 0
         branch_count = 0
         hash_revision_count = 0
         branch_revision_count = 0
-        branch_revision_query_count = 0  # 🔥 新增：記錄查詢 branch revision 的次數
+        branch_revision_query_count = 0  # 記錄查詢 branch revision 的次數
+        skipped_projects_count = 0  # 🔥 新增：跳過的專案計數
         
         self.logger.info(f"🔄 開始轉換專案分支，處理類型: {process_type}")
+        if is_tvconfig:
+            self.logger.info(f"🎯 Tvconfig 模式：使用 TVCONFIG_SKIP_PROJECTS 配置")
+        else:
+            self.logger.info(f"🎯 一般模式：使用 FEATURE_TWO_SKIP_PROJECTS 配置")
         
         for i, project in enumerate(projects, 1):
             converted_project = project.copy()
             converted_project['SN'] = i
+            
+            # 🔥 取得專案名稱
+            project_name = project.get('name', '')
             
             # 🔥 新增 source_manifest 欄位
             converted_project['source_manifest'] = source_manifest_name
@@ -1442,10 +1482,10 @@ class FeatureTwo:
             if not original_remote:
                 auto_remote = self._auto_detect_remote(project)
                 converted_project['remote'] = auto_remote
-                self.logger.debug(f"專案 {project.get('name', '')} 自動偵測 remote: {auto_remote}")
+                self.logger.debug(f"專案 {project_name} 自動偵測 remote: {auto_remote}")
             else:
                 converted_project['remote'] = original_remote
-                self.logger.debug(f"專案 {project.get('name', '')} 保留原始 remote: {original_remote}")
+                self.logger.debug(f"專案 {project_name} 保留原始 remote: {original_remote}")
             
             # 使用新邏輯取得用於轉換的 revision
             effective_revision = self._get_effective_revision_for_conversion(converted_project)
@@ -1459,7 +1499,7 @@ class FeatureTwo:
             
             # 🔥 新增：如果 original_revision 不是 hash，查詢對應的 branch revision
             branch_revision_value = self._get_branch_revision_if_needed(
-                project.get('name', ''), original_revision, converted_project['remote']
+                project_name, original_revision, converted_project['remote']
             )
             converted_project['branch_revision'] = branch_revision_value
             
@@ -1469,13 +1509,21 @@ class FeatureTwo:
             # 如果沒有有效的 revision，跳過轉換
             if not effective_revision:
                 target_branch = ''
-                self.logger.debug(f"專案 {project.get('name', '')} 沒有有效的 revision，跳過轉換")
+                self.logger.debug(f"專案 {project_name} 沒有有效的 revision，跳過轉換")
             else:
-                # 根據處理類型進行轉換
-                target_branch = self._convert_revision_by_type(effective_revision, process_type)
+                # 🔥 修改：根據處理類型進行轉換，傳遞專案名稱和 tvconfig 標記
+                target_branch = self._convert_revision_by_type(
+                    effective_revision, process_type, project_name, is_tvconfig
+                )
                 
+                # 🔥 檢查是否發生了轉換
                 if target_branch != effective_revision:
-                    self.logger.debug(f"專案 {project.get('name', '')} 轉換: {effective_revision} → {target_branch}")
+                    # 🔥 檢查是否被跳過
+                    if self._should_skip_project_conversion(project_name, process_type, is_tvconfig):
+                        skipped_projects_count += 1
+                        self.logger.debug(f"專案 {project_name} 已跳過轉換：{effective_revision} (保持不變)")
+                    else:
+                        self.logger.debug(f"專案 {project_name} 轉換: {effective_revision} → {target_branch}")
             
             converted_project['target_branch'] = target_branch
             converted_project['effective_revision'] = effective_revision
@@ -1494,22 +1542,22 @@ class FeatureTwo:
                 final_remote = converted_project['remote']
                 
                 if is_tag:
-                    exists_info = self._check_target_tag_exists(project.get('name', ''), target_branch, final_remote)
+                    exists_info = self._check_target_tag_exists(project_name, target_branch, final_remote)
                 else:
                     # 🔥 修正：直接傳入確定的 remote，不再測試兩種可能性
-                    exists_info = self._check_target_branch_exists(project.get('name', ''), target_branch, final_remote)
+                    exists_info = self._check_target_branch_exists(project_name, target_branch, final_remote)
                 
                 converted_project['target_branch_exists'] = exists_info['exists_status']
                 converted_project['target_branch_revision'] = exists_info['revision']
                 
                 # 🔥 記錄分支檢查結果
                 if exists_info['exists_status'] == 'Y':
-                    self.logger.debug(f"✅ 專案 {project.get('name', '')} 分支檢查成功:")
+                    self.logger.debug(f"✅ 專案 {project_name} 分支檢查成功:")
                     self.logger.debug(f"  目標分支: {target_branch}")
                     self.logger.debug(f"  使用 remote: {final_remote}")
                     self.logger.debug(f"  分支 revision: {exists_info['revision']}")
                 else:
-                    self.logger.debug(f"❌ 專案 {project.get('name', '')} 分支檢查失敗:")
+                    self.logger.debug(f"❌ 專案 {project_name} 分支檢查失敗:")
                     self.logger.debug(f"  目標分支: {target_branch}")
                     self.logger.debug(f"  使用 remote: {final_remote}")
                     
@@ -1524,6 +1572,9 @@ class FeatureTwo:
                 self.logger.info(f"已處理 {i}/{len(projects)} 個專案的存在性檢查")
         
         self.logger.info(f"轉換完成 - Branch: {branch_count}, Tag: {tag_count}")
+        if skipped_projects_count > 0:
+            self.logger.info(f"🚫 跳過轉換的專案: {skipped_projects_count} 個")
+        
         self.logger.info(f"📊 Revision 類型統計:")
         self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
         self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
@@ -1538,8 +1589,7 @@ class FeatureTwo:
             remote_stats[remote] = remote_stats.get(remote, 0) + 1
             
             # 統計自動偵測的數量
-            original_remote = proj.get('name', '')  # 使用原始資料檢查
-            original_project = next((p for p in projects if p.get('name') == original_remote), {})
+            original_project = next((p for p in projects if p.get('name') == proj.get('name', '')), {})
             if not original_project.get('remote', ''):
                 auto_detected_count += 1
         
@@ -1604,30 +1654,35 @@ class FeatureTwo:
             self.logger.debug(f"查詢 {project_name}/{revision} branch revision 失敗: {str(e)}")
             return '-'
             
-    def _convert_revision_by_type(self, revision: str, process_type: str) -> str:
-        """根據處理類型轉換 revision - 更新版：支援新的轉換類型"""
+    def _convert_revision_by_type(self, revision: str, process_type: str, project_name: str = '', is_tvconfig: bool = False) -> str:
+        """根據處理類型轉換 revision - 修正版：正確的處理類型"""
         try:
             if not revision:
                 return ''
+            
+            # 🔥 檢查是否應該跳過轉換
+            if project_name and self._should_skip_project_conversion(project_name, process_type, is_tvconfig):
+                self.logger.debug(f"跳過專案 {project_name} 的轉換，保持原 revision: {revision}")
+                return revision
             
             # 如果是 Tag 參考，直接返回不做轉換
             if self._is_tag_reference(revision):
                 self.logger.debug(f"檢測到 Tag 參考，保持原樣: {revision}")
                 return revision
             
-            # 根據處理類型進行轉換
-            if process_type == 'master_vs_premp':
+            # 🔥 根據處理類型進行轉換 - 使用正確的處理類型名稱
+            if process_type == 'master_vs_premp':  # 原始功能
                 return self._convert_master_to_premp(revision)
-            elif process_type == 'premp_vs_mp':
+            elif process_type == 'premp_vs_mp':  # 原始功能
                 return self._convert_premp_to_mp(revision)
-            elif process_type == 'mp_vs_mpbackup':
+            elif process_type == 'mp_vs_mpbackup':  # 原始功能
                 return self._convert_mp_to_mpbackup(revision)
-            # 新增：支援 tvconfig 的轉換類型
-            elif process_type == 'master_to_premp':
+            # tvconfig 功能的轉換類型
+            elif process_type == 'master_to_premp':  # tvconfig
                 return self._convert_master_to_premp(revision)
-            elif process_type == 'master_to_mp':
+            elif process_type == 'master_to_mp':  # tvconfig
                 return self._convert_master_to_wave(revision)
-            elif process_type == 'master_to_mpbackup':
+            elif process_type == 'master_to_mpbackup':  # tvconfig
                 return self._convert_master_to_wavebackup(revision)
             
             # 如果沒有匹配的處理類型，返回原值
@@ -1637,6 +1692,43 @@ class FeatureTwo:
             self.logger.error(f"轉換 revision 失敗: {revision}, 錯誤: {str(e)}")
             return revision
 
+    def _should_skip_project_conversion(self, project_name: str, process_type: str, is_tvconfig: bool = False) -> bool:
+        """
+        檢查專案是否應該跳過轉換
+        
+        Args:
+            project_name: 專案名稱
+            process_type: 處理類型
+            is_tvconfig: 是否為 tvconfig 轉換
+            
+        Returns:
+            是否應該跳過轉換
+        """
+        try:
+            # 選擇對應的跳過配置
+            if is_tvconfig:
+                skip_config = getattr(config, 'TVCONFIG_SKIP_PROJECTS', {})
+            else:
+                skip_config = getattr(config, 'FEATURE_TWO_SKIP_PROJECTS', {})
+            
+            # 取得該處理類型的跳過專案列表
+            skip_projects = skip_config.get(process_type, [])
+            
+            if not skip_projects:
+                return False
+            
+            # 檢查專案名稱是否在跳過列表中
+            for skip_pattern in skip_projects:
+                if skip_pattern in project_name:
+                    self.logger.info(f"🚫 跳過轉換專案: {project_name} (匹配規則: {skip_pattern})")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"檢查跳過專案失敗: {str(e)}")
+            return False
+            
     def _get_gerrit_base_url(self, remote: str) -> str:
         """根據 remote 取得對應的 Gerrit base URL"""
         try:
@@ -2753,13 +2845,7 @@ class FeatureTwo:
 
     def process_tvconfig_alignment(self, output_folder: str = './output') -> bool:
         """
-        處理 Master Tvconfig 對齊功能 - 修正版：使用正確的轉換命名
-        
-        Args:
-            output_folder: 輸出資料夾路徑
-            
-        Returns:
-            是否執行成功
+        處理 Master Tvconfig 對齊功能 - 修正版：使用正確的轉換命名和跳過邏輯 + 保留檔案
         """
         try:
             self.logger.info("=== 開始執行對齊 Master Tvconfig 功能 ===")
@@ -2768,12 +2854,23 @@ class FeatureTwo:
             # 確保輸出資料夾存在
             utils.ensure_dir(output_folder)
             
+            # 🔥 新增：保存檔案列表，用於最終檢查
+            saved_files = []
+            
             # 步驟 1: 選擇 manifest 來源
             manifest_info = self._choose_tvconfig_manifest_source()
             if not manifest_info:
                 return False
             
             manifest_path, is_from_gerrit, original_manifest_content = manifest_info
+            
+            # 🔥 步驟 1.5: 保存從 Gerrit 下載的原始檔案
+            if is_from_gerrit and original_manifest_content:
+                gerrit_original_path = self._save_gerrit_manifest_file(
+                    original_manifest_content, "atv-google-refplus.xml", output_folder
+                )
+                if gerrit_original_path:
+                    saved_files.append(gerrit_original_path)
             
             # 步驟 2: 選擇處理類型
             process_type = self._choose_tvconfig_process_type()
@@ -2806,8 +2903,13 @@ class FeatureTwo:
                         expanded_manifest_path, expanded_content = expanded_result
                         processed_manifest_path = expanded_manifest_path
                         self.logger.info(f"✅ 使用展開後的檔案: {expanded_manifest_path}")
-                        # 保存展開檔案到輸出資料夾
-                        self._save_expanded_tvconfig_manifest(expanded_content, output_folder)
+                        
+                        # 🔥 步驟 5.5: 保存展開檔案
+                        saved_expanded_path = self._save_expanded_manifest_file(
+                            expanded_content, "atv-google-refplus.xml", output_folder
+                        )
+                        if saved_expanded_path:
+                            saved_files.append(saved_expanded_path)
                     else:
                         self.logger.warning("⚠️ Manifest 展開失敗，使用原始檔案")
             
@@ -2828,9 +2930,10 @@ class FeatureTwo:
             # 步驟 7: 提取來源 manifest 檔名
             source_manifest_name = self._extract_tvconfig_manifest_filename(processed_manifest_path)
             
-            # 步驟 8: 轉換專案（使用現有邏輯，支援新的轉換類型）
+            # 步驟 8: 轉換專案（使用現有邏輯，支援新的轉換類型，添加 tvconfig 標記）
             converted_projects = self._convert_projects(
-                tvconfig_projects, process_type, check_branch_exists, source_manifest_name
+                tvconfig_projects, process_type, check_branch_exists, source_manifest_name, 
+                is_tvconfig=True  # 標記為 tvconfig 轉換，會使用 TVCONFIG_SKIP_PROJECTS 配置
             )
             
             # 步驟 9: 添加連結資訊（使用現有邏輯）
@@ -2841,6 +2944,13 @@ class FeatureTwo:
             
             # 步驟 11: 重新編號
             unique_projects = self._renumber_projects(unique_projects)
+            
+            # 🔥 步驟 11.5: 生成轉換後的 manifest 檔案
+            converted_manifest_path = self._generate_converted_manifest(
+                unique_projects, processed_manifest_path, output_folder, process_type
+            )
+            if converted_manifest_path:
+                saved_files.append(converted_manifest_path)
             
             # 步驟 12: 生成輸出檔案名
             output_filename = f"{process_type}_tvconfigs_prebuilt_prebuild.xlsx"
@@ -2855,7 +2965,11 @@ class FeatureTwo:
                 self._add_branch_status_sheet_with_revision(output_filename, output_folder, branch_results)
                 self.logger.info("✅ 分支建立流程完成")
             
+            # 🔥 步驟 15: 最終檔案檢查報告
             excel_path = os.path.join(output_folder, output_filename)
+            saved_files.append(excel_path)
+            self._final_file_report(output_folder, saved_files)
+            
             self.logger.info(f"=== 對齊 Master Tvconfig 功能執行完成，Excel 檔案：{excel_path} ===")
             return True
             
@@ -2996,25 +3110,37 @@ class FeatureTwo:
             return None
 
     def _backup_tvconfig_manifest_files(self, manifest_path: str, output_folder: str, 
-                                is_from_gerrit: bool, original_content: str) -> Dict[str, str]:
-        """備份 manifest 檔案到輸出資料夾 - 修正版：安全的檔案名稱處理"""
+                            is_from_gerrit: bool, original_content: str) -> Dict[str, str]:
+        """備份 manifest 檔案到輸出資料夾 - 修正版：改進檔案名稱處理"""
         backup_info = {}
         
         try:
-            # 🔥 參考 feature_three.py 的備份規則
-            
             if is_from_gerrit:
-                # 如果是從 gerrit 下載的，使用 gerrit_ 前綴
-                master_branch = config.get_default_android_master_branch()
-                # 🔥 修正：將路徑中的斜線替換為底線，確保檔案名稱安全
-                safe_branch_name = master_branch.replace('/', '_')
-                backup_filename = f"gerrit_atv-google-refplus_{safe_branch_name}.xml"
+                # 🔥 如果是從 gerrit 下載的，使用 gerrit_ 前綴 + 原始檔名
+                # 但不使用複雜的分支名稱，直接使用簡潔的檔名
+                backup_filename = "gerrit_atv-google-refplus.xml"
             else:
-                # 如果是本地檔案，使用原檔名加 backup_ 前綴
+                # 🔥 如果是本地檔案，直接使用原檔名（不加 backup_ 前綴）
                 original_filename = os.path.basename(manifest_path)
-                backup_filename = f"backup_{original_filename}"
+                backup_filename = original_filename
             
             backup_path = os.path.join(output_folder, backup_filename)
+            
+            # 🔥 檢查檔案是否已存在且內容相同
+            should_save = True
+            if os.path.exists(backup_path):
+                try:
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        existing_content = f.read()
+                    
+                    if existing_content == original_content:
+                        self.logger.info(f"✅ 檔案已存在且內容相同，跳過保存: {backup_filename}")
+                        backup_info['original_backup'] = backup_path
+                        return backup_info
+                    else:
+                        self.logger.info(f"⚠️ 檔案已存在但內容不同，將覆蓋: {backup_filename}")
+                except Exception as e:
+                    self.logger.warning(f"檢查現有檔案失敗，將覆蓋: {str(e)}")
             
             # 寫入備份檔案
             with open(backup_path, 'w', encoding='utf-8') as f:
@@ -3022,7 +3148,7 @@ class FeatureTwo:
             
             backup_info['original_backup'] = backup_path
             
-            self.logger.info(f"✅ 已備份原始 manifest: {backup_filename}")
+            self.logger.info(f"✅ 已備份 manifest: {backup_filename}")
             
             # 驗證備份檔案
             if os.path.exists(backup_path):
@@ -3232,4 +3358,384 @@ class FeatureTwo:
                 return "atv-google-refplus.xml"
         except Exception as e:
             self.logger.error(f"提取檔案名失敗: {str(e)}")
-            return "atv-google-refplus.xml"           
+            return "atv-google-refplus.xml"
+
+    def _save_original_manifest_file(self, input_file: str, output_folder: str) -> str:
+        """
+        保存原始 manifest 檔案到輸出資料夾 - 修正版：直接使用原始檔名
+        
+        Args:
+            input_file: 原始輸入檔案路徑
+            output_folder: 輸出資料夾
+            
+        Returns:
+            保存的檔案路徑
+        """
+        try:
+            original_filename = os.path.basename(input_file)
+            # 🔥 修改：直接使用原始檔名，不加 original_ 前綴
+            backup_path = os.path.join(output_folder, original_filename)
+            
+            # 🔥 檢查檔案是否已存在，如果存在且內容相同則跳過
+            should_copy = True
+            if os.path.exists(backup_path):
+                try:
+                    with open(input_file, 'r', encoding='utf-8') as f1:
+                        source_content = f1.read()
+                    with open(backup_path, 'r', encoding='utf-8') as f2:
+                        existing_content = f2.read()
+                    
+                    if source_content == existing_content:
+                        self.logger.info(f"✅ 檔案已存在且內容相同，跳過複製: {original_filename}")
+                        return backup_path
+                    else:
+                        self.logger.info(f"⚠️ 檔案已存在但內容不同，將覆蓋: {original_filename}")
+                except Exception as e:
+                    self.logger.warning(f"檢查現有檔案失敗，將覆蓋: {str(e)}")
+            
+            if should_copy:
+                # 讀取原始檔案內容
+                with open(input_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 寫入備份檔案
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            
+            # 驗證備份檔案
+            if os.path.exists(backup_path):
+                file_size = os.path.getsize(backup_path)
+                self.logger.info(f"✅ 已保存原始 manifest: {original_filename} ({file_size} bytes)")
+            
+            return backup_path
+            
+        except Exception as e:
+            self.logger.error(f"保存原始 manifest 檔案失敗: {str(e)}")
+            return ""
+
+    def _save_gerrit_manifest_file(self, content: str, filename: str, output_folder: str) -> str:
+        """
+        保存從 Gerrit 下載的 manifest 檔案 - 參考 feature_three.py
+        
+        Args:
+            content: 檔案內容
+            filename: 原始檔案名
+            output_folder: 輸出資料夾
+            
+        Returns:
+            保存的檔案路徑
+        """
+        try:
+            gerrit_filename = f"gerrit_{filename}"
+            gerrit_path = os.path.join(output_folder, gerrit_filename)
+            
+            # 確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            
+            self.logger.info(f"準備保存 Gerrit 檔案到: {gerrit_path}")
+            self.logger.info(f"檔案內容長度: {len(content)} 字符")
+            
+            # 寫入檔案
+            with open(gerrit_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 驗證檔案是否成功保存
+            if os.path.exists(gerrit_path):
+                file_size = os.path.getsize(gerrit_path)
+                self.logger.info(f"✅ Gerrit 檔案已成功保存: {gerrit_filename} ({file_size} bytes)")
+                
+                # 再次確認檔案內容
+                with open(gerrit_path, 'r', encoding='utf-8') as f:
+                    saved_content = f.read()
+                    if len(saved_content) == len(content):
+                        self.logger.info(f"✅ 檔案內容驗證成功: {len(saved_content)} 字符")
+                    else:
+                        self.logger.warning(f"⚠️ 檔案內容長度不匹配: 原始 {len(content)}, 保存 {len(saved_content)}")
+                
+                return gerrit_path
+            else:
+                raise Exception(f"檔案保存後不存在: {gerrit_path}")
+                
+        except Exception as e:
+            self.logger.error(f"保存 Gerrit 檔案失敗: {str(e)}")
+            return ""
+
+    def _save_expanded_manifest_file(self, content: str, original_filename: str, output_folder: str) -> str:
+        """
+        保存展開後的 manifest 檔案 - 參考 feature_three.py
+        
+        Args:
+            content: 展開後的內容
+            original_filename: 原始檔案名
+            output_folder: 輸出資料夾
+            
+        Returns:
+            保存的檔案路徑
+        """
+        try:
+            # 生成展開檔案名稱
+            base_name = os.path.splitext(original_filename)[0]
+            expanded_filename = f"gerrit_{base_name}_expanded.xml"
+            expanded_path = os.path.join(output_folder, expanded_filename)
+            
+            # 確保輸出資料夾存在
+            utils.ensure_dir(output_folder)
+            
+            self.logger.info(f"準備保存展開檔案到: {expanded_path}")
+            self.logger.info(f"檔案內容長度: {len(content)} 字符")
+            
+            # 寫入檔案
+            with open(expanded_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 驗證檔案
+            if os.path.exists(expanded_path):
+                file_size = os.path.getsize(expanded_path)
+                self.logger.info(f"✅ 展開檔案已成功保存: {expanded_filename} ({file_size} bytes)")
+                
+                # 驗證內容
+                with open(expanded_path, 'r', encoding='utf-8') as f:
+                    saved_content = f.read()
+                    project_count = saved_content.count('<project ')
+                    self.logger.info(f"✅ 檔案內容驗證成功: {len(saved_content)} 字符, {project_count} 個專案")
+                
+                return expanded_path
+            else:
+                raise Exception(f"展開檔案保存後不存在: {expanded_path}")
+                
+        except Exception as e:
+            self.logger.error(f"保存展開檔案失敗: {str(e)}")
+            return ""
+
+    def _generate_converted_manifest(self, projects: List[Dict], original_manifest_path: str, 
+                                    output_folder: str, process_type: str) -> str:
+        """
+        生成轉換後的 manifest 檔案 - 參考 feature_three.py 的邏輯
+        
+        Args:
+            projects: 轉換後的專案列表
+            original_manifest_path: 原始 manifest 檔案路徑
+            output_folder: 輸出資料夾
+            process_type: 處理類型
+            
+        Returns:
+            轉換後 manifest 檔案路徑
+        """
+        try:
+            # 讀取原始 manifest 檔案
+            with open(original_manifest_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            # 解析原始 XML
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(original_content)
+            
+            # 建立專案名稱到轉換資訊的映射
+            project_mapping = {}
+            for proj in projects:
+                project_name = proj.get('name', '')
+                target_branch = proj.get('target_branch', '')
+                if project_name and target_branch:
+                    project_mapping[project_name] = target_branch
+            
+            # 轉換 XML 內容
+            converted_content = self._convert_xml_content_with_projects(
+                original_content, project_mapping, process_type
+            )
+            
+            # 生成輸出檔案名
+            original_filename = os.path.basename(original_manifest_path)
+            base_name = os.path.splitext(original_filename)[0]
+            converted_filename = f"converted_{base_name}_{process_type}.xml"
+            converted_path = os.path.join(output_folder, converted_filename)
+            
+            # 保存轉換後的檔案
+            with open(converted_path, 'w', encoding='utf-8') as f:
+                f.write(converted_content)
+            
+            # 驗證檔案
+            if os.path.exists(converted_path):
+                file_size = os.path.getsize(converted_path)
+                self.logger.info(f"✅ 轉換後 manifest 已成功保存: {converted_filename} ({file_size} bytes)")
+                
+                # 統計轉換項目
+                converted_count = len([proj for proj in projects if proj.get('target_branch', '') != proj.get('revision', '')])
+                self.logger.info(f"✅ 已轉換 {converted_count} 個專案的分支")
+                
+                return converted_path
+            else:
+                raise Exception(f"轉換後檔案保存失敗: {converted_path}")
+                
+        except Exception as e:
+            self.logger.error(f"生成轉換後 manifest 失敗: {str(e)}")
+            return ""
+
+    def _convert_xml_content_with_projects(self, xml_content: str, project_mapping: Dict[str, str], 
+                                        process_type: str) -> str:
+        """
+        使用專案映射表轉換 XML 內容中的 revision
+        
+        Args:
+            xml_content: 原始 XML 內容
+            project_mapping: 專案名稱到目標分支的映射
+            process_type: 處理類型
+            
+        Returns:
+            轉換後的 XML 內容
+        """
+        try:
+            converted_content = xml_content
+            conversion_count = 0
+            
+            # 解析 XML
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(xml_content)
+            
+            # 遍歷所有 project 元素
+            for project in root.findall('project'):
+                project_name = project.get('name', '')
+                original_revision = project.get('revision', '')
+                
+                # 檢查是否需要轉換
+                if project_name in project_mapping:
+                    target_branch = project_mapping[project_name]
+                    
+                    # 檢查是否應該跳過轉換
+                    if self._should_skip_project_conversion(project_name, process_type, False):
+                        self.logger.debug(f"跳過專案 {project_name} 的 XML 轉換")
+                        continue
+                    
+                    if target_branch and target_branch != original_revision:
+                        # 進行字串替換
+                        old_pattern = f'name="{project_name}"[^>]*revision="{original_revision}"'
+                        new_revision_attr = f'revision="{target_branch}"'
+                        
+                        # 使用安全的替換方法
+                        success = self._safe_replace_project_revision_in_xml(
+                            converted_content, project_name, original_revision, target_branch
+                        )
+                        
+                        if success:
+                            converted_content = success
+                            conversion_count += 1
+                            self.logger.debug(f"XML 轉換: {project_name} - {original_revision} → {target_branch}")
+            
+            self.logger.info(f"XML 內容轉換完成，共轉換 {conversion_count} 個專案")
+            return converted_content
+            
+        except Exception as e:
+            self.logger.error(f"轉換 XML 內容失敗: {str(e)}")
+            return xml_content
+
+    def _safe_replace_project_revision_in_xml(self, xml_content: str, project_name: str, 
+                                            old_revision: str, new_revision: str) -> str:
+        """
+        安全地替換 XML 中特定專案的 revision - 參考 feature_three.py
+        """
+        try:
+            lines = xml_content.split('\n')
+            modified = False
+            
+            for i, line in enumerate(lines):
+                # 檢查這一行是否包含目標專案
+                if f'name="{project_name}"' in line and 'revision=' in line:
+                    # 找到目標行，進行替換
+                    if f'revision="{old_revision}"' in line:
+                        lines[i] = line.replace(f'revision="{old_revision}"', f'revision="{new_revision}"')
+                        modified = True
+                        self.logger.debug(f"✅ XML 替換成功: {project_name}")
+                        break
+                    elif f"revision='{old_revision}'" in line:
+                        lines[i] = line.replace(f"revision='{old_revision}'", f"revision='{new_revision}'")
+                        modified = True
+                        self.logger.debug(f"✅ XML 替換成功 (單引號): {project_name}")
+                        break
+            
+            if modified:
+                return '\n'.join(lines)
+            else:
+                self.logger.warning(f"❌ 未找到匹配的 XML 替換: {project_name} - {old_revision}")
+                return xml_content
+                
+        except Exception as e:
+            self.logger.error(f"安全 XML 替換失敗: {str(e)}")
+            return xml_content
+
+    def _final_file_report(self, output_folder: str, saved_files: List[str]):
+        """
+        最終檔案檢查和報告 - 修正版：更好的檔案分類
+        
+        Args:
+            output_folder: 輸出資料夾
+            saved_files: 已保存的檔案列表
+        """
+        try:
+            self.logger.info("🔍 最終檔案檢查報告:")
+            self.logger.info(f"📂 輸出資料夾: {output_folder}")
+            
+            all_files_exist = True
+            
+            for file_path in saved_files:
+                if file_path and os.path.exists(file_path):
+                    file_size = os.path.getsize(file_path)
+                    filename = os.path.basename(file_path)
+                    self.logger.info(f"  ✅ {filename} ({file_size} bytes)")
+                else:
+                    filename = os.path.basename(file_path) if file_path else "未知檔案"
+                    self.logger.error(f"  ❌ {filename} (檔案不存在)")
+                    all_files_exist = False
+            
+            # 檢查輸出資料夾中的所有 XML 檔案
+            self.logger.info(f"\n📋 Output 資料夾中的所有 XML 檔案:")
+            xml_files_found = []
+            try:
+                for filename in os.listdir(output_folder):
+                    if filename.lower().endswith('.xml'):
+                        file_path = os.path.join(output_folder, filename)
+                        file_size = os.path.getsize(file_path)
+                        xml_files_found.append((filename, file_size))
+                        self.logger.info(f"  📄 {filename} ({file_size} bytes)")
+                
+                if not xml_files_found:
+                    self.logger.warning("  ⚠️ 沒有找到任何 XML 檔案")
+                else:
+                    self.logger.info(f"\n📊 XML 檔案統計:")
+                    
+                    gerrit_files = [f for f in xml_files_found if f[0].startswith('gerrit_')]
+                    converted_files = [f for f in xml_files_found if f[0].startswith('converted_')]
+                    # 🔥 修改：原始檔案分類邏輯 - 不以 gerrit_ 或 converted_ 開頭的就是原始檔案
+                    original_files = [f for f in xml_files_found 
+                                    if not f[0].startswith('gerrit_') and not f[0].startswith('converted_')]
+                    
+                    if original_files:
+                        self.logger.info(f"  🟡 原始/來源檔案: {len(original_files)} 個")
+                        for filename, size in original_files:
+                            self.logger.info(f"    - {filename} ({size} bytes)")
+                    
+                    if gerrit_files:
+                        self.logger.info(f"  🔵 Gerrit 檔案: {len(gerrit_files)} 個")
+                        for filename, size in gerrit_files:
+                            file_type = "(展開檔案)" if "_expanded" in filename else "(下載檔案)"
+                            self.logger.info(f"    - {filename} ({size} bytes) {file_type}")
+                    
+                    if converted_files:
+                        self.logger.info(f"  🟢 轉換後檔案: {len(converted_files)} 個")
+                        for filename, size in converted_files:
+                            self.logger.info(f"    - {filename} ({size} bytes)")
+                    
+            except Exception as e:
+                self.logger.error(f"  ❌ 無法列出資料夾內容: {str(e)}")
+            
+            # 總結
+            if all_files_exist:
+                self.logger.info(f"\n✅ 所有檔案都已成功保存")
+                self.logger.info(f"🎯 檔案命名規則:")
+                self.logger.info(f"   - 原始檔案: 保持原始檔名")
+                self.logger.info(f"   - Gerrit 檔案: gerrit_*.xml")
+                self.logger.info(f"   - 展開檔案: gerrit_*_expanded.xml") 
+                self.logger.info(f"   - 轉換檔案: converted_*_{process_type}.xml")
+            else:
+                self.logger.warning(f"\n⚠️ 部分檔案可能保存失敗，請檢查上述報告")
+                
+        except Exception as e:
+            self.logger.error(f"檔案檢查報告失敗: {str(e)}")

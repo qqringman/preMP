@@ -574,10 +574,9 @@ class FeatureThree:
             self.logger.warning(f"下載目標檔案異常: {str(e)}")
             return None
     
-    # 🔥 完全重寫 _convert_revisions 方法，移除有問題的正則表達式
     def _convert_revisions(self, xml_content: str, overwrite_type: str) -> Tuple[str, List[Dict]]:
         """
-        根據轉換類型進行 revision 轉換 - 修正正則表達式錯誤版本
+        根據轉換類型進行 revision 轉換 - 修正版本：添加跳過專案轉換邏輯
         確保儲存 default revision 供 source_link 生成使用
         """
         try:
@@ -601,10 +600,11 @@ class FeatureThree:
             
             conversion_info = []
             conversion_count = 0
-            skipped_no_revision = 0  # 🔥 統計沒有 revision 而跳過的專案
+            skipped_no_revision = 0  # 統計沒有 revision 而跳過的專案
             hash_revision_count = 0
             branch_revision_count = 0
             upstream_used_count = 0
+            skipped_projects_count = 0  # 🔥 新增：跳過轉換的專案計數
             
             # 建立轉換後的內容（從原始字串開始）
             converted_content = xml_content
@@ -613,19 +613,22 @@ class FeatureThree:
             for project in temp_root.findall('project'):
                 project_name = project.get('name', '')
                 project_remote = project.get('remote', '') or default_remote
-                original_revision = project.get('revision', '')  # 🔥 只使用原始的 revision
+                original_revision = project.get('revision', '')  # 只使用原始的 revision
                 upstream = project.get('upstream', '')
                 
                 # 🔥 添加調試：記錄所有處理的專案
                 composite_key = f"{project_name}|{project.get('path', '')}"
                 self.logger.debug(f"處理專案: {composite_key}, 原始 revision: '{original_revision}'")
                 
-                # 🔥 如果沒有 revision，記錄但跳過轉換
+                # 🔥 新增：檢查是否應該跳過轉換
+                should_skip = self._should_skip_project_conversion(project_name, overwrite_type)
+                
+                # 如果沒有 revision，記錄但跳過轉換
                 if not original_revision:
                     skipped_no_revision += 1
                     self.logger.debug(f"跳過沒有 revision 的專案: {project_name}")
                     
-                    # 🔥 重要：即使沒有 revision，也要加入 conversion_info
+                    # 重要：即使沒有 revision，也要加入 conversion_info
                     conversion_info.append({
                         'name': project_name,
                         'path': project.get('path', ''),
@@ -640,7 +643,46 @@ class FeatureThree:
                         'original_remote': project.get('remote', ''),
                         'changed': False,
                         'used_default_revision': False,
-                        'used_upstream_for_conversion': False
+                        'used_upstream_for_conversion': False,
+                        'skipped': False,  # 🔥 新增：標記跳過狀態
+                        'skip_reason': 'no_revision'  # 🔥 新增：跳過原因
+                    })
+                    continue
+                
+                # 🔥 新增：如果專案在跳過清單中，記錄但不進行轉換
+                if should_skip:
+                    skipped_projects_count += 1
+                    self.logger.info(f"🚫 跳過專案轉換: {project_name}")
+                    
+                    # 使用新邏輯取得用於轉換的有效 revision（但不實際轉換）
+                    effective_revision = self._get_effective_revision_for_conversion(project)
+                    
+                    # 統計 revision 類型
+                    if self._is_revision_hash(original_revision):
+                        hash_revision_count += 1
+                        if upstream:
+                            upstream_used_count += 1
+                    elif original_revision:
+                        branch_revision_count += 1
+                    
+                    # 跳過的專案：保持原始值不變
+                    conversion_info.append({
+                        'name': project_name,
+                        'path': project.get('path', ''),
+                        'original_revision': original_revision,
+                        'effective_revision': effective_revision,
+                        'converted_revision': original_revision,  # 🔥 保持原值不變
+                        'upstream': upstream,
+                        'dest-branch': project.get('dest-branch', ''),
+                        'groups': project.get('groups', ''),
+                        'clone-depth': project.get('clone-depth', ''),
+                        'remote': project.get('remote', ''),
+                        'original_remote': project.get('remote', ''),
+                        'changed': False,  # 🔥 標記為未改變
+                        'used_default_revision': False,
+                        'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream,
+                        'skipped': True,  # 🔥 新增：標記為跳過
+                        'skip_reason': 'in_skip_list'  # 🔥 新增：跳過原因
                     })
                     continue
                 
@@ -657,7 +699,7 @@ class FeatureThree:
                 
                 if not effective_revision:
                     self.logger.debug(f"專案 {project_name} 沒有有效的轉換 revision，但仍記錄")
-                    # 🔥 沒有有效 revision 也要記錄
+                    # 沒有有效 revision 也要記錄
                     conversion_info.append({
                         'name': project_name,
                         'path': project.get('path', ''),
@@ -672,14 +714,17 @@ class FeatureThree:
                         'original_remote': project.get('remote', ''),
                         'changed': False,
                         'used_default_revision': False,
-                        'used_upstream_for_conversion': False
+                        'used_upstream_for_conversion': False,
+                        'skipped': False,  # 🔥 新增：標記跳過狀態
+                        'skip_reason': 'no_effective_revision'  # 🔥 新增：跳過原因
                     })
                     continue
                 
                 old_revision = effective_revision
-                new_revision = self._convert_single_revision(effective_revision, overwrite_type)
+                # 🔥 修改：傳遞 project_name 給轉換方法
+                new_revision = self._convert_single_revision(effective_revision, overwrite_type, project_name)
                 
-                # 🔥 增強除錯 - MP to MPBackup 專用
+                # 增強除錯 - MP to MPBackup 專用
                 if overwrite_type == 'mp_to_mpbackup':
                     self.logger.debug(f"🔍 MP to MPBackup 轉換除錯:")
                     self.logger.debug(f"  專案: {project_name}")
@@ -688,7 +733,7 @@ class FeatureThree:
                     self.logger.debug(f"  轉換結果: {new_revision}")
                     self.logger.debug(f"  是否改變: {new_revision != old_revision}")
                 
-                # 🔥 重要：所有專案都要記錄到 conversion_info 中
+                # 重要：所有專案都要記錄到 conversion_info 中
                 conversion_info.append({
                     'name': project_name,
                     'path': project.get('path', ''),
@@ -700,15 +745,17 @@ class FeatureThree:
                     'groups': project.get('groups', ''),
                     'clone-depth': project.get('clone-depth', ''),
                     'remote': project.get('remote', ''),
-                    'original_remote': project.get('remote', ''),  # 🔥 保存原始 remote
+                    'original_remote': project.get('remote', ''),  # 保存原始 remote
                     'changed': new_revision != old_revision,
-                    'used_default_revision': False,  # 🔥 不再插入 default revision
-                    'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream
+                    'used_default_revision': False,  # 不再插入 default revision
+                    'used_upstream_for_conversion': self._is_revision_hash(original_revision) and upstream,
+                    'skipped': False,  # 🔥 新增：標記跳過狀態
+                    'skip_reason': None  # 🔥 新增：跳過原因
                 })
                 
                 # 如果需要轉換，在字串中直接替換
                 if new_revision != old_revision:
-                    # 🔥 使用安全的替換方法
+                    # 使用安全的替換方法
                     replacement_success = self._safe_replace_revision_in_xml(
                         converted_content, project_name, old_revision, new_revision
                     )
@@ -718,7 +765,7 @@ class FeatureThree:
                         conversion_count += 1
                         self.logger.debug(f"字串替換成功: {project_name} - {old_revision} → {new_revision}")
                         
-                        # 🔥 MP to MPBackup 特別記錄
+                        # MP to MPBackup 特別記錄
                         if overwrite_type == 'mp_to_mpbackup':
                             self.logger.info(f"✅ MP to MPBackup 轉換成功: {project_name}")
                             self.logger.info(f"  {old_revision} → {new_revision}")
@@ -726,13 +773,15 @@ class FeatureThree:
             self.logger.info(f"revision 轉換完成，共轉換 {conversion_count} 個專案")
             self.logger.info(f"📊 處理統計:")
             self.logger.info(f"  - ⭐ 跳過沒有 revision 的專案: {skipped_no_revision} 個")
+            if skipped_projects_count > 0:
+                self.logger.info(f"  - 🚫 跳過在跳過清單中的專案: {skipped_projects_count} 個")
             self.logger.info(f"  - 📸 Hash revision: {hash_revision_count} 個")
             self.logger.info(f"  - 📹 Branch revision: {branch_revision_count} 個")
             self.logger.info(f"  - ⬆️ 使用 upstream 進行轉換: {upstream_used_count} 個")
             self.logger.info(f"  - 📋 總記錄專案數: {len(conversion_info)} 個")
             self.logger.info("✅ 保留了所有原始格式：XML 宣告、註解、空格、換行等")
             
-            # 🔥 特別檢查 MP to MPBackup 轉換效果
+            # 特別檢查 MP to MPBackup 轉換效果
             if overwrite_type == 'mp_to_mpbackup':
                 self._verify_mp_to_mpbackup_conversion(converted_content, xml_content)
             
@@ -821,8 +870,15 @@ class FeatureThree:
             self.logger.error(f"安全替換失敗: {str(e)}")
             return xml_content
             
-    def _convert_single_revision(self, revision: str, overwrite_type: str) -> str:
-        """轉換單一 revision"""
+    def _convert_single_revision(self, revision: str, overwrite_type: str, project_name: str = '') -> str:
+        """轉換單一 revision - 添加跳過邏輯"""
+        
+        # 🔥 檢查是否應該跳過轉換
+        if project_name and self._should_skip_project_conversion(project_name, overwrite_type):
+            self.logger.debug(f"跳過專案 {project_name} 的轉換，保持原 revision: {revision}")
+            return revision
+        
+        # 🔥 根據正確的 overwrite_type 進行轉換
         if overwrite_type == 'master_to_premp':
             return self._convert_master_to_premp(revision)
         elif overwrite_type == 'premp_to_mp':
@@ -832,6 +888,39 @@ class FeatureThree:
         else:
             return revision
     
+    def _should_skip_project_conversion(self, project_name: str, overwrite_type: str) -> bool:
+        """
+        檢查專案是否應該跳過轉換 - Feature Three 版本
+        
+        Args:
+            project_name: 專案名稱
+            overwrite_type: 轉換類型
+            
+        Returns:
+            是否應該跳過轉換
+        """
+        try:
+            # 取得 Feature Three 的跳過配置
+            skip_config = getattr(config, 'FEATURE_THREE_SKIP_PROJECTS', {})
+            
+            # 取得該處理類型的跳過專案列表
+            skip_projects = skip_config.get(overwrite_type, [])
+            
+            if not skip_projects:
+                return False
+            
+            # 檢查專案名稱是否在跳過列表中
+            for skip_pattern in skip_projects:
+                if skip_pattern in project_name:
+                    self.logger.info(f"🚫 Feature Three 跳過轉換專案: {project_name} (匹配規則: {skip_pattern})")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"檢查跳過專案失敗: {str(e)}")
+            return False
+                
     def _convert_master_to_premp(self, revision: str) -> str:
         """
         master → premp 轉換規則 - 使用動態 Android 版本，動態 kernel 版本匹配
