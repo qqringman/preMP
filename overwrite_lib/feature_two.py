@@ -802,7 +802,7 @@ class FeatureTwo:
             
     def _add_formulas_to_existing_excel(self, excel_path: str):
         """
-        🔥 新方法：在現有 Excel 檔案中添加公式
+        🔥 修正版：在現有 Excel 檔案中添加公式 - 支援 hash 判斷的比較邏輯
         """
         try:
             from openpyxl import load_workbook
@@ -819,10 +819,11 @@ class FeatureTwo:
                     continue
                     
                 worksheet = workbook[sheet_name]
-                self.logger.info(f"🔧 開始為 '{sheet_name}' 頁籤設定 revision_diff 公式（比較完整 hash）...")
+                self.logger.info(f"🔧 開始為 '{sheet_name}' 頁籤設定 revision_diff 公式（支援 hash 判斷）...")
                 
                 # 找到各欄位的位置
                 revision_col = None
+                branch_revision_col = None  # 🔥 新增：branch_revision 欄位
                 target_revision_col = None
                 revision_diff_col = None
                 
@@ -835,6 +836,9 @@ class FeatureTwo:
                     if header == 'revision':
                         revision_col = col_num
                         self.logger.debug(f"找到 revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
+                    elif header == 'branch_revision':  # 🔥 新增
+                        branch_revision_col = col_num
+                        self.logger.debug(f"找到 branch_revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
                     elif header == 'target_branch_revision':
                         target_revision_col = col_num
                         self.logger.debug(f"找到 target_branch_revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
@@ -844,23 +848,41 @@ class FeatureTwo:
                 
                 self.logger.debug(f"'{sheet_name}' 所有標頭: {', '.join(headers)}")
                 
-                if revision_col and target_revision_col and revision_diff_col:
+                # 🔥 修改：需要所有四個欄位才能設定公式
+                if revision_col and branch_revision_col and target_revision_col and revision_diff_col:
                     revision_letter = get_column_letter(revision_col)
+                    branch_revision_letter = get_column_letter(branch_revision_col)  # 🔥 新增
                     target_letter = get_column_letter(target_revision_col)
                     diff_letter = get_column_letter(revision_diff_col)
                     
-                    self.logger.info(f"📍 欄位對應: revision={revision_letter}, target_branch_revision={target_letter}, revision_diff={diff_letter}")
+                    self.logger.info(f"📍 欄位對應: revision={revision_letter}, branch_revision={branch_revision_letter}, target_branch_revision={target_letter}, revision_diff={diff_letter}")
                     
                     # 🔥 為每一行設定公式（從第2行開始到最後一行）
                     formula_count = 0
                     for row_num in range(2, worksheet.max_row + 1):
-                        # 🔥 公式：比對 revision 和 target_branch_revision 的完整值
+                        # 🔥 新邏輯：程式判斷該用哪個欄位，然後產生簡單公式
+                        revision_cell = worksheet[f"{revision_letter}{row_num}"]
+                        revision_value = str(revision_cell.value) if revision_cell.value else ''
+                        
+                        # 判斷是否為 hash（40字符長度）
+                        is_hash = self._is_revision_hash(revision_value)
+                        
+                        if is_hash:
+                            # 如果是 hash，用 revision 欄位比較
+                            compare_letter = revision_letter
+                            self.logger.debug(f"第{row_num}行使用 revision 欄位比較（hash）")
+                        else:
+                            # 如果不是 hash，用 branch_revision 欄位比較
+                            compare_letter = branch_revision_letter
+                            self.logger.debug(f"第{row_num}行使用 branch_revision 欄位比較（非hash）")
+                        
+                        # 產生簡單的比較公式
                         formula = (
                             f'=IF(OR({target_letter}{row_num}="-", '
                             f'{target_letter}{row_num}="", '
-                            f'{revision_letter}{row_num}=""), '
+                            f'{compare_letter}{row_num}=""), '
                             f'"Y", '
-                            f'IF({revision_letter}{row_num}={target_letter}{row_num}, '
+                            f'IF({compare_letter}{row_num}={target_letter}{row_num}, '
                             f'"N", "Y"))'
                         )
                         
@@ -871,19 +893,22 @@ class FeatureTwo:
                         
                         # 每10行記錄一次進度
                         if row_num % 50 == 0 or row_num == 2:
-                            self.logger.debug(f"設定公式 {sheet_name} {diff_letter}{row_num}: {formula}")
+                            compare_field = "revision" if is_hash else "branch_revision"
+                            self.logger.debug(f"設定公式 {sheet_name} {diff_letter}{row_num}: 使用 {compare_field} 欄位比較")
                     
-                    self.logger.info(f"✅ 已為 '{sheet_name}' 頁籤設定 {formula_count} 個 revision_diff 公式")
+                    self.logger.info(f"✅ 已為 '{sheet_name}' 頁籤設定 {formula_count} 個 revision_diff 公式（支援 hash 判斷）")
                     
                     # 🔥 驗證公式設定
                     sample_cell = worksheet[f"{diff_letter}2"]
                     sample_formula = sample_cell.value if sample_cell.value else "無"
-                    self.logger.info(f"🔍 第2行公式範例（比較完整hash）: {sample_formula}")
+                    self.logger.info(f"🔍 第2行公式範例（支援 hash 判斷）: 已設定複雜邏輯判斷公式")
                     
                 else:
                     missing_cols = []
                     if not revision_col:
                         missing_cols.append("revision")
+                    if not branch_revision_col:  # 🔥 新增
+                        missing_cols.append("branch_revision")
                     if not target_revision_col:
                         missing_cols.append("target_branch_revision")
                     if not revision_diff_col:
@@ -2192,26 +2217,6 @@ class FeatureTwo:
                 self.logger.debug(f"專案 {project_name} 已有 remote: {remote}")
                 return remote
             
-            # 🔥 檢查 revision、upstream、dest-branch 等欄位的線索
-            # 這些比專案名稱更可靠
-            for field in ['revision', 'upstream', 'dest-branch']:
-                value = project.get(field, '')
-                if value:
-                    # 如果包含明顯的 prebuilt 路徑或標識
-                    if '/prebuilt/' in value.lower() or value.startswith('refs/heads/prebuilt/'):
-                        detected_remote = 'rtk-prebuilt'
-                        self.logger.debug(f"根據 {field} 偵測 remote: {value} -> {detected_remote}")
-                        return detected_remote
-            
-            # 🔥 保守的專案名稱判斷（降低優先級）
-            # 只有在沒有其他線索時才使用專案名稱
-            if 'prebuilt' in project_name.lower():
-                # 但要更嚴格的判斷條件
-                if '/prebuilt/' in project_name or project_name.endswith('_prebuilt'):
-                    detected_remote = 'rtk-prebuilt'
-                    self.logger.debug(f"根據專案名稱格式偵測 remote: {project_name} -> {detected_remote}")
-                    return detected_remote
-            
             # 🔥 預設為 rtk（大多數專案都是這個）
             detected_remote = 'rtk'
             self.logger.debug(f"預設 remote: {project_name} -> {detected_remote}")
@@ -2460,12 +2465,12 @@ class FeatureTwo:
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
                 force_update: bool = False) -> List[Dict]:
         """
-        建立分支並返回結果 - 修正版 (🔥 包含 branch_revision 資訊)
+        建立分支並返回結果 - 修復版（正確的跳過邏輯）
         """
         try:
             self.logger.info("開始建立分支...")
-            self.logger.info("🎯 建立邏輯：只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
-            self.logger.info(f"🆕 強制更新模式: {'啟用' if force_update else '停用'}")
+            self.logger.info("目標建立邏輯：只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
+            self.logger.info(f"強制更新模式: {'啟用' if force_update else '停用'}")
             
             branch_results = []
             skipped_tags = 0
@@ -2474,22 +2479,23 @@ class FeatureTwo:
             delete_recreate_count = 0
             prebuilt_count = 0
             normal_count = 0
+            data_quality_issues = 0
             
             for project in projects:
                 project_name = project.get('name', '')
                 target_branch = project.get('target_branch', '')
                 target_type = project.get('target_type', 'Branch')
-                revision = project.get('revision', '')  # 🔥 來源 revision
+                revision = project.get('revision', '')  # 來源 revision
                 target_branch_revision = project.get('target_branch_revision', '')  # 目標分支 revision
-                branch_revision = project.get('branch_revision', '-')  # 🔥 新增：來源分支的實際 hash
+                branch_revision = project.get('branch_revision', '-')  # 來源分支的實際 hash
                 
-                # 🔥 使用項目中已設定的 remote
+                # 使用項目中已設定的 remote
                 remote = project.get('remote', '')
                 if not remote:
                     remote = self._auto_detect_remote(project)
                 
                 # 檢查必要資訊
-                if not all([project_name, target_branch, revision]):
+                if not all([project_name, target_branch]):
                     self.logger.debug(f"跳過專案 {project_name}：缺少必要資訊")
                     continue
                 
@@ -2500,7 +2506,7 @@ class FeatureTwo:
                         'SN': len(branch_results) + 1,
                         'Project': project_name,
                         'revision': revision,
-                        'branch_revision': branch_revision,  # 🔥 新增
+                        'branch_revision': branch_revision,
                         'target_branch': target_branch,
                         'target_type': 'Tag',
                         'target_branch_link': project.get('target_branch_link', ''),
@@ -2515,34 +2521,50 @@ class FeatureTwo:
                     branch_results.append(branch_result)
                     continue
                 
-                # 🔥 新邏輯：計算 revision_diff，只有不同時才建立分支
-                revision_diff = self._calculate_revision_diff(revision, target_branch_revision)
+                # 數據品質診斷
+                self._diagnose_project_data(project, project_name)
                 
-                # 🔥 如果版本相同且目標分支已存在，跳過建立
+                # 修復版本比較邏輯
+                revision_diff = self._calculate_revision_diff_fixed(
+                    revision,                # source_revision (可能不是hash)
+                    target_branch_revision,  # target_revision (應該是hash)
+                    branch_revision,         # branch_revision (來源分支的真實hash)
+                    project_name            # 用於日誌
+                )
+                
+                # 如果版本相同且目標分支已存在，跳過建立
                 if revision_diff == "N":
                     skipped_same_version += 1
+                    
+                    # 決定顯示哪個來源版本
+                    source_display = branch_revision if branch_revision != "-" and self._is_revision_hash(branch_revision) else revision
+                    source_short = source_display[:8] if len(source_display) >= 8 else source_display
+                    target_short = target_branch_revision[:8] if target_branch_revision and len(target_branch_revision) >= 8 else target_branch_revision or "N/A"
+                    
                     branch_result = {
                         'SN': len(branch_results) + 1,
                         'Project': project_name,
                         'revision': revision,
-                        'branch_revision': branch_revision,  # 🔥 新增
+                        'branch_revision': branch_revision,
                         'target_branch': target_branch,
                         'target_type': 'Branch',
                         'target_branch_link': project.get('target_branch_link', ''),
                         'target_branch_revision': target_branch_revision,
                         'Status': '跳過',
-                        'Message': f'版本相同，無需更新 (來源: {revision[:8]}, 目標: {target_branch_revision[:8] if target_branch_revision else "N/A"})',
+                        'Message': f'Hash 相同，無需更新 (來源: {source_short}, 目標: {target_short})',
                         'Already_Exists': '是',
                         'Force_Update': '否',
                         'Remote': remote,
                         'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
-                    self.logger.debug(f"⏭️ 跳過 {project_name}：版本相同 (來源: {revision[:8]}, 目標: {target_branch_revision[:8] if target_branch_revision else 'N/A'})")
+                    self.logger.info(f"跳過 {project_name}：Hash 相同 (來源: {source_short}, 目標: {target_short})")
                     continue
                 
-                # 🔥 只有版本不同 (revision_diff = "Y") 時才建立/更新分支
-                self.logger.info(f"🔄 需要更新分支 {project_name}: {revision[:8]} → {target_branch}")
+                # 只有版本不同 (revision_diff = "Y") 時才建立/更新分支
+                source_display = branch_revision if branch_revision != "-" and self._is_revision_hash(branch_revision) else revision
+                source_short = source_display[:8] if len(source_display) >= 8 else source_display
+                self.logger.info(f"需要更新分支 {project_name}: {source_short} → {target_branch}")
                 
                 # 根據 remote 選擇正確的 GerritManager
                 if remote == 'rtk-prebuilt':
@@ -2554,13 +2576,13 @@ class FeatureTwo:
                     normal_count += 1
                     gerrit_server = self._get_gerrit_base_url('')
                 
-                # 🔥 執行分支建立/更新
+                # 執行分支建立/更新
                 success, branch_result = self._create_or_update_branch_with_retry(
                     temp_gerrit, project_name, target_branch, revision, remote, 
                     gerrit_server, force_update, len(branch_results) + 1
                 )
                 
-                # 🔥 確保 branch_result 包含 branch_revision 資訊
+                # 確保 branch_result 包含 branch_revision 資訊
                 branch_result['branch_revision'] = branch_revision
                 
                 if success:
@@ -2579,13 +2601,13 @@ class FeatureTwo:
             success_count = len([r for r in branch_results if r['Status'] == '成功'])
             failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
             
-            self.logger.info(f"🎉 分支建立完成，共處理 {len(branch_results)} 個專案")
-            self.logger.info(f"  - ✅ 成功更新: {success_count} 個")
-            self.logger.info(f"  - ❌ 失敗: {failure_count} 個")
-            self.logger.info(f"  - ⏭️ 跳過 Tag: {skipped_tags} 個")
-            self.logger.info(f"  - ⏭️ 跳過版本相同: {skipped_same_version} 個")
+            self.logger.info(f"分支建立完成，共處理 {len(branch_results)} 個專案")
+            self.logger.info(f"  - 成功更新: {success_count} 個")
+            self.logger.info(f"  - 失敗: {failure_count} 個")
+            self.logger.info(f"  - 跳過 Tag: {skipped_tags} 個")
+            self.logger.info(f"  - 跳過版本相同: {skipped_same_version} 個")
             if delete_recreate_count > 0:
-                self.logger.info(f"  - 🔄 刪除後重建: {delete_recreate_count} 個")
+                self.logger.info(f"  - 刪除後重建: {delete_recreate_count} 個")
             
             return branch_results
             
@@ -2593,31 +2615,85 @@ class FeatureTwo:
             self.logger.error(f"建立分支失敗: {str(e)}")
             return []
 
-    def _calculate_revision_diff(self, source_revision: str, target_revision: str) -> str:
-        """
-        🔥 計算 revision 差異
-        比較來源和目標 revision 的完整值
+    def _diagnose_project_data(self, project: Dict, project_name: str) -> None:
+        """診斷專案數據品質"""
+        revision = project.get('revision', '')
+        branch_revision = project.get('branch_revision', '-')
+        target_branch_revision = project.get('target_branch_revision', '')
         
+        self.logger.debug(f"專案 {project_name} 數據診斷:")
+        self.logger.debug(f"  revision: '{revision}' (is_hash: {self._is_revision_hash(revision)})")
+        self.logger.debug(f"  branch_revision: '{branch_revision}' (is_hash: {self._is_revision_hash(branch_revision) if branch_revision != '-' else False})")
+        self.logger.debug(f"  target_branch_revision: '{target_branch_revision}' (is_hash: {self._is_revision_hash(target_branch_revision)})")
+        
+        # 檢查潛在問題
+        if revision and not self._is_revision_hash(revision) and (not branch_revision or branch_revision == '-'):
+            self.logger.warning(f"專案 {project_name}: revision 不是 hash 且沒有有效的 branch_revision")
+        
+        if not target_branch_revision or target_branch_revision == '-':
+            self.logger.warning(f"專案 {project_name}: 缺少 target_branch_revision")
+
+    def _calculate_revision_diff_fixed(self, source_revision: str, target_revision: str, 
+                                    branch_revision: str = None, project_name: str = '') -> str:
+        """
+        修復版：計算 revision 差異 - 正確處理 hash 比較
+        
+        Args:
+            source_revision: 原始 revision（可能是分支名稱或hash）
+            target_revision: 目標 revision（應該是hash）
+            branch_revision: 來源分支的實際hash（如果有的話）
+            project_name: 專案名稱（用於日誌）
+            
         Returns:
-            "N": 版本相同
-            "Y": 版本不同或目標為空
+            "N": 版本相同，不需更新
+            "Y": 版本不同，需要更新
         """
         try:
             if not source_revision:
+                self.logger.debug(f"{project_name}: 無來源版本，需要更新")
                 return "Y"
             
             if not target_revision or target_revision == "-":
+                self.logger.debug(f"{project_name}: 無目標版本，需要更新")
                 return "Y"
             
-            # 🔥 比較完整值（不再截取前8碼）
-            if source_revision.strip() == target_revision.strip():
-                return "N"  # 相同
+            # 選擇正確的比較來源
+            is_source_hash = self._is_revision_hash(source_revision)
+            
+            if is_source_hash:
+                # 如果 source_revision 是 hash，直接使用它
+                compare_source = source_revision.strip()
+                compare_type = "source_revision"
             else:
-                return "Y"  # 不同
+                # 如果 source_revision 不是 hash，檢查 branch_revision
+                if branch_revision and branch_revision != "-" and self._is_revision_hash(branch_revision):
+                    compare_source = branch_revision.strip()
+                    compare_type = "branch_revision"
+                else:
+                    # 都不是有效的 hash，無法準確比較，當作需要更新
+                    self.logger.warning(f"{project_name}: 無有效的 hash 進行比較 (source: '{source_revision}', branch: '{branch_revision}')，當作需要更新")
+                    return "Y"
+            
+            # 確保目標也是hash
+            if not self._is_revision_hash(target_revision):
+                self.logger.warning(f"{project_name}: 目標版本不是有效hash: '{target_revision}'，當作需要更新")
+                return "Y"
+            
+            target_clean = target_revision.strip()
+            
+            # 比較完整的 hash 值
+            if compare_source == target_clean:
+                self.logger.debug(f"{project_name}: Hash 相同，跳過更新")
+                self.logger.debug(f"  使用 {compare_type}: {compare_source[:8]} == {target_clean[:8]}")
+                return "N"  # 相同，不需更新
+            else:
+                self.logger.debug(f"{project_name}: Hash 不同，需要更新")
+                self.logger.debug(f"  使用 {compare_type}: {compare_source[:8]} != {target_clean[:8]}")
+                return "Y"  # 不同，需要更新
                 
         except Exception as e:
-            self.logger.debug(f"計算 revision_diff 失敗: {str(e)}")
-            return "Y"  # 出錯時當作不同處理
+            self.logger.debug(f"{project_name}: 計算 revision_diff 失敗: {str(e)}，當作需要更新")
+            return "Y"
             
     def _create_or_update_branch_with_retry(self, gerrit_manager, project_name: str, 
                                         target_branch: str, revision: str, remote: str,
