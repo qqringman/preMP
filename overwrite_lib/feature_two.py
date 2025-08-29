@@ -3508,18 +3508,9 @@ class FeatureTwo:
             return ""
 
     def _generate_converted_manifest(self, projects: List[Dict], original_manifest_path: str, 
-                                    output_folder: str, process_type: str) -> str:
+                                output_folder: str, process_type: str) -> str:
         """
-        生成轉換後的 manifest 檔案 - 參考 feature_three.py 的邏輯
-        
-        Args:
-            projects: 轉換後的專案列表
-            original_manifest_path: 原始 manifest 檔案路徑
-            output_folder: 輸出資料夾
-            process_type: 處理類型
-            
-        Returns:
-            轉換後 manifest 檔案路徑
+        生成轉換後的 manifest 檔案 - 修正版：使用正確的目標檔案名
         """
         try:
             # 讀取原始 manifest 檔案
@@ -3543,10 +3534,8 @@ class FeatureTwo:
                 original_content, project_mapping, process_type
             )
             
-            # 生成輸出檔案名
-            original_filename = os.path.basename(original_manifest_path)
-            base_name = os.path.splitext(original_filename)[0]
-            converted_filename = f"converted_{base_name}_{process_type}.xml"
+            # 🔥 修改：根據 process_type 生成正確的目標檔案名
+            converted_filename = self._get_target_manifest_filename(process_type)
             converted_path = os.path.join(output_folder, converted_filename)
             
             # 保存轉換後的檔案
@@ -3570,6 +3559,38 @@ class FeatureTwo:
             self.logger.error(f"生成轉換後 manifest 失敗: {str(e)}")
             return ""
 
+    def _get_target_manifest_filename(self, process_type: str) -> str:
+        """
+        🔥 新方法：根據處理類型取得正確的目標檔案名
+        
+        Args:
+            process_type: 處理類型
+            
+        Returns:
+            目標檔案名
+        """
+        filename_mapping = {
+            # 功能二的處理類型
+            'master_vs_premp': 'atv-google-refplus-premp.xml',
+            'premp_vs_mp': 'atv-google-refplus-wave.xml', 
+            'mp_vs_mpbackup': 'atv-google-refplus-wave-backup.xml',
+            
+            # tvconfig 功能的處理類型  
+            'master_to_premp': 'atv-google-refplus-premp.xml',
+            'master_to_mp': 'atv-google-refplus-wave.xml',
+            'master_to_mpbackup': 'atv-google-refplus-wave-backup.xml'
+        }
+        
+        target_filename = filename_mapping.get(process_type)
+        
+        if target_filename:
+            self.logger.info(f"✅ 使用目標檔案名: {process_type} → {target_filename}")
+            return target_filename
+        else:
+            # 如果沒有預定義的映射，使用原來的邏輯作為備案
+            self.logger.warning(f"⚠️ 未找到 {process_type} 的檔案名映射，使用預設格式")
+            return f"converted_manifest_{process_type}.xml"
+            
     def _convert_xml_content_with_projects(self, xml_content: str, project_mapping: Dict[str, str], 
                                         process_type: str) -> str:
         """
@@ -3663,7 +3684,7 @@ class FeatureTwo:
 
     def _final_file_report(self, output_folder: str, saved_files: List[str]):
         """
-        最終檔案檢查和報告 - 修正版：更好的檔案分類
+        最終檔案檢查和報告 - 修正版：移除 process_type 依賴
         
         Args:
             output_folder: 輸出資料夾
@@ -3702,10 +3723,16 @@ class FeatureTwo:
                     self.logger.info(f"\n📊 XML 檔案統計:")
                     
                     gerrit_files = [f for f in xml_files_found if f[0].startswith('gerrit_')]
-                    converted_files = [f for f in xml_files_found if f[0].startswith('converted_')]
-                    # 🔥 修改：原始檔案分類邏輯 - 不以 gerrit_ 或 converted_ 開頭的就是原始檔案
+                    # 🔥 修改：由於現在轉換檔案使用目標檔名，檢查 atv-google-refplus 系列檔案
+                    target_manifest_files = [f for f in xml_files_found 
+                                        if f[0].startswith('atv-google-refplus') and not f[0].startswith('gerrit_')]
+                    converted_files = [f for f in xml_files_found if f[0].startswith('converted_')]  # 保留舊格式檢查
+                    
+                    # 🔥 修改：原始檔案分類邏輯
                     original_files = [f for f in xml_files_found 
-                                    if not f[0].startswith('gerrit_') and not f[0].startswith('converted_')]
+                                    if not f[0].startswith('gerrit_') 
+                                    and not f[0].startswith('converted_')
+                                    and not f[0].startswith('atv-google-refplus')]
                     
                     if original_files:
                         self.logger.info(f"  🟡 原始/來源檔案: {len(original_files)} 個")
@@ -3718,8 +3745,14 @@ class FeatureTwo:
                             file_type = "(展開檔案)" if "_expanded" in filename else "(下載檔案)"
                             self.logger.info(f"    - {filename} ({size} bytes) {file_type}")
                     
+                    # 🔥 新增：目標 manifest 檔案分類
+                    if target_manifest_files:
+                        self.logger.info(f"  🟢 目標 manifest 檔案: {len(target_manifest_files)} 個")
+                        for filename, size in target_manifest_files:
+                            self.logger.info(f"    - {filename} ({size} bytes)")
+                    
                     if converted_files:
-                        self.logger.info(f"  🟢 轉換後檔案: {len(converted_files)} 個")
+                        self.logger.info(f"  🟠 轉換檔案 (舊格式): {len(converted_files)} 個")
                         for filename, size in converted_files:
                             self.logger.info(f"    - {filename} ({size} bytes)")
                     
@@ -3732,8 +3765,8 @@ class FeatureTwo:
                 self.logger.info(f"🎯 檔案命名規則:")
                 self.logger.info(f"   - 原始檔案: 保持原始檔名")
                 self.logger.info(f"   - Gerrit 檔案: gerrit_*.xml")
-                self.logger.info(f"   - 展開檔案: gerrit_*_expanded.xml") 
-                self.logger.info(f"   - 轉換檔案: converted_*_{process_type}.xml")
+                self.logger.info(f"   - 展開檔案: gerrit_*_expanded.xml")
+                self.logger.info(f"   - 目標 manifest: atv-google-refplus-*.xml")  # 🔥 修正：移除 process_type
             else:
                 self.logger.warning(f"\n⚠️ 部分檔案可能保存失敗，請檢查上述報告")
                 

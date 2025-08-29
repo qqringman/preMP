@@ -569,10 +569,13 @@ class FeatureManager:
             self.logger.error(f"對齊 Master Tvconfig 功能執行失敗: {str(e)}")
 
     def _execute_tvconfig_alignment_simplified(self, manifest_source, process_type, output_file, 
-                                            output_folder, create_branches, force_update_branches, 
-                                            check_branch_exists):
+                                        output_folder, create_branches, force_update_branches, 
+                                        check_branch_exists):
         """執行簡化版的 tvconfig 對齊處理"""
         try:
+            # 🔥 新增：保存檔案列表
+            saved_files = []
+            
             # 準備參數，直接調用 feature_two 但跳過內部交互
             if manifest_source['type'] == 'gerrit':
                 # 使用 feature_two 的內部方法處理 Gerrit 下載
@@ -581,17 +584,32 @@ class FeatureManager:
                     print("❌ 從 Gerrit 下載 manifest 失敗")
                     return False
                 input_file, original_content = manifest_info
+                
+                # 🔥 Gerrit 檔案：保存為 gerrit_*.xml
+                gerrit_original_path = self.feature_two._save_gerrit_manifest_file(
+                    original_content, "atv-google-refplus.xml", output_folder
+                )
+                if gerrit_original_path:
+                    saved_files.append(gerrit_original_path)
+                
             else:
                 # 使用本地檔案
                 input_file = manifest_source['source']
                 with open(input_file, 'r', encoding='utf-8') as f:
                     original_content = f.read()
+                
+                # 🔥 本地檔案：保存原始檔名
+                original_manifest_path = self.feature_two._save_original_manifest_file(
+                    input_file, output_folder
+                )
+                if original_manifest_path:
+                    saved_files.append(original_manifest_path)
             
-            # 直接調用 feature_two.process 方法，但需要先處理 tvconfig 特有邏輯
-            # 這裡我們需要調用一個新的內部方法來處理 tvconfig 邏輯
-            success = self._process_tvconfig_with_params(
+            # 🔥 修改：調用修正版的處理方法
+            success = self._process_tvconfig_with_params_fixed(
                 input_file, original_content, process_type, output_file, output_folder,
-                create_branches, force_update_branches, check_branch_exists
+                create_branches, force_update_branches, check_branch_exists, 
+                manifest_source['type'], saved_files  # 傳入來源類型和已保存檔案列表
             )
             
             return success
@@ -600,14 +618,16 @@ class FeatureManager:
             self.logger.error(f"簡化版 tvconfig 對齊處理失敗: {str(e)}")
             return False
 
-    def _process_tvconfig_with_params(self, input_file, original_content, process_type, output_file, 
-                                    output_folder, create_branches, force_update_branches, check_branch_exists):
-        """使用指定參數處理 tvconfig，避免內部交互"""
+    def _process_tvconfig_with_params_fixed(self, input_file, original_content, process_type, output_file, 
+                                      output_folder, create_branches, force_update_branches, 
+                                      check_branch_exists, source_type, saved_files):
+        """使用指定參數處理 tvconfig，避免內部交互 - 修正版：使用短檔名展開檔案"""
         try:
-            # 備份原始檔案
-            backup_info = self.feature_two._backup_tvconfig_manifest_files(
-                input_file, output_folder, True, original_content
-            )
+            # 備份原始檔案（如果是 Gerrit 類型才需要備份到不同檔名）
+            if source_type == 'gerrit':
+                backup_info = self.feature_two._backup_tvconfig_manifest_files(
+                    input_file, output_folder, True, original_content
+                )
             
             # 處理 manifest（展開 include 等）
             processed_manifest_path = input_file
@@ -616,7 +636,25 @@ class FeatureManager:
                 if expanded_result:
                     expanded_manifest_path, expanded_content = expanded_result
                     processed_manifest_path = expanded_manifest_path
-                    self.feature_two._save_expanded_tvconfig_manifest(expanded_content, output_folder)
+                    
+                    # 🔥 修正：使用 _save_expanded_manifest_file() 產生短檔名
+                    saved_expanded_path = self.feature_two._save_expanded_manifest_file(
+                        expanded_content, "atv-google-refplus.xml", output_folder
+                    )
+                    if saved_expanded_path:
+                        saved_files.append(saved_expanded_path)
+                        self.logger.info(f"✅ 展開檔案已保存（短檔名）: {os.path.basename(saved_expanded_path)}")
+                    
+                    # 🔥 新增：刪除長檔名的臨時檔案（如果存在）
+                    if expanded_manifest_path and os.path.exists(expanded_manifest_path):
+                        try:
+                            os.remove(expanded_manifest_path)
+                            self.logger.info(f"🗑️ 已清理長檔名臨時檔案: {os.path.basename(expanded_manifest_path)}")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ 清理長檔名檔案失敗: {str(e)}")
+                    
+                    # 🔥 更新處理路徑為短檔名檔案
+                    processed_manifest_path = saved_expanded_path
             
             # 解析並過濾專案
             all_projects = self.feature_two._parse_manifest(processed_manifest_path)
@@ -632,7 +670,8 @@ class FeatureManager:
             
             # 轉換專案
             converted_projects = self.feature_two._convert_projects(
-                tvconfig_projects, process_type, check_branch_exists, source_manifest_name
+                tvconfig_projects, process_type, check_branch_exists, source_manifest_name, 
+                is_tvconfig=True  # 標記為 tvconfig 轉換
             )
             
             # 添加連結資訊
@@ -641,6 +680,13 @@ class FeatureManager:
             # 重新編號
             unique_projects = self.feature_two._renumber_projects(projects_with_links)
             duplicate_projects = []
+            
+            # 生成轉換後的 manifest 檔案
+            converted_manifest_path = self.feature_two._generate_converted_manifest(
+                unique_projects, processed_manifest_path, output_folder, process_type
+            )
+            if converted_manifest_path:
+                saved_files.append(converted_manifest_path)
             
             # 寫入 Excel
             self.feature_two._write_excel_unified_basic(unique_projects, duplicate_projects, output_file, output_folder)
@@ -651,6 +697,97 @@ class FeatureManager:
                     unique_projects, output_file, output_folder, force_update_branches
                 )
                 self.feature_two._add_branch_status_sheet_with_revision(output_file, output_folder, branch_results)
+            
+            # 最終檔案檢查報告
+            excel_path = os.path.join(output_folder, output_file)
+            saved_files.append(excel_path)
+            self.feature_two._final_file_report(output_folder, saved_files)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"處理 tvconfig 參數失敗: {str(e)}")
+            return False
+            
+    def _process_tvconfig_with_params(self, input_file, original_content, process_type, output_file, 
+                                output_folder, create_branches, force_update_branches, check_branch_exists):
+        """使用指定參數處理 tvconfig，避免內部交互"""
+        try:
+            # 🔥 新增：保存檔案列表
+            saved_files = []
+            
+            # 🔥 新增：保存從 Gerrit 下載的原始檔案
+            gerrit_original_path = self.feature_two._save_gerrit_manifest_file(
+                original_content, "atv-google-refplus.xml", output_folder
+            )
+            if gerrit_original_path:
+                saved_files.append(gerrit_original_path)
+            
+            # 備份原始檔案
+            backup_info = self.feature_two._backup_tvconfig_manifest_files(
+                input_file, output_folder, True, original_content
+            )
+            
+            # 處理 manifest（展開 include 等）
+            processed_manifest_path = input_file
+            if self.feature_two._has_tvconfig_include_tags(original_content):
+                expanded_result = self.feature_two._expand_tvconfig_manifest(output_folder)
+                if expanded_result:
+                    expanded_manifest_path, expanded_content = expanded_result
+                    processed_manifest_path = expanded_manifest_path
+                    # 🔥 新增：保存展開檔案
+                    saved_expanded_path = self.feature_two._save_expanded_manifest_file(
+                        expanded_content, "atv-google-refplus.xml", output_folder
+                    )
+                    if saved_expanded_path:
+                        saved_files.append(saved_expanded_path)
+            
+            # 解析並過濾專案
+            all_projects = self.feature_two._parse_manifest(processed_manifest_path)
+            if not all_projects:
+                return False
+                
+            tvconfig_projects = self.feature_two._filter_tvconfigs_projects(all_projects)
+            if not tvconfig_projects:
+                return False
+            
+            # 提取來源 manifest 檔名
+            source_manifest_name = self.feature_two._extract_tvconfig_manifest_filename(processed_manifest_path)
+            
+            # 轉換專案
+            converted_projects = self.feature_two._convert_projects(
+                tvconfig_projects, process_type, check_branch_exists, source_manifest_name, 
+                is_tvconfig=True  # 標記為 tvconfig 轉換
+            )
+            
+            # 添加連結資訊
+            projects_with_links = self.feature_two._add_links_to_projects(converted_projects)
+            
+            # 重新編號
+            unique_projects = self.feature_two._renumber_projects(projects_with_links)
+            duplicate_projects = []
+            
+            # 🔥 新增：生成轉換後的 manifest 檔案
+            converted_manifest_path = self.feature_two._generate_converted_manifest(
+                unique_projects, processed_manifest_path, output_folder, process_type
+            )
+            if converted_manifest_path:
+                saved_files.append(converted_manifest_path)
+            
+            # 寫入 Excel
+            self.feature_two._write_excel_unified_basic(unique_projects, duplicate_projects, output_file, output_folder)
+            
+            # 如果選擇建立分支，執行分支建立
+            if create_branches:
+                branch_results = self.feature_two._create_branches(
+                    unique_projects, output_file, output_folder, force_update_branches
+                )
+                self.feature_two._add_branch_status_sheet_with_revision(output_file, output_folder, branch_results)
+            
+            # 🔥 新增：最終檔案檢查報告
+            excel_path = os.path.join(output_folder, output_file)
+            saved_files.append(excel_path)
+            self.feature_two._final_file_report(output_folder, saved_files)
             
             return True
             
