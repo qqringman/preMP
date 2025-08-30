@@ -59,7 +59,7 @@ Master → PreMP → Wave → Wave Backup
 
 **範例**:
 - `realtek/linux-5.15/master` → `realtek/linux-5.15/android-14/premp.google-refplus`
-- `realtek/linux-4.14/android-13/master` → `realtek/linux-4.14/android-14/premp.google-refplus`
+- `realtek/linux-4.14/android-14/master` → `realtek/linux-4.14/android-14/premp.google-refplus`
 
 ### 📱 Android 版本轉換
 
@@ -69,8 +69,8 @@ Master → PreMP → Wave → Wave Backup
 | **Android MP + 晶片** | `realtek/android-Y/mp.google-refplus.rtdZZZZ` | `realtek/android-14/premp.google-refplus.rtdZZZZ` |
 
 **範例**:
-- `realtek/android-13/mp.google-refplus` → `realtek/android-14/premp.google-refplus`
-- `realtek/android-13/mp.google-refplus.rtd2851a` → `realtek/android-14/premp.google-refplus.rtd2851a`
+- `realtek/android-14/mp.google-refplus` → `realtek/android-14/premp.google-refplus`
+- `realtek/android-14/mp.google-refplus.rtd2851a` → `realtek/android-14/premp.google-refplus.rtd2851a`
 
 ### 💾 晶片特定轉換
 
@@ -169,7 +169,7 @@ realtek/android-14/mp.google-refplus.wave.backup.rtd6748
 ### 🐧 Linux Kernel 轉換鏈
 
 ```
-realtek/linux-5.15/android-13/master
+realtek/linux-5.15/android-14/master
     ↓ master_to_premp (版本升級)
 realtek/linux-5.15/android-14/premp.google-refplus
     ↓ premp_to_mp
