@@ -426,6 +426,45 @@ TVCONFIG_SKIP_PROJECTS = {
 }
 
 # =====================================
+# ===== 自定義專案轉換規則設定 =====
+# =====================================
+
+FEATURE_THREE_CUSTOM_CONVERSIONS = {
+    'master_to_premp': {
+    },
+    
+    'premp_to_mp': {
+    },
+    
+    'mp_to_mpbackup': {
+        # 🆕 支援陣列格式：同一個 name pattern 可以有多個不同的 path 條件
+        '.*tvconfigs_prebuilt': [
+            {
+                'path_pattern': '.*refplus2.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },            
+            {
+                'path_pattern': '.*refplus3.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },
+            {
+                'path_pattern': '.*refplus5.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+            }
+        ],
+        
+        # 🆕 仍然支援簡單格式
+        # '.*tvconfigs_prebuilt': 'realtek/android-14/mp.google-refplus.wave.backup',
+        
+        # 🆕 也支援單一物件格式
+        # '.*another_pattern': {
+        #    'target': 'some_target',
+        #    'path_pattern': '.*some_path.*'
+        # }
+    }
+}
+
+# =====================================
 # ===== 晶片映射設定 =====
 # =====================================
 

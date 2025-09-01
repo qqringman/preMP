@@ -584,7 +584,8 @@ class FeatureThree:
             
             # 先解析 XML 取得 default 資訊
             temp_root = ET.fromstring(xml_content)
-            
+            self._current_xml_root = temp_root  # 🆕 新增：供自定義轉換規則查找 path 使用
+
             # 🆕 讀取 default 標籤的 remote 和 revision 屬性
             default_remote = ''
             default_revision = ''
@@ -871,14 +872,119 @@ class FeatureThree:
             return xml_content
             
     def _convert_single_revision(self, revision: str, overwrite_type: str, project_name: str = '') -> str:
-        """轉換單一 revision - 添加跳過邏輯"""
+        """轉換單一 revision - 支援陣列格式的多重條件匹配"""
         
         # 🔥 檢查是否應該跳過轉換
         if project_name and self._should_skip_project_conversion(project_name, overwrite_type):
             self.logger.debug(f"跳過專案 {project_name} 的轉換，保持原 revision: {revision}")
             return revision
         
-        # 🔥 根據正確的 overwrite_type 進行轉換
+        # 🆕 新增：檢查自定義轉換規則（支援陣列格式）
+        if project_name:
+            import re
+            
+            # 取得自定義轉換規則
+            custom_rules = getattr(config, 'FEATURE_THREE_CUSTOM_CONVERSIONS', {}).get(overwrite_type, {})
+            
+            # 檢查是否有匹配的規則
+            for pattern, rule_config in custom_rules.items():
+                try:
+                    # 先檢查 name 是否匹配
+                    name_matches = False
+                    try:
+                        name_matches = bool(re.search(pattern, project_name))
+                    except re.error:
+                        name_matches = pattern in project_name
+                    
+                    if not name_matches:
+                        continue
+                    
+                    # 🆕 支援三種配置格式
+                    if isinstance(rule_config, list):
+                        # 陣列格式：同一個 name pattern 對應多個規則
+                        for rule_item in rule_config:
+                            if not isinstance(rule_item, dict):
+                                continue
+                                
+                            target_branch = rule_item.get('target', '')
+                            path_pattern = rule_item.get('path_pattern', '')
+                            
+                            if not target_branch:
+                                continue
+                            
+                            # 檢查 path 條件
+                            if path_pattern:
+                                project_path = self._get_project_path_for_conversion(project_name, overwrite_type)
+                                if not project_path:
+                                    continue
+                                
+                                # 檢查 path 是否匹配
+                                path_matches = False
+                                try:
+                                    path_matches = bool(re.search(path_pattern, project_path))
+                                except re.error:
+                                    path_matches = path_pattern in project_path
+                                
+                                if not path_matches:
+                                    continue
+                                
+                                self.logger.info(f"🎯 使用自定義轉換規則（陣列格式 - name + path）: {project_name}")
+                                self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                self.logger.info(f"   path 模式: '{path_pattern}' ✓ (path: {project_path})")
+                                self.logger.info(f"   目標: '{target_branch}'")
+                                return target_branch
+                            else:
+                                # 沒有 path 限制，直接使用
+                                self.logger.info(f"🎯 使用自定義轉換規則（陣列格式 - 僅 name）: {project_name}")
+                                self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                self.logger.info(f"   目標: '{target_branch}'")
+                                return target_branch
+                                
+                    elif isinstance(rule_config, dict):
+                        # 字典格式：單一規則
+                        target_branch = rule_config.get('target', '')
+                        path_pattern = rule_config.get('path_pattern', '')
+                        
+                        if not target_branch:
+                            continue
+                        
+                        if path_pattern:
+                            project_path = self._get_project_path_for_conversion(project_name, overwrite_type)
+                            if not project_path:
+                                continue
+                            
+                            path_matches = False
+                            try:
+                                path_matches = bool(re.search(path_pattern, project_path))
+                            except re.error:
+                                path_matches = path_pattern in project_path
+                            
+                            if not path_matches:
+                                continue
+                            
+                            self.logger.info(f"🎯 使用自定義轉換規則（字典格式 - name + path）: {project_name}")
+                            self.logger.info(f"   name 模式: '{pattern}' ✓")
+                            self.logger.info(f"   path 模式: '{path_pattern}' ✓ (path: {project_path})")
+                            self.logger.info(f"   目標: '{target_branch}'")
+                        else:
+                            self.logger.info(f"🎯 使用自定義轉換規則（字典格式 - 僅 name）: {project_name}")
+                            self.logger.info(f"   name 模式: '{pattern}' ✓")
+                            self.logger.info(f"   目標: '{target_branch}'")
+                        
+                        return target_branch
+                        
+                    else:
+                        # 簡單格式：直接是 target branch 字符串
+                        target_branch = str(rule_config)
+                        self.logger.info(f"🎯 使用自定義轉換規則（簡單格式）: {project_name}")
+                        self.logger.info(f"   模式: '{pattern}' → 目標: '{target_branch}'")
+                        return target_branch
+                        
+                except Exception as e:
+                    self.logger.error(f"處理自定義轉換規則 '{pattern}' 時發生錯誤: {str(e)}")
+                    continue
+        
+        # 🔥 標準轉換邏輯（原本邏輯不變）
         if overwrite_type == 'master_to_premp':
             return self._convert_master_to_premp(revision)
         elif overwrite_type == 'premp_to_mp':
@@ -888,6 +994,37 @@ class FeatureThree:
         else:
             return revision
     
+    def _get_project_path_for_conversion(self, project_name: str, overwrite_type: str) -> str:
+        """
+        取得專案的 path 屬性用於自定義轉換規則檢查
+        
+        Args:
+            project_name: 專案名稱
+            overwrite_type: 轉換類型
+            
+        Returns:
+            專案的 path 屬性，如果找不到則返回空字串
+        """
+        try:
+            # 從 conversion_info 中尋找（如果已經處理過）
+            if hasattr(self, '_current_conversion_projects'):
+                for project_info in self._current_conversion_projects:
+                    if project_info.get('name') == project_name:
+                        return project_info.get('path', '')
+            
+            # 🔥 關鍵：從當前正在處理的 XML 中查找
+            if hasattr(self, '_current_xml_root'):
+                for project in self._current_xml_root.findall('project'):
+                    if project.get('name') == project_name:
+                        return project.get('path', '')
+            
+            self.logger.debug(f"無法找到專案 {project_name} 的 path 屬性")
+            return ''
+            
+        except Exception as e:
+            self.logger.error(f"取得專案 path 時發生錯誤: {str(e)}")
+            return ''
+        
     def _should_skip_project_conversion(self, project_name: str, overwrite_type: str) -> bool:
         """
         檢查專案是否應該跳過轉換 - Feature Three 版本
