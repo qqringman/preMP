@@ -1,4 +1,4 @@
-# 📋 Manifest 分支映射規則手冊
+# 📋 Manifest 分支映射規則手冊（完整版）
 
 ## 🎯 轉換鏈總覽
 
@@ -11,6 +11,174 @@ Master → PreMP → Wave → Wave Backup
 | 🔵 **第一階段** | `master_to_premp` | `master` → `premp.google-refplus` |
 | 🟢 **第二階段** | `premp_to_mp` | `premp.google-refplus` → `mp.google-refplus.wave` |
 | 🟠 **第三階段** | `mp_to_mpbackup` | `mp.google-refplus.wave` → `mp.google-refplus.wave.backup` |
+
+---
+
+## 🛠️ Feature Three 專用配置
+
+### 🚫 跳過專案設定 (`FEATURE_THREE_SKIP_PROJECTS`)
+
+允許指定特定專案跳過轉換，保持原始 revision 不變。
+
+```python
+FEATURE_THREE_SKIP_PROJECTS = {
+    'master_to_premp': [
+        # 'project_name_pattern_1',
+        # 'project_name_pattern_2'
+    ],
+    
+    'premp_to_mp': [
+        # 'project_name_pattern_1'
+    ],
+    
+    'mp_to_mpbackup': [
+        # 'project_name_pattern_1'
+    ]
+}
+```
+
+**使用方式**：
+- 專案名稱包含指定模式的專案將跳過轉換
+- 保持原始 revision 值不變
+- 在 Excel 報告中標記為 "跳過轉換"
+
+**範例**：
+```python
+'master_to_premp': [
+    'special_project',  # 跳過名稱包含 'special_project' 的專案
+    'test_'             # 跳過名稱包含 'test_' 的專案
+]
+```
+
+### 🎯 自定義轉換規則 (`FEATURE_THREE_CUSTOM_CONVERSIONS`)
+
+提供靈活的自定義轉換規則，支援複雜的條件匹配。
+
+#### 📝 基本配置結構
+
+```python
+FEATURE_THREE_CUSTOM_CONVERSIONS = {
+    'master_to_premp': {
+        # 自定義規則
+    },
+    
+    'premp_to_mp': {
+        # 自定義規則
+    },
+    
+    'mp_to_mpbackup': {
+        # 自定義規則
+    }
+}
+```
+
+#### 🔧 支援的三種格式
+
+##### 1️⃣ **簡單格式**（直接字串）
+```python
+'.*project_pattern': 'target_branch_name'
+```
+
+**範例**：
+```python
+'.*tvconfigs_prebuilt': 'realtek/android-14/mp.google-refplus.wave.backup'
+```
+
+##### 2️⃣ **字典格式**（單一條件）
+```python
+'.*project_pattern': {
+    'target': 'target_branch_name',
+    'path_pattern': '.*path_pattern.*'  # 可選的路徑條件
+}
+```
+
+**範例**：
+```python
+'.*tvconfigs_prebuilt': {
+    'target': 'realtek/android-14/mp.google-refplus.wave.backup',
+    'path_pattern': '.*refplus5.*'
+}
+```
+
+##### 3️⃣ **陣列格式**（多重條件）
+```python
+'.*project_pattern': [
+    {
+        'path_pattern': '.*condition1.*',
+        'target': 'target_branch_1'
+    },
+    {
+        'path_pattern': '.*condition2.*', 
+        'target': 'target_branch_2'
+    }
+]
+```
+
+**範例**：
+```python
+'.*tvconfigs_prebuilt': [
+    {
+        'path_pattern': '.*refplus2.*',
+        'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+    },
+    {
+        'path_pattern': '.*refplus3.*',
+        'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+    },
+    {
+        'path_pattern': '.*refplus5.*',
+        'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+    }
+]
+```
+
+#### 🎯 條件匹配邏輯
+
+1. **專案名稱匹配** (`project_pattern`)
+   - 使用正規表達式匹配專案的 `name` 屬性
+   - 支援萬用字元如 `.*`、`^`、`$` 等
+
+2. **路徑條件匹配** (`path_pattern`)
+   - 額外的路徑條件限制，可選
+   - 匹配專案的 `path` 屬性
+   - 只有名稱和路徑都匹配時才套用規則
+
+3. **優先級順序**
+   - 自定義轉換規則 > 跳過專案規則 > 標準轉換規則
+   - 陣列格式中按順序檢查，第一個匹配的條件生效
+
+#### 💡 實際使用範例
+
+```python
+FEATURE_THREE_CUSTOM_CONVERSIONS = {
+    'mp_to_mpbackup': {
+        # 範例1: 簡單轉換
+        '.*special_project': 'realtek/android-14/mp.google-refplus.wave.backup.special',
+        
+        # 範例2: 基於路徑的條件轉換
+        '.*tvconfigs_prebuilt': [
+            {
+                'path_pattern': '.*refplus2.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },            
+            {
+                'path_pattern': '.*refplus3.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },
+            {
+                'path_pattern': '.*refplus5.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+            }
+        ],
+        
+        # 範例3: 單一條件轉換
+        '.*another_pattern': {
+            'target': 'custom_target_branch',
+            'path_pattern': '.*specific_path.*'
+        }
+    }
+}
+```
 
 ---
 
@@ -83,6 +251,7 @@ Master → PreMP → Wave → Wave Backup
 | `merlin8` | `rtd2885p` | `realtek/merlin8/master` → `realtek/android-14/premp.google-refplus.rtd2885p` |
 | `merlin8p` | `rtd2885q` | `realtek/merlin8p/master` → `realtek/android-14/premp.google-refplus.rtd2885q` |
 | `merlin9` | `rtd2875q` | `realtek/merlin9/master` → `realtek/android-14/premp.google-refplus.rtd2875q` |
+| `matrix` | `rtd2811` | `realtek/matrix/master` → `realtek/android-14/premp.google-refplus.rtd2811` |
 
 ### ⛔ 跳過轉換的項目
 
@@ -190,6 +359,15 @@ realtek/android-14/mp.google-refplus.wave.upgrade-11.rtd2851a
 realtek/android-14/mp.google-refplus.wave.backup.upgrade-11.rtd2851a
 ```
 
+### 🎯 自定義轉換範例
+
+```
+# 假設有專案 "realtek/tvconfigs_prebuilt" 且 path 包含 "refplus2"
+realtek/android-14/mp.google-refplus.wave
+    ↓ mp_to_mpbackup (使用自定義規則)
+realtek/android-14/mp.google-refplus.wave.backup.upgrade-11
+```
+
 ---
 
 ## 🎯 特殊處理規則
@@ -205,9 +383,11 @@ realtek/android-14/mp.google-refplus.wave.backup.upgrade-11.rtd2851a
 ### 📋 處理優先級
 
 1. **跳過檢查**: Google 項目、Git Tags
-2. **精確匹配**: 完全相符的轉換規則
-3. **模式匹配**: 正規表達式匹配規則
-4. **智能備案**: 通用轉換邏輯
+2. **跳過專案**: `FEATURE_THREE_SKIP_PROJECTS` 配置
+3. **自定義轉換**: `FEATURE_THREE_CUSTOM_CONVERSIONS` 規則
+4. **精確匹配**: 完全相符的轉換規則
+5. **模式匹配**: 正規表達式匹配規則
+6. **智能備案**: 通用轉換邏輯
 
 ---
 
@@ -218,10 +398,11 @@ realtek/android-14/mp.google-refplus.wave.backup.upgrade-11.rtd2851a
 | **總專案數** | 所有處理的專案數量 |
 | **實際轉換專案數** | revision 有變更的專案 |
 | **未轉換專案數** | revision 保持不變的專案 |
+| **跳過專案數** | 在跳過清單中的專案 |
+| **自定義轉換數** | 使用自定義規則轉換的專案 |
 | **Hash Revision 數量** | 使用 commit hash 的專案 |
 | **Branch Revision 數量** | 使用分支名稱的專案 |
 | **使用 Upstream 轉換數量** | hash revision 使用 upstream 的專案 |
-| **跳過特殊專案數** | Google 項目和 Git Tags |
 
 ---
 
@@ -241,3 +422,64 @@ realtek/android-14/mp.google-refplus.wave.backup.upgrade-11.rtd2851a
 - ✅ 晶片映射表可擴展新的晶片型號
 - ✅ Linux kernel 版本完全動態匹配
 - ✅ Upgrade 版本號自動保留和轉換
+- ✅ 支援靈活的跳過專案配置
+- ✅ 支援複雜的自定義轉換規則
+- ✅ 支援基於專案名稱和路徑的條件匹配
+
+---
+
+## 🔧 配置範例
+
+### 完整配置範例
+
+```python
+# 跳過專案設定
+FEATURE_THREE_SKIP_PROJECTS = {
+    'master_to_premp': [
+        'external/googletest',
+        'platform/system/core'
+    ],
+    
+    'premp_to_mp': [
+        'test_project'
+    ],
+    
+    'mp_to_mpbackup': []
+}
+
+# 自定義轉換規則
+FEATURE_THREE_CUSTOM_CONVERSIONS = {
+    'master_to_premp': {},
+    
+    'premp_to_mp': {},
+    
+    'mp_to_mpbackup': {
+        # 複雜的條件匹配
+        '.*tvconfigs_prebuilt': [
+            {
+                'path_pattern': '.*refplus2.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },            
+            {
+                'path_pattern': '.*refplus3.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+            },
+            {
+                'path_pattern': '.*refplus5.*',
+                'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+            }
+        ],
+        
+        # 簡單轉換
+        '.*special_project': 'realtek/android-14/mp.google-refplus.wave.backup.special',
+        
+        # 單一條件轉換
+        '.*conditional_project': {
+            'target': 'custom_target_branch',
+            'path_pattern': '.*specific_condition.*'
+        }
+    }
+}
+```
+
+這個配置系統提供了極大的靈活性，可以處理各種複雜的轉換需求和特殊情況。
