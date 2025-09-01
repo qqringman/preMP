@@ -1122,7 +1122,7 @@ class FeatureTwo:
                 elif header_text in ['revision', 'target_branch_revision']:
                     # revision 欄位設定適中寬度
                     final_width = max(max_content_width + 2, 25)
-                elif header_text == 'revision_diff':
+                elif header_text in ['revision_diff', 'title_diff']:
                     # revision_diff 欄位固定寬度並置中
                     final_width = 13.71  # 🔥 精確設定為 13.71
                 else:
