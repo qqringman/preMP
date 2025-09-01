@@ -429,6 +429,51 @@ TVCONFIG_SKIP_PROJECTS = {
 # ===== 自定義專案轉換規則設定 =====
 # =====================================
 
+FEATURE_TWO_CUSTOM_CONVERSIONS = {
+    'master_vs_premp': {
+    },
+    
+    'premp_vs_mp': {
+    },
+    
+    'mp_vs_mpbackup': {
+    },
+    
+    # tvconfig 功能的處理類型
+    'master_to_premp': {
+    },
+    
+    'master_to_mp': {
+    },
+    
+    'master_to_mpbackup': {
+        # 🆕 支援陣列格式：同一個 name pattern 可以有多個不同的 path 條件
+        # '.*tvconfigs_prebuilt': [
+        #     {
+        #         'path_pattern': '.*refplus2.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+        #     },            
+        #     {
+        #         'path_pattern': '.*refplus3.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+        #     },
+        #     {
+        #         'path_pattern': '.*refplus5.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+        #     }
+        # ],
+
+        # 🆕 仍然支援簡單格式
+        # '.*tvconfigs_prebuilt': 'realtek/android-14/mp.google-refplus.wave.backup',
+        
+        # 🆕 也支援單一物件格式
+        # '.*another_pattern': {
+        #    'target': 'some_target',
+        #    'path_pattern': '.*some_path.*'
+        # }
+    }
+}
+
 FEATURE_THREE_CUSTOM_CONVERSIONS = {
     'master_to_premp': {
     },
@@ -438,20 +483,20 @@ FEATURE_THREE_CUSTOM_CONVERSIONS = {
     
     'mp_to_mpbackup': {
         # 🆕 支援陣列格式：同一個 name pattern 可以有多個不同的 path 條件
-        '.*tvconfigs_prebuilt': [
-            {
-                'path_pattern': '.*refplus2.*',
-                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
-            },            
-            {
-                'path_pattern': '.*refplus3.*',
-                'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
-            },
-            {
-                'path_pattern': '.*refplus5.*',
-                'target': 'realtek/android-14/mp.google-refplus.wave.backup'
-            }
-        ],
+        # '.*tvconfigs_prebuilt': [
+        #     {
+        #         'path_pattern': '.*refplus2.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+        #     },            
+        #     {
+        #         'path_pattern': '.*refplus3.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup.upgrade-11'
+        #     },
+        #     {
+        #         'path_pattern': '.*refplus5.*',
+        #         'target': 'realtek/android-14/mp.google-refplus.wave.backup'
+        #     }
+        # ],
         
         # 🆕 仍然支援簡單格式
         # '.*tvconfigs_prebuilt': 'realtek/android-14/mp.google-refplus.wave.backup',

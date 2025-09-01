@@ -1850,17 +1850,10 @@ class FeatureTwo:
                  source_manifest_name: str = '', is_tvconfig: bool = False) -> List[Dict]:
         """
         轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援 + title 查詢）
-        
-        Args:
-            projects: 專案列表
-            process_type: 處理類型
-            check_branch_exists: 是否檢查分支存在性
-            source_manifest_name: 來源 manifest 檔名
-            is_tvconfig: 是否為 tvconfig 轉換
-            
-        Returns:
-            轉換後的專案列表
         """
+        # 🔥 新增：設置實例變量供自定義轉換規則使用
+        self._current_projects = projects
+
         converted_projects = []
         tag_count = 0
         branch_count = 0
@@ -2185,7 +2178,7 @@ class FeatureTwo:
             return '-'
             
     def _convert_revision_by_type(self, revision: str, process_type: str, project_name: str = '', is_tvconfig: bool = False) -> str:
-        """根據處理類型轉換 revision - 修正版：正確的處理類型"""
+        """根據處理類型轉換 revision - 修正版：正確的處理類型 + 自定義轉換規則"""
         try:
             if not revision:
                 return ''
@@ -2195,12 +2188,117 @@ class FeatureTwo:
                 self.logger.debug(f"跳過專案 {project_name} 的轉換，保持原 revision: {revision}")
                 return revision
             
-            # 如果是 Tag 參考，直接返回不做轉換
+            # 🆕 新增：檢查自定義轉換規則（支援陣列格式）
+            if project_name:
+                import re
+                
+                # 🔥 使用 FEATURE_TWO_CUSTOM_CONVERSIONS（與 feature_three.py 分開）
+                custom_rules = getattr(config, 'FEATURE_TWO_CUSTOM_CONVERSIONS', {}).get(process_type, {})
+                
+                # 檢查是否有匹配的規則
+                for pattern, rule_config in custom_rules.items():
+                    try:
+                        # 先檢查 name 是否匹配
+                        name_matches = False
+                        try:
+                            name_matches = bool(re.search(pattern, project_name))
+                        except re.error:
+                            name_matches = pattern in project_name
+                        
+                        if not name_matches:
+                            continue
+                        
+                        # 🆕 支援三種配置格式
+                        if isinstance(rule_config, list):
+                            # 陣列格式：同一個 name pattern 對應多個規則
+                            for rule_item in rule_config:
+                                if not isinstance(rule_item, dict):
+                                    continue
+                                    
+                                target_branch = rule_item.get('target', '')
+                                path_pattern = rule_item.get('path_pattern', '')
+                                
+                                if not target_branch:
+                                    continue
+                                
+                                # 檢查 path 條件
+                                if path_pattern:
+                                    project_path = self._get_project_path_for_conversion(project_name, process_type)
+                                    if not project_path:
+                                        continue
+                                    
+                                    # 檢查 path 是否匹配
+                                    path_matches = False
+                                    try:
+                                        path_matches = bool(re.search(path_pattern, project_path))
+                                    except re.error:
+                                        path_matches = path_pattern in project_path
+                                    
+                                    if not path_matches:
+                                        continue
+                                    
+                                    self.logger.info(f"🎯 Feature Two 使用自定義轉換規則（陣列格式 - name + path）: {project_name}")
+                                    self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                    self.logger.info(f"   path 模式: '{path_pattern}' ✓ (path: {project_path})")
+                                    self.logger.info(f"   目標: '{target_branch}'")
+                                    return target_branch
+                                else:
+                                    # 沒有 path 限制，直接使用
+                                    self.logger.info(f"🎯 Feature Two 使用自定義轉換規則（陣列格式 - 僅 name）: {project_name}")
+                                    self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                    self.logger.info(f"   目標: '{target_branch}'")
+                                    return target_branch
+                                    
+                        elif isinstance(rule_config, dict):
+                            # 字典格式：單一規則
+                            target_branch = rule_config.get('target', '')
+                            path_pattern = rule_config.get('path_pattern', '')
+                            
+                            if not target_branch:
+                                continue
+                            
+                            if path_pattern:
+                                project_path = self._get_project_path_for_conversion(project_name, process_type)
+                                if not project_path:
+                                    continue
+                                
+                                path_matches = False
+                                try:
+                                    path_matches = bool(re.search(path_pattern, project_path))
+                                except re.error:
+                                    path_matches = path_pattern in project_path
+                                
+                                if not path_matches:
+                                    continue
+                                
+                                self.logger.info(f"🎯 Feature Two 使用自定義轉換規則（字典格式 - name + path）: {project_name}")
+                                self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                self.logger.info(f"   path 模式: '{path_pattern}' ✓ (path: {project_path})")
+                                self.logger.info(f"   目標: '{target_branch}'")
+                            else:
+                                self.logger.info(f"🎯 Feature Two 使用自定義轉換規則（字典格式 - 僅 name）: {project_name}")
+                                self.logger.info(f"   name 模式: '{pattern}' ✓")
+                                self.logger.info(f"   目標: '{target_branch}'")
+                            
+                            return target_branch
+                            
+                        else:
+                            # 簡單格式：直接是 target branch 字符串
+                            target_branch = str(rule_config)
+                            self.logger.info(f"🎯 Feature Two 使用自定義轉換規則（簡單格式）: {project_name}")
+                            self.logger.info(f"   模式: '{pattern}' → 目標: '{target_branch}'")
+                            return target_branch
+                            
+                    except Exception as e:
+                        self.logger.error(f"處理自定義轉換規則 '{pattern}' 時發生錯誤: {str(e)}")
+                        continue
+            
+            # 🔥 如果是 Tag 參考，直接返回不做轉換（原本邏輯）
             if self._is_tag_reference(revision):
                 self.logger.debug(f"檢測到 Tag 參考，保持原樣: {revision}")
                 return revision
             
-            # 🔥 根據處理類型進行轉換 - 使用正確的處理類型名稱
+            # 🔥 標準轉換邏輯（完全保持原樣，不影響現有功能）
             if process_type == 'master_vs_premp':  # 原始功能
                 return self._convert_master_to_premp(revision)
             elif process_type == 'premp_vs_mp':  # 原始功能
@@ -4353,3 +4451,28 @@ class FeatureTwo:
                 
         except Exception as e:
             self.logger.error(f"檔案檢查報告失敗: {str(e)}")
+
+    def _get_project_path_for_conversion(self, project_name: str, process_type: str) -> str:
+        """
+        取得專案的 path 屬性用於自定義轉換規則檢查 - Feature Two 版本
+        
+        Args:
+            project_name: 專案名稱
+            process_type: 處理類型
+            
+        Returns:
+            專案的 path 屬性，如果找不到則返回空字串
+        """
+        try:
+            # 🔥 從當前正在處理的專案列表中查找
+            if hasattr(self, '_current_projects'):
+                for project_info in self._current_projects:
+                    if project_info.get('name') == project_name:
+                        return project_info.get('path', '')
+            
+            self.logger.debug(f"無法找到專案 {project_name} 的 path 屬性")
+            return ''
+            
+        except Exception as e:
+            self.logger.error(f"取得專案 path 時發生錯誤: {str(e)}")
+            return ''            
