@@ -151,7 +151,7 @@ class FeatureTwo:
 
     def _add_branch_status_sheet_with_revision(self, output_file: str, output_folder: str, branch_results: List[Dict]):
         """
-        🔥 修正方法：添加分支建立狀態頁籤 - 包含 branch_revision 欄位，不影響原有邏輯
+        🔥 修正方法：添加分支建立狀態頁籤 - 包含 title 欄位，不影響原有邏輯
         """
         try:
             from openpyxl import load_workbook
@@ -166,25 +166,29 @@ class FeatureTwo:
             
             # 🔥 加入分支建立狀態頁籤
             if branch_results:
-                # 🔥 為分支結果添加 branch_revision 欄位（如果需要）
+                # 🔥 為分支結果添加 title 相關欄位（如果需要）
                 enhanced_branch_results = []
                 for result in branch_results:
                     enhanced_result = result.copy()
-                    # 🔥 如果原始結果中沒有 branch_revision，添加空值
+                    # 🔥 如果原始結果中沒有這些欄位，添加空值
                     if 'branch_revision' not in enhanced_result:
                         enhanced_result['branch_revision'] = '-'  # 分支建立狀態通常不需要此資訊
+                    if 'title' not in enhanced_result:
+                        enhanced_result['title'] = '-'  # 🔥 新增
+                    if 'target_title' not in enhanced_result:
+                        enhanced_result['target_title'] = '-'  # 🔥 新增
                     enhanced_branch_results.append(enhanced_result)
                 
                 df_branch = pd.DataFrame(enhanced_branch_results)
                 
-                # 🔥 調整欄位順序，在 revision 右邊添加 branch_revision
+                # 🔥 調整欄位順序，添加 title 相關欄位
                 column_order = [
-                    'SN', 'Project', 'revision', 'branch_revision',  # 🔥 新增但設為 '-'
+                    'SN', 'Project', 'revision', 'branch_revision', 'title',  # 🔥 新增 title
                     'target_manifest',      # 🔥 紫底白字
                     'target_branch',        # 🔥 改為小寫，綠底白字
                     'target_type',          # 🔥 改為小寫，綠底白字
                     'target_branch_link',   # 🔥 綠底白字
-                    'target_branch_revision',  # 🔥 改名並改為小寫，綠底白字
+                    'target_branch_revision', 'target_title',  # 🔥 新增 target_title
                     'Status', 'Message', 'Already_Exists', 'Force_Update',
                     'Remote', 'Gerrit_Server'
                 ]
@@ -201,11 +205,12 @@ class FeatureTwo:
                 column_order = [col for col in column_order if col in df_branch.columns]
                 df_branch = df_branch[column_order]
             else:
-                # 🔥 空的 DataFrame 結構（包含 branch_revision 欄位）
+                # 🔥 空的 DataFrame 結構（包含 title 相關欄位）
                 df_branch = pd.DataFrame(columns=[
-                    'SN', 'Project', 'revision', 'branch_revision', 'target_manifest', 
+                    'SN', 'Project', 'revision', 'branch_revision', 'title', 'target_manifest', 
                     'target_branch', 'target_type', 'target_branch_link', 
-                    'target_branch_revision', 'Status', 'Message', 'Already_Exists', 'Force_Update',
+                    'target_branch_revision', 'target_title',  # 🔥 新增 target_title
+                    'Status', 'Message', 'Already_Exists', 'Force_Update',
                     'Remote', 'Gerrit_Server'
                 ])
             
@@ -217,17 +222,217 @@ class FeatureTwo:
                 branch_sheet.append(r)
             
             # 🔥 格式化新的分支狀態頁籤
-            self._format_branch_status_sheet_in_workbook(workbook, 'Branch 建立狀態')
+            self._format_branch_status_sheet_in_workbook_with_titles(workbook, 'Branch 建立狀態')
             
             # 🔥 保存工作簿（保留原有公式）
             workbook.save(full_output_path)
             workbook.close()
             
-            self.logger.info("✅ 成功加入包含 branch_revision 欄位的分支建立狀態頁籤（保留公式）")
+            self.logger.info("✅ 成功加入包含 title 欄位的分支建立狀態頁籤（保留公式）")
             
         except Exception as e:
             self.logger.error(f"加入分支狀態頁籤失敗: {str(e)}")
 
+    def _format_branch_status_sheet_in_workbook_with_titles(self, workbook, sheet_name):
+        """
+        🔥 新方法：在 workbook 中格式化分支建立狀態頁籤 - 包含 title 欄位支援
+        """
+        try:
+            from openpyxl.styles import PatternFill, Font
+            from openpyxl.utils import get_column_letter
+            
+            if sheet_name not in workbook.sheetnames:
+                self.logger.warning(f"⚠️ 工作表 '{sheet_name}' 不存在")
+                return
+                
+            worksheet = workbook[sheet_name]
+            
+            # 定義顏色
+            blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            green_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+            orange_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")
+            purple_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")
+            red_fill = PatternFill(start_color="C0504D", end_color="C0504D", fill_type="solid")
+            yellow_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")  # 🔥 新增：黃底
+            white_font = Font(color="FFFFFF", bold=True)
+            black_font = Font(color="000000", bold=True)
+            
+            # 基本格式化
+            self.excel_handler._format_worksheet(worksheet)
+            
+            # 分支建立狀態頁籤：特殊格式（包含 title 欄位）
+            self._format_branch_status_sheet_with_titles(worksheet, green_fill, purple_fill, orange_fill, red_fill, yellow_fill, white_font)
+            
+            # 🔥 自動調適欄位寬度
+            self._auto_adjust_column_widths(worksheet)
+            
+            self.logger.info(f"✅ 已格式化包含 title 的分支狀態頁籤: {sheet_name}")
+            
+        except Exception as e:
+            self.logger.error(f"格式化分支狀態頁籤失敗: {str(e)}")
+
+    def _format_branch_status_sheet_with_titles(self, worksheet, green_fill, purple_fill, orange_fill, red_fill, yellow_fill, white_font):
+        """
+        🔥 新方法：格式化分支建立狀態頁籤 - 包含 title 欄位格式
+        """
+        try:
+            from openpyxl.styles import Font, PatternFill
+            from openpyxl.utils import get_column_letter
+            
+            # 內容樣式
+            green_font = Font(color="00B050", bold=True)
+            red_content_font = Font(color="FF0000", bold=True)
+            blue_font = Font(color="0070C0", bold=True)
+            purple_font = Font(color="7030A0", bold=True)
+            orange_font = Font(color="FFC000", bold=True)
+            black_font = Font(color="000000")
+            
+            # 🔥 綠底白字欄位（與專案列表頁籤一致）
+            green_header_columns = [
+                'target_branch', 'target_type', 'target_branch_link'
+            ]
+            
+            # 🔥 紫底白字欄位
+            purple_header_columns = ['Remote', 'Gerrit_Server', 'target_manifest']
+            
+            # 🔥 深紅底白字欄位（revision 相關）
+            red_header_columns = ['revision', 'branch_revision', 'target_branch_revision']
+            
+            # 🔥 黃底白字欄位（title 相關）
+            yellow_header_columns = ['title', 'target_title']
+            
+            # 🔥 橘底白字欄位
+            orange_header_columns = ['Force_Update']
+            
+            # 狀態顏色設定
+            status_colors = {
+                '成功': {'fill': PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                        'font': Font(color="006100", bold=True)},
+                '失敗': {'fill': PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                        'font': Font(color="9C0006", bold=True)},
+                '跳過': {'fill': PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid"),
+                        'font': Font(color="0070C0", bold=True)}
+            }
+            
+            # 找到所有欄位位置並設定格式
+            for col_num, cell in enumerate(worksheet[1], 1):
+                col_letter = get_column_letter(col_num)
+                header_value = str(cell.value) if cell.value else ''
+                
+                # 🔥 綠底白字標頭
+                if header_value in green_header_columns:
+                    cell.fill = green_fill
+                    cell.font = Font(color="FFFFFF", bold=True)
+                    
+                    # 🔥 設定內容格式
+                    if header_value == 'target_type':
+                        for row_num in range(2, worksheet.max_row + 1):
+                            content_cell = worksheet[f"{col_letter}{row_num}"]
+                            if content_cell.value == 'Tag':
+                                content_cell.font = blue_font
+                            elif content_cell.value == 'Branch':
+                                content_cell.font = purple_font
+                            else:
+                                content_cell.font = black_font
+                                
+                    elif header_value == 'target_branch_link':
+                        # 設定較寬的欄寬
+                        worksheet.column_dimensions[col_letter].width = 60
+                        
+                    else:
+                        # 其他綠底欄位使用黑字內容
+                        for row_num in range(2, worksheet.max_row + 1):
+                            content_cell = worksheet[f"{col_letter}{row_num}"]
+                            content_cell.font = black_font
+                
+                # 🔥 深紅底白字標頭（revision 相關欄位）
+                elif header_value in red_header_columns:
+                    cell.fill = red_fill
+                    cell.font = white_font
+                    
+                    # revision 相關欄位內容使用黑字
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet[f"{col_letter}{row_num}"]
+                        content_cell.font = black_font
+                
+                # 🔥 新增：黃底白字標頭（title 相關欄位）
+                elif header_value in yellow_header_columns:
+                    cell.fill = yellow_fill
+                    cell.font = white_font
+                    
+                    # title 相關欄位內容使用黑字
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet[f"{col_letter}{row_num}"]
+                        content_cell.font = black_font
+                    
+                    # 設定較寬欄寬
+                    worksheet.column_dimensions[col_letter].width = 50
+                
+                # 🔥 紫底白字標頭
+                elif header_value in purple_header_columns:
+                    cell.fill = purple_fill
+                    cell.font = Font(color="FFFFFF", bold=True)
+                    
+                    if header_value == 'Remote':
+                        # Remote 欄位：rtk-prebuilt 用紫字
+                        for row_num in range(2, worksheet.max_row + 1):
+                            content_cell = worksheet[f"{col_letter}{row_num}"]
+                            if content_cell.value == 'rtk-prebuilt':
+                                content_cell.font = purple_font
+                            else:
+                                content_cell.font = black_font
+                                
+                    elif header_value == 'Gerrit_Server':
+                        # 設定較寬欄寬
+                        worksheet.column_dimensions[col_letter].width = 40
+                        # mm2sd-git2 用紫字
+                        for row_num in range(2, worksheet.max_row + 1):
+                            content_cell = worksheet[f"{col_letter}{row_num}"]
+                            if 'mm2sd-git2' in str(content_cell.value):
+                                content_cell.font = purple_font
+                            else:
+                                content_cell.font = black_font
+                                
+                    elif header_value == 'target_manifest':
+                        # 設定較寬欄寬
+                        worksheet.column_dimensions[col_letter].width = 50
+                        # HYPERLINK 用藍色連結字體
+                        blue_link_font = Font(color="0070C0", underline="single")
+                        for row_num in range(2, worksheet.max_row + 1):
+                            content_cell = worksheet[f"{col_letter}{row_num}"]
+                            if content_cell.value and str(content_cell.value).startswith('=HYPERLINK'):
+                                content_cell.font = blue_link_font
+                            else:
+                                content_cell.font = black_font
+                
+                # 🔥 橘底白字標頭
+                elif header_value in orange_header_columns:
+                    cell.fill = orange_fill
+                    cell.font = Font(color="FFFFFF", bold=True)
+                    
+                    # Force_Update 欄位："是" 用橘字
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet[f"{col_letter}{row_num}"]
+                        if content_cell.value == '是':
+                            content_cell.font = orange_font
+                        else:
+                            content_cell.font = black_font
+                
+                # 🔥 Status 欄位特殊格式
+                elif header_value == 'Status':
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet[f"{col_letter}{row_num}"]
+                        status = str(content_cell.value) if content_cell.value else ''
+                        
+                        if status in status_colors:
+                            content_cell.fill = status_colors[status]['fill']
+                            content_cell.font = status_colors[status]['font']
+            
+            self.logger.info("✅ 已設定包含 title 欄位的分支建立狀態頁籤格式")
+            
+        except Exception as e:
+            self.logger.error(f"格式化分支建立狀態頁籤失敗: {str(e)}")
+                        
     def _format_branch_status_sheet_in_workbook(self, workbook, sheet_name):
         """
         🔥 新方法：在 workbook 中格式化分支建立狀態頁籤
@@ -413,9 +618,9 @@ class FeatureTwo:
 
     # 修改 Excel 輸出的欄位順序，在 revision 右方添加 branch_revision
     def _write_excel_unified_basic(self, projects: List[Dict], duplicate_projects: List[Dict], 
-                          output_file: str, output_folder: str = None):
+                      output_file: str, output_folder: str = None):
         """
-        🔥 修正方法：統一的基本 Excel 寫入 - 添加 branch_revision 欄位，保持 revision_diff 公式
+        🔥 修正方法：統一的基本 Excel 寫入 - 添加 title, target_title, title_diff 欄位
         """
         try:
             # 處理輸出檔案路徑
@@ -436,26 +641,28 @@ class FeatureTwo:
             self.logger.info(f"寫入統一格式 Excel 檔案: {full_output_path}")
             
             with pd.ExcelWriter(full_output_path, engine='openpyxl') as writer:
-                # 🔥 頁籤 1: 專案列表（添加 branch_revision 欄位，保持 revision_diff）
+                # 🔥 頁籤 1: 專案列表（添加 title, target_title, title_diff 欄位）
                 if projects:
-                    # 🔥 重要：移除任何可能存在的 revision_diff 值
+                    # 🔥 重要：移除任何可能存在的公式欄位值
                     clean_projects = []
                     for project in projects:
                         clean_project = project.copy()
-                        # 強制移除 revision_diff 欄位，避免覆蓋公式
+                        # 強制移除公式欄位，避免覆蓋公式
                         if 'revision_diff' in clean_project:
                             del clean_project['revision_diff']
+                        if 'title_diff' in clean_project:  # 🔥 新增：移除 title_diff
+                            del clean_project['title_diff']
                         clean_projects.append(clean_project)
                     
                     df_main = pd.DataFrame(clean_projects)
                     
-                    # 🔥 修改欄位順序：在 revision 右方添加 branch_revision，保持 revision_diff 在原位置
+                    # 🔥 修改欄位順序：添加 title, target_title, title_diff
                     main_column_order = [
                         'SN', 'source_manifest', 'name', 'path', 
-                        'revision', 'branch_revision',  # 🔥 新增 branch_revision 在 revision 後
+                        'revision', 'branch_revision', 'title',  # 🔥 在 branch_revision 後加 title
                         'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff',  # 🔥 保持 revision_diff 在原位置
+                        'target_branch_revision', 'target_title', 'revision_diff', 'title_diff',  # 🔥 在 target_branch_revision 後加 target_title，在 revision_diff 後加 title_diff
                         'target_branch_link', 'branch_link',
                         'target_open_project_link', 'open_project_link',
                         'groups', 'clone-depth', 'remote'
@@ -471,24 +678,35 @@ class FeatureTwo:
                     main_column_order = [col for col in main_column_order if col in df_main.columns]
                     df_main = df_main[main_column_order]
                     
-                    # 🔥 關鍵修正：確保 revision_diff 欄位存在且在正確位置
+                    # 🔥 關鍵修正：確保 revision_diff 和 title_diff 欄位存在且在正確位置
                     if 'revision_diff' not in df_main.columns:
-                        # 在 target_branch_revision 後面插入空的 revision_diff 欄位
-                        if 'target_branch_revision' in df_main.columns:
-                            target_revision_idx = df_main.columns.get_loc('target_branch_revision')
-                            # 在 target_branch_revision 後插入
-                            df_main.insert(target_revision_idx + 1, 'revision_diff', None)
+                        # 在 target_title 後面插入空的 revision_diff 欄位
+                        if 'target_title' in df_main.columns:
+                            target_title_idx = df_main.columns.get_loc('target_title')
+                            # 在 target_title 後插入
+                            df_main.insert(target_title_idx + 1, 'revision_diff', None)
                         else:
-                            # 如果找不到 target_branch_revision，則在最後添加
+                            # 如果找不到 target_title，則在最後添加
                             df_main['revision_diff'] = None
+                    
+                    # 🔥 新增：確保 title_diff 欄位存在
+                    if 'title_diff' not in df_main.columns:
+                        # 在 revision_diff 後面插入空的 title_diff 欄位
+                        if 'revision_diff' in df_main.columns:
+                            revision_diff_idx = df_main.columns.get_loc('revision_diff')
+                            # 在 revision_diff 後插入
+                            df_main.insert(revision_diff_idx + 1, 'title_diff', None)
+                        else:
+                            # 如果找不到 revision_diff，則在最後添加
+                            df_main['title_diff'] = None
                 else:
                     # 空的 DataFrame 結構（確保包含所有必要欄位）
                     df_main = pd.DataFrame(columns=[
                         'SN', 'source_manifest', 'name', 'path', 
-                        'revision', 'branch_revision',  # 🔥 新增
+                        'revision', 'branch_revision', 'title',  # 🔥 新增 title
                         'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff',  # 🔥 確保 revision_diff 存在
+                        'target_branch_revision', 'target_title', 'revision_diff', 'title_diff',  # 🔥 新增 target_title, title_diff
                         'target_branch_link', 'branch_link',
                         'target_open_project_link', 'open_project_link',
                         'groups', 'clone-depth', 'remote'
@@ -499,13 +717,15 @@ class FeatureTwo:
                 
                 # 🔥 頁籤 2: 重複專案（同樣處理）
                 if duplicate_projects:
-                    # 🔥 重要：移除任何可能存在的 revision_diff 值
+                    # 🔥 重要：移除任何可能存在的公式欄位值
                     clean_duplicates = []
                     for project in duplicate_projects:
                         clean_project = project.copy()
-                        # 強制移除 revision_diff 欄位，避免覆蓋公式
+                        # 強制移除公式欄位，避免覆蓋公式
                         if 'revision_diff' in clean_project:
                             del clean_project['revision_diff']
+                        if 'title_diff' in clean_project:  # 🔥 新增
+                            del clean_project['title_diff']
                         clean_duplicates.append(clean_project)
                     
                     df_dup = pd.DataFrame(clean_duplicates)
@@ -513,10 +733,10 @@ class FeatureTwo:
                     # 🔥 重複頁籤使用相同的欄位順序
                     dup_column_order = [
                         'SN', 'source_manifest', 'name', 'path', 
-                        'revision', 'branch_revision',  # 🔥 新增
+                        'revision', 'branch_revision', 'title',  # 🔥 新增 title
                         'upstream', 'dest-branch',
                         'target_manifest', 'target_branch', 'target_type', 'target_branch_exists', 
-                        'target_branch_revision', 'revision_diff',  # 🔥 保持原位置
+                        'target_branch_revision', 'target_title', 'revision_diff', 'title_diff',  # 🔥 新增 target_title, title_diff
                         'target_branch_link', 'branch_link',
                         'groups', 'clone-depth', 'remote'
                     ]
@@ -530,13 +750,21 @@ class FeatureTwo:
                     dup_column_order = [col for col in dup_column_order if col in df_dup.columns]
                     df_dup = df_dup[dup_column_order]
                     
-                    # 🔥 關鍵修正：確保重複頁籤的 revision_diff 欄位也存在
+                    # 🔥 關鍵修正：確保重複頁籤的公式欄位也存在
                     if 'revision_diff' not in df_dup.columns:
-                        if 'target_branch_revision' in df_dup.columns:
-                            target_revision_idx = df_dup.columns.get_loc('target_branch_revision')
-                            df_dup.insert(target_revision_idx + 1, 'revision_diff', None)
+                        if 'target_title' in df_dup.columns:
+                            target_title_idx = df_dup.columns.get_loc('target_title')
+                            df_dup.insert(target_title_idx + 1, 'revision_diff', None)
                         else:
                             df_dup['revision_diff'] = None
+                    
+                    # 🔥 新增：確保 title_diff 欄位存在
+                    if 'title_diff' not in df_dup.columns:
+                        if 'revision_diff' in df_dup.columns:
+                            revision_diff_idx = df_dup.columns.get_loc('revision_diff')
+                            df_dup.insert(revision_diff_idx + 1, 'title_diff', None)
+                        else:
+                            df_dup['title_diff'] = None
                     
                     df_dup.to_excel(writer, sheet_name='重覆', index=False)
                     self.logger.info(f"建立 '重覆' 頁籤，共 {len(duplicate_projects)} 筆資料")
@@ -557,7 +785,7 @@ class FeatureTwo:
 
     def _format_existing_excel(self, excel_path: str):
         """
-        🔥 新方法：格式化現有 Excel 檔案
+        🔥 新方法：格式化現有 Excel 檔案 - 添加 title 欄位格式支援
         """
         try:
             from openpyxl import load_workbook
@@ -574,6 +802,7 @@ class FeatureTwo:
             orange_fill = PatternFill(start_color="ED7D31", end_color="ED7D31", fill_type="solid")  # 橘底
             purple_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")  # 🔥 紫底
             red_fill = PatternFill(start_color="C0504D", end_color="C0504D", fill_type="solid")     # 🔥 改為RGB(192,80,77)的深紅色
+            yellow_fill = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")  # 🔥 新增：黃底（用於 title 欄位）
             white_font = Font(color="FFFFFF", bold=True)  # 白字
             black_font = Font(color="000000", bold=True)  # 🔥 紅底用白字
             
@@ -587,8 +816,8 @@ class FeatureTwo:
                     # 統一格式化連結欄位
                     self._format_link_columns_unified(worksheet, blue_fill, green_fill, white_font)
                     
-                    # 統一格式化 revision_diff 欄位
-                    self._format_revision_diff_column_unified(worksheet, orange_fill, white_font)
+                    # 統一格式化 revision_diff 和 title_diff 欄位
+                    self._format_diff_columns_unified(worksheet, orange_fill, white_font)
                     
                     # 統一格式化目標分支欄位
                     self._format_target_branch_columns_unified(worksheet, green_fill, white_font)
@@ -596,8 +825,11 @@ class FeatureTwo:
                     # 🔥 格式化 revision 相關欄位（深紅底白字）
                     self._format_revision_columns_unified(worksheet, red_fill, white_font)
                     
-                    # 🔥 格式化 manifest 相關欄位（新增紫底白字）
+                    # 🔥 格式化 manifest 相關欄位（紫底白字）
                     self._format_manifest_columns_unified(worksheet, purple_fill, white_font)
+                    
+                    # 🔥 新增：格式化 title 相關欄位（黃底白字）
+                    self._format_title_columns_unified(worksheet, yellow_fill, white_font)
                     
                     # 🔥 自動調適欄位寬度
                     self._auto_adjust_column_widths(worksheet)
@@ -612,6 +844,115 @@ class FeatureTwo:
             import traceback
             self.logger.error(f"錯誤詳情: {traceback.format_exc()}")
 
+    def _format_diff_columns_unified(self, worksheet, orange_fill, white_font):
+        """
+        🔥 修正方法：格式化 diff 欄位為橘底白字，N綠字/Y紅字，並置中對齊 - 支援 title_diff
+        """
+        try:
+            from openpyxl.styles import Font, Alignment  # 🔥 加入 Alignment
+            from openpyxl.utils import get_column_letter
+            from openpyxl.formatting.rule import CellIsRule
+            
+            # 內容樣式
+            green_font = Font(color="00B050", bold=True)  # N 的綠字
+            red_font = Font(color="FF0000", bold=True)    # Y 的紅字
+            
+            # 🔥 新增：置中對齊設定
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 🔥 diff 欄位列表（包含新的 title_diff）
+            diff_columns = ['revision_diff', 'title_diff']
+            
+            for diff_column in diff_columns:
+                # 找到 diff 欄位的位置
+                diff_col = None
+                for col_num, cell in enumerate(worksheet[1], 1):
+                    header_value = str(cell.value) if cell.value else ''
+                    if header_value == diff_column:
+                        diff_col = col_num
+                        break
+                
+                if diff_col:
+                    col_letter = get_column_letter(diff_col)
+                    
+                    # 🔥 格式化標題（橘底白字 + 置中）
+                    header_cell = worksheet[f"{col_letter}1"]
+                    header_cell.fill = orange_fill
+                    header_cell.font = white_font
+                    header_cell.alignment = center_alignment  # 🔥 新增：標題置中
+                    
+                    # 設定欄寬
+                    worksheet.column_dimensions[col_letter].width = 13.71  # 🔥 精確設定為 13.71
+                    
+                    # 🔥 新增：為所有資料欄位設定置中對齊
+                    for row_num in range(2, worksheet.max_row + 1):
+                        cell = worksheet[f"{col_letter}{row_num}"]
+                        cell.alignment = center_alignment  # 🔥 關鍵修復：資料置中
+                    
+                    # 定義資料範圍
+                    data_range = f"{col_letter}2:{col_letter}{worksheet.max_row}"
+                    
+                    # 條件格式規則 1: 當值為 "N" 時使用綠字（相同）
+                    rule_n = CellIsRule(
+                        operator='equal',
+                        formula=['"N"'],
+                        font=green_font
+                    )
+                    worksheet.conditional_formatting.add(data_range, rule_n)
+                    
+                    # 條件格式規則 2: 當值為 "Y" 時使用紅字（不同或空值）
+                    rule_y = CellIsRule(
+                        operator='equal',
+                        formula=['"Y"'],
+                        font=red_font
+                    )
+                    worksheet.conditional_formatting.add(data_range, rule_y)
+                    
+                    self.logger.info(f"✅ 已設定 {diff_column} 欄位格式：標題橘底白字，N綠字/Y紅字，全部置中對齊")
+                    
+        except Exception as e:
+            self.logger.error(f"格式化 diff 欄位失敗: {str(e)}")
+            
+    def _format_title_columns_unified(self, worksheet, yellow_fill, white_font):
+        """
+        🔥 新方法：格式化 title 相關欄位為黃底白字
+        """
+        try:
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+            
+            black_font = Font(color="000000")         # 一般內容用黑字
+            
+            # 🔥 需要黃底白字的 title 欄位
+            title_columns = ['title', 'target_title']
+            
+            # 找到 title 欄位的位置
+            for col_num, cell in enumerate(worksheet[1], 1):
+                header_value = str(cell.value) if cell.value else ''
+                
+                if header_value in title_columns:
+                    col_letter = get_column_letter(col_num)
+                    
+                    # 🔥 設定標頭為黃底白字
+                    cell.fill = yellow_fill
+                    cell.font = white_font
+                    
+                    # 🔥 設定內容格式（黑字）
+                    for row_num in range(2, worksheet.max_row + 1):
+                        content_cell = worksheet[f"{col_letter}{row_num}"]
+                        content_cell.font = black_font
+                    
+                    # 設定欄寬（title 內容可能較長）
+                    if header_value == 'title':
+                        worksheet.column_dimensions[col_letter].width = 50  # title 較寬
+                    elif header_value == 'target_title':
+                        worksheet.column_dimensions[col_letter].width = 50  # target_title 也較寬
+            
+            self.logger.info("✅ 已設定 title 欄位為黃底白字")
+            
+        except Exception as e:
+            self.logger.error(f"格式化 title 欄位失敗: {str(e)}")
+            
     # 修改格式化邏輯，讓 branch_revision 也使用深紅底白字
     def _format_revision_columns_unified(self, worksheet, red_fill, white_font):
         """
@@ -802,7 +1143,7 @@ class FeatureTwo:
             
     def _add_formulas_to_existing_excel(self, excel_path: str):
         """
-        🔥 修正版：在現有 Excel 檔案中添加公式 - 支援 hash 判斷的比較邏輯
+        🔥 修正版：在現有 Excel 檔案中添加公式 - 支援 hash 判斷的比較邏輯 + title_diff 公式
         """
         try:
             from openpyxl import load_workbook
@@ -819,13 +1160,16 @@ class FeatureTwo:
                     continue
                     
                 worksheet = workbook[sheet_name]
-                self.logger.info(f"🔧 開始為 '{sheet_name}' 頁籤設定 revision_diff 公式（支援 hash 判斷）...")
+                self.logger.info(f"🔧 開始為 '{sheet_name}' 頁籤設定公式...")
                 
                 # 找到各欄位的位置
                 revision_col = None
-                branch_revision_col = None  # 🔥 新增：branch_revision 欄位
+                branch_revision_col = None
+                title_col = None  # 🔥 新增
                 target_revision_col = None
+                target_title_col = None  # 🔥 新增
                 revision_diff_col = None
+                title_diff_col = None  # 🔥 新增
                 
                 # 打印所有標頭以便調試
                 headers = []
@@ -836,29 +1180,38 @@ class FeatureTwo:
                     if header == 'revision':
                         revision_col = col_num
                         self.logger.debug(f"找到 revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
-                    elif header == 'branch_revision':  # 🔥 新增
+                    elif header == 'branch_revision':
                         branch_revision_col = col_num
                         self.logger.debug(f"找到 branch_revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
+                    elif header == 'title':  # 🔥 新增
+                        title_col = col_num
+                        self.logger.debug(f"找到 title 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
                     elif header == 'target_branch_revision':
                         target_revision_col = col_num
                         self.logger.debug(f"找到 target_branch_revision 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
+                    elif header == 'target_title':  # 🔥 新增
+                        target_title_col = col_num
+                        self.logger.debug(f"找到 target_title 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
                     elif header == 'revision_diff':
                         revision_diff_col = col_num
                         self.logger.debug(f"找到 revision_diff 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
+                    elif header == 'title_diff':  # 🔥 新增
+                        title_diff_col = col_num
+                        self.logger.debug(f"找到 title_diff 欄位: {get_column_letter(col_num)} (第{col_num}欄)")
                 
                 self.logger.debug(f"'{sheet_name}' 所有標頭: {', '.join(headers)}")
                 
-                # 🔥 修改：需要所有四個欄位才能設定公式
+                # 🔥 設定 revision_diff 公式（需要所有四個欄位）
                 if revision_col and branch_revision_col and target_revision_col and revision_diff_col:
                     revision_letter = get_column_letter(revision_col)
-                    branch_revision_letter = get_column_letter(branch_revision_col)  # 🔥 新增
+                    branch_revision_letter = get_column_letter(branch_revision_col)
                     target_letter = get_column_letter(target_revision_col)
                     diff_letter = get_column_letter(revision_diff_col)
                     
-                    self.logger.info(f"📍 欄位對應: revision={revision_letter}, branch_revision={branch_revision_letter}, target_branch_revision={target_letter}, revision_diff={diff_letter}")
+                    self.logger.info(f"📍 revision_diff 欄位對應: revision={revision_letter}, branch_revision={branch_revision_letter}, target_branch_revision={target_letter}, revision_diff={diff_letter}")
                     
-                    # 🔥 為每一行設定公式（從第2行開始到最後一行）
-                    formula_count = 0
+                    # 🔥 為每一行設定 revision_diff 公式（從第2行開始到最後一行）
+                    revision_diff_formula_count = 0
                     for row_num in range(2, worksheet.max_row + 1):
                         # 🔥 新邏輯：程式判斷該用哪個欄位，然後產生簡單公式
                         revision_cell = worksheet[f"{revision_letter}{row_num}"]
@@ -889,32 +1242,62 @@ class FeatureTwo:
                         # 設定公式到儲存格
                         cell = worksheet[f"{diff_letter}{row_num}"]
                         cell.value = formula
-                        formula_count += 1
-                        
-                        # 每10行記錄一次進度
-                        if row_num % 50 == 0 or row_num == 2:
-                            compare_field = "revision" if is_hash else "branch_revision"
-                            self.logger.debug(f"設定公式 {sheet_name} {diff_letter}{row_num}: 使用 {compare_field} 欄位比較")
+                        revision_diff_formula_count += 1
                     
-                    self.logger.info(f"✅ 已為 '{sheet_name}' 頁籤設定 {formula_count} 個 revision_diff 公式（支援 hash 判斷）")
-                    
-                    # 🔥 驗證公式設定
-                    sample_cell = worksheet[f"{diff_letter}2"]
-                    sample_formula = sample_cell.value if sample_cell.value else "無"
-                    self.logger.info(f"🔍 第2行公式範例（支援 hash 判斷）: 已設定複雜邏輯判斷公式")
-                    
+                    self.logger.info(f"✅ 已為 '{sheet_name}' 頁籤設定 {revision_diff_formula_count} 個 revision_diff 公式")
+                
                 else:
                     missing_cols = []
                     if not revision_col:
                         missing_cols.append("revision")
-                    if not branch_revision_col:  # 🔥 新增
+                    if not branch_revision_col:
                         missing_cols.append("branch_revision")
                     if not target_revision_col:
                         missing_cols.append("target_branch_revision")
                     if not revision_diff_col:
                         missing_cols.append("revision_diff")
                         
-                    self.logger.error(f"❌ 無法為 '{sheet_name}' 頁籤設定公式，缺少欄位: {', '.join(missing_cols)}")
+                    self.logger.error(f"❌ 無法為 '{sheet_name}' 頁籤設定 revision_diff 公式，缺少欄位: {', '.join(missing_cols)}")
+                
+                # 🔥 新增：設定 title_diff 公式
+                if title_col and target_title_col and title_diff_col:
+                    title_letter = get_column_letter(title_col)
+                    target_title_letter = get_column_letter(target_title_col)
+                    title_diff_letter = get_column_letter(title_diff_col)
+                    
+                    self.logger.info(f"📍 title_diff 欄位對應: title={title_letter}, target_title={target_title_letter}, title_diff={title_diff_letter}")
+                    
+                    # 🔥 為每一行設定 title_diff 公式（從第2行開始到最後一行）
+                    title_diff_formula_count = 0
+                    for row_num in range(2, worksheet.max_row + 1):
+                        # 🔥 title_diff 公式：比較 title 和 target_title
+                        formula = (
+                            f'=IF(OR({title_letter}{row_num}="-", '
+                            f'{title_letter}{row_num}="", '
+                            f'{target_title_letter}{row_num}="-", '
+                            f'{target_title_letter}{row_num}=""), '
+                            f'"Y", '
+                            f'IF({title_letter}{row_num}={target_title_letter}{row_num}, '
+                            f'"N", "Y"))'
+                        )
+                        
+                        # 設定公式到儲存格
+                        cell = worksheet[f"{title_diff_letter}{row_num}"]
+                        cell.value = formula
+                        title_diff_formula_count += 1
+                    
+                    self.logger.info(f"✅ 已為 '{sheet_name}' 頁籤設定 {title_diff_formula_count} 個 title_diff 公式")
+                    
+                else:
+                    missing_cols = []
+                    if not title_col:
+                        missing_cols.append("title")
+                    if not target_title_col:
+                        missing_cols.append("target_title")
+                    if not title_diff_col:
+                        missing_cols.append("title_diff")
+                        
+                    self.logger.error(f"❌ 無法為 '{sheet_name}' 頁籤設定 title_diff 公式，缺少欄位: {', '.join(missing_cols)}")
             
             # 保存檔案
             workbook.save(excel_path)
@@ -1464,9 +1847,9 @@ class FeatureTwo:
         return backup_revision
         
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, 
-                     source_manifest_name: str = '', is_tvconfig: bool = False) -> List[Dict]:
+                 source_manifest_name: str = '', is_tvconfig: bool = False) -> List[Dict]:
         """
-        轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援）
+        轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援 + title 查詢）
         
         Args:
             projects: 專案列表
@@ -1485,6 +1868,8 @@ class FeatureTwo:
         branch_revision_count = 0
         branch_revision_query_count = 0  # 記錄查詢 branch revision 的次數
         skipped_projects_count = 0  # 🔥 新增：跳過的專案計數
+        title_query_count = 0  # 🔥 新增：記錄 title 查詢次數
+        target_title_query_count = 0  # 🔥 新增：記錄 target_title 查詢次數
         
         self.logger.info(f"🔄 開始轉換專案分支，處理類型: {process_type}")
         if is_tvconfig:
@@ -1590,6 +1975,31 @@ class FeatureTwo:
                 converted_project['target_branch_exists'] = '-'
                 converted_project['target_branch_revision'] = '-'
             
+            # 🔥 新增：查詢 commit titles
+            final_remote = converted_project['remote']
+            
+            # 查詢 branch_revision 的 title
+            branch_revision_for_title = converted_project.get('branch_revision', '-')
+            if branch_revision_for_title and branch_revision_for_title != '-':
+                title = self._get_commit_title(project_name, branch_revision_for_title, final_remote)
+                converted_project['title'] = title
+                if title != '-':
+                    title_query_count += 1
+                    self.logger.debug(f"✅ 查詢到 title: {project_name}/{branch_revision_for_title[:8]} -> {title[:30]}...")
+            else:
+                converted_project['title'] = '-'
+                
+            # 查詢 target_branch_revision 的 target_title
+            target_branch_revision_for_title = converted_project.get('target_branch_revision', '-')
+            if target_branch_revision_for_title and target_branch_revision_for_title != '-':
+                target_title = self._get_commit_title(project_name, target_branch_revision_for_title, final_remote)
+                converted_project['target_title'] = target_title
+                if target_title != '-':
+                    target_title_query_count += 1
+                    self.logger.debug(f"✅ 查詢到 target_title: {project_name}/{target_branch_revision_for_title[:8]} -> {target_title[:30]}...")
+            else:
+                converted_project['target_title'] = '-'
+            
             converted_projects.append(converted_project)
             
             # 每100個項目顯示進度
@@ -1604,6 +2014,11 @@ class FeatureTwo:
         self.logger.info(f"  - 🔸 Hash revision: {hash_revision_count} 個")
         self.logger.info(f"  - 🔹 Branch revision: {branch_revision_count} 個")
         self.logger.info(f"  - 🔍 Branch revision 查詢: {branch_revision_query_count} 個")
+        
+        # 🔥 新增：Title 查詢統計
+        self.logger.info(f"📊 Title 查詢統計:")
+        self.logger.info(f"  - 📝 Title 查詢成功: {title_query_count} 個")
+        self.logger.info(f"  - 📝 Target Title 查詢成功: {target_title_query_count} 個")
         
         # 🔥 統計 remote 分布
         remote_stats = {}
@@ -1639,6 +2054,96 @@ class FeatureTwo:
         
         return converted_projects
 
+    def _get_commit_title(self, project_name: str, commit_hash: str, remote: str = '') -> str:
+        """
+        🔥 修改方法：查詢 gerrit commit 的 title - 使用 GerritManager 的新方法
+        
+        Args:
+            project_name: 專案名稱
+            commit_hash: commit hash
+            remote: remote 類型
+            
+        Returns:
+            commit title 或 '-' (如果查詢失敗)
+        """
+        try:
+            if not project_name or not commit_hash or commit_hash == '-':
+                return '-'
+            
+            # 如果不是有效的 hash，直接返回
+            if not self._is_revision_hash(commit_hash):
+                self.logger.debug(f"跳過非 hash commit title 查詢: {project_name}/{commit_hash}")
+                return '-'
+            
+            # 🔥 修改：根據 remote 選擇正確的 GerritManager 實例，然後使用其 get_commit_title 方法
+            if remote == 'rtk-prebuilt':
+                temp_gerrit = self._get_prebuilt_gerrit_manager()
+            else:
+                temp_gerrit = self.gerrit_manager
+            
+            # 🔥 使用 GerritManager 的新方法
+            title = temp_gerrit.get_commit_title(project_name, commit_hash)
+            
+            if title:
+                self.logger.debug(f"✅ 查詢到 commit title: {project_name}/{commit_hash[:8]} -> {title[:50]}...")
+                return title
+            else:
+                self.logger.debug(f"❌ 無法查詢到 commit title: {project_name}/{commit_hash[:8]}")
+                return '-'
+                
+        except Exception as e:
+            self.logger.debug(f"❌ 查詢 commit title 異常: {project_name}/{commit_hash[:8] if commit_hash else 'N/A'} - {str(e)}")
+            return '-'
+
+    def _get_commit_title_batch(self, commit_requests: list) -> dict:
+        """
+        🔥 修改方法：批量查詢 commit titles - 使用 GerritManager 的批量方法
+        
+        Args:
+            commit_requests: [(project_name, commit_hash, remote), ...] 的列表
+            
+        Returns:
+            {(project_name, commit_hash): title} 的字典
+        """
+        results = {}
+        
+        try:
+            # 🔥 按 remote 分組，使用對應的 GerritManager 實例
+            rtk_requests = []
+            prebuilt_requests = []
+            
+            for project_name, commit_hash, remote in commit_requests:
+                if remote == 'rtk-prebuilt':
+                    prebuilt_requests.append((project_name, commit_hash))
+                else:
+                    rtk_requests.append((project_name, commit_hash))
+            
+            # 🔥 處理 rtk 請求
+            if rtk_requests:
+                rtk_results = self.gerrit_manager.batch_get_commit_titles(rtk_requests)
+                for (project_name, commit_hash), title in rtk_results.items():
+                    key = (project_name, commit_hash)
+                    results[key] = title if title else '-'
+            
+            # 🔥 處理 rtk-prebuilt 請求  
+            if prebuilt_requests:
+                temp_gerrit = self._get_prebuilt_gerrit_manager()
+                prebuilt_results = temp_gerrit.batch_get_commit_titles(prebuilt_requests)
+                for (project_name, commit_hash), title in prebuilt_results.items():
+                    key = (project_name, commit_hash)
+                    results[key] = title if title else '-'
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"批量查詢 commit titles 失敗: {str(e)}")
+            # 如果批量失敗，回退到單個查詢
+            for project_name, commit_hash, remote in commit_requests:
+                key = (project_name, commit_hash)
+                results[key] = self._get_commit_title(project_name, commit_hash, remote)
+            
+            return results
+            
     def _get_branch_revision_if_needed(self, project_name: str, revision: str, remote: str = '') -> str:
         """
         🔥 新方法：取得 revision 對應的實際 hash 值

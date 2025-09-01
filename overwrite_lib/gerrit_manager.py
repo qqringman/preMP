@@ -1566,4 +1566,170 @@ class GerritManager:
             result['message'] = f"備用方法發生錯誤: {str(e)}"
             self.logger.error(result['message'])
             return result
+        
+    def get_commit_title(self, project_name: str, commit_hash: str) -> str:
+        """
+        🔥 新增方法：查詢 gerrit commit 的 title (commit message 的第一行)
+        
+        Args:
+            project_name: 專案名稱
+            commit_hash: commit hash (完整的 40 字符或短版本)
+            
+        Returns:
+            commit title 字串，失敗時返回空字串
+        """
+        try:
+            if not project_name or not commit_hash:
+                self.logger.debug(f"參數不完整: project_name={project_name}, commit_hash={commit_hash}")
+                return ''
+            
+            # 移除可能的空白字符
+            commit_hash = commit_hash.strip()
+            project_name = project_name.strip()
+            
+            # 檢查是否為有效的 commit hash（至少 7 個字符的十六進制）
+            if len(commit_hash) < 7 or not all(c in '0123456789abcdefABCDEF' for c in commit_hash):
+                self.logger.debug(f"無效的 commit hash: {commit_hash}")
+                return ''
+            
+            import urllib.parse
+            encoded_project = urllib.parse.quote(project_name, safe='')
+            encoded_commit = urllib.parse.quote(commit_hash, safe='')
+            
+            # 嘗試不同的 API 路徑（按照現有邏輯的模式）
+            api_paths = [
+                f"{self.base_url}/gerrit/a/projects/{encoded_project}/commits/{encoded_commit}",
+                f"{self.api_url}/projects/{encoded_project}/commits/{encoded_commit}",
+                f"{self.base_url}/a/projects/{encoded_project}/commits/{encoded_commit}"
+            ]
+            
+            for api_path in api_paths:
+                try:
+                    self.logger.debug(f"嘗試查詢 commit: {api_path}")
+                    response = self._make_request(api_path, timeout=10)
+                    
+                    if response.status_code == 200:
+                        content = response.text
+                        # 處理 Gerrit JSON 前綴
+                        if content.startswith(")]}'\n"):
+                            content = content[5:]
+                        
+                        import json
+                        commit_info = json.loads(content)
+                        
+                        # 提取 commit message
+                        message = commit_info.get('message', '')
+                        if message:
+                            # 取第一行作為 title，去除前後空白
+                            title = message.split('\n')[0].strip()
+                            if title:
+                                self.logger.debug(f"✅ 成功查詢 commit title: {project_name}/{commit_hash[:8]} -> {title[:50]}...")
+                                return title
+                        
+                        self.logger.debug(f"❌ commit message 為空: {project_name}/{commit_hash[:8]}")
+                        return ''
+                        
+                    elif response.status_code == 404:
+                        self.logger.debug(f"❌ commit 不存在: {project_name}/{commit_hash[:8]}")
+                        # 404 表示 commit 不存在，不需要嘗試其他路徑
+                        return ''
+                        
+                    elif response.status_code == 403:
+                        self.logger.debug(f"❌ 權限不足: {project_name}/{commit_hash[:8]}")
+                        # 權限問題，不需要嘗試其他路徑
+                        return ''
+                        
+                    else:
+                        self.logger.debug(f"❌ HTTP {response.status_code}: {api_path}")
+                        # 其他錯誤，嘗試下一個路徑
+                        continue
+                        
+                except json.JSONDecodeError as e:
+                    self.logger.debug(f"❌ JSON 解析失敗 {api_path}: {str(e)}")
+                    continue
+                except Exception as e:
+                    self.logger.debug(f"❌ 查詢異常 {api_path}: {str(e)}")
+                    continue
+            
+            # 所有路徑都失敗
+            self.logger.debug(f"❌ 所有 API 路徑都無法查詢 commit title: {project_name}/{commit_hash[:8]}")
+            return ''
+            
+        except Exception as e:
+            self.logger.debug(f"❌ 查詢 commit title 時發生錯誤: {project_name}/{commit_hash[:8] if commit_hash else 'N/A'} - {str(e)}")
+            return ''
+
+    def get_commit_title_for_server(self, project_name: str, commit_hash: str, server_type: str = 'rtk') -> str:
+        """
+        🔥 新增方法：針對特定 Gerrit 服務器查詢 commit title
+        
+        這個方法是為了配合 feature_two.py 中根據 remote 類型選擇不同 Gerrit 服務器的需求
+        
+        Args:
+            project_name: 專案名稱
+            commit_hash: commit hash
+            server_type: 服務器類型 ('rtk' 或 'rtk-prebuilt')
+            
+        Returns:
+            commit title 字串，失敗時返回空字串
+        """
+        try:
+            if not project_name or not commit_hash:
+                return ''
+            
+            # 根據服務器類型決定使用哪個 GerritManager 實例
+            # 這個方法主要是為了與現有的 rtk/rtk-prebuilt 邏輯兼容
+            
+            if server_type == 'rtk-prebuilt':
+                # 對於 rtk-prebuilt，需要使用不同的 base_url
+                # 但這個邏輯應該由調用方（feature_two.py）來處理不同的 GerritManager 實例
+                self.logger.debug(f"查詢 rtk-prebuilt commit title: {project_name}/{commit_hash[:8]}")
+            else:
+                self.logger.debug(f"查詢 rtk commit title: {project_name}/{commit_hash[:8]}")
+            
+            # 使用基本的 get_commit_title 方法
+            return self.get_commit_title(project_name, commit_hash)
+            
+        except Exception as e:
+            self.logger.debug(f"針對服務器 {server_type} 查詢 commit title 失敗: {str(e)}")
+            return ''
+
+    def batch_get_commit_titles(self, commit_requests: list) -> dict:
+        """
+        🔥 新增方法：批量查詢 commit titles（性能優化用）
+        
+        Args:
+            commit_requests: [(project_name, commit_hash), ...] 的列表
+            
+        Returns:
+            {(project_name, commit_hash): title} 的字典
+        """
+        results = {}
+        
+        try:
+            self.logger.debug(f"批量查詢 {len(commit_requests)} 個 commit titles")
+            
+            for project_name, commit_hash in commit_requests:
+                try:
+                    key = (project_name, commit_hash)
+                    title = self.get_commit_title(project_name, commit_hash)
+                    results[key] = title
+                    
+                    if title:
+                        self.logger.debug(f"✅ 批量查詢成功: {project_name}/{commit_hash[:8]} -> {title[:30]}...")
+                    else:
+                        self.logger.debug(f"❌ 批量查詢失敗: {project_name}/{commit_hash[:8]}")
+                        
+                except Exception as e:
+                    self.logger.debug(f"批量查詢單項失敗: {project_name}/{commit_hash[:8]} - {str(e)}")
+                    results[(project_name, commit_hash)] = ''
+            
+            success_count = len([v for v in results.values() if v])
+            self.logger.debug(f"批量查詢完成: {success_count}/{len(commit_requests)} 成功")
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"批量查詢 commit titles 時發生錯誤: {str(e)}")
+            return results        
             
