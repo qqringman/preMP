@@ -70,7 +70,7 @@ DEFAULT_ZIP_DIR = './zip_output'
 # =====================================
 FTP_PATH_COLUMN = 'ftp path'  # Excel 中 FTP 路徑的欄位名稱
 FTP_PATH_COLUMN_ALTERNATIVE = 'SftpURL'  # Excel 中 FTP 路徑的備用欄位名稱
-FTP_PATH_COLUMNS = ['ftp path', 'SftpURL']  # 可能的 FTP 路徑欄位名稱列表
+FTP_PATH_COLUMNS = ['ftp path', 'SftpURL', 'SftpPath', 'compare_SftpPath']  # 可能的 FTP 路徑欄位名稱列表
 
 # =====================================
 # 路徑替換規則

@@ -568,12 +568,6 @@ class WebProcessor:
                 self.update_progress(30, 'comparing', '正在執行所有比對情境...')
                 all_results = self.comparator.compare_all_scenarios(source_dir, compare_dir)
                 
-                # ===== 移除會在根目錄創建 all_scenarios_compare.xlsx 的舊邏輯 =====
-                # 現在 FileComparator 的 compare_all_scenarios 方法已經會正確處理所有檔案結構
-                # 包括：
-                # 1. 各情境子目錄下的 all_scenarios_compare.xlsx
-                # 2. 根目錄下的 all_scenarios_summary.xlsx
-                
                 # 直接使用 FileComparator 返回的結果
                 self.results['compare_results'] = all_results
                 
@@ -582,253 +576,71 @@ class WebProcessor:
                     self.results['summary_report'] = all_results['summary_report']
             
             else:
-                # 單一情境比對（保持原有邏輯）
+                # 單一情境比對
                 self.update_progress(30, 'comparing', f'正在執行 {scenarios} 比對情境...')
                 
-                # 初始化比對器
-                comparator = FileComparator()
-                
-                # 根據情境呼叫對應的比對方法
-                scenario_map = {
-                    'master_vs_premp': 'master_vs_premp',
-                    'premp_vs_wave': 'premp_vs_wave', 
-                    'wave_vs_backup': 'wave_vs_backup'
-                }
-                
-                if scenarios in scenario_map:
-                    scenario_key = scenario_map[scenarios]
+                # 🔥 關鍵修正：模仿 compare_all_scenarios 的邏輯
+                try:
+                    # 載入 mapping tables 並保存到 comparator
+                    self.logger.info(f"🔍 準備載入 mapping tables，source_dir: {source_dir}")
+                    self.comparator.mapping_tables = self.comparator._load_mapping_tables(source_dir)
+                    self.logger.info(f"📊 載入結果: {len(self.comparator.mapping_tables) if self.comparator.mapping_tables else 0} 個 mapping tables")
                     
-                    # 執行單一情境比對
-                    try:
-                        # 取得所有模組
-                        actual_modules = comparator._get_all_modules(source_dir)
+                    # 🔥 關鍵：如果有 mapping table，使用 _compare_with_mapping 的邏輯
+                    if self.comparator.mapping_tables:
+                        self.logger.info("✅ 找到 mapping tables，使用 mapping 邏輯")
                         
-                        # 準備結果容器
-                        scenario_results = {
+                        # 使用 compare_with_mapping，然後篩選特定情境的結果
+                        all_results = self.comparator._compare_with_mapping(source_dir, compare_dir)
+                        
+                        # 從完整結果中提取單一情境
+                        scenario_map = {
+                            'master_vs_premp': 'master_vs_premp',
+                            'premp_vs_wave': 'premp_vs_wave',
+                            'wave_vs_backup': 'wave_vs_backup'
+                        }
+                        
+                        if scenarios in scenario_map:
+                            scenario_key = scenario_map[scenarios]
+                            
+                            # 提取單一情境結果
+                            if scenario_key in all_results:
+                                single_scenario_result = {scenario_key: all_results[scenario_key]}
+                                self.results['compare_results'] = single_scenario_result
+                                
+                                # 尋找對應的報表檔案
+                                scenario_report_path = os.path.join(compare_dir, scenario_key, 'all_scenarios_compare.xlsx')
+                                if os.path.exists(scenario_report_path):
+                                    self.results['summary_report'] = scenario_report_path
+                                elif 'summary_report' in all_results:
+                                    self.results['summary_report'] = all_results['summary_report']
+                                    
+                                self.logger.info(f"✅ 成功使用 mapping 邏輯處理 {scenario_key}")
+                            else:
+                                raise Exception(f"在結果中找不到情境: {scenario_key}")
+                        else:
+                            raise Exception(f"不支援的情境: {scenarios}")
+                            
+                    else:
+                        # 沒有 mapping table，使用原有邏輯
+                        self.logger.warning("⚠️ 沒有載入 mapping table，使用原有邏輯（可能會失敗）")
+                        success = self._process_single_scenario_without_mapping(source_dir, compare_dir, scenarios)
+                        if not success:
+                            raise Exception("沒有 mapping table 的情況下處理失敗")
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ 單一情境比對失敗: {str(e)}")
+                    # 設定失敗的結果結構
+                    scenario_key = {'master_vs_premp': 'master_vs_premp', 'premp_vs_wave': 'premp_vs_wave', 'wave_vs_backup': 'wave_vs_backup'}.get(scenarios, scenarios)
+                    self.results['compare_results'] = {
+                        scenario_key: {
                             'success': 0,
                             'failed': 0,
                             'modules': [],
-                            'failed_modules': [],
-                            'reports': []
+                            'failed_modules': []
                         }
-                        
-                        scenario_data = {
-                            'revision_diff': [],
-                            'branch_error': [],
-                            'lost_project': [],
-                            'version_diff': [],
-                            'cannot_compare': []
-                        }
-                        
-                        self.update_progress(50, 'comparing', f'正在處理 {len(actual_modules)} 個模組...')
-                        
-                        # 處理每個模組
-                        for top_dir, module, module_path in actual_modules:
-                            full_module = f"{top_dir}/{module}" if top_dir else module
-                            
-                            # 找出需要比對的資料夾
-                            base_folder, compare_folder, missing_info = comparator._find_folders_for_comparison(
-                                module_path, scenario_key
-                            )
-                            
-                            if base_folder and compare_folder:
-                                try:
-                                    # 執行比對
-                                    results = comparator._compare_specific_folders(
-                                        module_path, base_folder, compare_folder, full_module, scenario_key
-                                    )
-                                    
-                                    # 收集資料
-                                    scenario_data['revision_diff'].extend(results['revision_diff'])
-                                    scenario_data['branch_error'].extend(results['branch_error'])
-                                    scenario_data['lost_project'].extend(results['lost_project'])
-                                    if 'version_diffs' in results:
-                                        scenario_data['version_diff'].extend(results['version_diffs'])
-                                    
-                                    # 記錄成功
-                                    scenario_results['success'] += 1
-                                    scenario_results['modules'].append(module)
-                                    
-                                    # 寫入個別模組報表
-                                    if any([results['revision_diff'], results['branch_error'], results['lost_project']]):
-                                        scenario_output_dir = os.path.join(compare_dir, scenario_key)
-                                        if top_dir:
-                                            module_output_dir = os.path.join(scenario_output_dir, top_dir, module)
-                                        else:
-                                            module_output_dir = os.path.join(scenario_output_dir, module)
-                                        
-                                        if not os.path.exists(module_output_dir):
-                                            os.makedirs(module_output_dir, exist_ok=True)
-                                        
-                                        compare_filename = comparator._generate_compare_filename(
-                                            module, base_folder, compare_folder
-                                        )
-                                        
-                                        report_file = comparator._write_module_compare_report(
-                                            module, results, module_output_dir, compare_filename
-                                        )
-                                        if report_file:
-                                            scenario_results['reports'].append(report_file)
-                                            
-                                except Exception as e:
-                                    self.logger.error(f"比對模組 {module} 失敗: {str(e)}")
-                                    scenario_results['failed'] += 1
-                                    scenario_results['failed_modules'].append(module)
-                            else:
-                                # 無法比對
-                                scenario_results['failed'] += 1
-                                scenario_results['failed_modules'].append(module)
-                                
-                                # 記錄無法比對的原因
-                                folders = [f for f in os.listdir(module_path) 
-                                        if os.path.isdir(os.path.join(module_path, f))]
-                                
-                                scenario_data['cannot_compare'].append({
-                                    'SN': len(scenario_data['cannot_compare']) + 1,
-                                    'module': module,
-                                    'location_path': module_path,
-                                    'folder_count': len(folders),
-                                    'folders': ', '.join(folders) if folders else '無資料夾',
-                                    'path': os.path.join(module_path, folders[0]) if folders else module_path,
-                                    'reason': missing_info
-                                })
-                        
-                        self.update_progress(80, 'comparing', '正在生成報表...')
-                        
-                        # 重新編號
-                        for i, item in enumerate(scenario_data['revision_diff'], 1):
-                            item['SN'] = i
-                        for i, item in enumerate(scenario_data['branch_error'], 1):
-                            item['SN'] = i
-                        for i, item in enumerate(scenario_data['lost_project'], 1):
-                            item['SN'] = i
-                        for i, item in enumerate(scenario_data['version_diff'], 1):
-                            item['SN'] = i
-                        for i, item in enumerate(scenario_data['cannot_compare'], 1):
-                            item['SN'] = i
-                        
-                        # 建立情境輸出目錄
-                        scenario_output_dir = os.path.join(compare_dir, scenario_key)
-                        if not os.path.exists(scenario_output_dir):
-                            os.makedirs(scenario_output_dir, exist_ok=True)
-                        
-                        # 寫入該情境的整合報表
-                        summary_report_path = os.path.join(scenario_output_dir, 'all_scenarios_compare.xlsx')
-                        
-                        try:
-                            comparator._write_scenario_summary_report(
-                                scenario_data['revision_diff'],
-                                scenario_data['branch_error'],
-                                scenario_data['lost_project'],
-                                scenario_data['version_diff'],
-                                scenario_data.get('cannot_compare', []),
-                                scenario_results,
-                                summary_report_path,
-                                scenario_key
-                            )
-                            
-                            scenario_results['summary_report'] = summary_report_path
-                            self.logger.info(f"成功創建情境報表: {summary_report_path}")
-                            
-                        except Exception as scenario_report_error:
-                            self.logger.error(f"創建情境報表失敗: {str(scenario_report_error)}")
-                            # 即使失敗也要繼續
-                        
-                        # 也在根目錄建立總摘要
-                        total_summary_path = os.path.join(compare_dir, 'all_scenarios_summary.xlsx')
-                        
-                        # 創建安全的結果結構供總摘要使用
-                        all_results_for_summary = {
-                            'master_vs_premp': {
-                                'success': 0,
-                                'failed': 0,
-                                'modules': [],
-                                'failed_modules': []
-                            },
-                            'premp_vs_wave': {
-                                'success': 0,
-                                'failed': 0,
-                                'modules': [],
-                                'failed_modules': []
-                            },
-                            'wave_vs_backup': {
-                                'success': 0,
-                                'failed': 0,
-                                'modules': [],
-                                'failed_modules': []
-                            }
-                        }
-                        
-                        # 更新對應情境的資料
-                        all_results_for_summary[scenario_key] = scenario_results
-                        
-                        scenario_data_for_summary = {
-                            'master_vs_premp': {
-                                'revision_diff': [],
-                                'branch_error': [],
-                                'lost_project': [],
-                                'version_diff': [],
-                                'cannot_compare': []
-                            },
-                            'premp_vs_wave': {
-                                'revision_diff': [],
-                                'branch_error': [],
-                                'lost_project': [],
-                                'version_diff': [],
-                                'cannot_compare': []
-                            },
-                            'wave_vs_backup': {
-                                'revision_diff': [],
-                                'branch_error': [],
-                                'lost_project': [],
-                                'version_diff': [],
-                                'cannot_compare': []
-                            }
-                        }
-                        
-                        # 更新對應情境的資料
-                        scenario_data_for_summary[scenario_key] = scenario_data
-                        
-                        # 安全地調用總摘要報告生成
-                        try:
-                            comparator._write_total_summary_report(all_results_for_summary, scenario_data_for_summary, total_summary_path)
-                            self.logger.info(f"成功創建總摘要報告: {total_summary_path}")
-                        except Exception as summary_error:
-                            self.logger.error(f"創建總摘要報告失敗: {str(summary_error)}")
-                            # 如果總摘要失敗，創建一個簡單的摘要檔案
-                            try:
-                                simple_summary = pd.DataFrame([{
-                                    '情境': self._get_scenario_display_name(scenario_key),
-                                    '成功模組數': scenario_results.get('success', 0),
-                                    '失敗模組數': scenario_results.get('failed', 0),
-                                    '狀態': '部分成功（總摘要生成失敗）'
-                                }])
-                                simple_summary.to_excel(total_summary_path, sheet_name='簡易摘要', index=False)
-                                self.logger.info(f"創建了簡易摘要報告: {total_summary_path}")
-                            except Exception as simple_error:
-                                self.logger.error(f"創建簡易摘要也失敗: {str(simple_error)}")
-                                # 如果都失敗，至少確保有一個檔案
-                                total_summary_path = summary_report_path  # 使用情境報告作為總摘要
-                        
-                        # 設定結果 - 重要：建立 compare_results 結構
-                        self.results['compare_results'] = {scenario_key: scenario_results}
-                        self.results['summary_report'] = total_summary_path
-                        
-                    except Exception as e:
-                        self.logger.error(f"執行單一情境比對失敗: {str(e)}")
-                        # 即使失敗也要建立基本的 compare_results 結構
-                        self.results['compare_results'] = {
-                            scenario_key: {
-                                'success': 0,
-                                'failed': 0,
-                                'modules': [],
-                                'failed_modules': []
-                            }
-                        }
-                        raise
-                        
-                else:
-                    raise ValueError(f"不支援的比對情境: {scenarios}")
+                    }
+                    raise
             
             self.update_progress(100, 'completed', '比對完成！')
             
@@ -857,6 +669,12 @@ class WebProcessor:
                 self.results['compare_results'] = {}
                 
             raise
+
+    def _process_single_scenario_without_mapping(self, source_dir, compare_dir, scenarios):
+        """沒有 mapping table 時的後備處理方式"""
+        # 這裡可以實作原有的邏輯，但通常在有 mapping table 的情況下不會用到
+        self.logger.warning("使用後備邏輯處理單一情境（通常會失敗）")
+        return False
 
     def _get_scenario_display_name(self, scenario):
         """取得情境的顯示名稱"""
