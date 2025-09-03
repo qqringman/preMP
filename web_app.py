@@ -176,6 +176,19 @@ class WebProcessor:
                 if excel_result['excel_copied']:
                     self.results['excel_copied'] = True
                     self.results['excel_new_name'] = excel_result['excel_new_name']
+            else:
+                # 🔥 新增：如果沒有元資料，直接複製原始 Excel 檔案到下載目錄
+                try:
+                    import shutil
+                    if os.path.exists(excel_file):
+                        original_filename = os.path.basename(excel_file)
+                        target_path = os.path.join(download_dir, original_filename)
+                        shutil.copy2(excel_file, target_path)
+                        self.logger.info(f"已複製原始 Excel 檔案到下載目錄: {target_path}")
+                    else:
+                        self.logger.warning(f"找不到原始 Excel 檔案: {excel_file}")
+                except Exception as e:
+                    self.logger.error(f"複製 Excel 檔案失敗: {str(e)}")
             
             # 步驟 2：比較
             self.update_progress(50, 'comparing', '正在執行所有比對...')
