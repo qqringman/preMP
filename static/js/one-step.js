@@ -1276,7 +1276,7 @@ function generateStatsSection(stats) {
             <div class="stat-cards">
                 <div class="stat-card clickable" onclick="showFilesList('total')" title="點擊查看所有檔案">
                     <div class="stat-icon info">
-                        <i class="fas fa-files"></i>
+                        <i class="fas fa-folder-open"></i>
                     </div>
                     <div class="stat-content">
                         <div class="stat-value">${total}</div>
