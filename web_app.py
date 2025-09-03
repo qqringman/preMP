@@ -1121,7 +1121,7 @@ def check_task_exists(task_id):
         })
 
 def analyze_compare_directory(compare_dir):
-    """分析比較結果目錄"""
+    """分析比較結果目錄 - 增強版，支援讀取摘要統計"""
     compare_results = {}
     
     try:
@@ -1131,20 +1131,92 @@ def analyze_compare_directory(compare_dir):
         for scenario in scenarios:
             scenario_dir = os.path.join(compare_dir, scenario)
             if os.path.exists(scenario_dir):
-                # 統計該情境下的模組數量
-                module_count = count_modules_in_scenario(scenario_dir)
-                compare_results[scenario] = {
-                    'success': module_count,
-                    'failed': 0,  # 從文件系統恢復時很難確定失敗數量
-                    'modules': [],  # 可以進一步實現詳細模組列表
-                    'failed_modules': []
-                }
+                
+                # 檢查是否有 all_scenarios_compare.xlsx 檔案
+                summary_file = os.path.join(scenario_dir, 'all_scenarios_compare.xlsx')
+                
+                if os.path.exists(summary_file):
+                    # 嘗試從摘要檔案中讀取統計資料
+                    stats = read_summary_stats_from_excel(summary_file)
+                    if stats:
+                        compare_results[scenario] = stats
+                    else:
+                        # 如果讀取失敗，使用原來的邏輯
+                        module_count = count_modules_in_scenario(scenario_dir)
+                        compare_results[scenario] = {
+                            'success': module_count,
+                            'failed': 0,
+                            'modules': [],
+                            'failed_modules': []
+                        }
+                else:
+                    # 沒有摘要檔案，使用原來的邏輯
+                    module_count = count_modules_in_scenario(scenario_dir)
+                    compare_results[scenario] = {
+                        'success': module_count,
+                        'failed': 0,
+                        'modules': [],
+                        'failed_modules': []
+                    }
     
     except Exception as e:
         app.logger.error(f'Error analyzing compare directory {compare_dir}: {str(e)}')
     
     return compare_results
 
+def read_summary_stats_from_excel(excel_file):
+    """從 Excel 摘要檔案中讀取統計資料"""
+    try:
+        import pandas as pd
+        
+        # 讀取摘要頁籤
+        df = pd.read_excel(excel_file, sheet_name='摘要')
+        
+        # 查找成功模組數和失敗模組數
+        success_count = 0
+        failed_count = 0
+        success_modules = []
+        failed_modules = []
+        
+        for index, row in df.iterrows():
+            item = str(row.iloc[0]).strip()  # 第一欄是項目名稱
+            value = row.iloc[1] if len(row) > 1 else ''  # 第二欄是值
+            
+            if '成功模組數' in item:
+                try:
+                    success_count = int(value)
+                except:
+                    success_count = 0
+                    
+            elif '失敗模組數' in item:
+                try:
+                    failed_count = int(value)
+                except:
+                    failed_count = 0
+                    
+            elif '成功模組清單' in item and value and str(value) != '無':
+                try:
+                    success_modules = [m.strip() for m in str(value).split(',') if m.strip()]
+                except:
+                    success_modules = []
+                    
+            elif '失敗模組清單' in item and value and str(value) != '無':
+                try:
+                    failed_modules = [m.strip() for m in str(value).split(',') if m.strip()]
+                except:
+                    failed_modules = []
+        
+        return {
+            'success': success_count,
+            'failed': failed_count,
+            'modules': success_modules,
+            'failed_modules': failed_modules
+        }
+        
+    except Exception as e:
+        app.logger.error(f'Error reading summary stats from {excel_file}: {str(e)}')
+        return None
+        
 def count_modules_in_scenario(scenario_dir):
     """計算情境目錄下的模組數量"""
     try:
