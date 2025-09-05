@@ -797,7 +797,12 @@ def compare_page():
 @global_login_required
 def one_step_page():
     """一步到位頁面"""
-    return render_template('one_step.html')
+    import json
+    # 準備前端需要的配置
+    frontend_config = {
+        'DEFAULT_SERVER_PATH': config.DEFAULT_SERVER_PATH
+    }
+    return render_template('one_step.html', frontend_config=json.dumps(frontend_config))
 
 @app.route('/results/<task_id>')
 @global_login_required
@@ -3674,6 +3679,13 @@ def check_scenarios(task_id):
         scenario_status[scenario] = os.path.exists(file_path)
     
     return jsonify(scenario_status)
+
+@app.route('/api/config')
+def get_config():
+    """獲取前端所需的配置"""
+    return jsonify({
+        'DEFAULT_SERVER_PATH': config.DEFAULT_SERVER_PATH
+    })
     
 if __name__ == '__main__':
     # 開發模式執行

@@ -3,7 +3,7 @@
 let selectedFile = null;
 let currentTaskId = null;
 let selectedServerFiles = [];
-let currentServerPath = '/home/vince_lin/ai/preMP';
+let currentServerPath = window.FRONTEND_CONFIG?.DEFAULT_SERVER_PATH // 從配置獲取
 let serverFilesLoaded = false;
 let pathInputTimer = null;
 
@@ -12,13 +12,19 @@ let downloadedFilesList = [];
 let skippedFilesList = [];
 let failedFilesList = [];
 
-// 初始化頁面
+// 修改初始化函數
 document.addEventListener('DOMContentLoaded', () => {
+
+    // 調試日誌
+    console.log('Current server path:', currentServerPath);
+    console.log('Frontend config:', window.FRONTEND_CONFIG);
+
+    // 原有的初始化
     initializeUpload();
     initializeSftpConfig();
     initializeEventListeners();
     initializePathInput();
-    updateStepIndicator('upload', 'active');    
+    updateStepIndicator('upload', 'active');
 });
 
 // 切換檔案來源標籤
@@ -992,31 +998,114 @@ function generateResultSummary(results, forceDisplay = false) {
             <div class="results-summary-content">
     `;
     
-    // 簡化的任務資訊卡片
+    // 任務資訊卡片 - 簡化為一層藍色樣式
     html += `
-        <div class="task-info-section">
-            <div class="info-card">
-                <div class="info-header">
-                    <i class="fas fa-info-circle"></i>
-                    <span>任務資訊</span>
-                </div>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="info-label">任務 ID</span>
-                        <code class="info-value">${currentTaskId || 'N/A'}</code>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">完成時間</span>
-                        <span class="info-value">${new Date().toLocaleString('zh-TW')}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">處理模式</span>
-                        <span class="info-value">
-                            <i class="fas fa-rocket"></i> 一步到位
-                        </span>
-                    </div>
-                </div>
+        <div class="task-info-box">
+            <div class="task-info-item">
+                <strong>處理模式：</strong>
+                <code><i class="fas fa-rocket"></i> 一步到位</code>
+            </div>        
+            <div class="task-info-item">
+                <strong>任務 ID：</strong>
+                <code>${currentTaskId || 'N/A'}</code>
             </div>
+            <div class="task-info-item">
+                <strong>完成時間：</strong>
+                <code>${new Date().toLocaleString('zh-TW')}</code>
+            </div>
+    `;
+
+    // 顯示路徑資訊 - 修正邏輯處理 undefined 的情況
+    if (currentTaskId) {
+        // 取得基礎路徑
+        const basePath = results?.base_path || results?.full_download_path || '/home/vince_lin/ai/preMP';
+        const fullDownloadPath = results?.full_download_path || `${basePath}/downloads`;
+        
+        // 下載路徑
+        html += `
+            <div class="task-info-item">
+                <strong>下載路徑：</strong>
+                <code>${fullDownloadPath}/${currentTaskId}</code>
+            </div>
+        `;
+        
+        // 比對來源路徑
+        html += `
+            <div class="task-info-item">
+                <strong>比對來源：</strong>
+                <code>${fullDownloadPath}/${currentTaskId}</code>
+            </div>
+        `;
+        
+        // 比對結果路徑 - 只顯示到任務目錄層級
+        html += `
+        <div class="task-info-item">
+            <strong>比對結果：</strong>
+            <code>${basePath}/compare_results/${currentTaskId}</code>
+        </div>
+        `;
+        
+        // 下載報告
+        if (results?.download_report) {
+            let reportPath;
+            if (results.download_report.startsWith('/')) {
+                reportPath = results.download_report;
+            } else {
+                reportPath = `${basePath}/${results.download_report}`;
+            }
+            html += `
+            <div class="task-info-item">
+                <strong>下載報告：</strong>
+                <code>${reportPath}</code>
+            </div>
+            `;
+        } else {
+            // 如果沒有具體報告路徑，顯示預期路徑
+            html += `
+            <div class="task-info-item">
+                <strong>下載報告：</strong>
+                <code>${fullDownloadPath}/${currentTaskId}/sample_ftp_paths_report.xlsx</code>
+            </div>
+            `;
+        }
+        
+        // ZIP 檔案
+        if (results?.zip_file) {
+            let zipPath;
+            if (results.zip_file.startsWith('/')) {
+                zipPath = results.zip_file;
+            } else {
+                zipPath = `${basePath}/${results.zip_file}`;
+            }
+            html += `
+            <div class="task-info-item">
+                <strong>ZIP 檔案：</strong>
+                <code>${zipPath}</code>
+            </div>
+            `;
+        } else {
+            // 如果沒有具體ZIP路徑，顯示預期路徑
+            const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            html += `
+            <div class="task-info-item">
+                <strong>ZIP 檔案：</strong>
+                <code>${basePath}/zip_output/${currentTaskId}/all_results_${timestamp}.zip</code>
+            </div>
+            `;
+        }
+        
+        // Excel 檔案
+        if (results?.excel_copied && results?.excel_new_name) {
+            html += `
+            <div class="task-info-item">
+                <strong>Excel 檔案：</strong>
+                <code>${fullDownloadPath}/${currentTaskId}/${results.excel_new_name}</code>
+            </div>
+            `;
+        }
+    }
+
+    html += `
         </div>
     `;
     

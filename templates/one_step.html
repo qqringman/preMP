@@ -395,7 +395,15 @@
     </div>
 </div>
 {% endblock %}
-
 {% block extra_scripts %}
+<script>
+    // 從後端安全地獲取配置
+    try {
+        window.FRONTEND_CONFIG = {{ frontend_config|safe }};
+        console.log('Frontend config loaded:', window.FRONTEND_CONFIG);
+    } catch (e) {
+        console.error('Failed to load frontend config:', e);
+    }
+</script>
 <script src="{{ url_for('static', filename='js/one-step.js') }}"></script>
 {% endblock %}
