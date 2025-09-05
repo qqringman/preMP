@@ -270,11 +270,17 @@ function displayTaskError(taskId, status) {
 
 // 顯示任務結果
 function displayTaskResults(taskId, status) {
+
+    console.log('=== displayTaskResults 被調用 ===');
+    console.log('status:', status);
+    console.log('status.base_path:', status.base_path);
+    console.log('status.output_dir:', status.output_dir);
+
     const container = document.querySelector('.container');
     const results = status.results || {};
     const stats = results.stats || {};
     const files = results.files || {};
-    
+
     // 更新全域變數以支援現有功能
     downloadedFilesList = files.downloaded || [];
     skippedFilesList = files.skipped || [];
@@ -309,7 +315,7 @@ function displayTaskResults(taskId, status) {
             </div>
             
             <!-- 檔案結構預覽 -->
-            ${results.folder_structure ? generateFolderTreeSection(results.folder_structure, taskId) : ''}
+            ${results.folder_structure ? generateFolderTreeSection(results.folder_structure, taskId, status.base_path, status.output_dir, status.full_download_path) : ''}
         </div>
     `;
     
@@ -323,7 +329,7 @@ function viewTaskReport(taskId) {
 
 
 // 生成資料夾樹區塊
-function generateFolderTreeSection(folderStructure, taskId) {
+function generateFolderTreeSection(folderStructure, taskId, basePath, outputDir, fullDownloadPath) {
     return `
         <div class="step-section mt-4">
             <div class="step-header">
@@ -344,7 +350,7 @@ function generateFolderTreeSection(folderStructure, taskId) {
                     </div>
                     <div class="task-info-item">
                         <strong>下載路徑：</strong>
-                        <code>downloads/${taskId}</code>
+                        <code>${fullDownloadPath}/${taskId}</code>
                     </div>
                 </div>
                 
@@ -2702,6 +2708,12 @@ function clearLog() {
 
 // 顯示下載結果時包含 Excel 改名資訊
 function showDownloadResults(results) {
+
+    console.log('=== showDownloadResults 被調用 ===');
+    console.log('results:', results);
+    console.log('results.base_path:', results.base_path);
+    console.log('results.output_dir:', results.output_dir);
+
     const downloadProgress = document.getElementById('downloadProgress');
     const downloadResults = document.getElementById('downloadResults');
     
@@ -2747,7 +2759,7 @@ function showDownloadResults(results) {
     
     // 生成資料夾樹
     if (results.folder_structure) {
-        const folderTreeHtml = generateFolderTreeSection(results.folder_structure, downloadTaskId);
+        const folderTreeHtml = generateFolderTreeSection(results.folder_structure, downloadTaskId, results.base_path, results.output_dir, results.full_download_path);
         document.getElementById('folderTree').parentElement.parentElement.outerHTML = folderTreeHtml;
     }
 }

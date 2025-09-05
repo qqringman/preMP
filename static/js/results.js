@@ -50,13 +50,30 @@ async function initializeScenarioSelector() {
 function updateScenarioButtons(scenarioStatus) {
     let hasAnyScenario = false;
     
+    // 獲取從 URL 傳入的特定情境
+    const urlParams = new URLSearchParams(window.location.search);
+    const specificScenario = urlParams.get('scenario');
+    
+    console.log('更新情境按鈕，特定情境:', specificScenario);
+    
     for (const [scenario, exists] of Object.entries(scenarioStatus)) {
         const button = document.querySelector(`[data-scenario="${scenario}"]`);
         if (button) {
             if (exists) {
-                button.style.display = 'flex';
-                button.disabled = false;
-                hasAnyScenario = true;
+                // 如果有特定情境參數，只顯示該情境，否則顯示所有可用情境
+                if (specificScenario) {
+                    if (scenario === specificScenario || scenario === 'all') {
+                        button.style.display = 'flex';
+                        button.disabled = false;
+                        hasAnyScenario = true;
+                    } else {
+                        button.style.display = 'none';
+                    }
+                } else {
+                    button.style.display = 'flex';
+                    button.disabled = false;
+                    hasAnyScenario = true;
+                }
             } else {
                 button.style.display = 'none';
             }
@@ -65,23 +82,36 @@ function updateScenarioButtons(scenarioStatus) {
     
     const container = document.querySelector('.scenario-selector-container');
     if (container) {
-        container.style.display = hasAnyScenario ? 'block' : 'none';
+        // 如果有特定情境，隱藏整個情境選擇器
+        if (specificScenario && specificScenario !== 'all') {
+            container.style.display = 'none';
+        } else {
+            container.style.display = hasAnyScenario ? 'block' : 'none';
+        }
     }
     
-    // 修正：根據URL參數或情境可用性設定預選情境
-    if (currentScenario && currentScenario !== 'all' && scenarioStatus[currentScenario]) {
-        // 如果URL中指定的情境存在，使用它
+    // 設定當前情境和預選按鈕
+    if (specificScenario && specificScenario !== 'all' && scenarioStatus[specificScenario]) {
+        // 有特定情境且該情境存在，使用特定情境
+        currentScenario = specificScenario;
+        setActiveScenarioButton(specificScenario);
+        console.log('設定為特定情境:', specificScenario);
+    } else if (currentScenario && currentScenario !== 'all' && scenarioStatus[currentScenario]) {
+        // 使用已初始化的情境
         setActiveScenarioButton(currentScenario);
+        console.log('使用已初始化的情境:', currentScenario);
     } else if (scenarioStatus.all) {
-        // 否則使用全部情境
+        // 使用全部情境
         currentScenario = 'all';
         setActiveScenarioButton('all');
+        console.log('設定為全部情境');
     } else {
         // 最後備案：使用第一個可用的情境
         for (const [scenario, exists] of Object.entries(scenarioStatus)) {
             if (exists) {
                 currentScenario = scenario;
                 setActiveScenarioButton(scenario);
+                console.log('設定為第一個可用情境:', scenario);
                 break;
             }
         }

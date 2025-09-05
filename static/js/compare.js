@@ -2814,8 +2814,18 @@ function getTotalSuccess(compareResults) {
 // 查看詳細結果
 function viewDetailedResults() {
     if (currentTaskId) {
-        console.log('Viewing detailed results for task_id:', currentTaskId); // 除錯用
-        window.location.href = `/results/${currentTaskId}`;
+        console.log('Viewing detailed results for task_id:', currentTaskId);
+        
+        // 獲取當前選擇的情境
+        const selectedScenario = window.currentCompareScenario || 'all';
+        console.log('Selected scenario:', selectedScenario);
+        
+        // 如果是特定情境，在 URL 中傳遞情境參數
+        if (selectedScenario && selectedScenario !== 'all') {
+            window.location.href = `/results/${currentTaskId}?scenario=${selectedScenario}`;
+        } else {
+            window.location.href = `/results/${currentTaskId}`;
+        }
     } else {
         utils.showNotification('無法取得任務 ID', 'error');
     }

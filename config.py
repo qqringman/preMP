@@ -6,7 +6,7 @@
 JIRA_SITE = 'jira.realtek.com'
 JIRA_USER = 'vince_lin'
 JIRA_PASSWORD = 'Amon200!Amon200!'
-JIRA_TOKEN = ''
+JIRA_TOKEN = ' '
 
 # Gerrit 連線設定
 GERRIT_BASE = 'https://mm2sd.rtkbf.com/'

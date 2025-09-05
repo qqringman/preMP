@@ -84,12 +84,23 @@ class WebProcessor:
         self.progress = progress
         self.status = status
         self.message = message
-        
+
+        # 用 os.path.join 重組完整路徑
+        full_download_path = os.path.join(
+            config.DEFAULT_SERVER_PATH, 
+            config.DEFAULT_OUTPUT_DIR
+        )
+        # os.path.normpath 會清理路徑中的 './' 
+        full_download_path = os.path.normpath(full_download_path)
+
         update_data = {
             'progress': progress,
             'status': status,
             'message': message,
-            'results': self.results
+            'results': self.results,
+            'base_path': config.DEFAULT_SERVER_PATH,
+            'output_dir': config.DEFAULT_OUTPUT_DIR,
+            'full_download_path': full_download_path    # 加這個完整路徑
         }
         
         if stats:
@@ -161,7 +172,11 @@ class WebProcessor:
                 'files': files,
                 'report_path': report_path
             }
-            
+            self.results['base_path'] = config.DEFAULT_SERVER_PATH
+            self.results['output_dir'] = config.DEFAULT_OUTPUT_DIR
+            full_download_path = os.path.join(config.DEFAULT_SERVER_PATH, config.DEFAULT_OUTPUT_DIR)
+            self.results['full_download_path'] = os.path.normpath(full_download_path)
+
             self.update_progress(40, 'downloaded', '下載完成！', stats, files)
             
             # 處理 Excel 檔案複製改名
@@ -349,7 +364,11 @@ class WebProcessor:
                 self.results['stats'] = stats
                 self.results['files'] = files
                 self.results['folder_structure'] = folder_structure
-                
+                self.results['base_path'] = config.DEFAULT_SERVER_PATH      # 加這行
+                self.results['output_dir'] = config.DEFAULT_OUTPUT_DIR      # 加這行
+                full_download_path = os.path.join(config.DEFAULT_SERVER_PATH, config.DEFAULT_OUTPUT_DIR)
+                self.results['full_download_path'] = os.path.normpath(full_download_path)
+
                 # 如果有 Excel 複製結果，加入到結果中
                 if excel_result['excel_copied']:
                     self.results['excel_copied'] = True
@@ -983,13 +1002,19 @@ def recover_task_status_from_filesystem(task_id):
     # 檢查下載目錄
     download_dir = os.path.join('downloads', task_id)
     compare_dir = os.path.join('compare_results', task_id)
-    
+
+    full_download_path = os.path.join(config.DEFAULT_SERVER_PATH, config.DEFAULT_OUTPUT_DIR)
+    full_download_path = os.path.normpath(full_download_path)
+
     task_info = {
         'task_id': task_id,
         'progress': 100,
         'status': 'completed',
         'message': '任務已完成（從文件系統恢復）',
-        'results': {}
+        'results': {},
+        'base_path': config.DEFAULT_SERVER_PATH,
+        'output_dir': config.DEFAULT_OUTPUT_DIR,
+        'full_download_path': full_download_path
     }
     
     # 檢查是否有下載結果
