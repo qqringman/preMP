@@ -3879,3 +3879,115 @@ body > .pvtFilterBox {
 .data-table tr:hover .content-divider {
   opacity: 0.5;
 }
+
+/* 任務資訊框 - 北歐藍配色 */
+.task-info-box {
+    background: linear-gradient(135deg, #E3F2FD 0%, #F1F8FF 100%);
+    border: 1px solid #BBDEFB;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 32px;
+    margin-top: 16px;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.08);
+}
+
+.task-info-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.task-info-item:last-child {
+    margin-bottom: 0;
+}
+
+.task-info-item strong {
+    color: #1565C0;
+    font-weight: 600;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.task-info-item code {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #BBDEFB;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.875rem;
+    color: #1A237E;
+    word-break: break-all;
+    flex: 1;
+    transition: all 0.2s ease;
+}
+
+.task-info-item code:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: #2196F3;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.15);
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-completed {
+    background: #E8F5E9;
+    color: #2E7D32;
+    border: 1px solid #4CAF50;
+}
+
+.status-error {
+    background: #FFEBEE;
+    color: #C62828;
+    border: 1px solid #F44336;
+}
+
+.status-downloading, .status-comparing {
+    background: #FFF3E0;
+    color: #E65100;
+    border: 1px solid #FF9800;
+}
+
+.loading-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #1565C0;
+    font-size: 0.925rem;
+}
+
+.loading-info i {
+    color: #2196F3;
+}
+
+@media (max-width: 768px) {
+    .task-info-box {
+        padding: 16px;
+        margin-bottom: 24px;
+    }
+    
+    .task-info-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .task-info-item strong {
+        min-width: auto;
+    }
+    
+    .task-info-item code {
+        width: 100%;
+        font-size: 0.8rem;
+    }
+}

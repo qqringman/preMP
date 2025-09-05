@@ -144,7 +144,9 @@ function rebindScenarioEvents() {
             // 設定當前情境並重新載入資料
             const newScenario = this.dataset.scenario;
             currentScenario = newScenario;
-            loadPivotData(); // 重新載入該情境的資料
+            
+            // 重新載入資料和任務資訊
+            loadPivotData(); // 這會自動調用 loadTaskInfo()
         };
     });
 }
@@ -191,12 +193,197 @@ async function loadPivotData() {
     currentData = data;
     updatePageHeader(); // 顯示當前情境名稱
     populateSheetSelector(data);
-    
+
+    loadTaskInfo();
+
     // 載入第一個資料表
     const sheets = Object.keys(data);
     if (sheets.length > 0) {
         loadSheet(sheets[0]);
     }
+}
+
+// 載入任務資訊函數
+async function loadTaskInfo() {
+    try {
+        const response = await fetch(`/api/status/${taskId}`);
+        const taskData = await response.json();
+        
+        renderTaskInfo(taskData);
+    } catch (error) {
+        console.error('載入任務資訊失敗:', error);
+        renderTaskInfoError();
+    }
+}
+
+// 渲染任務資訊
+// 渲染任務資訊
+function renderTaskInfo(taskData) {
+    const taskInfoBox = document.getElementById('taskInfoBox');
+    
+    if (!taskData || taskData.status === 'not_found') {
+        renderTaskInfoError();
+        return;
+    }
+    
+    const results = taskData.results || {};
+    const stats = taskData.stats || results.stats || {};
+    
+    let infoHTML = '';
+    
+    // 基本任務資訊
+    infoHTML += `
+        <div class="task-info-item">
+            <strong><i class="fas fa-tag"></i> 任務狀態：</strong>
+            <span class="status-badge status-${taskData.status}">${getStatusDisplayName(taskData.status)}</span>
+        </div>
+    `;
+    
+    // 下載統計 - 根據情境篩選
+    if (stats.total > 0) {
+        let displayStats = stats;
+        let scenarioText = '';
+        
+        if (currentScenario !== 'all') {
+            scenarioText = ` (${getScenarioDisplayName(currentScenario)})`;
+        }
+        
+        infoHTML += `
+            <div class="task-info-item">
+                <strong><i class="fas fa-download"></i> 下載統計${scenarioText}：</strong>
+                <span>總計 ${displayStats.total} 個檔案，成功 ${displayStats.downloaded} 個，跳過 ${displayStats.skipped || 0} 個</span>
+            </div>
+        `;
+    }
+    
+    // 下載路徑資訊 - 使用後端提供的完整路徑
+    if (taskData.full_download_path) {
+        infoHTML += `
+            <div class="task-info-item">
+                <strong><i class="fas fa-folder-open"></i> 下載路徑：</strong>
+                <code>${taskData.full_download_path}/${taskId}</code>
+            </div>
+        `;
+    } else if (taskData.base_path && taskData.output_dir) {
+        // 備用方案：組合路徑
+        infoHTML += `
+            <div class="task-info-item">
+                <strong><i class="fas fa-folder-open"></i> 下載路徑：</strong>
+                <code>${taskData.base_path}/${taskData.output_dir}/${taskId}</code>
+            </div>
+        `;
+    }
+    
+    // 比對路徑資訊 - 使用後端邏輯構建
+    if (results.compare_results || currentScenario !== 'all') {
+        // 比對來源路徑（就是下載路徑）
+        if (taskData.full_download_path) {
+            infoHTML += `
+                <div class="task-info-item">
+                    <strong><i class="fas fa-balance-scale"></i> 比對來源路徑：</strong>
+                    <code>${taskData.full_download_path}/${taskId}</code>
+                </div>
+            `;
+        }
+        
+        // 比對結果路徑 - 基於工作目錄
+        let compareResultPath = '';
+        if (taskData.base_path) {
+            // 使用工作目錄作為基礎，因為 compare_results 是相對於工作目錄的
+            const workingDir = taskData.base_path.split('/').slice(0, -2).join('/'); // 去掉最後的 ai/preMP 部分
+            compareResultPath = `${workingDir}/ai/preMP/compare_results/${taskId}`;
+            
+            if (currentScenario !== 'all') {
+                compareResultPath += `/${currentScenario}`;
+            }
+        } else {
+            // 備用方案
+            compareResultPath = `compare_results/${taskId}`;
+            if (currentScenario !== 'all') {
+                compareResultPath += `/${currentScenario}`;
+            }
+        }
+        
+        infoHTML += `
+            <div class="task-info-item">
+                <strong><i class="fas fa-folder"></i> 比對結果路徑：</strong>
+                <code>${compareResultPath}</code>
+            </div>
+        `;
+    }
+    
+    // 比對結果統計 - 根據當前情境篩選
+    if (results.compare_results) {
+        const compareResults = results.compare_results;
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        let scenarioText = '';
+        
+        if (currentScenario === 'all') {
+            // 顯示所有情境的總計
+            Object.values(compareResults).forEach(scenario => {
+                if (scenario.success !== undefined) totalSuccess += scenario.success;
+                if (scenario.failed !== undefined) totalFailed += scenario.failed;
+            });
+            scenarioText = ' (全部情境)';
+        } else {
+            // 只顯示當前情境的統計
+            const currentScenarioData = compareResults[currentScenario];
+            if (currentScenarioData) {
+                totalSuccess = currentScenarioData.success || 0;
+                totalFailed = currentScenarioData.failed || 0;
+                scenarioText = ` (${getScenarioDisplayName(currentScenario)})`;
+            }
+        }
+        
+        if (totalSuccess > 0 || totalFailed > 0) {
+            infoHTML += `
+                <div class="task-info-item">
+                    <strong><i class="fas fa-chart-bar"></i> 比對結果${scenarioText}：</strong>
+                    <span>成功 ${totalSuccess} 個模組，失敗 ${totalFailed} 個模組</span>
+                </div>
+            `;
+        }
+    }
+    
+    // Excel 檔案資訊
+    if (results.excel_copied && results.excel_new_name) {
+        infoHTML += `
+            <div class="task-info-item">
+                <strong><i class="fas fa-file-excel"></i> Excel 檔案：</strong>
+                <span>已另存為 <code>${results.excel_new_name}</code></span>
+            </div>
+        `;
+    }
+    
+    taskInfoBox.innerHTML = infoHTML;
+}
+
+// 渲染任務資訊錯誤狀態
+function renderTaskInfoError() {
+    const taskInfoBox = document.getElementById('taskInfoBox');
+    taskInfoBox.innerHTML = `
+        <div class="task-info-item">
+            <strong><i class="fas fa-exclamation-triangle"></i> 狀態：</strong>
+            <span class="status-badge status-error">找不到任務資訊</span>
+        </div>
+        <div class="task-info-item">
+            <strong><i class="fas fa-info-circle"></i> 說明：</strong>
+            <span>此任務可能已過期或不存在</span>
+        </div>
+    `;
+}
+
+// 獲取狀態顯示名稱
+function getStatusDisplayName(status) {
+    const statusMap = {
+        'completed': '已完成',
+        'error': '錯誤',
+        'downloading': '下載中',
+        'comparing': '比對中',
+        'not_found': '找不到'
+    };
+    return statusMap[status] || status;
 }
 
 // 取得情境的顯示名稱
@@ -3054,7 +3241,26 @@ function exportPageAsHTML() {
                 <div class="stats-grid" id="statsGrid"></div>
             </div>
         </div>
-
+        <!-- 新增：任務資訊區塊 -->
+        <div class="step-section">
+            <div class="step-header">
+                <div class="step-number"><i class="fas fa-info-circle"></i></div>
+                <div class="step-content">
+                    <h2 class="step-title">任務資訊</h2>
+                    <p class="step-subtitle">查看此任務的詳細資訊和路徑</p>
+                </div>
+            </div>
+            
+            <div class="section-body">
+                <div class="task-info-box" id="taskInfoBox">
+                    <!-- 動態填充任務資訊 -->
+                    <div class="loading-info">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>載入任務資訊中...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- 步驟 2：資料檢視 -->
         <div class="step-section">
             <div class="step-header">
