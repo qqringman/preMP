@@ -3646,6 +3646,9 @@ async function showResultsStructure(taskId) {
             // 獲取來源目錄路徑
             const sourcePath = sourceDirectory || '未知路徑';
             
+            // 生成比較結果路徑
+            const resultsPath = `/home/vince_lin/ai/preMP/compare_results/${taskId}`;
+            
             // 生成任務資訊框
             const taskInfoHtml = `
                 <div class="task-info-box">
@@ -3654,8 +3657,12 @@ async function showResultsStructure(taskId) {
                         <code>${taskId}</code>
                     </div>
                     <div class="task-info-item">
-                        <strong>比較路徑：</strong>
+                        <strong>比較來源路徑：</strong>
                         <code>${sourcePath}</code>
+                    </div>
+                    <div class="task-info-item">
+                        <strong>比較結果路徑：</strong>
+                        <code>${resultsPath}</code>
                     </div>
                 </div>
             `;
