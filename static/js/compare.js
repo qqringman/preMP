@@ -3667,11 +3667,11 @@ async function showResultsStructure(taskId) {
                         <code>${taskId}</code>
                     </div>
                     <div class="task-info-item">
-                        <strong>比較來源路徑：</strong>
+                        <strong>比較來源：</strong>
                         <code>${sourcePath}</code>
                     </div>
                     <div class="task-info-item">
-                        <strong>比較結果路徑：</strong>
+                        <strong>比較結果：</strong>
                         <code>${resultsPath}</code>
                     </div>
                 </div>

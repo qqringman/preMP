@@ -280,7 +280,7 @@ function renderTaskInfo(taskData) {
         if (taskData.full_download_path) {
             infoHTML += `
                 <div class="task-info-item">
-                    <strong><i class="fas fa-balance-scale"></i> 比對來源路徑：</strong>
+                    <strong><i class="fas fa-balance-scale"></i> 比對來源：</strong>
                     <code>${taskData.full_download_path}/${taskId}</code>
                 </div>
             `;
@@ -306,7 +306,7 @@ function renderTaskInfo(taskData) {
         
         infoHTML += `
             <div class="task-info-item">
-                <strong><i class="fas fa-folder"></i> 比對結果路徑：</strong>
+                <strong><i class="fas fa-folder"></i> 比對結果：</strong>
                 <code>${compareResultPath}</code>
             </div>
         `;
