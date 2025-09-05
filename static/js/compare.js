@@ -3640,7 +3640,27 @@ async function showResultsStructure(taskId) {
         const structure = await utils.apiRequest(`/api/results-structure/${taskId}`);
         
         if (structure && structure.scenarios) {
-            let structureHtml = `
+            // 獲取當前選擇的情境
+            const selectedScenario = getSelectedScenario();
+            
+            // 獲取來源目錄路徑
+            const sourcePath = sourceDirectory || '未知路徑';
+            
+            // 生成任務資訊框
+            const taskInfoHtml = `
+                <div class="task-info-box">
+                    <div class="task-info-item">
+                        <strong>任務 ID：</strong>
+                        <code>${taskId}</code>
+                    </div>
+                    <div class="task-info-item">
+                        <strong>比較路徑：</strong>
+                        <code>${sourcePath}</code>
+                    </div>
+                </div>
+            `;
+            
+            let structureHtml = taskInfoHtml + `
                 <div class="file-explorer-simple">
                     <div class="explorer-body">
                         <div class="file-tree-simple">
@@ -3653,13 +3673,23 @@ async function showResultsStructure(taskId) {
                             </div>
             `;
             
-            // 計算有多少個情境
-            const scenarios = Object.entries(structure.scenarios);
+            // 根據選擇的情境過濾要顯示的情境
+            let scenariosToShow = [];
+            if (selectedScenario === 'all') {
+                // 顯示所有情境
+                scenariosToShow = Object.entries(structure.scenarios);
+            } else {
+                // 只顯示選中的情境
+                if (structure.scenarios[selectedScenario]) {
+                    scenariosToShow = [[selectedScenario, structure.scenarios[selectedScenario]]];
+                }
+            }
             
-            scenarios.forEach(([scenario, data], index) => {
+            // 顯示過濾後的情境
+            scenariosToShow.forEach(([scenario, data], index) => {
                 const scenarioName = getScenarioDisplayName(scenario);
                 const hasFiles = data.files && data.files.length > 0;
-                const isLastScenario = index === scenarios.length - 1;
+                const isLastScenario = index === scenariosToShow.length - 1;
                 
                 structureHtml += `
                     <!-- 情境資料夾 -->
@@ -3713,7 +3743,7 @@ async function showResultsStructure(taskId) {
                         </div>
                     </div>
                     
-                    <div class="explorer-actions-simple">
+                    <div class="explorer-actions-simple structure-actions">
                         <button class="action-btn-simple primary-action" onclick="downloadAllScenarios()">
                             <i class="fas fa-download"></i>
                             <div class="btn-content-simple">

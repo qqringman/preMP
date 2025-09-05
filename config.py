@@ -5,14 +5,14 @@
 # JIRA 連線設定
 JIRA_SITE = 'jira.realtek.com'
 JIRA_USER = 'vince_lin'
-JIRA_PASSWORD = ''
+JIRA_PASSWORD = 'Amon200!Amon200!'
 JIRA_TOKEN = ''
 
 # Gerrit 連線設定
 GERRIT_BASE = 'https://mm2sd.rtkbf.com/'
 GERRIT_API_PREFIX = '/a'
 GERRIT_USER = 'vince_lin'
-GERRIT_PW = ''
+GERRIT_PW = 'Amon200!Amon200!'
 
 # JIRA/Gerrit 工具設定
 JIRA_BASE_URL = f'https://{JIRA_SITE}'

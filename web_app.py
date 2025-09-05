@@ -3579,8 +3579,11 @@ def copy_excel_to_results():
 # 在 web_app.py 的 API 路由部分新增
 @app.route('/api/results-structure/<task_id>')
 def get_results_structure(task_id):
-    """獲取結果檔案結構 API"""
+    """獲取結果檔案結構 API - 支援情境過濾"""
     try:
+        # 檢查是否有情境過濾參數
+        scenario_filter = request.args.get('scenario', 'all')
+        
         structure = {
             'task_id': task_id,
             'scenarios': {}
@@ -3592,10 +3595,14 @@ def get_results_structure(task_id):
         if not os.path.exists(compare_dir):
             return jsonify({'error': '找不到結果目錄'}), 404
         
-        # 檢查各情境子目錄
-        scenarios = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
+        # 根據過濾條件決定要檢查的情境
+        if scenario_filter == 'all':
+            scenarios_to_check = ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup']
+        else:
+            scenarios_to_check = [scenario_filter] if scenario_filter in ['master_vs_premp', 'premp_vs_wave', 'wave_vs_backup'] else []
         
-        for scenario in scenarios:
+        # 檢查各情境子目錄
+        for scenario in scenarios_to_check:
             scenario_dir = os.path.join(compare_dir, scenario)
             if os.path.exists(scenario_dir):
                 scenario_data = {
@@ -3615,6 +3622,8 @@ def get_results_structure(task_id):
                             'modified': file_stat.st_mtime
                         })
                 
+                # 按檔案名稱排序
+                scenario_data['files'].sort(key=lambda x: x['name'])
                 structure['scenarios'][scenario] = scenario_data
         
         return jsonify(structure)

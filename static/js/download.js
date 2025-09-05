@@ -309,7 +309,7 @@ function displayTaskResults(taskId, status) {
             </div>
             
             <!-- 檔案結構預覽 -->
-            ${results.folder_structure ? generateFolderTreeSection(results.folder_structure) : ''}
+            ${results.folder_structure ? generateFolderTreeSection(results.folder_structure, taskId) : ''}
         </div>
     `;
     
@@ -323,7 +323,7 @@ function viewTaskReport(taskId) {
 
 
 // 生成資料夾樹區塊
-function generateFolderTreeSection(folderStructure) {
+function generateFolderTreeSection(folderStructure, taskId) {
     return `
         <div class="step-section mt-4">
             <div class="step-header">
@@ -336,6 +336,18 @@ function generateFolderTreeSection(folderStructure) {
                 </div>
             </div>
             <div class="section-body">
+                <!-- 任務資訊 -->
+                <div class="task-info-box">
+                    <div class="task-info-item">
+                        <strong>任務 ID：</strong>
+                        <code>${taskId}</code>
+                    </div>
+                    <div class="task-info-item">
+                        <strong>下載路徑：</strong>
+                        <code>downloads/${taskId}</code>
+                    </div>
+                </div>
+                
                 <div class="structure-actions mb-3">
                     <button class="btn btn-small" id="toggleFoldersBtn" onclick="toggleAllFolders()" title="展開/摺疊全部">
                         <i class="fas fa-expand-alt"></i>
@@ -2735,7 +2747,8 @@ function showDownloadResults(results) {
     
     // 生成資料夾樹
     if (results.folder_structure) {
-        generateFolderTree(results.folder_structure);
+        const folderTreeHtml = generateFolderTreeSection(results.folder_structure, downloadTaskId);
+        document.getElementById('folderTree').parentElement.parentElement.outerHTML = folderTreeHtml;
     }
 }
 
