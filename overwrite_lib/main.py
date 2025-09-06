@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import shutil
 import config
+from manifest_compare.manifest_manager import ManifestManager
 
 logger = utils.setup_logger(__name__)
 
@@ -88,8 +89,9 @@ class MenuManager:
         print("  📄 Manifest 處理工具")
         print("="*50)
         print("  [1] Manifest 轉換工具 (功能三) 🚀")
-        print("  [2] 比較 manifest 差異")
-        print("  [3] 下載 Gerrit manifest")
+        print("  [2] Manifest 取代工具 🚀")
+        print("  [3] 比較 manifest 差異")
+        print("  [4] 下載 Gerrit manifest")
         print("  [0] 返回主選單")
         print("="*50)
     
@@ -1314,7 +1316,7 @@ class MainApplication:
         self.feature_one = FeatureOne()
         self.feature_two = FeatureTwo()
         self.feature_three = FeatureThree()
-        
+
         # 初始化管理模組
         self.menu_manager = MenuManager()
         self.input_validator = InputValidator()
@@ -1417,13 +1419,28 @@ class MainApplication:
             elif choice == '1':
                 self.feature_manager.execute_feature_three()
             elif choice == '2':
-                self._compare_manifest_diff()
+                self._execute_manifest_replacer()  # 新增這行
             elif choice == '3':
+                self._compare_manifest_diff()
+            elif choice == '4':
                 self._download_gerrit_manifest()
             else:
                 print(f"❌ 無效的選項: {choice}")
                 input("按 Enter 繼續...")
-    
+
+    def _execute_manifest_replacer(self):
+        """執行 Manifest 取代工具"""
+        try:
+            manager = ManifestManager()
+            manager.run()
+        except ImportError as e:
+            print(f"❌ 無法載入 Manifest 取代工具: {str(e)}")
+            print("請確認 manifest_manager.py 檔案存在於正確位置")
+            input("按 Enter 繼續...")
+        except Exception as e:
+            print(f"❌ Manifest 取代工具執行錯誤: {str(e)}")
+            input("按 Enter 繼續...")
+                
     def _system_tools_menu(self):
         """系統工具選單"""
         while True:

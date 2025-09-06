@@ -5,14 +5,14 @@
 # JIRA 連線設定
 JIRA_SITE = 'jira.realtek.com'
 JIRA_USER = 'vince_lin'
-JIRA_PASSWORD = 'Amon200!Amon200!'
+JIRA_PASSWORD = ''
 JIRA_TOKEN = ''
 
 # Gerrit 連線設定
 GERRIT_BASE = 'https://mm2sd.rtkbf.com/'
 GERRIT_API_PREFIX = '/a'
 GERRIT_USER = 'vince_lin'
-GERRIT_PW = 'Amon200!Amon200!'
+GERRIT_PW = ''
 
 # JIRA/Gerrit 工具設定
 JIRA_BASE_URL = f'https://{JIRA_SITE}'
@@ -386,34 +386,43 @@ def get_mp_backup_manifest_url() -> str:
 FEATURE_TWO_SKIP_PROJECTS = {
     # 🔥 原始功能的處理類型
     'master_vs_premp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'premp_vs_mp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'mp_vs_mpbackup': [
+        '.*tvconfigs_prebuilt'
     ],
     
     # 🔥 tvconfig 功能的處理類型
     'master_to_premp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'master_to_mp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'master_to_mpbackup': [
+        '.*tvconfigs_prebuilt'
     ]
 }
 
 # Feature Three (Manifest 轉換工具) 跳過專案設定
 FEATURE_THREE_SKIP_PROJECTS = {
     'master_to_premp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'premp_to_mp': [
+        '.*tvconfigs_prebuilt'
     ],
     
     'mp_to_mpbackup': [
+        '.*tvconfigs_prebuilt'
     ]
 }
 
