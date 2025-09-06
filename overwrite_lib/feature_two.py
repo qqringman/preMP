@@ -2322,7 +2322,7 @@ class FeatureTwo:
 
     def _should_skip_project_conversion(self, project_name: str, process_type: str, is_tvconfig: bool = False) -> bool:
         """
-        檢查專案是否應該跳過轉換
+        檢查專案是否應該跳過轉換（修復正則表達式支援）
         
         Args:
             project_name: 專案名稱
@@ -2333,6 +2333,8 @@ class FeatureTwo:
             是否應該跳過轉換
         """
         try:
+            import re
+            
             # 選擇對應的跳過配置
             if is_tvconfig:
                 skip_config = getattr(config, 'TVCONFIG_SKIP_PROJECTS', {})
@@ -2347,9 +2349,26 @@ class FeatureTwo:
             
             # 檢查專案名稱是否在跳過列表中
             for skip_pattern in skip_projects:
-                if skip_pattern in project_name:
-                    self.logger.info(f"🚫 跳過轉換專案: {project_name} (匹配規則: {skip_pattern})")
-                    return True
+                try:
+                    # 🔥 修復：首先嘗試正則表達式匹配
+                    if re.search(skip_pattern, project_name):
+                        context = "tvconfig" if is_tvconfig else "Feature Two"
+                        self.logger.info(f"🚫 {context} 跳過轉換專案: {project_name} (正則匹配: {skip_pattern})")
+                        return True
+                except re.error as regex_error:
+                    # 🔥 如果正則表達式無效，回退到字串包含檢查
+                    self.logger.debug(f"正則表達式 '{skip_pattern}' 無效: {str(regex_error)}，回退到字串匹配")
+                    if skip_pattern in project_name:
+                        context = "tvconfig" if is_tvconfig else "Feature Two"
+                        self.logger.info(f"🚫 {context} 跳過轉換專案: {project_name} (字串匹配: {skip_pattern})")
+                        return True
+                except Exception as match_error:
+                    # 🔥 其他匹配錯誤，回退到字串包含檢查
+                    self.logger.debug(f"匹配模式 '{skip_pattern}' 時發生錯誤: {str(match_error)}，回退到字串匹配")
+                    if skip_pattern in project_name:
+                        context = "tvconfig" if is_tvconfig else "Feature Two"
+                        self.logger.info(f"🚫 {context} 跳過轉換專案: {project_name} (字串匹配: {skip_pattern})")
+                        return True
             
             return False
             
