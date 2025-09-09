@@ -3033,17 +3033,21 @@ class FeatureTwo:
     # ============================================
 
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
-                force_update: bool = False) -> List[Dict]:
+            force_update: bool = False) -> List[Dict]:
         """
-        建立分支並返回結果 - 修復版（正確的跳過邏輯）
+        建立分支並返回結果 - 修復版（正確的跳過邏輯 + 分支名稱檢查）
         """
         try:
             self.logger.info("開始建立分支...")
-            self.logger.info("目標建立邏輯：只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
+            self.logger.info("目標建立邏輯：")
+            self.logger.info("1. 跳過 Tag 類型")
+            self.logger.info("2. 跳過來源和目標分支名稱相同的情況")
+            self.logger.info("3. 只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
             self.logger.info(f"強制更新模式: {'啟用' if force_update else '停用'}")
             
             branch_results = []
             skipped_tags = 0
+            skipped_same_branch_name = 0  # 🔥 新增：分支名稱相同跳過計數
             skipped_same_version = 0
             updated_branches = 0
             delete_recreate_count = 0
@@ -3069,7 +3073,7 @@ class FeatureTwo:
                     self.logger.debug(f"跳過專案 {project_name}：缺少必要資訊")
                     continue
                 
-                # 跳過 Tag 類型的專案
+                # 🔥 跳過條件 1: Tag 類型的專案
                 if target_type == 'Tag' or self._is_tag_reference(target_branch):
                     skipped_tags += 1
                     branch_result = {
@@ -3091,10 +3095,35 @@ class FeatureTwo:
                     branch_results.append(branch_result)
                     continue
                 
+                # 🔥 跳過條件 2: 來源和目標分支名稱相同
+                branch_name_check = self._should_skip_same_branch_name(project)
+                if branch_name_check['should_skip']:
+                    skipped_same_branch_name += 1
+                    
+                    branch_result = {
+                        'SN': len(branch_results) + 1,
+                        'Project': project_name,
+                        'revision': revision,
+                        'branch_revision': branch_revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': project.get('target_branch_link', ''),
+                        'target_branch_revision': target_branch_revision,
+                        'Status': '跳過',
+                        'Message': f'同根生分支，無需對齊 ({branch_name_check["reason"]})',
+                        'Already_Exists': '同分支',
+                        'Force_Update': '-',
+                        'Remote': remote,
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)
+                    }
+                    branch_results.append(branch_result)
+                    self.logger.info(f"跳過 {project_name}：{branch_name_check['reason']}")
+                    continue
+                
                 # 數據品質診斷
                 self._diagnose_project_data(project, project_name)
                 
-                # 修復版本比較邏輯
+                # 🔥 跳過條件 3: 修復版本比較邏輯
                 revision_diff = self._calculate_revision_diff_fixed(
                     revision,                # source_revision (可能不是hash)
                     target_branch_revision,  # target_revision (應該是hash)
@@ -3131,10 +3160,16 @@ class FeatureTwo:
                     self.logger.info(f"跳過 {project_name}：Hash 相同 (來源: {source_short}, 目標: {target_short})")
                     continue
                 
-                # 只有版本不同 (revision_diff = "Y") 時才建立/更新分支
+                # 🔥 執行分支建立/更新（只有通過所有跳過檢查的才會執行）
                 source_display = branch_revision if branch_revision != "-" and self._is_revision_hash(branch_revision) else revision
                 source_short = source_display[:8] if len(source_display) >= 8 else source_display
-                self.logger.info(f"需要更新分支 {project_name}: {source_short} → {target_branch}")
+                
+                # 顯示來源和目標分支名稱資訊
+                source_branch = branch_name_check.get('source_branch', 'N/A')
+                self.logger.info(f"需要更新分支 {project_name}:")
+                self.logger.info(f"  來源分支: {source_branch}")
+                self.logger.info(f"  目標分支: {target_branch}")
+                self.logger.info(f"  版本更新: {source_short} → 目標分支最新版本")
                 
                 # 根據 remote 選擇正確的 GerritManager
                 if remote == 'rtk-prebuilt':
@@ -3167,7 +3202,7 @@ class FeatureTwo:
                     success_count = len([r for r in branch_results if r['Status'] == '成功'])
                     self.logger.info(f"已處理 {len(branch_results)} 個分支，成功 {success_count} 個")
             
-            # 最終統計
+            # 🔥 修改：最終統計（包含分支名稱相同跳過統計）
             success_count = len([r for r in branch_results if r['Status'] == '成功'])
             failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
             
@@ -3175,6 +3210,7 @@ class FeatureTwo:
             self.logger.info(f"  - 成功更新: {success_count} 個")
             self.logger.info(f"  - 失敗: {failure_count} 個")
             self.logger.info(f"  - 跳過 Tag: {skipped_tags} 個")
+            self.logger.info(f"  - 跳過同根生分支: {skipped_same_branch_name} 個")  # 🔥 新增統計
             self.logger.info(f"  - 跳過版本相同: {skipped_same_version} 個")
             if delete_recreate_count > 0:
                 self.logger.info(f"  - 刪除後重建: {delete_recreate_count} 個")
@@ -4442,4 +4478,85 @@ class FeatureTwo:
             
         except Exception as e:
             self.logger.error(f"取得專案 path 時發生錯誤: {str(e)}")
-            return ''            
+            return ''      
+
+    def _should_skip_same_branch_name(self, project: Dict) -> Dict[str, Any]:
+        """
+        檢查來源分支和目標分支名稱是否相同，如果相同則跳過建立
+        
+        Args:
+            project: 專案資訊字典
+            
+        Returns:
+            字典包含 should_skip 和相關資訊
+        """
+        try:
+            project_name = project.get('name', '')
+            revision = project.get('revision', '')
+            upstream = project.get('upstream', '')
+            target_branch = project.get('target_branch', '')
+            
+            # 取得來源分支名稱
+            source_branch = self._get_effective_source_branch_name(project)
+            
+            if not source_branch or not target_branch:
+                return {
+                    'should_skip': False,
+                    'reason': '',
+                    'source_branch': source_branch or 'N/A',
+                    'target_branch': target_branch or 'N/A'
+                }
+            
+            # 比較分支名稱
+            if source_branch == target_branch:
+                return {
+                    'should_skip': True,
+                    'reason': f'來源和目標分支相同: {source_branch}',
+                    'source_branch': source_branch,
+                    'target_branch': target_branch
+                }
+            
+            return {
+                'should_skip': False,
+                'reason': '',
+                'source_branch': source_branch,
+                'target_branch': target_branch
+            }
+            
+        except Exception as e:
+            self.logger.error(f"檢查分支名稱相同性失敗 {project_name}: {str(e)}")
+            return {
+                'should_skip': False,
+                'reason': f'檢查失敗: {str(e)}',
+                'source_branch': 'Error',
+                'target_branch': 'Error'
+            }
+
+    def _get_effective_source_branch_name(self, project: Dict) -> str:
+        """
+        取得有效的來源分支名稱
+        
+        Args:
+            project: 專案資訊字典
+            
+        Returns:
+            來源分支名稱
+        """
+        try:
+            revision = project.get('revision', '')
+            upstream = project.get('upstream', '')
+            
+            # 如果 revision 不是 hash，直接使用它作為分支名稱
+            if revision and not self._is_revision_hash(revision):
+                return revision.strip()
+            
+            # 如果 revision 是 hash，使用 upstream 作為分支名稱
+            if self._is_revision_hash(revision) and upstream:
+                return upstream.strip()
+            
+            # 如果都沒有有效值，返回空字串
+            return ''
+            
+        except Exception as e:
+            self.logger.error(f"取得來源分支名稱失敗: {str(e)}")
+            return ''              
