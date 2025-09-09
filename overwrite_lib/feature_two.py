@@ -653,7 +653,7 @@ class FeatureTwo:
                         if 'title_diff' in clean_project:  # 🔥 新增：移除 title_diff
                             del clean_project['title_diff']
                         clean_projects.append(clean_project)
-                    
+ 
                     df_main = pd.DataFrame(clean_projects)
                     
                     # 🔥 修改欄位順序：添加 title, target_title, title_diff
@@ -1666,7 +1666,7 @@ class FeatureTwo:
         if self._should_skip_revision_conversion(original_revision):
             return original_revision
         
-        # 🔥 修改：精確匹配轉換規則 - 使用動態版本（移除預定義 kernel 版本）
+        # 精確匹配轉換規則 - 使用動態版本（移除預定義 kernel 版本）
         exact_mappings = {
             # 基本 master 分支轉換
             'realtek/master': config.get_default_premp_branch(),
@@ -1687,7 +1687,7 @@ class FeatureTwo:
             self.logger.debug(f"精確匹配轉換: {original_revision} → {result}")
             return result
         
-        # 🔥 修改：模式匹配轉換規則 - 完全使用正則表達式動態匹配
+        # 模式匹配轉換規則 - 完全使用正則表達式動態匹配
         import re
         
         # vX.X.X 版本轉換 - 保留版本號
@@ -1697,6 +1697,16 @@ class FeatureTwo:
             version = match_version.group(1)
             result = f'realtek/{version}/premp.google-refplus'
             self.logger.debug(f"版本格式轉換: {original_revision} → {result}")
+            return result
+        
+        # 新增規則: vX.X.X/mp.google-refplus → vX.X.X/premp.google-refplus.upgrade-{prev_version}
+        pattern_version_mp = r'realtek/(v\d+\.\d+(?:\.\d+)?)/mp\.google-refplus$'
+        match_version_mp = re.match(pattern_version_mp, original_revision)
+        if match_version_mp:
+            version = match_version_mp.group(1)
+            upgrade_ver = config.get_current_android_prev_version()
+            result = f'realtek/{version}/premp.google-refplus.upgrade-{upgrade_ver}'
+            self.logger.debug(f"版本 mp 格式轉換: {original_revision} → {result}")
             return result
         
         # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
@@ -1724,7 +1734,7 @@ class FeatureTwo:
             self.logger.debug(f"模式2轉換: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern3 = r'realtek/linux-([\d.]+)/master$'
         match3 = re.match(pattern3, original_revision)
         if match3:
@@ -1735,7 +1745,7 @@ class FeatureTwo:
             self.logger.debug(f"模式3轉換（動態 kernel 版本）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 4: linux-X.X/android-Y/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/master$'
         match4 = re.match(pattern4, original_revision)
         if match4:
@@ -1747,7 +1757,7 @@ class FeatureTwo:
             self.logger.debug(f"模式4轉換（動態 kernel，升級 Android）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
         match5 = re.match(pattern5, original_revision)
         if match5:
@@ -1758,7 +1768,7 @@ class FeatureTwo:
             self.logger.debug(f"模式5轉換（動態 kernel）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-{current_version}/premp.google-refplus.rtdXXXX（完全動態）
+        # 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-{current_version}/premp.google-refplus.rtdXXXX（完全動態）
         pattern6 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
         match6 = re.match(pattern6, original_revision)
         if match6:
@@ -1793,15 +1803,15 @@ class FeatureTwo:
             self.logger.debug(f"檢查晶片規則: {chip} -> {rtd_model}")
             if f'realtek/{chip}/master' == original_revision:
                 result = config.get_premp_branch_with_chip(rtd_model)
-                self.logger.info(f"✅ 晶片轉換匹配: {original_revision} → {result}")
+                self.logger.info(f"晶片轉換匹配: {original_revision} → {result}")
                 return result
             else:
-                self.logger.debug(f"❌ 不匹配: 'realtek/{chip}/master' != '{original_revision}'")
+                self.logger.debug(f"不匹配: 'realtek/{chip}/master' != '{original_revision}'")
         
         # 智能轉換備案
         smart_result = self._smart_conversion_fallback(original_revision)
         self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
-        return smart_result
+        return smart_result    
 
     def _convert_premp_to_mp(self, revision: str) -> str:
         """premp → mp 轉換規則"""
@@ -1853,7 +1863,7 @@ class FeatureTwo:
         """
         # 🔥 新增：設置實例變量供自定義轉換規則使用
         self._current_projects = projects
-
+        import copy  # 加入這行
         converted_projects = []
         tag_count = 0
         branch_count = 0
@@ -1871,7 +1881,7 @@ class FeatureTwo:
             self.logger.info(f"🎯 一般模式：使用 FEATURE_TWO_SKIP_PROJECTS 配置")
         
         for i, project in enumerate(projects, 1):
-            converted_project = project.copy()
+            converted_project = copy.deepcopy(project)
             converted_project['SN'] = i
             
             # 🔥 取得專案名稱
@@ -2139,7 +2149,7 @@ class FeatureTwo:
             
     def _get_branch_revision_if_needed(self, project_name: str, revision: str, remote: str = '') -> str:
         """
-        🔥 新方法：取得 revision 對應的實際 hash 值
+        取得 revision 對應的實際 hash 值
         
         Args:
             project_name: 專案名稱
@@ -2154,25 +2164,26 @@ class FeatureTwo:
             if not project_name or not revision:
                 return '-'
             
-            # 🔥 修正：如果 revision 已經是 hash，直接返回它的值
+            # 如果 revision 已經是 hash，直接返回它的值
             if self._is_revision_hash(revision):
-                self.logger.debug(f"專案 {project_name} revision 已是 hash，直接使用: {revision}")
-                return revision  # 🔥 改為返回 revision 本身，而不是 '-'
+                self.logger.debug(f"專案 {project_name} revision 已是 hash，直接使用: {revision[:8]}...")
+                return revision
             
             # 如果是 branch name，查詢對應的 hash
             self.logger.debug(f"專案 {project_name} revision 是 branch，查詢實際 hash: {revision}")
-            
-            # 使用與 target_branch_revision 相同的查詢邏輯
+
+            # 使用增強版查詢方法
             branch_info = self._query_branch_direct_enhanced(project_name, revision, remote)
             
             if branch_info['exists'] and branch_info['revision']:
                 actual_hash = branch_info['revision']
-                self.logger.debug(f"✅ 查詢到 {project_name}/{revision} 的實際 hash: {actual_hash}")
+                self.logger.debug(f"查詢到 {project_name}/{revision} 的實際 hash: {actual_hash[:8]}...")
                 return actual_hash
             else:
-                self.logger.debug(f"❌ 無法查詢 {project_name}/{revision} 的 hash: {branch_info.get('error', '未知錯誤')}")
+                error_msg = branch_info.get('error', '未知錯誤')
+                self.logger.debug(f"無法查詢 {project_name}/{revision} 的 hash: {error_msg}")
                 return '-'
-                
+                    
         except Exception as e:
             self.logger.debug(f"查詢 {project_name}/{revision} branch revision 失敗: {str(e)}")
             return '-'
@@ -2971,12 +2982,15 @@ class FeatureTwo:
                 
                 self.logger.debug(f"✅ 分支查詢成功: {project_name}/{branch_name} -> 完整版本: {revision}")
                 
-                return {
+                # 在 return 前加入：
+                import copy
+                result = {
                     'exists': True,
-                    'revision': revision if revision else 'Unknown',  # 🔥 返回完整 revision
+                    'revision': revision,
                     'server': server_type,
                     'full_revision': revision
                 }
+                return copy.deepcopy(result)  # 深拷貝避免引用共享
             elif response.status_code == 404:
                 self.logger.debug(f"❌ 分支不存在: {project_name}/{branch_name} 在 {server_type}")
                 return {
@@ -3005,11 +3019,12 @@ class FeatureTwo:
             }
 
     def _handle_duplicates(self, projects: List[Dict], remove_duplicates: bool) -> tuple:
-        """處理重複資料"""
+        """處理重複資料 - 使用 name + path 作為唯一識別"""
         if not remove_duplicates:
             return projects, []
         
-        check_fields = ['name', 'revision', 'upstream', 'dest-branch', 'target_branch']
+        # 使用 name + path 作為主要唯一識別
+        check_fields = ['name', 'path', 'revision', 'upstream', 'dest-branch', 'target_branch']
         
         seen = set()
         unique_projects = []
@@ -3117,7 +3132,7 @@ class FeatureTwo:
                         'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
-                    self.logger.info(f"跳過 {project_name}：{branch_name_check['reason']}")
+                    # self.logger.info(f"跳過 {project_name}：{branch_name_check['reason']}")
                     continue
                 
                 # 數據品質診斷
@@ -3157,7 +3172,7 @@ class FeatureTwo:
                         'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
-                    self.logger.info(f"跳過 {project_name}：Hash 相同 (來源: {source_short}, 目標: {target_short})")
+                    # self.logger.info(f"跳過 {project_name}：Hash 相同 (來源: {source_short}, 目標: {target_short})")
                     continue
                 
                 # 🔥 執行分支建立/更新（只有通過所有跳過檢查的才會執行）

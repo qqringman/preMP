@@ -1092,7 +1092,7 @@ class FeatureThree:
         if self._should_skip_revision_conversion(original_revision):
             return original_revision
         
-        # 🔥 修改：精確匹配轉換規則 - 使用動態版本（移除預定義 kernel 版本）
+        # 精確匹配轉換規則 - 使用動態版本（移除預定義 kernel 版本）
         exact_mappings = {
             # 基本 master 分支轉換
             'realtek/master': config.get_default_premp_branch(),
@@ -1113,7 +1113,7 @@ class FeatureThree:
             self.logger.debug(f"精確匹配轉換: {original_revision} → {result}")
             return result
         
-        # 🔥 修改：模式匹配轉換規則 - 完全使用正則表達式動態匹配
+        # 模式匹配轉換規則 - 完全使用正則表達式動態匹配
         import re
         
         # vX.X.X 版本轉換 - 保留版本號
@@ -1123,6 +1123,16 @@ class FeatureThree:
             version = match_version.group(1)
             result = f'realtek/{version}/premp.google-refplus'
             self.logger.debug(f"版本格式轉換: {original_revision} → {result}")
+            return result
+        
+        # 新增規則: vX.X.X/mp.google-refplus → vX.X.X/premp.google-refplus.upgrade-{prev_version}
+        pattern_version_mp = r'realtek/(v\d+\.\d+(?:\.\d+)?)/mp\.google-refplus$'
+        match_version_mp = re.match(pattern_version_mp, original_revision)
+        if match_version_mp:
+            version = match_version_mp.group(1)
+            upgrade_ver = config.get_current_android_prev_version()
+            result = f'realtek/{version}/premp.google-refplus.upgrade-{upgrade_ver}'
+            self.logger.debug(f"版本 mp 格式轉換: {original_revision} → {result}")
             return result
         
         # 規則 1: mp.google-refplus.upgrade-11.rtdXXXX → premp.google-refplus.upgrade-11.rtdXXXX
@@ -1150,7 +1160,7 @@ class FeatureThree:
             self.logger.debug(f"模式2轉換: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 3: linux-X.X/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern3 = r'realtek/linux-([\d.]+)/master$'
         match3 = re.match(pattern3, original_revision)
         if match3:
@@ -1161,7 +1171,7 @@ class FeatureThree:
             self.logger.debug(f"模式3轉換（動態 kernel 版本）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 4: linux-X.X/android-Y/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 4: linux-X.X/android-Y/master → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern4 = r'realtek/linux-([\d.]+)/android-(\d+)/master$'
         match4 = re.match(pattern4, original_revision)
         if match4:
@@ -1173,7 +1183,7 @@ class FeatureThree:
             self.logger.debug(f"模式4轉換（動態 kernel，升級 Android）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
+        # 規則 5: linux-X.X/android-Y/mp.google-refplus → linux-X.X/android-{current_version}/premp.google-refplus（完全動態）
         pattern5 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus$'
         match5 = re.match(pattern5, original_revision)
         if match5:
@@ -1184,7 +1194,7 @@ class FeatureThree:
             self.logger.debug(f"模式5轉換（動態 kernel）: {original_revision} → {result}")
             return result
         
-        # 🔥 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-{current_version}/premp.google-refplus.rtdXXXX（完全動態）
+        # 規則 6: linux-X.X/android-Y/mp.google-refplus.rtdXXXX → linux-X.X/android-{current_version}/premp.google-refplus.rtdXXXX（完全動態）
         pattern6 = r'realtek/linux-([\d.]+)/android-(\d+)/mp\.google-refplus\.(rtd\w+)'
         match6 = re.match(pattern6, original_revision)
         if match6:
@@ -1216,15 +1226,18 @@ class FeatureThree:
         
         # 規則 9: 晶片特定的 master 分支 → premp.google-refplus.rtdXXXX（使用當前 Android 版本）
         for chip, rtd_model in config.CHIP_TO_RTD_MAPPING.items():
+            self.logger.debug(f"檢查晶片規則: {chip} -> {rtd_model}")
             if f'realtek/{chip}/master' == original_revision:
                 result = config.get_premp_branch_with_chip(rtd_model)
-                self.logger.debug(f"晶片轉換（當前 Android 版本）: {original_revision} → {result}")
+                self.logger.info(f"晶片轉換匹配: {original_revision} → {result}")
                 return result
+            else:
+                self.logger.debug(f"不匹配: 'realtek/{chip}/master' != '{original_revision}'")
         
         # 智能轉換備案
         smart_result = self._smart_conversion_fallback(original_revision)
         self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
-        return smart_result
+        return smart_result    
 
     def _should_skip_revision_conversion(self, revision: str) -> bool:
         """

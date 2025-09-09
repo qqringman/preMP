@@ -64,7 +64,7 @@ class GerritManager:
         if self.auth:
             self.session.auth = self.auth
         
-        self.logger.info(f"Gerrit Manager 初始化完成 - Base URL: {self.base_url}")
+        # self.logger.info(f"Gerrit Manager 初始化完成 - Base URL: {self.base_url}")
     
     def _make_request(self, url: str, method: str = 'GET', **kwargs) -> requests.Response:
         """統一的請求方法，使用 session 處理認證"""
