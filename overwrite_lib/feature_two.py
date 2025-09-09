@@ -2449,65 +2449,13 @@ class FeatureTwo:
             return ""
     
     def _determine_revision_type(self, revision: str) -> str:
-        """判斷 revision 是 branch 還是 tag"""
+        """判斷 revision 是 branch 還是 tag - 簡化版：只有 refs/tags/ 開頭才是 tag"""
         if not revision:
             return 'Branch'
         
-        # 如果以 refs/tags/ 開頭，直接判斷為 Tag
+        # 只有以 refs/tags/ 開頭的才是 Tag，其他都是 Branch
         if revision.startswith('refs/tags/'):
             return 'Tag'
-        
-        revision_lower = revision.lower()
-        
-        # 常見的 tag 關鍵字
-        tag_keywords = [
-            'release', 'tag', 'v1.', 'v2.', 'v3.', 'v4.', 'v5.',
-            'stable', 'final', 'rc', 'beta', 'alpha',
-            'aosp-', 'platform-',
-            '.release', '-release', '_release'
-        ]
-        
-        # 檢查是否包含 tag 關鍵字
-        for keyword in tag_keywords:
-            if keyword in revision_lower:
-                return 'Tag'
-        
-        # Android tag 版本號格式檢查
-        import re
-        android_tag_patterns = [
-            r'android-\d+\.\d+\.\d+',
-            r'android-\d+-.*-release',
-            r'android-\d+-.*-beta',
-            r'android-\d+-.*-rc',
-            r'android-\d+\.\d+\.\d+_r\d+',
-        ]
-        
-        for pattern in android_tag_patterns:
-            if re.search(pattern, revision_lower):
-                return 'Tag'
-        
-        # 分支格式檢查
-        if '/' in revision:
-            branch_indicators = [
-                '/master', '/main', '/develop', '/dev',
-                '/premp', '/mp', '/wave', '/backup',
-                'realtek/', 'refs/heads/'
-            ]
-            
-            for indicator in branch_indicators:
-                if indicator in revision_lower:
-                    return 'Branch'
-        
-        # 檢查版本號格式
-        version_patterns = [
-            r'^v?\d+\.\d+$',
-            r'^v?\d+\.\d+\.\d+$',
-            r'^api-\d+$',
-        ]
-        
-        for pattern in version_patterns:
-            if re.match(pattern, revision_lower):
-                return 'Tag'
         
         return 'Branch'
 
