@@ -5,6 +5,7 @@
 支援將 manifest 檔案在不同的 code line 之間轉換
 新增 TXT 檔案 Branch 轉換功能
 修正版本：新增 dest-branch、upstream 處理和 upgrade 版本識別
+v3: 新增防呆機制 - 檢查輸入檔案是否符合轉換類型要求
 """
 
 import os
@@ -23,7 +24,7 @@ import logging
 # ===== Android 版本設定 =====
 # =====================================
 
-# 📥 當前 Android 版本（用於動態替換）
+# 🔥 當前 Android 版本（用於動態替換）
 CURRENT_ANDROID_VERSION = '14'
 
 def get_current_android_version() -> str:
@@ -161,6 +162,35 @@ CONVERSION_TYPE_INFO = {
 }
 
 # =====================================
+# ===== 🆕 新增：檔案內容驗證規則 =====
+# =====================================
+
+FILE_VALIDATION_RULES = {
+    'master_to_premp': {
+        'description': 'Master → PreMP',
+        'forbidden_keywords': [
+            'premp.google-refplus',
+            'mp.google-refplus.wave',
+            'mp.google-refplus.wave.backup'
+        ],
+        'required_keywords': [],
+        'error_message': 'Master 檔案不能包含 premp 或 mp 相關的 branch 資訊'
+    },
+    'premp_to_mp': {
+        'description': 'PreMP → MP',
+        'forbidden_keywords': [],
+        'required_keywords': ['premp.google-refplus'],
+        'error_message': 'PreMP 檔案必須包含 premp.google-refplus 關鍵字'
+    },
+    'mp_to_mpbackup': {
+        'description': 'MP → MP Backup',
+        'forbidden_keywords': ['mp.google-refplus.wave.backup'],
+        'required_keywords': ['mp.google-refplus.wave'],
+        'error_message': 'MP 檔案必須包含 mp.google-refplus.wave 關鍵字，且不能是 backup 版本'
+    }
+}
+
+# =====================================
 # ===== 轉換工具實現部分 =====
 # =====================================
 
@@ -169,7 +199,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 class EnhancedManifestConverter:
-    """增強版 Manifest 轉換器 - 支援 XML 和 TXT 檔案，修正版本，支援 dest-branch、upstream 和 upgrade 識別"""
+    """增強版 Manifest 轉換器 - 支援 XML 和 TXT 檔案，修正版本，支援 dest-branch、upstream 和 upgrade 識別，含防呆機制"""
     
     def __init__(self):
         self.logger = logger
@@ -217,6 +247,67 @@ class EnhancedManifestConverter:
             self.logger.warning(f"無法偵測檔案類型: {str(e)}")
             return 'xml'  # 預設為 xml
     
+    def validate_file_content(self, input_file: str, conversion_type: str) -> bool:
+        """
+        🆕 新增：驗證輸入檔案內容是否符合轉換類型要求
+        
+        Args:
+            input_file: 輸入檔案路徑
+            conversion_type: 轉換類型
+            
+        Returns:
+            是否通過驗證
+        """
+        try:
+            # 檢查驗證規則是否存在
+            if conversion_type not in FILE_VALIDATION_RULES:
+                self.logger.warning(f"未找到轉換類型 {conversion_type} 的驗證規則")
+                return True  # 沒有規則就不驗證
+            
+            validation_rule = FILE_VALIDATION_RULES[conversion_type]
+            
+            # 讀取檔案內容
+            with open(input_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 檢查禁止的關鍵字
+            for forbidden_keyword in validation_rule['forbidden_keywords']:
+                if forbidden_keyword in content:
+                    self._print_error(f"❌ 檔案內容驗證失敗！")
+                    self._print_error(f"   轉換類型: {validation_rule['description']}")
+                    self._print_error(f"   錯誤原因: 檔案中包含禁止的關鍵字 '{forbidden_keyword}'")
+                    self._print_error(f"   {validation_rule['error_message']}")
+                    return False
+            
+            # 檢查必要的關鍵字
+            for required_keyword in validation_rule['required_keywords']:
+                if required_keyword not in content:
+                    self._print_error(f"❌ 檔案內容驗證失敗！")
+                    self._print_error(f"   轉換類型: {validation_rule['description']}")
+                    self._print_error(f"   錯誤原因: 檔案中缺少必要的關鍵字 '{required_keyword}'")
+                    self._print_error(f"   {validation_rule['error_message']}")
+                    return False
+            
+            self.logger.info(f"✅ 檔案內容驗證通過: {validation_rule['description']}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"檔案內容驗證時發生錯誤: {str(e)}")
+            return False
+    
+    def _print_error(self, message: str):
+        """以紅色字體輸出錯誤訊息（如果終端支援）"""
+        # ANSI 顏色代碼：紅色
+        RED = '\033[91m'
+        RESET = '\033[0m'
+        
+        try:
+            # 嘗試使用顏色輸出
+            print(f"{RED}{message}{RESET}")
+        except:
+            # 如果不支援顏色，就正常輸出
+            print(message)
+    
     def convert_file(self, input_file: str, conversion_type: str, output_file: str = None) -> bool:
         """
         轉換檔案（支援 XML 和 TXT）
@@ -238,6 +329,12 @@ class EnhancedManifestConverter:
             # 檢查轉換類型
             if conversion_type not in self.conversion_descriptions:
                 self.logger.error(f"不支援的轉換類型: {conversion_type}")
+                return False
+            
+            # 🆕 新增：驗證檔案內容是否符合轉換類型要求
+            if not self.validate_file_content(input_file, conversion_type):
+                self._print_error(f"🚫 防呆機制阻止了不合適的轉換操作")
+                self._print_error(f"   請確認輸入檔案是否為正確的 {self.conversion_descriptions[conversion_type]} 來源檔案")
                 return False
             
             # 偵測檔案類型
@@ -345,6 +442,10 @@ class EnhancedManifestConverter:
             self.logger.error(f"TXT 轉換失敗: {str(e)}")
             return False
     
+    # =====================================
+    # ===== 其餘方法保持原有邏輯不變 =====
+    # =====================================
+    
     def _convert_txt_branches(self, txt_content: str, conversion_type: str) -> Tuple[str, List[Dict]]:
         """轉換 TXT 檔案中的 Branch 資訊"""
         try:
@@ -354,7 +455,7 @@ class EnhancedManifestConverter:
             # 逐行處理
             for i, line in enumerate(lines):
                 if line.strip().startswith('Branch:'):
-                    # 提取 Branch 值
+                    # 擷取 Branch 值
                     branch_match = re.match(r'Branch:\s*(.+)', line.strip())
                     if branch_match:
                         original_branch = branch_match.group(1).strip()
@@ -572,7 +673,7 @@ class EnhancedManifestConverter:
     
     def _extract_upgrade_version_from_groups(self, groups: str) -> Optional[str]:
         """
-        從 groups 中提取 upgrade 版本號
+        從 groups 中擷取 upgrade 版本號
         
         Args:
             groups: groups 屬性字串，如 "google_upload,trigger_2851f_upgrade_11,tpv"
@@ -1105,7 +1206,7 @@ def interactive_mode():
     
     print("="*60)
     print("🔧 增強版 Manifest 轉換工具 - 互動模式")
-    print("支援 XML 和 TXT 檔案")
+    print("支援 XML 和 TXT 檔案，含防呆機制")
     print("="*60)
     
     # 選擇輸入檔案
@@ -1148,7 +1249,7 @@ def interactive_mode():
 
 def main():
     """主函數"""
-    parser = argparse.ArgumentParser(description='增強版 Manifest 轉換工具 - 支援 XML 和 TXT')
+    parser = argparse.ArgumentParser(description='增強版 Manifest 轉換工具 - 支援 XML 和 TXT，含防呆機制')
     parser.add_argument('input_file', nargs='?', help='輸入檔案 (XML 或 TXT)')
     parser.add_argument('-t', '--type', choices=['master_to_premp', 'premp_to_mp', 'mp_to_mpbackup'],
                        help='轉換類型')
