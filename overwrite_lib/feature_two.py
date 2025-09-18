@@ -4219,16 +4219,17 @@ class FeatureTwo:
     def _generate_converted_manifest(self, projects: List[Dict], original_manifest_path: str, 
                                 output_folder: str, process_type: str) -> str:
         """
-        生成轉換後的 manifest 檔案 - 修正版：使用正確的目標檔案名
+        生成轉換後的 manifest 檔案 - 修正版：支援 wave 版本遞減和 default revision 替換
         """
         try:
             # 讀取原始 manifest 檔案
             with open(original_manifest_path, 'r', encoding='utf-8') as f:
                 original_content = f.read()
             
-            # 解析原始 XML
-            import xml.etree.ElementTree as ET
-            root = ET.fromstring(original_content)
+            # 新增：當 process_type 為 master_vs_premp 時，下載目標分支的 manifest 作為參考
+            target_default_revision = None
+            if process_type == 'master_vs_premp':
+                target_default_revision = self._download_target_manifest_for_reference(output_folder)
             
             # 建立專案名稱到轉換資訊的映射
             project_mapping = {}
@@ -4240,7 +4241,7 @@ class FeatureTwo:
             
             # 轉換 XML 內容
             converted_content = self._convert_xml_content_with_projects(
-                original_content, project_mapping, process_type
+                original_content, project_mapping, process_type, target_default_revision
             )
             
             # 🔥 修改：根據 process_type 生成正確的目標檔案名
@@ -4299,27 +4300,106 @@ class FeatureTwo:
             # 如果沒有預定義的映射，使用原來的邏輯作為備案
             self.logger.warning(f"⚠️ 未找到 {process_type} 的檔案名映射，使用預設格式")
             return f"converted_manifest_{process_type}.xml"
-            
-    def _convert_xml_content_with_projects(self, xml_content: str, project_mapping: Dict[str, str], 
-                                        process_type: str) -> str:
+
+    def _download_target_manifest_for_reference(self, output_folder: str) -> Optional[str]:
         """
-        使用專案映射表轉換 XML 內容中的 revision
-        
-        Args:
-            xml_content: 原始 XML 內容
-            project_mapping: 專案名稱到目標分支的映射
-            process_type: 處理類型
+        下载目标分支的 manifest 文件作为参考
+        """
+        try:
+            target_branch = config.get_default_android_master_branch()
+            manifest_filename = "atv-google-refplus-premp.xml"
             
-        Returns:
-            轉換後的 XML 內容
+            gerrit_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{target_branch}/{manifest_filename}"
+            
+            self.logger.info(f"下载目标 manifest 作为参考...")
+            self.logger.info(f"目标分支: {target_branch}")
+            
+            # 保存文件路径
+            target_filename = "gerrit_atv-google-refplus-premp.xml"
+            target_path = os.path.join(output_folder, target_filename)
+            
+            # 下载文件
+            success = self.gerrit_manager.download_file_from_link(gerrit_url, target_path)
+            
+            if success and os.path.exists(target_path):
+                # 读取文件内容并提取 default revision
+                with open(target_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 解析 XML 并提取 default revision
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(content)
+                default_element = root.find('default')
+                
+                if default_element is not None:
+                    target_default_revision = default_element.get('revision', '')
+                    
+                    file_size = os.path.getsize(target_path)
+                    self.logger.info(f"成功下载目标 manifest: {target_filename} ({file_size} bytes)")
+                    self.logger.info(f"提取目标 default revision: {target_default_revision}")
+                    
+                    return target_default_revision
+                else:
+                    self.logger.warning("目标 manifest 中未找到 default 元素")
+                    return None
+            else:
+                self.logger.error("下载目标 manifest 失败")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"下载目标 manifest 时发生错误: {str(e)}")
+            return None
+
+    def _replace_wave5_with_wave4_dynamic(self, xml_content: str, target_default_revision: str) -> str:
+        """
+        动态替换 wave5 为 wave4
+        """
+        try:
+            # 从源文件提取 default revision
+            import re
+            default_pattern = r'<default[^>]*revision="([^"]*)"[^>]*>'
+            match = re.search(default_pattern, xml_content)
+            
+            if match:
+                source_default_revision = match.group(1)
+                
+                # 检查是否是 wave5 版本
+                if 'u-tv-keystone-rtk-refplus-wave5-release' in source_default_revision:
+                    self.logger.info(f"进行动态字符串替换:")
+                    self.logger.info(f"  源: {source_default_revision}")
+                    self.logger.info(f"  目标: {target_default_revision}")
+                    
+                    # 执行替换
+                    before_count = xml_content.count(source_default_revision)
+                    result_content = xml_content.replace(source_default_revision, target_default_revision)
+                    after_count = result_content.count(source_default_revision)
+                    
+                    self.logger.info(f"替换完成: {before_count - after_count} 处成功")
+                    
+                    return result_content
+                else:
+                    self.logger.info(f"源不是 wave5 版本: {source_default_revision}")
+            else:
+                self.logger.warning("未找到源 default revision")
+            
+            return xml_content
+            
+        except Exception as e:
+            self.logger.error(f"动态字符串替换失败: {str(e)}")
+            return xml_content
+                        
+    def _convert_xml_content_with_projects(self, xml_content: str, project_mapping: Dict[str, str], 
+                                    process_type: str, target_default_revision: Optional[str] = None) -> str:
+        """
+        使用專案映射表轉換 XML 內容中的 revision - 修正版：完整處理 Google wave 項目
         """
         try:
             converted_content = xml_content
             conversion_count = 0
             
-            # 解析 XML
+            # 解析 XML 進行項目轉換
             import xml.etree.ElementTree as ET
-            root = ET.fromstring(xml_content)
+            root = ET.fromstring(converted_content)
             
             # 遍歷所有 project 元素
             for project in root.findall('project'):
@@ -4336,27 +4416,81 @@ class FeatureTwo:
                         continue
                     
                     if target_branch and target_branch != original_revision:
-                        # 進行字串替換
-                        old_pattern = f'name="{project_name}"[^>]*revision="{original_revision}"'
-                        new_revision_attr = f'revision="{target_branch}"'
+                        # 特殊處理：Google wave 項目需要完整替換所有相關字段
+                        if (process_type == 'master_vs_premp' and
+                            'google/u-tv-keystone-rtk-refplus-wave' in target_branch):
+                            
+                            converted_content = self._safe_replace_google_wave_project_completely(
+                                converted_content, project_name, original_revision, target_branch
+                            )
+                            self.logger.debug(f"Google wave 完整項目轉換: {project_name}")
+                        else:
+                            # 使用原有的替換邏輯
+                            success = self._safe_replace_project_revision_in_xml(
+                                converted_content, project_name, original_revision, target_branch
+                            )
+                            if success:
+                                converted_content = success
                         
-                        # 使用安全的替換方法
-                        success = self._safe_replace_project_revision_in_xml(
-                            converted_content, project_name, original_revision, target_branch
-                        )
-                        
-                        if success:
-                            converted_content = success
-                            conversion_count += 1
-                            self.logger.debug(f"XML 轉換: {project_name} - {original_revision} → {target_branch}")
+                        conversion_count += 1
             
             self.logger.info(f"XML 內容轉換完成，共轉換 {conversion_count} 個專案")
+            
+            # 最後進行 refs/tags/ 字符串替換
+            if process_type == 'master_vs_premp' and target_default_revision:
+                self.logger.info("開始執行 wave5 → wave4 字符串替換")
+                converted_content = self._replace_wave5_with_wave4_dynamic(
+                    converted_content, target_default_revision)
+            
             return converted_content
             
         except Exception as e:
             self.logger.error(f"轉換 XML 內容失敗: {str(e)}")
             return xml_content
 
+    def _safe_replace_google_wave_project_completely(self, xml_content: str, project_name: str, 
+                                                old_revision: str, new_revision: str) -> str:
+        """
+        完整替換 Google wave 項目的所有相關字段
+        """
+        try:
+            lines = xml_content.split('\n')
+            
+            for i, line in enumerate(lines):
+                if f'name="{project_name}"' in line:
+                    updated_line = line
+                    
+                    # 替換 revision
+                    if self._is_revision_hash(old_revision):
+                        # 如果原始是 hash，替換為 branch 名稱
+                        updated_line = updated_line.replace(f'revision="{old_revision}"', f'revision="{new_revision}"')
+                    
+                    # 處理 dest-branch：wave5 → wave4
+                    import re
+                    dest_branch_match = re.search(r'dest-branch="([^"]*)"', updated_line)
+                    if dest_branch_match:
+                        dest_branch_value = dest_branch_match.group(1)
+                        if 'google/u-tv-keystone-rtk-refplus-wave5-release' in dest_branch_value:
+                            new_dest_branch = dest_branch_value.replace('wave5-release', 'wave4-release')
+                            updated_line = updated_line.replace(f'dest-branch="{dest_branch_value}"', f'dest-branch="{new_dest_branch}"')
+                    
+                    # 處理 upstream：wave5 → wave4
+                    upstream_match = re.search(r'upstream="([^"]*)"', updated_line)
+                    if upstream_match:
+                        upstream_value = upstream_match.group(1)
+                        if 'google/u-tv-keystone-rtk-refplus-wave5-release' in upstream_value:
+                            new_upstream = upstream_value.replace('wave5-release', 'wave4-release')
+                            updated_line = updated_line.replace(f'upstream="{upstream_value}"', f'upstream="{new_upstream}"')
+                    
+                    lines[i] = updated_line
+                    break
+            
+            return '\n'.join(lines)
+            
+        except Exception as e:
+            self.logger.error(f"Google wave 完整替換失敗: {str(e)}")
+            return xml_content
+        
     def _safe_replace_project_revision_in_xml(self, xml_content: str, project_name: str, 
                                             old_revision: str, new_revision: str) -> str:
         """
