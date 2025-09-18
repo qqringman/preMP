@@ -162,6 +162,15 @@ class FeatureThree:
                 self.target_default_remote, self.target_default_revision = self._get_default_values_from_xml(target_content)
                 self.logger.info(f"目標檔案預設值: remote={self.target_default_remote}, revision={self.target_default_revision}")
                 self.logger.info("✅ 目標檔案下載成功")
+
+                # 🆕 新增：如果有目標檔案，重新處理轉換內容以保持目標檔案的 default revision
+                if converted_content:
+                    updated_converted_content = self._preserve_target_default_revision(converted_content, target_content)
+                    if updated_converted_content != converted_content:
+                        converted_content = updated_converted_content
+                        # 重新保存修改後的轉換檔案
+                        output_file_path = self._save_converted_file(converted_content, overwrite_type, output_folder)
+                        self.logger.info("✅ 已重新保存包含目標 default revision 的轉換檔案")
             else:
                 self.logger.warning("⚠️ 無法下載目標檔案，將跳過差異比較")
                 self.target_default_remote, self.target_default_revision = '', ''
@@ -1083,7 +1092,19 @@ class FeatureThree:
         
         original_revision = revision.strip()
         
-        # 跳過 Google 開頭的項目
+        # 🆕 新增：Google wave 版本遞減轉換 (wave n → wave n-1)
+        import re
+        google_wave_pattern = r'google/u-tv-keystone-rtk-refplus-wave(\d+)-release'
+        match = re.match(google_wave_pattern, original_revision)
+        if match:
+            wave_num = int(match.group(1))
+            if wave_num > 1:  # 確保不會變成 wave0
+                new_wave_num = wave_num - 1
+                result = f'google/u-tv-keystone-rtk-refplus-wave{new_wave_num}-release'
+                self.logger.debug(f"Google wave 版本遞減轉換: {original_revision} → {result}")
+                return result
+        
+        # 跳過 Google 開頭的項目（除了上面已處理的 wave 版本）
         if original_revision.startswith('google/'):
             self.logger.debug(f"跳過 Google 項目: {original_revision}")
             return original_revision
@@ -1262,6 +1283,77 @@ class FeatureThree:
         
         return False
 
+    def _preserve_target_default_revision(self, converted_content: str, target_content: str) -> str:
+        """
+        保持目標檔案的 default revision，替換轉換結果中的 default revision
+        
+        Args:
+            converted_content: 轉換後的內容
+            target_content: 目標檔案內容
+            
+        Returns:
+            修改後的轉換內容
+        """
+        try:
+            import xml.etree.ElementTree as ET
+            import re
+            
+            # 解析目標檔案，提取 default revision
+            target_root = ET.fromstring(target_content)
+            target_default = target_root.find('default')
+            
+            if target_default is None:
+                self.logger.debug("目標檔案沒有 default 標籤，跳過替換")
+                return converted_content
+            
+            target_default_revision = target_default.get('revision', '')
+            if not target_default_revision:
+                self.logger.debug("目標檔案 default 標籤沒有 revision，跳過替換")
+                return converted_content
+            
+            # 在轉換內容中尋找並替換 default revision
+            lines = converted_content.split('\n')
+            modified = False
+            
+            for i, line in enumerate(lines):
+                stripped_line = line.strip()
+                
+                # 找到 default 標籤行
+                if stripped_line.startswith('<default') and 'revision=' in stripped_line:
+                    # 使用正則表達式替換 revision 屬性值
+                    old_line = line
+                    new_line = re.sub(
+                        r'revision="[^"]*"', 
+                        f'revision="{target_default_revision}"', 
+                        line
+                    )
+                    
+                    # 如果沒匹配到雙引號，嘗試單引號
+                    if new_line == line:
+                        new_line = re.sub(
+                            r"revision='[^']*'", 
+                            f"revision='{target_default_revision}'", 
+                            line
+                        )
+                    
+                    if new_line != line:
+                        lines[i] = new_line
+                        modified = True
+                        self.logger.info(f"✅ 已保持目標檔案的 default revision: {target_default_revision}")
+                        self.logger.debug(f"原行: {old_line.strip()}")
+                        self.logger.debug(f"新行: {new_line.strip()}")
+                        break
+            
+            if modified:
+                return '\n'.join(lines)
+            else:
+                self.logger.warning("未找到可替換的 default revision")
+                return converted_content
+                
+        except Exception as e:
+            self.logger.error(f"保持目標 default revision 失敗: {str(e)}")
+            return converted_content
+        
     def _smart_conversion_fallback(self, revision: str) -> str:
         """
         智能轉換備案 - 使用動態 Android 版本

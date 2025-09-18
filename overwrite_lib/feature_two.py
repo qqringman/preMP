@@ -1657,7 +1657,19 @@ class FeatureTwo:
         
         original_revision = revision.strip()
         
-        # 跳過 Google 開頭的項目
+        # 🆕 新增：Google wave 版本遞減轉換 (wave n → wave n-1)
+        import re
+        google_wave_pattern = r'google/u-tv-keystone-rtk-refplus-wave(\d+)-release'
+        match = re.match(google_wave_pattern, original_revision)
+        if match:
+            wave_num = int(match.group(1))
+            if wave_num > 1:  # 確保不會變成 wave0
+                new_wave_num = wave_num - 1
+                result = f'google/u-tv-keystone-rtk-refplus-wave{new_wave_num}-release'
+                self.logger.debug(f"Google wave 版本遞減轉換: {original_revision} → {result}")
+                return result
+        
+        # 跳過 Google 開頭的項目（除了上面已處理的 wave 版本）
         if original_revision.startswith('google/'):
             self.logger.debug(f"跳過 Google 項目: {original_revision}")
             return original_revision
@@ -1811,7 +1823,7 @@ class FeatureTwo:
         # 智能轉換備案
         smart_result = self._smart_conversion_fallback(original_revision)
         self.logger.debug(f"智能轉換: {original_revision} → {smart_result}")
-        return smart_result    
+        return smart_result  
 
     def _convert_premp_to_mp(self, revision: str) -> str:
         """premp → mp 轉換規則"""
