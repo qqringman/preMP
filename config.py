@@ -271,6 +271,9 @@ USE_DETAILED_COMMIT_MESSAGE = True  # True = 使用詳細模板, False = 使用�
 # 🔥 新增：當前 Android 版本（用於動態替換硬編碼的 android-14）
 CURRENT_ANDROID_VERSION = '14'
 
+# 🆕 新增：當前 Android 前一版本升級號（用於 upgrade 分支）
+CURRENT_ANDROID_PREV_VERSION = '11'
+
 # =====================================
 # ===== 動態 Android 版本輔助函數 =====
 # =====================================
@@ -279,6 +282,18 @@ def get_current_android_version() -> str:
     """取得當前使用的 Android 版本"""
     return CURRENT_ANDROID_VERSION
 
+def get_current_android_prev_version() -> str:
+    """取得當前 Android 前一版本升級號"""
+    return CURRENT_ANDROID_PREV_VERSION
+
+def get_premp_branch_with_version_upgrade(version: str, chip_rtd: str = None) -> str:
+    """取得帶版本升級的 premp 分支"""
+    upgrade_ver = get_current_android_prev_version()
+    if chip_rtd:
+        return f'realtek/{version}/premp.google-refplus.upgrade-{upgrade_ver}.{chip_rtd}'
+    else:
+        return f'realtek/{version}/premp.google-refplus.upgrade-{upgrade_ver}'
+    
 def get_android_path(template: str) -> str:
     """
     將模板中的 {android_version} 替換為當前版本
