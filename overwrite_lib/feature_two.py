@@ -2201,10 +2201,17 @@ class FeatureTwo:
             return '-'
             
     def _convert_revision_by_type(self, revision: str, process_type: str, project_name: str = '', is_tvconfig: bool = False) -> str:
-        """根據處理類型轉換 revision - 修正版：正確的處理類型 + 自定義轉換規則"""
+        """
+        根據處理類型轉換 revision - 修正版：保護 hash revision + 正確的處理類型 + 自定義轉換規則
+        """
         try:
             if not revision:
                 return ''
+            
+            # 🔥 新增：如果是 hash，直接返回不轉換（最優先檢查）
+            if self._is_revision_hash(revision):
+                self.logger.debug(f"專案 {project_name}: revision 是 hash，保持不變: {revision[:8]}...")
+                return revision
             
             # 🔥 檢查是否應該跳過轉換
             if project_name and self._should_skip_project_conversion(project_name, process_type, is_tvconfig):
@@ -3058,23 +3065,24 @@ class FeatureTwo:
     # ============================================
     # 🔥 分支建立相關方法（保持原狀）
     # ============================================
-
     def _create_branches(self, projects: List[Dict], output_file: str, output_folder: str = None, 
-            force_update: bool = False) -> List[Dict]:
+        force_update: bool = False) -> List[Dict]:
         """
-        建立分支並返回結果 - 修復版（正確的跳過邏輯 + 分支名稱檢查）
+        建立分支並返回結果 - 修復版（正確的跳過邏輯 + 分支名稱檢查 + Google wave 跳過）
         """
         try:
             self.logger.info("開始建立分支...")
             self.logger.info("目標建立邏輯：")
             self.logger.info("1. 跳過 Tag 類型")
             self.logger.info("2. 跳過來源和目標分支名稱相同的情況")
-            self.logger.info("3. 只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
+            self.logger.info("3. 🆕 跳過 Google wave 項目建立分支（但保留查詢比較）")
+            self.logger.info("4. 只有當來源和目標版本不同時才建立/更新分支（比較完整 hash）")
             self.logger.info(f"強制更新模式: {'啟用' if force_update else '停用'}")
             
             branch_results = []
             skipped_tags = 0
-            skipped_same_branch_name = 0  # 🔥 新增：分支名稱相同跳過計數
+            skipped_same_branch_name = 0
+            skipped_by_pattern = 0  # 🆕 新增：模式跳過計數
             skipped_same_version = 0
             updated_branches = 0
             delete_recreate_count = 0
@@ -3144,13 +3152,35 @@ class FeatureTwo:
                         'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
-                    # self.logger.info(f"跳過 {project_name}：{branch_name_check['reason']}")
                     continue
+                
+                # 🆕 跳過條件 3: 根據模式跳過建立分支（但保留查詢和比較）
+                if self._should_skip_branch_creation_simple(project):
+                    skipped_by_pattern += 1
+                    
+                    branch_result = {
+                        'SN': len(branch_results) + 1,
+                        'Project': project_name,
+                        'revision': revision,
+                        'branch_revision': branch_revision,
+                        'target_branch': target_branch,
+                        'target_type': 'Branch',
+                        'target_branch_link': project.get('target_branch_link', ''),
+                        'target_branch_revision': target_branch_revision,  # 🔥 保留查詢到的版本
+                        'Status': '跳過',
+                        'Message': 'Google wave 項目跳過建立分支',
+                        'Already_Exists': '模式跳過',
+                        'Force_Update': '-',
+                        'Remote': remote,
+                        'Gerrit_Server': self._get_gerrit_base_url(remote)
+                    }
+                    branch_results.append(branch_result)
+                    continue  # 🔥 關鍵：跳過實際的分支建立，但前面的查詢都已經完成
                 
                 # 數據品質診斷
                 self._diagnose_project_data(project, project_name)
                 
-                # 🔥 跳過條件 3: 修復版本比較邏輯
+                # 🔥 跳過條件 4: 修復版本比較邏輯
                 revision_diff = self._calculate_revision_diff_fixed(
                     revision,                # source_revision (可能不是hash)
                     target_branch_revision,  # target_revision (應該是hash)
@@ -3184,7 +3214,6 @@ class FeatureTwo:
                         'Gerrit_Server': self._get_gerrit_base_url(remote)
                     }
                     branch_results.append(branch_result)
-                    # self.logger.info(f"跳過 {project_name}：Hash 相同 (來源: {source_short}, 目標: {target_short})")
                     continue
                 
                 # 🔥 執行分支建立/更新（只有通過所有跳過檢查的才會執行）
@@ -3229,7 +3258,7 @@ class FeatureTwo:
                     success_count = len([r for r in branch_results if r['Status'] == '成功'])
                     self.logger.info(f"已處理 {len(branch_results)} 個分支，成功 {success_count} 個")
             
-            # 🔥 修改：最終統計（包含分支名稱相同跳過統計）
+            # 🔥 修改：最終統計（包含 Google wave 跳過統計）
             success_count = len([r for r in branch_results if r['Status'] == '成功'])
             failure_count = len([r for r in branch_results if r['Status'] == '失敗'])
             
@@ -3237,7 +3266,8 @@ class FeatureTwo:
             self.logger.info(f"  - 成功更新: {success_count} 個")
             self.logger.info(f"  - 失敗: {failure_count} 個")
             self.logger.info(f"  - 跳過 Tag: {skipped_tags} 個")
-            self.logger.info(f"  - 跳過同根生分支: {skipped_same_branch_name} 個")  # 🔥 新增統計
+            self.logger.info(f"  - 跳過同根生分支: {skipped_same_branch_name} 個")
+            self.logger.info(f"  - 🆕 跳過 Google wave 建立分支: {skipped_by_pattern} 個")  # 新增統計
             self.logger.info(f"  - 跳過版本相同: {skipped_same_version} 個")
             if delete_recreate_count > 0:
                 self.logger.info(f"  - 刪除後重建: {delete_recreate_count} 個")
@@ -4235,9 +4265,12 @@ class FeatureTwo:
             project_mapping = {}
             for proj in projects:
                 project_name = proj.get('name', '')
+                project_path = proj.get('path', '')
                 target_branch = proj.get('target_branch', '')
-                if project_name and target_branch:
-                    project_mapping[project_name] = target_branch
+                if project_name and project_path and target_branch:
+                    # 🔥 使用 (name, path) 組合作為 key
+                    project_key = f"{project_name}||{project_path}"
+                    project_mapping[project_key] = target_branch
             
             # 轉換 XML 內容
             converted_content = self._convert_xml_content_with_projects(
@@ -4404,11 +4437,13 @@ class FeatureTwo:
             # 遍歷所有 project 元素
             for project in root.findall('project'):
                 project_name = project.get('name', '')
+                project_path = project.get('path', '')
                 original_revision = project.get('revision', '')
                 
-                # 檢查是否需要轉換
-                if project_name in project_mapping:
-                    target_branch = project_mapping[project_name]
+                # 🔥 使用 (name, path) 組合檢查
+                project_key = f"{project_name}||{project_path}"
+                if project_key in project_mapping:
+                    target_branch = project_mapping[project_key]
                     
                     # 檢查是否應該跳過轉換
                     if self._should_skip_project_conversion(project_name, process_type, False):
@@ -4448,6 +4483,33 @@ class FeatureTwo:
             self.logger.error(f"轉換 XML 內容失敗: {str(e)}")
             return xml_content
 
+    def _should_skip_branch_creation_simple(self, project: Dict) -> bool:
+        """
+        🆕 簡單檢查：是否應該跳過建立分支
+        """
+        try:
+            patterns = getattr(config, 'SKIP_BRANCH_CREATION_PATTERNS', [])
+            if not patterns:
+                return False
+            
+            # 檢查相關欄位
+            revision = project.get('revision', '')
+            target_branch = project.get('target_branch', '')
+            upstream = project.get('upstream', '')
+            
+            check_values = [revision, target_branch, upstream]
+            
+            for pattern in patterns:
+                for value in check_values:
+                    if value and pattern in value:
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"檢查跳過分支建立失敗: {str(e)}")
+            return False
+            
     def _safe_replace_google_wave_project_completely(self, xml_content: str, project_name: str, 
                                                 old_revision: str, new_revision: str) -> str:
         """
