@@ -25,8 +25,8 @@ import tempfile
 
 # Gerrit 連線設定
 GERRIT_SORUCE_URL = "https://mm2sd.rtkbf.com"
-GERRIT_USER = 'vince_lin'
-GERRIT_PW = 'Amon200!Amon200!'
+GERRIT_USER = ''
+GERRIT_PW = ''
 CURRENT_ANDROID_VERSION = '14'
 
 def get_current_android_version() -> str:
@@ -656,10 +656,33 @@ class EnhancedManifestConverter:
             return None
 
     def _get_auth(self):
-        """取得認證資訊 - 使用設定值"""
+        """取得認證資訊 - 支援互動式輸入"""
+        global GERRIT_USER, GERRIT_PW
+        
+        # 如果已經有設定，直接回傳
         if GERRIT_USER and GERRIT_PW:
             return (GERRIT_USER, GERRIT_PW)
-        return None
+        
+        # 沒有設定就互動式輸入
+        print(f"\n🔐 master_to_premp 操作需要 Gerrit 認證")
+        
+        username = input("請輸入 Gerrit 使用者名稱: ").strip()
+        if not username:
+            return None
+            
+        import getpass
+        try:
+            password = getpass.getpass("請輸入 Gerrit 密碼: ").strip()
+            if not password:
+                return None
+        except:
+            return None
+        
+        # 設置全域變數供後續使用
+        GERRIT_USER = username
+        GERRIT_PW = password
+        
+        return (username, password)
 
     def interactive_download(self):
         """互動式下載功能"""
