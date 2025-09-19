@@ -4385,10 +4385,9 @@ class FeatureTwo:
 
     def _replace_wave5_with_wave4_dynamic(self, xml_content: str, target_default_revision: str) -> str:
         """
-        动态替换 wave5 为 wave4
+        動態替換 wave 版本 - 最小改動版
         """
         try:
-            # 从源文件提取 default revision
             import re
             default_pattern = r'<default[^>]*revision="([^"]*)"[^>]*>'
             match = re.search(default_pattern, xml_content)
@@ -4396,29 +4395,32 @@ class FeatureTwo:
             if match:
                 source_default_revision = match.group(1)
                 
-                # 检查是否是 wave5 版本
-                if 'u-tv-keystone-rtk-refplus-wave5-release' in source_default_revision:
-                    self.logger.info(f"进行动态字符串替换:")
+                # 🔥 最小改動：動態檢測 wave 版本
+                wave_match = re.search(r'u-tv-keystone-rtk-refplus-wave(\d+)-release', source_default_revision)
+                if wave_match:
+                    current_wave = int(wave_match.group(1))
+                    self.logger.info(f"進行動態 wave 版本替換:")
+                    self.logger.info(f"  檢測到當前版本: wave{current_wave}")
                     self.logger.info(f"  源: {source_default_revision}")
-                    self.logger.info(f"  目标: {target_default_revision}")
+                    self.logger.info(f"  目標: {target_default_revision}")
                     
-                    # 执行替换
+                    # 執行替換
                     before_count = xml_content.count(source_default_revision)
                     result_content = xml_content.replace(source_default_revision, target_default_revision)
                     after_count = result_content.count(source_default_revision)
                     
-                    self.logger.info(f"替换完成: {before_count - after_count} 处成功")
+                    self.logger.info(f"替換完成: {before_count - after_count} 處成功")
                     
                     return result_content
                 else:
-                    self.logger.info(f"源不是 wave5 版本: {source_default_revision}")
+                    self.logger.info(f"源不包含 wave 版本模式: {source_default_revision}")
             else:
                 self.logger.warning("未找到源 default revision")
             
             return xml_content
             
         except Exception as e:
-            self.logger.error(f"动态字符串替换失败: {str(e)}")
+            self.logger.error(f"動態替換失敗: {str(e)}")
             return xml_content
                         
     def _convert_xml_content_with_projects(self, xml_content: str, project_mapping: Dict[str, str], 
@@ -4473,7 +4475,7 @@ class FeatureTwo:
             
             # 最後進行 refs/tags/ 字符串替換
             if process_type == 'master_vs_premp' and target_default_revision:
-                self.logger.info("開始執行 wave5 → wave4 字符串替換")
+                self.logger.info("開始執行 wave n - 1 字符串替換")
                 converted_content = self._replace_wave5_with_wave4_dynamic(
                     converted_content, target_default_revision)
             
@@ -4511,9 +4513,9 @@ class FeatureTwo:
             return False
             
     def _safe_replace_google_wave_project_completely(self, xml_content: str, project_name: str, 
-                                                old_revision: str, new_revision: str) -> str:
+                                            old_revision: str, new_revision: str) -> str:
         """
-        完整替換 Google wave 項目的所有相關字段
+        完整替換 Google wave 項目的所有相關字段 - 最小改動版
         """
         try:
             lines = xml_content.split('\n')
@@ -4524,25 +4526,34 @@ class FeatureTwo:
                     
                     # 替換 revision
                     if self._is_revision_hash(old_revision):
-                        # 如果原始是 hash，替換為 branch 名稱
                         updated_line = updated_line.replace(f'revision="{old_revision}"', f'revision="{new_revision}"')
                     
-                    # 處理 dest-branch：wave5 → wave4
+                    # 🔥 最小改動：動態處理 dest-branch
                     import re
                     dest_branch_match = re.search(r'dest-branch="([^"]*)"', updated_line)
                     if dest_branch_match:
                         dest_branch_value = dest_branch_match.group(1)
-                        if 'google/u-tv-keystone-rtk-refplus-wave5-release' in dest_branch_value:
-                            new_dest_branch = dest_branch_value.replace('wave5-release', 'wave4-release')
-                            updated_line = updated_line.replace(f'dest-branch="{dest_branch_value}"', f'dest-branch="{new_dest_branch}"')
+                        # 動態檢測並遞減 wave 版本
+                        wave_match = re.search(r'wave(\d+)', dest_branch_value)
+                        if wave_match:
+                            current_wave = int(wave_match.group(1))
+                            if current_wave > 1:
+                                new_wave = current_wave - 1
+                                new_dest_branch = dest_branch_value.replace(f'wave{current_wave}', f'wave{new_wave}')
+                                updated_line = updated_line.replace(f'dest-branch="{dest_branch_value}"', f'dest-branch="{new_dest_branch}"')
                     
-                    # 處理 upstream：wave5 → wave4
+                    # 🔥 最小改動：動態處理 upstream
                     upstream_match = re.search(r'upstream="([^"]*)"', updated_line)
                     if upstream_match:
                         upstream_value = upstream_match.group(1)
-                        if 'google/u-tv-keystone-rtk-refplus-wave5-release' in upstream_value:
-                            new_upstream = upstream_value.replace('wave5-release', 'wave4-release')
-                            updated_line = updated_line.replace(f'upstream="{upstream_value}"', f'upstream="{new_upstream}"')
+                        # 動態檢測並遞減 wave 版本
+                        wave_match = re.search(r'wave(\d+)', upstream_value)
+                        if wave_match:
+                            current_wave = int(wave_match.group(1))
+                            if current_wave > 1:
+                                new_wave = current_wave - 1
+                                new_upstream = upstream_value.replace(f'wave{current_wave}', f'wave{new_wave}')
+                                updated_line = updated_line.replace(f'upstream="{upstream_value}"', f'upstream="{new_upstream}"')
                     
                     lines[i] = updated_line
                     break
