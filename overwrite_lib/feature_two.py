@@ -90,7 +90,10 @@ class FeatureTwo:
             self.logger.info(f"成功解析 {len(projects)} 個專案")
             
             # 步驟 2: 轉換專案（使用新的邏輯）
-            converted_projects = self._convert_projects(projects, process_type, check_branch_exists, source_manifest_name)
+            converted_projects = self._convert_projects(
+                projects, process_type, check_branch_exists, source_manifest_name, 
+                is_tvconfig=False, original_manifest_path=input_file  # 🔥 修正
+            )
             
             # 步驟 3: 添加連結資訊
             projects_with_links = self._add_links_to_projects(converted_projects)
@@ -1869,12 +1872,24 @@ class FeatureTwo:
         return backup_revision
         
     def _convert_projects(self, projects: List[Dict], process_type: str, check_branch_exists: bool = False, 
-                 source_manifest_name: str = '', is_tvconfig: bool = False) -> List[Dict]:
+             source_manifest_name: str = '', is_tvconfig: bool = False, 
+             original_manifest_path: str = '') -> List[Dict]:  # 🆕 新增參數
         """
-        轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援 + title 查詢）
+        轉換專案的分支名稱 - 修正版（🔥 新增跳過邏輯和 tvconfig 支援 + title 查詢 + 全局字符串替換）
         """
         # 🔥 新增：設置實例變量供自定義轉換規則使用
         self._current_projects = projects
+        
+        # 🆕 新增：為 Excel 準備全局字符串替換所需的數據
+        excel_source_default_revision = None
+        excel_target_default_revision = None
+
+        if process_type == 'master_vs_premp' and original_manifest_path:
+            # 取得來源 default revision
+            excel_source_default_revision = self._get_source_default_revision(original_manifest_path)
+            # 取得目標 default revision
+            excel_target_default_revision = self._get_target_default_revision_for_wave_replacement()
+        
         import copy  # 加入這行
         converted_projects = []
         tag_count = 0
@@ -2067,8 +2082,104 @@ class FeatureTwo:
             self.logger.info(f"  - ❌ 分支不存在: {branch_check_stats['N']} 個")
             self.logger.info(f"  - ⏭️ 未檢查: {branch_check_stats['-']} 個")
         
+        # 🆕 新增：對 Excel 進行與 XML 相同的全局字符串替換
+        if (process_type == 'master_vs_premp' and 
+            excel_source_default_revision and 
+            excel_target_default_revision):
+            converted_projects = self._apply_global_wave_replacement_to_excel(
+                converted_projects, excel_source_default_revision, excel_target_default_revision
+            )
+        
         return converted_projects
 
+    def _apply_global_wave_replacement_to_excel(self, projects: List[Dict], 
+                                          source_default_revision: str, 
+                                          target_default_revision: str) -> List[Dict]:
+        """對 Excel 進行直接字符串替換"""
+        try:
+            self.logger.info(f"🔄 開始 Excel 全局字符串替換:")
+            self.logger.info(f"  來源: {source_default_revision}")
+            self.logger.info(f"  目標: {target_default_revision}")
+            
+            replacement_count = 0
+            
+            for project in projects:
+                target_branch = project.get('target_branch', '')
+                
+                if target_branch == source_default_revision:
+                    project['target_branch'] = target_default_revision
+                    replacement_count += 1
+                    
+                    self.logger.debug(f"✅ Excel 直接替換: {project.get('name', '')}")
+            
+            self.logger.info(f"✅ Excel 字符串替換完成，共替換 {replacement_count} 個專案")
+            
+            return projects
+            
+        except Exception as e:
+            self.logger.error(f"Excel 字符串替換失敗: {str(e)}")
+            return projects
+
+    def _get_source_default_revision(self, original_manifest_path: str) -> Optional[str]:
+        """從使用者輸入的 manifest.xml 中提取 default revision"""
+        try:
+            with open(original_manifest_path, 'r', encoding='utf-8') as f:
+                xml_content = f.read()
+            
+            import re
+            default_pattern = r'<default[^>]*revision="([^"]*)"[^>]*>'
+            match = re.search(default_pattern, xml_content)
+            
+            if match:
+                source_default_revision = match.group(1)
+                self.logger.info(f"從原始 manifest 提取 default revision: {source_default_revision}")
+                return source_default_revision
+            else:
+                self.logger.warning("原始 manifest 中未找到 default revision")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"從原始 manifest 提取 default revision 失敗: {str(e)}")
+            return None
+
+    def _get_target_default_revision_for_wave_replacement(self) -> Optional[str]:
+        """下載目標 manifest 並提取 default revision"""
+        try:
+            target_branch = config.get_default_android_master_branch()
+            manifest_filename = "atv-google-refplus-premp.xml"
+            
+            gerrit_url = f"https://mm2sd.rtkbf.com/gerrit/plugins/gitiles/realtek/android/manifest/+/refs/heads/{target_branch}/{manifest_filename}"
+            
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as temp_file:
+                temp_path = temp_file.name
+            
+            try:
+                success = self.gerrit_manager.download_file_from_link(gerrit_url, temp_path)
+                
+                if success and os.path.exists(temp_path):
+                    with open(temp_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(content)
+                    default_element = root.find('default')
+                    
+                    if default_element is not None:
+                        target_default_revision = default_element.get('revision', '')
+                        self.logger.info(f"取得目標 default revision: {target_default_revision}")
+                        return target_default_revision
+                    
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"取得目標 default revision 失敗: {str(e)}")
+            return None
+        
     def _get_commit_title(self, project_name: str, commit_hash: str, remote: str = '') -> str:
         """
         🔥 修改方法：查詢 gerrit commit 的 title - 使用 GerritManager 的新方法
@@ -3672,7 +3783,7 @@ class FeatureTwo:
             # 步驟 8: 轉換專案（使用現有邏輯，支援新的轉換類型，添加 tvconfig 標記）
             converted_projects = self._convert_projects(
                 tvconfig_projects, process_type, check_branch_exists, source_manifest_name, 
-                is_tvconfig=True  # 標記為 tvconfig 轉換，會使用 TVCONFIG_SKIP_PROJECTS 配置
+                is_tvconfig=True, original_manifest_path=processed_manifest_path
             )
             
             # 步驟 9: 添加連結資訊（使用現有邏輯）

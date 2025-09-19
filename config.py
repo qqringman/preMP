@@ -409,7 +409,7 @@ FEATURE_TWO_SKIP_PROJECTS = {
     ],
     
     'mp_vs_mpbackup': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt'    
     ],
     
     # 🔥 tvconfig 功能的處理類型
@@ -425,6 +425,11 @@ FEATURE_TWO_SKIP_PROJECTS = {
         '.*tvconfigs_prebuilt'
     ]
 }
+
+# 跳過建立分支的模式列表 (不去建立 branch)
+SKIP_BRANCH_CREATION_PATTERNS = [
+    'google/u-tv-keystone-rtk-refplus'  # 包含此字串就跳過
+]
 
 # Feature Three (Manifest 轉換工具) 跳過專案設定
 FEATURE_THREE_SKIP_PROJECTS = {
