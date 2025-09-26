@@ -401,15 +401,18 @@ def get_mp_backup_manifest_url() -> str:
 FEATURE_TWO_SKIP_PROJECTS = {
     # 🔥 原始功能的處理類型
     'master_vs_premp': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ],
     
     'premp_vs_mp': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ],
     
     'mp_vs_mpbackup': [
-        '.*tvconfigs_prebuilt'    
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ],
     
     # 🔥 tvconfig 功能的處理類型
@@ -434,15 +437,18 @@ SKIP_BRANCH_CREATION_PATTERNS = [
 # Feature Three (Manifest 轉換工具) 跳過專案設定
 FEATURE_THREE_SKIP_PROJECTS = {
     'master_to_premp': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ],
     
     'premp_to_mp': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ],
     
     'mp_to_mpbackup': [
-        '.*tvconfigs_prebuilt'
+        '.*tvconfigs_prebuilt',
+        '.*GingaD-prebuilts'
     ]
 }
 
